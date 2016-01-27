@@ -10,21 +10,11 @@ set -e
 
 cd ..
 
-LIBEVENT=libevent-2.0.22-stable
-rm -rf libevent*
-wget https://github.com/libevent/libevent/releases/download/release-2.0.22-stable/libevent-2.0.22-stable.tar.gz
-tar -xvzf libevent-2.0.22-stable.tar.gz
-cd ${LIBEVENT}
-./configure --prefix=$TOP_DIR/install
-make
-make install
-cd ..
-
-rm -rf hwloc*
-wget https://www.open-mpi.org/software/hwloc/v1.11/downloads/hwloc-1.11.2.tar.gz
-tar -xvzf hwloc-1.11.2.tar.gz
-HWLOC=hwloc-1.11.2
-cd ${HWLOC}
+HWLOC_VERSION=1.11.2
+[ -d hwloc-$HWLOC_VERSION ] && /bin/rm -rf hwloc-$HWLOC_VERSION
+[ -f hwloc-${HWLOC_VERSION}.tar.gz ] || wget https://www.open-mpi.org/software/hwloc/v1.11/downloads/hwloc-${HWLOC_VERSION}.tar.gz
+tar -xzf hwloc-${HWLOC_VERSION}.tar.gz
+cd hwloc-$HWLOC_VERSION
 ./configure --prefix=$TOP_DIR/install
 make
 make install
@@ -32,13 +22,13 @@ cd ..
 
 cd pmix
 ./autogen.sh
-./configure --with-platform=optimized --prefix=$TOP_DIR/install --with-libevent=$TOP_DIR/install --with-hwloc=$TOP_DIR/install
+./configure --with-platform=optimized --prefix=$TOP_DIR/install --with-libevent=/usr --with-hwloc=$TOP_DIR/install
 make
 make install
 cd ..
 
 cd ompi
 ./autogen.pl
-./configure --prefix=$TOP_DIR/install --with-pmix=$TOP_DIR/install --with-libevent=$TOP_DIR/install --disable-mpi-fortran --with-hwloc=$TOP_DIR/install
+./configure --prefix=$TOP_DIR/install --with-pmix=$TOP_DIR/install --with-libevent=/usr --disable-mpi-fortran --with-hwloc=$TOP_DIR/install
 make
 make install
