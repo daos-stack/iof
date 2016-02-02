@@ -28,7 +28,7 @@ make install
 cd ..
 
 cd ompi
-./autogen.pl
+./autogen.pl --no-ompi --no-oshmem
 ./configure --prefix=$TOP_DIR/install --with-pmix=$TOP_DIR/install --with-libevent=/usr --disable-mpi-fortran --with-hwloc=$TOP_DIR/install
 make
 make install
