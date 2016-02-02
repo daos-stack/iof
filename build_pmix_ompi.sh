@@ -4,7 +4,7 @@ TOP_DIR=`pwd`
 
 # Hack alert.  Use the Intel proxy if the host exists, else connect direct.
 host proxy-chain.intel.com > /dev/null 2>&1
-[ $? -eq 0 ] && export http_proxy=http://proxy-chain.intel.com:911
+[ $? -eq 0 ] && export https_proxy=http://proxy-chain.intel.com:911
 
 set -e
 
