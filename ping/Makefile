@@ -12,7 +12,7 @@ all: $(EXE)
 
 .SUFFIXES: .o .c
 %.o: %.c my_rpc_common.h
-	$(CC) $(CFLAGS) $(INC) -o $@ -c $< $(LIBDIR) $(LIBS)
+	$(CC) $(CFLAGS) $(INC) -o $@ -c $<
 
 .PRECIOUS: %.o
 test_%: test_%.o my_rpc_common.o

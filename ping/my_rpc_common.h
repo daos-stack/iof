@@ -5,6 +5,7 @@
 
 #include <mercury.h>
 #include <mercury_types.h>
+#include <mercury_proc_string.h>
 
 hg_return_t my_in_proc_cb(hg_proc_t proc, void *data);
 hg_return_t my_out_proc_cb(hg_proc_t proc, void *data);
