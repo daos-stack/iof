@@ -49,6 +49,7 @@ except:
 build_dir=Dir('.').abspath
 origin_dir = Dir('.').srcnode().abspath
 top_dir = Dir('#').abspath
+origin_offset = os.path.relpath(origin_dir, top_dir)
 
 def run_commands(commands, subdir=None):
     retval = True
@@ -220,7 +221,8 @@ class component:
         self.targets = []
         for root, dirs, files in os.walk("."):
             for f in files:
-                target = Glob(os.path.join("objects", self.subdir, root, f))
+                target = Glob(os.path.join(origin_offset, "objects",
+                                           self.subdir, root, f))
                 self.targets = self.targets + target
                 env.Install(os.path.join(ins_root, root), target)
         os.chdir(cwd)
@@ -289,7 +291,7 @@ hwloc = component(env,
 
 pmix = component(env,
                 "pmix",
-                git_repo("https://github.com/open-mpi/ompi"),
+                git_repo("https://github.com/pmix/master"),
                 ["./autogen.sh",
                 "./configure --with-platform=optimized "
                 "--prefix=$LOCAL_INSTALL "
