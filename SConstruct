@@ -1,7 +1,7 @@
 import os, sys, re, subprocess
-from enum import Enum
 
 env = Environment()
+config = Configure(env)
 
 opts = Variables("iof.conf")
 opts.Add(PathVariable('PREFIX', 'Alternate installation path',
@@ -13,7 +13,7 @@ env.Alias('install', env.get('PREFIX'))
 
 ins_root = '$PREFIX'
 
-Export('env opts ins_root')
+Export('env opts ins_root config')
 
 SConscript('SConscript', variant_dir='#build')
 
@@ -25,6 +25,8 @@ all_deps.build()
 
 env.Alias('deps', all_deps.targets)
 
-Default('deps')
+SConscript('ping/SConscript', variant_dir="#build/ping")
+
+Default('deps', 'ping')
 
 opts.Save('iof.conf', env)

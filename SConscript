@@ -1,5 +1,5 @@
-import sys, os, hashlib, subprocess, socket
-Import('env opts ins_root')
+import sys, os, hashlib, subprocess, socket, tarfile
+Import('env opts config ins_root')
 
 """
 This script can be invoked by dependent components to build
@@ -22,9 +22,11 @@ class component_group:
     def __init__(self):
         self.components = []
         self.targets = []
+        self.libs={}
 
     def add(self, component):
         self.components.append(component)
+        self.libs[component.subdir] = component.libs
 
     def build(self):
         for c in self.components:
@@ -32,12 +34,19 @@ class component_group:
         for c in self.components:
             c.build()
             self.targets = self.targets + c.targets
+    def get_libs(self, name):
+        return self.libs.get(name, [])
 
 all_deps = component_group()
 
 #checkout, if necessary, and build iof dependencies
-real_env = {"PATH":"/bin:/usr/bin",
+real_env = {"PATH":"/bin:/usr/bin:/usr/local/bin",
             "HOME":os.environ["HOME"]}
+
+auth_sock = os.environ.get("SSH_AUTH_SOCK")
+if auth_sock:
+    real_env["SSH_AUTH_SOCK"] = auth_sock
+
 try:
     socket.gethostbyname("proxy-chain.intel.com")
     real_env["http_proxy"] = "http://proxy-chain.intel.com:911"
@@ -83,7 +92,7 @@ class git_repo:
         if self.has_submodules:
             commands = ["git submodule init",
                         "git submodule update"]
-            if not run_commands(init, subdir=subdir):
+            if not run_commands(commands, subdir=subdir):
                 print "Could not get %s submodules"%subdir
                 sys.exit(-1)
 
@@ -94,17 +103,27 @@ class web:
 
     def get(self, subdir):
         basename = os.path.basename(self.url)
-        if self.url.endswith(".tar.gz") or self.url.endswith(".tgz"):
-            commands = ["wget %s"%self.url,
-                        "mkdir -p %s; tar -zxvf %s -C %s --strip-components 1 "
-                        "--overwrite"%(subdir, basename, subdir)]
-        else:
-            print "Don't know how to get %s"%self.url
-            sys.exit(-1)
+
+        commands = ["rm -rf %s"%subdir]
+        if not os.path.exists(basename):
+            commands.append("wget %s"%self.url)
 
         if not run_commands(commands):
             print "Could not get %s sources"%subdir
             sys.exit(-1)
+
+        if self.url.endswith(".tar.gz") or self.url.endswith(".tgz"):
+            tf = tarfile.open(basename, 'r:gz')
+            members = tf.getnames()
+            prefix = os.path.commonprefix(members)
+            tf.extractall()
+            if not run_commands(["mv %s %s"%(prefix, subdir)]):
+                print "Could not get %s sources"%subdir
+                sys.exit(-1)
+        else:
+            print "Don't know how to get %s"%self.url
+            sys.exit(-1)
+
 
 class component:
     def __init__(self,
@@ -113,12 +132,13 @@ class component:
                  retriever,
                  build_commands,
                  expected_targets,
+                 libs=[],
                  extra_lib_path = [],
                  extra_include_path = [],
                  out_of_source_build = False):
         global top_dir, build_dir, origin_dir
         global opts
-        all_deps.add(self)
+        self.libs = libs
         self.env = env
         self.subdir = subdir
         self.retriever = retriever
@@ -158,6 +178,7 @@ class component:
             self.build_path = self.source_path
             self.build_commands = map(lambda x: x.replace("$LOCAL_SRC",
                                       self.subdir), temp)
+        all_deps.add(self)
 
     def get(self):
         def_path = os.path.join(top_dir, "..", self.subdir)
@@ -237,24 +258,36 @@ class component:
              crcfile.write(new_crc)
 
 #A simple check to ensure that libevent is installed
-config = Configure(env)
 if not config.CheckLib("libevent"):
     print "You need to install libevent development package to build iof."
     Exit(1)
 
+libtoolize = "libtoolize"
+rt = ["rt"]
+bmi_build = ["./prepare"]
+
+if env["PLATFORM"] == "darwin":
+    libtoolize = "glibtoolize"
+    rt = []
+    bmi_build.append("./configure --enable-bmi-only --prefix=$LOCAL_INSTALL")
+    bmi_lib = "lib/libbmi.a"
+else:
+    bmi_build.append("./configure --enable-shared --enable-bmi-only --prefix=$LOCAL_INSTALL")
+    bmi_lib = "lib/libbmi.so"
+
+bmi_build += ["make",
+          "make install"]
+
 bmi = component(env,
                   "bmi",
                   git_repo("http://git.mcs.anl.gov/bmi.git"),
-                  ["./prepare",
-                  "./configure --enable-shared --prefix=$LOCAL_INSTALL",
-                  "make",
-                  "make install"],
-                  ["lib/libbmi.so"])
+                  bmi_build,
+                  [bmi_lib])
 
 openpa = component(env,
                   "openpa",
                   git_repo("http://git.mcs.anl.gov/radix/openpa.git"),
-                  ["libtoolize",
+                  [libtoolize,
                   "./autogen.sh",
                   "./configure --prefix=$LOCAL_INSTALL",
                   "make",
@@ -263,21 +296,25 @@ openpa = component(env,
 
 mercury = component(env,
                  "mercury",
-                 git_repo("ssh://review.whamcloud.com/daos/mercury",
+                 git_repo("ssh://review.whamcloud.com:29418/daos/mercury",
                           True),
                  ["cmake -DOPA_LIBRARY=%s/lib/libopa.a "
-                 "-DBMI_LIBRARY=%s/lib/libbmi.so "
+                 "-DOPA_INCLUDE_DIR=%s/include/ "
+                 "-DBMI_LIBRARY=%s/%s "
                  "-DBMI_INCLUDE_DIR=%s/include/ "
                  "-DCMAKE_INSTALL_PREFIX=$LOCAL_INSTALL "
                  "-DBUILD_EXAMPLES=ON -DMERCURY_BUILD_HL_LIB=ON "
                  "-DMERCURY_USE_BOOST_PP=ON -DNA_USE_BMI=ON "
                  "-DBUILD_TESTING=ON -DBUILD_DOCUMENTATION=OFF "
                  "-DBUILD_SHARED_LIBS=ON "
-                 "$LOCAL_SRC"%(openpa.local_install,
-                               bmi.local_install, bmi.local_install),
+                 "$LOCAL_SRC"%(openpa.local_install, openpa.local_install,
+                               bmi.local_install, bmi_lib, bmi.local_install),
                  "make",
                  "make install"],
-                 ["lib/libmercury.so"],
+                 ["lib/libmercury%s"%env.subst('$SHLIBSUFFIX')],
+                 libs=['mercury', 'na', 'bmi',
+                       'mercury_util', 'pthread',
+                       'mchecksum'] + rt,
                  extra_include_path = [os.path.join("include", "na")],
                  out_of_source_build = True)
 
@@ -299,8 +336,9 @@ pmix = component(env,
                 "--with-hwloc=%s"%(hwloc.local_install),
                 "make",
                 "make install"],
-                ["lib/libpmix.so",
-                 "include/pmix.h"])
+                ["lib/libpmix%s"%env.subst("$SHLIBSUFFIX"),
+                 "include/pmix.h"],
+                libs=['pmix'])
 
 ompi = component(env,
                 "ompi",
@@ -312,6 +350,6 @@ ompi = component(env,
                                    hwloc.local_install),
                 "make",
                 "make install"],
-                ["lib/libopen-rte.so"])
+                ["lib/libopen-rte%s"%env.subst("$SHLIBSUFFIX")])
 
 Export('all_deps')

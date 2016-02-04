@@ -1,0 +1,8 @@
+config.log
+/objects/
+/build/
+.sconsign.dblite
+/.sconf_temp/
+*.tar.gz
+/install/
+iof.conf

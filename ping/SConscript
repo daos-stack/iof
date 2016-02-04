@@ -1,0 +1,12 @@
+import os
+Import('env all_deps')
+
+tenv = env.Clone()
+tenv.Append(LIBS = all_deps.get_libs("pmix") + all_deps.get_libs("mercury"))
+tenv.Append(CFLAGS = ['-O3', '-Wall'])
+common = tenv.Object('my_rpc_common')
+sources = Glob('test*.c')
+
+for source in sources:
+    (base, ext) = os.path.splitext(str(source))
+    tenv.Program(base, [source, common])
