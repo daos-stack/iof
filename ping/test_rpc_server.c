@@ -6,11 +6,16 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #include <pmix.h>
 #include <mercury.h>
 
 #include "my_rpc_common.h"
+
+int get_uri(char **uri);
 
 int main(int argc, char **argv)
 {
@@ -26,7 +31,10 @@ int main(int argc, char **argv)
     bool flag;
     pmix_info_t *info;
 
-    char *uri       = "bmi+tcp://localhost:8888";
+//    char *uri       = "bmi+tcp://localhost:8888";
+    char *uri;
+    get_uri(&uri);
+    fprintf(stderr, "server uri: %s\n", uri);
     //============= begin PMIx stuff
     if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc))) {
         fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
@@ -84,6 +92,31 @@ int main(int argc, char **argv)
         fprintf(stderr, "Client ns %s rank %d: PMIx_Finalize failed: %d\n",
                 myproc.nspace, myproc.rank, rc);
     }
+
+    return 0;
+}
+
+
+int get_uri(char **uri)
+{
+    int socketfd;
+    struct sockaddr_in tmp_socket;
+    char name[256 + 10]; // POSIX HOST_NAME_MAX + bmi+tcp://
+    char hname[256];
+    socklen_t slen = sizeof(struct sockaddr);
+
+
+    socketfd = socket(AF_INET, SOCK_STREAM, 0);
+    tmp_socket.sin_family = AF_INET;
+    tmp_socket.sin_addr.s_addr = INADDR_ANY;
+    tmp_socket.sin_port = 0;
+
+    bind(socketfd, (const struct sockaddr *) &tmp_socket, sizeof(tmp_socket));
+    getsockname(socketfd, (struct sockaddr *) &tmp_socket, &slen);
+    gethostname(hname, HOST_NAME_MAX);
+    snprintf(name, 256 + 10 + 1, "bmi+tcp://%s:%d\n", hname, ntohs(tmp_socket.sin_port));
+    *uri = strndup(name, 256 + 10);
+    close(socketfd);
 
     return 0;
 }
