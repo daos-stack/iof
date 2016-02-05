@@ -28,6 +28,7 @@ int main(int argc, char **argv)
     my_rpc_test_in_t in_struct;
     unsigned int act_count = 0;
     hg_return_t ret;
+    struct hg_info *hgi;
     pmix_proc_t myproc, proc;
     int rc;
     pmix_pdata_t *pdata;
@@ -76,6 +77,12 @@ int main(int argc, char **argv)
 
     my_rpc_id = HG_Register(hg_class, "rpc_test", my_in_proc_cb, my_out_proc_cb, my_rpc_test_handler);
     HG_Create(hg_class, hg_context, my_server_addr, my_rpc_id, &my_hg_handle);
+    hgi = HG_Get_info(my_hg_handle);
+    my_rpc_test_state_p->size = 512;
+    my_rpc_test_state_p->buffer = calloc(1, 512);
+    HG_Bulk_create(hgi->hg_bulk_class, 1, &my_rpc_test_state_p->buffer,
+            &my_rpc_test_state_p->size, HG_BULK_READ_ONLY,
+            &in_struct.bulk_handle);
     my_rpc_test_state_p->cc = 18;
     in_struct.aa = 19;
     HG_Forward(my_hg_handle, my_rpc_test_cb, my_rpc_test_state_p, &in_struct);

@@ -25,7 +25,7 @@ int main(int argc, char **argv)
     hg_class_t      *hg_class = NULL;
     hg_context_t    *hg_context = NULL;
     hg_return_t ret;
-    unsigned int act_count = 0;
+    unsigned int act_count = 0, total_count = 0;
     pmix_proc_t myproc, proc;
     int rc;
     bool flag;
@@ -78,9 +78,10 @@ int main(int argc, char **argv)
     while (1) {
         do {
             ret = HG_Trigger(hg_class, hg_context, 0, 1, &act_count);
+            total_count += act_count;
         } while (ret == HG_SUCCESS && act_count);
         HG_Progress(hg_class, hg_context, 100);
-        if (act_count) break;
+        if (total_count == 3) break;
     }
 
     HG_Context_destroy(hg_context);
