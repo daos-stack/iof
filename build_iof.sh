@@ -3,5 +3,6 @@
 set -e
 set -x
 
-scons
-scons install
+prefix=`readlink -f /scratch/hudson/mercury/mercury-update-scratch/latest`
+scons PREBUILT_PREFIX=$prefix
+scons install PREBUILT_PREFIX=$prefix

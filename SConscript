@@ -18,6 +18,20 @@ way but this is a start that can help developers using SCons in
 dependent projects to get IOF and its dependencies built.
 """
 
+opts.Add(PathVariable("PREBUILT_PREFIX",
+                      'Directory for prebuilt components',
+                      None,
+                      PathVariable.PathIsDir))
+opts.Add(PathVariable("SRC_PREFIX",
+                      'Directory to find sources for components',
+                      None,
+                      PathVariable.PathIsDir))
+opts.Add(PathVariable("TARGET_PREFIX",
+                      'Eventual installation path prefix for components',
+                      None,
+                      PathVariable.PathAccept))
+opts.Update(env)
+
 class component_group:
     def __init__(self):
         self.components = []
@@ -29,8 +43,9 @@ class component_group:
         self.libs[component.subdir] = component.libs
 
     def build(self):
-        for c in self.components:
-            c.get()
+        if not prebuilt_prefix:
+            for c in self.components:
+                c.get()
         for c in self.components:
             c.build()
             self.targets = self.targets + c.targets
@@ -59,6 +74,15 @@ build_dir=Dir('.').abspath
 origin_dir = Dir('.').srcnode().abspath
 top_dir = Dir('#').abspath
 origin_offset = os.path.relpath(origin_dir, top_dir)
+
+prebuilt_prefix = env.get("PREBUILT_PREFIX", None)
+src_prefix = env.get("SRC_PREFIX", None)
+if prebuilt_prefix:
+    #resolve a link if applicable
+    prebuilt_prefix = os.path.realpath(os.path.join(top_dir, prebuilt_prefix))
+if src_prefix:
+    #resolve a link if applicable
+    src_prefix = os.path.realpath(os.path.join(top_dir, src_prefix))
 
 def run_commands(commands, subdir=None):
     retval = True
@@ -147,24 +171,44 @@ class component:
         self.local_install = os.path.join(origin_dir,
                                          "objects",
                                          subdir)
+        target_prefix = env.get("TARGET_PREFIX")
+        self.target_install = None
+        if target_prefix:
+            target_prefix = os.path.realpath(target_prefix)
+            self.target_install = os.path.join(target_prefix, subdir)
         self.lib_path = ["lib"]
         self.include_path = ["include"]
         for path in extra_lib_path:
             self.lib_path.append(path)
         for path in extra_include_path:
             self.include_path.append(path)
+        replacement = self.local_install
         try:
-            os.mkdirs(self.local_install)
+            os.makedirs(self.local_install)
         except:
             pass
+        if not os.path.exists(self.local_install):
+            print "Could not create %s"%self.local_install
+            sys.exit(-1)
+        if self.target_install:
+            replacement = self.target_install
+            if not os.path.islink(self.local_install):
+                run_commands(["rm -rf %s"%(self.local_install)])
+            #Add a command to link the directory
+            build_commands.append("ln -sfn %s %s"%(self.target_install,
+                                                 self.local_install))
+        else:
+            if os.path.islink(self.local_install):
+                os.unlink(self.local_install)
+                os.mkdir(self.local_install)
         temp = map(lambda x: x.replace("$LOCAL_INSTALL",
-                                  self.local_install), build_commands)
+                                  replacement), build_commands)
         self.rel_ins = os.path.join(build_dir, "objects", subdir)
         self.expected_targets = map(lambda x: os.path.join(self.local_install,
                                 x),
                                 expected_targets)
-        self.opt_name = "%s_SRC"%subdir.upper()
-        opts.Add(PathVariable(self.opt_name,
+        self.src_opt = "%s_SRC"%subdir.upper()
+        opts.Add(PathVariable(self.src_opt,
                               'Alternate path for %s source'%subdir,
                               None,
                               PathVariable.PathIsDir))
@@ -181,10 +225,16 @@ class component:
         all_deps.add(self)
 
     def get(self):
-        def_path = os.path.join(top_dir, "..", self.subdir)
-        def_path = self.env.get(self.opt_name, def_path)
+        def_path = None
+        if src_prefix and not isinstance(self.retriever, web):
+            #Don't use src_prefix for web components
+            def_path = os.path.join(src_prefix, self.subdir)
+        def_path = self.env.get(self.src_opt, def_path)
 
-        if os.path.exists(def_path):
+        if def_path:
+            if not os.path.exists(def_path):
+                print "%s not found at %s"%(self.subdir, def_path)
+                sys.exit(-1)
             #Use the specified location
             print "Using %s source from %s"%(self.subdir, def_path)
             if not os.path.islink(self.source_path) or \
@@ -233,10 +283,22 @@ class component:
         return False
 
     def build(self):
-        if self.has_changes() or self.has_missing_targets():
-            if not run_commands(self.build_commands, subdir=self.build_path):
-                       print "Could not build %s"%self.subdir
-                       sys.exit(-1)
+        if prebuilt_prefix:
+            commands = ["rm -rf %s"%self.subdir,
+                        "ln -s %s %s"%(os.path.join(prebuilt_prefix,
+                                                    self.subdir),
+                                                    self.subdir)]
+            if not run_commands(commands,
+                                subdir=os.path.join(origin_dir, "objects")):
+               print "Could not link %s"%self.subdir
+               sys.exit(-1)
+        else:
+            build_dir = os.path.join(self.build_path, self.subdir)
+            if self.has_changes() or self.has_missing_targets():
+                if not run_commands(self.build_commands,
+                                    subdir=self.build_path):
+                    print "Could not build %s"%self.subdir
+                    sys.exit(-1)
         cwd = os.getcwd()
         os.chdir(self.local_install)
         self.targets = []

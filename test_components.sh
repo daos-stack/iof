@@ -15,8 +15,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${WORKSPACE}/iof/install/lib
 fi
 export PATH=${WORKSPACE}/iof/install/bin:$PATH
 
+export OPAL_PREFIX=${WORKSPACE}/iof/install
+
 echo Trying to run pmix tests.
 orterun -np 2 ./build/pmix/examples/client
-
-echo Trying to run Mercury tests.
-orterun -np 1 ./build/ping/test_rpc_server : -np 1 ./build/ping/test_rpc_client

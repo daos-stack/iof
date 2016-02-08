@@ -1,9 +1,9 @@
-import os, sys, re, subprocess
+import os, sys, subprocess
 
 env = Environment()
 config = Configure(env)
+opts = Variables(["iof.conf"])
 
-opts = Variables("iof.conf")
 opts.Add(PathVariable('PREFIX', 'Alternate installation path',
                       os.path.join(Dir('#').abspath, 'install'),
                       PathVariable.PathIsDirCreate))
