@@ -1,6 +1,3 @@
-import sys, os, hashlib, subprocess, socket, tarfile
-Import('env opts config ins_root')
-
 """
 This script can be invoked by dependent components to build
 various dependencies of IO forwarding and dependent projects.
@@ -18,6 +15,16 @@ way but this is a start that can help developers using SCons in
 dependent projects to get IOF and its dependencies built.
 """
 
+import sys, os, hashlib, subprocess, socket, tarfile
+Import('opts env config')
+
+def updateValue(env, key, value):
+   env[key] = value
+   opts.args[key] = value
+
+opts.Add(PathVariable('PREFIX', 'Alternate installation path',
+                      os.path.join(Dir('#').abspath, 'install'),
+                      PathVariable.PathIsDirCreate))
 opts.Add(PathVariable("PREBUILT_PREFIX",
                       'Directory for prebuilt components',
                       None,
@@ -75,14 +82,28 @@ origin_dir = Dir('.').srcnode().abspath
 top_dir = Dir('#').abspath
 origin_offset = os.path.relpath(origin_dir, top_dir)
 
+tmp = os.path.realpath(os.path.join(top_dir, env.get('PREFIX')))
+updateValue(env, "PREFIX", tmp)
+env.Alias('install', env.get('PREFIX'))
+
+ins_root = '$PREFIX'
+
+target_prefix = env.get("TARGET_PREFIX")
+if target_prefix:
+    target_prefix = os.path.realpath(os.path.join(top_dir, target_prefix))
+    updateValue(env, "TARGET_PREFIX", target_prefix)
+
 prebuilt_prefix = env.get("PREBUILT_PREFIX", None)
-src_prefix = env.get("SRC_PREFIX", None)
 if prebuilt_prefix:
     #resolve a link if applicable
     prebuilt_prefix = os.path.realpath(os.path.join(top_dir, prebuilt_prefix))
+    updateValue(env, "PREBUILT_PREFIX", prebuilt_prefix)
+
+src_prefix = env.get("SRC_PREFIX", None)
 if src_prefix:
     #resolve a link if applicable
     src_prefix = os.path.realpath(os.path.join(top_dir, src_prefix))
+    updateValue(env, "SRC_PREFIX", src_prefix)
 
 def run_commands(commands, subdir=None):
     retval = True
@@ -112,13 +133,13 @@ class git_repo:
         commands = ["git clone %s %s"%(self.url, subdir)]
         if not run_commands(commands):
             print "Could not get %s sources"%subdir
-            sys.exit(-1)
+            Exit(-1)
         if self.has_submodules:
             commands = ["git submodule init",
                         "git submodule update"]
             if not run_commands(commands, subdir=subdir):
                 print "Could not get %s submodules"%subdir
-                sys.exit(-1)
+                Exit(-1)
 
 class web:
     def __init__(self,
@@ -134,7 +155,7 @@ class web:
 
         if not run_commands(commands):
             print "Could not get %s sources"%subdir
-            sys.exit(-1)
+            Exit(-1)
 
         if self.url.endswith(".tar.gz") or self.url.endswith(".tgz"):
             tf = tarfile.open(basename, 'r:gz')
@@ -143,10 +164,10 @@ class web:
             tf.extractall()
             if not run_commands(["mv %s %s"%(prefix, subdir)]):
                 print "Could not get %s sources"%subdir
-                sys.exit(-1)
+                Exit(-1)
         else:
             print "Don't know how to get %s"%self.url
-            sys.exit(-1)
+            Exit(-1)
 
 
 class component:
@@ -171,10 +192,8 @@ class component:
         self.local_install = os.path.join(origin_dir,
                                          "objects",
                                          subdir)
-        target_prefix = env.get("TARGET_PREFIX")
         self.target_install = None
         if target_prefix:
-            target_prefix = os.path.realpath(target_prefix)
             self.target_install = os.path.join(target_prefix, subdir)
         self.lib_path = ["lib"]
         self.include_path = ["include"]
@@ -183,13 +202,15 @@ class component:
         for path in extra_include_path:
             self.include_path.append(path)
         replacement = self.local_install
+        if os.path.islink(self.local_install):
+            os.unlink(self.local_install)
         try:
             os.makedirs(self.local_install)
         except:
             pass
         if not os.path.exists(self.local_install):
             print "Could not create %s"%self.local_install
-            sys.exit(-1)
+            Exit(-1)
         if self.target_install:
             replacement = self.target_install
             if not os.path.islink(self.local_install):
@@ -197,10 +218,6 @@ class component:
             #Add a command to link the directory
             build_commands.append("ln -sfn %s %s"%(self.target_install,
                                                  self.local_install))
-        else:
-            if os.path.islink(self.local_install):
-                os.unlink(self.local_install)
-                os.mkdir(self.local_install)
         temp = map(lambda x: x.replace("$LOCAL_INSTALL",
                                   replacement), build_commands)
         self.rel_ins = os.path.join(build_dir, "objects", subdir)
@@ -212,7 +229,7 @@ class component:
                               'Alternate path for %s source'%subdir,
                               None,
                               PathVariable.PathIsDir))
-        opts.Update(env)
+        opts.Update(self.env)
         if out_of_source_build:
             self.build_path = os.path.join(build_dir, "%s.build"%self.subdir)
             os.system("mkdir -p %s"%self.build_path)
@@ -234,15 +251,17 @@ class component:
         if def_path:
             if not os.path.exists(def_path):
                 print "%s not found at %s"%(self.subdir, def_path)
-                sys.exit(-1)
+                Exit(-1)
+            def_path = os.path.realpath(os.path.join(top_dir, def_path))
+            updateValue(self.env, self.src_opt, def_path)
             #Use the specified location
             print "Using %s source from %s"%(self.subdir, def_path)
             if not os.path.islink(self.source_path) or \
-              os.path.realpath(self.source_path) != os.path.realpath(def_path):
+              os.path.realpath(self.source_path) != def_path:
                 if not run_commands(["rm -rf %s"%self.source_path,
                                 "ln -s %s %s"%(def_path, self.source_path)]):
                     print "Could not link %s sources"%self.subdir
-                    sys.exit(-1)
+                    Exit(-1)
         else:
             #Source code is retrieved using retriever
             print "Using repository for %s"%self.subdir
@@ -291,15 +310,18 @@ class component:
             if not run_commands(commands,
                                 subdir=os.path.join(origin_dir, "objects")):
                print "Could not link %s"%self.subdir
-               sys.exit(-1)
+               Exit(-1)
         else:
             build_dir = os.path.join(self.build_path, self.subdir)
             if self.has_changes() or self.has_missing_targets():
                 if not run_commands(self.build_commands,
                                     subdir=self.build_path):
                     print "Could not build %s"%self.subdir
-                    sys.exit(-1)
+                    Exit(-1)
         cwd = os.getcwd()
+        if not os.path.exists(self.local_install):
+             print "%s not found in %s"%(self.subdir, self.local_install)
+             Exit(-1)
         os.chdir(self.local_install)
         self.targets = []
         for root, dirs, files in os.walk("."):
@@ -307,7 +329,7 @@ class component:
                 target = Glob(os.path.join(origin_offset, "objects",
                                            self.subdir, root, f))
                 self.targets = self.targets + target
-                env.Install(os.path.join(ins_root, root), target)
+                self.env.Install(os.path.join(ins_root, root), target)
         os.chdir(cwd)
         #Add the relevant paths to the build environment
         for x in self.lib_path:
@@ -414,4 +436,4 @@ ompi = component(env,
                 "make install"],
                 ["lib/libopen-rte%s"%env.subst("$SHLIBSUFFIX")])
 
-Export('all_deps')
+Export('all_deps ins_root')

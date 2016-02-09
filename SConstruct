@@ -1,32 +1,31 @@
 import os, sys, subprocess
 
-env = Environment()
+opts_file = os.path.join(Dir('#').abspath, "iof.conf")
+opts = Variables([opts_file])
+env = Environment(variables=opts)
 config = Configure(env)
-opts = Variables(["iof.conf"])
 
-opts.Add(PathVariable('PREFIX', 'Alternate installation path',
-                      os.path.join(Dir('#').abspath, 'install'),
-                      PathVariable.PathIsDirCreate))
-opts.Update(env)
-
-env.Alias('install', env.get('PREFIX'))
-
-ins_root = '$PREFIX'
-
-Export('env opts ins_root config')
+Export('opts env config')
 
 SConscript('SConscript', variant_dir='#build')
 
+Import('all_deps ins_root')
+
 Help(opts.GenerateHelpText(env))
 
-Import('all_deps')
+opts.Save(opts_file, env)
 
-all_deps.build()
+unknown = opts.UnknownVariables()
+if unknown:
+    print "Unknown variables: %s"%unknown.keys()
+    SetOption("help", True)
 
-env.Alias('deps', all_deps.targets)
+if not GetOption("help"):
 
-SConscript('ping/SConscript', variant_dir="#build/ping")
+    all_deps.build()
 
-Default('deps', 'ping')
+    env.Alias('deps', all_deps.targets)
 
-opts.Save('iof.conf', env)
+    SConscript('ping/SConscript', variant_dir="#build/ping")
+
+    Default('deps', 'ping')
