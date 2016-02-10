@@ -50,6 +50,8 @@ class component_group:
         self.libs[component.subdir] = component.libs
 
     def build(self):
+        if GetOption('help'):
+            return
         if not prebuilt_prefix:
             for c in self.components:
                 c.get()

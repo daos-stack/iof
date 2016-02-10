@@ -20,12 +20,10 @@ if unknown:
     print "Unknown variables: %s"%unknown.keys()
     SetOption("help", True)
 
-if not GetOption("help"):
+all_deps.build()
 
-    all_deps.build()
+env.Alias('deps', all_deps.targets)
 
-    env.Alias('deps', all_deps.targets)
+SConscript('ping/SConscript', variant_dir="#build/ping")
 
-    SConscript('ping/SConscript', variant_dir="#build/ping")
-
-    Default('deps', 'ping')
+Default('deps', 'ping')
