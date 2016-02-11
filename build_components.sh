@@ -5,7 +5,7 @@ set -x
 
 option=
 if [ -n "$WORKSPACE" ]; then
-    export option="TARGET_PREFIX=/scratch/coral/artifacts/${JOB_NAME}/${BUILD_NUMBER}
+    export option="TARGET_PREFIX=/scratch/coral/artifacts/${JOB_NAME}/${BUILD_NUMBER}"
 fi
 
 /bin/rm -f *.conf
