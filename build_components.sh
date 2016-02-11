@@ -4,10 +4,14 @@ set -e
 set -x
 
 option=
-if [ -n "$PREBUILT_AREA" ]; then
-export option="TARGET_PREFIX=${PREBUILT_AREA}"
+if [ -n "$WORKSPACE" ]; then
+    export option="TARGET_PREFIX=/scratch/coral/artifacts/${JOB_NAME}/${BUILD_NUMBER}
 fi
 
-rm -f *.conf
+/bin/rm -f *.conf
 scons $option SRC_PREFIX=../
 scons install
+
+if [ -n "$WORKSPACE" ]; then
+    ln -sfn ${BUILD_NUMBER} /scratch/coral/artifacts/${JOB_NAME}/latest
+fi
