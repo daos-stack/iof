@@ -102,7 +102,7 @@ int get_uri(char **uri)
 {
     int socketfd;
     struct sockaddr_in tmp_socket;
-    char name[256 + 10]; // POSIX HOST_NAME_MAX + bmi+tcp://
+    char name[256 + 10 + 1]; // POSIX HOST_NAME_MAX + bmi+tcp://
     char hname[256];
     socklen_t slen = sizeof(struct sockaddr);
 
@@ -114,8 +114,8 @@ int get_uri(char **uri)
 
     bind(socketfd, (const struct sockaddr *) &tmp_socket, sizeof(tmp_socket));
     getsockname(socketfd, (struct sockaddr *) &tmp_socket, &slen);
-    gethostname(hname, HOST_NAME_MAX);
-    snprintf(name, 256 + 10 + 1, "bmi+tcp://%s:%d\n", hname, ntohs(tmp_socket.sin_port));
+    gethostname(hname, 256);
+    snprintf(name, 256 + 10 + 1, "bmi+tcp://%s:%d", hname, ntohs(tmp_socket.sin_port));
     *uri = strndup(name, 256 + 10);
     close(socketfd);
 

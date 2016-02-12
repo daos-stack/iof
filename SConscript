@@ -153,7 +153,7 @@ class web:
 
         commands = ["rm -rf %s"%subdir]
         if not os.path.exists(basename):
-            commands.append("wget %s"%self.url)
+            commands.append("curl -O %s"%self.url)
 
         if not run_commands(commands):
             print "Could not get %s sources"%subdir
