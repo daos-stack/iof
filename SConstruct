@@ -1,4 +1,4 @@
-import os, sys, subprocess
+import os
 
 opts_file = os.path.join(Dir('#').abspath, "iof.conf")
 opts = Variables([opts_file])
@@ -17,7 +17,7 @@ opts.Save(opts_file, env)
 
 unknown = opts.UnknownVariables()
 if unknown:
-    print "Unknown variables: %s"%unknown.keys()
+    print "Unknown variables: %s" % unknown.keys()
     SetOption("help", True)
 
 all_deps.build()
