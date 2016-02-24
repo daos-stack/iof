@@ -73,7 +73,9 @@ int main(int argc, char **argv)
     hg_context = HG_Context_create(hg_class);
     assert(hg_context);
 
-    my_rpc_id = HG_Register(hg_class, "rpc_test", my_in_proc_cb, my_out_proc_cb, my_rpc_test_handler);
+    my_rpc_id = HG_Register_name(hg_class, "rpc_test", my_in_proc_cb, my_out_proc_cb, my_rpc_test_handler);
+
+    printf("Id registered on Server is %u\n", my_rpc_id);
 
     while (1) {
         do {

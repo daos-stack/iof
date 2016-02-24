@@ -75,7 +75,9 @@ int main(int argc, char **argv)
     PMIX_PDATA_FREE(pdata, 1);
     // ========= end PMIx stuff
 
-    my_rpc_id = HG_Register(hg_class, "rpc_test", my_in_proc_cb, my_out_proc_cb, my_rpc_test_handler);
+    my_rpc_id = HG_Register_name(hg_class, "rpc_test", my_in_proc_cb, my_out_proc_cb, my_rpc_test_handler);
+    printf("Id registered on Client is %u\n", my_rpc_id);
+
     HG_Create(hg_class, hg_context, my_server_addr, my_rpc_id, &my_hg_handle);
     hgi = HG_Get_info(my_hg_handle);
     my_rpc_test_state_p->size = 512;
