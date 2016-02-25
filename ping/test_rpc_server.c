@@ -15,6 +15,7 @@
 
 #include "my_rpc_common.h"
 
+extern hg_bool_t test_bulk_cb_done_g;
 int get_uri(char **uri);
 
 int main(int argc, char **argv)
@@ -83,7 +84,8 @@ int main(int argc, char **argv)
             total_count += act_count;
         } while (ret == HG_SUCCESS && act_count);
         HG_Progress(hg_class, hg_context, 100);
-        if (total_count == 3) break;
+//        if (total_count == 3) break;
+        if (test_bulk_cb_done_g) break;
     }
 
     HG_Context_destroy(hg_context);

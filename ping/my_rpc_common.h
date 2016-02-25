@@ -1,3 +1,6 @@
+#ifndef MY_RPC_COMMON_H
+#define MY_RPC_COMMON_H
+
 #include <stdio.h>
 #include <assert.h>
 #include <unistd.h>
@@ -26,3 +29,5 @@ typedef struct {
 typedef struct {
     int32_t bb;
 } my_rpc_test_out_t;
+
+#endif // MY_RPC_COMMON_H
