@@ -16,4 +16,5 @@ fi
 export PATH=${WORKSPACE}/install/bin:$PATH
 
 echo Trying to run Mercury tests.
-orterun -np 1  ./build/ping/test_rpc_server : -np 1 ./build/ping/test_rpc_client
+orterun -np 1  ./build/ping/test_rpc_server : \
+-np 1 ./build/ping/test_rpc_client

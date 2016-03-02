@@ -1,29 +1,41 @@
+"""Build iof components"""
 import os
+import sys
+sys.path.insert(0, os.path.join(Dir('#').abspath, "scons_local"))
+from prereq_tools import PreReqComponent
+OPTS_FILE = os.path.join(Dir('#').abspath, "iof.conf")
+ENV = DefaultEnvironment()
 
-opts_file = os.path.join(Dir('#').abspath, "iof.conf")
-opts = Variables([opts_file])
-env = Environment(variables=opts)
-config = Configure(env)
+if os.path.exists("SConscript.local"):
+# pylint: disable=pointless-string-statement
+    """Define this file in order to modify environment defaults
+#For example:
+Import('ENV')
+import os
+OS_ENV = ENV['ENV']
+OS_ENV["PATH"] = "/foo/bar" + os.pathsep + OS_ENV["PATH"]
+ENV.Replace(ENV=OS_ENV)"""
+    SConscript('SConscript.local')
+# pylint: enable=pointless-string-statement
 
-Export('opts env config')
+OPTS = Variables(OPTS_FILE)
+PREREQS = PreReqComponent(ENV, OPTS)
+PREREQS.preload(os.path.join(Dir('#').abspath,
+                             "scons_local",
+                             "components.py"),
+                prebuild=["ompi", "mercury"])
 
-SConscript('SConscript', variant_dir='#build')
+Export('ENV PREREQS')
 
-Import('all_deps ins_root')
+Help(OPTS.GenerateHelpText(ENV))
 
-Help(opts.GenerateHelpText(env))
+OPTS.Save(OPTS_FILE, ENV)
 
-opts.Save(opts_file, env)
-
-unknown = opts.UnknownVariables()
-if unknown:
-    print "Unknown variables: %s" % unknown.keys()
+UNKNOWN = OPTS.UnknownVariables()
+if UNKNOWN:
+    print "Unknown variables: %s" % UNKNOWN.keys()
     SetOption("help", True)
-
-all_deps.build()
-
-env.Alias('deps', all_deps.targets)
 
 SConscript('ping/SConscript', variant_dir="#build/ping")
 
-Default('deps', 'ping')
+Default('ping')

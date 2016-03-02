@@ -2,6 +2,7 @@
 config.log
 /objects/
 /build/
+/_build.external/
 .sconsign.dblite
 /.sconf_temp/
 *.tar.gz

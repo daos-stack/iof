@@ -18,4 +18,4 @@ export PATH=${WORKSPACE}/iof/install/bin:$PATH
 export OPAL_PREFIX=${WORKSPACE}/iof/install
 
 echo Trying to run pmix tests.
-orterun -np 2 ./build/pmix/examples/client
+orterun -np 2 ./_build.external/pmix/examples/client

@@ -1,11 +1,11 @@
+"""Build ping test"""
+Import('ENV PREREQS')
 
-Import('env all_deps')
+TENV = ENV.Clone()
+PREREQS.require(TENV, "pmix", "mercury", "bmi", "pthread")
+TENV.Append(CFLAGS=['-g', '-Wall'])
+COMMON = TENV.Object('my_rpc_common')
+SOURCES = Glob('test*.c')
 
-tenv = env.Clone()
-tenv.Append(LIBS=all_deps.get_libs("pmix") + all_deps.get_libs("mercury"))
-tenv.Append(CFLAGS=['-g', '-Wall'])
-common = tenv.Object('my_rpc_common')
-sources = Glob('test*.c')
-
-for source in sources:
-    tenv.Program([source, common])
+for source in SOURCES:
+    TENV.Program([source, COMMON])
