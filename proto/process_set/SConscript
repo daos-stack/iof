@@ -1,0 +1,8 @@
+"""Build ping test"""
+Import('ENV PREREQS')
+
+TENV = ENV.Clone()
+PREREQS.require(TENV, "pmix", "mercury", "bmi")
+COMMON = TENV.Object('process_set')
+
+TENV.Program(['test_ps.c', COMMON])
