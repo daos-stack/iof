@@ -2,7 +2,7 @@
 Import('ENV PREREQS')
 
 TENV = ENV.Clone()
-PREREQS.require(TENV, "pmix", "mercury", "bmi", "pthread")
+PREREQS.require(TENV, "pmix", "mercury", "bmi")
 TENV.Append(CFLAGS=['-g', '-Wall'])
 COMMON = TENV.Object('my_rpc_common')
 SOURCES = Glob('test*.c')
