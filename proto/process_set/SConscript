@@ -4,7 +4,7 @@ import os
 
 TENV = ENV.Clone()
 TENV.Prepend(CPPPATH=['../common/include'])
-PREREQS.require(TENV, "pmix", "mercury", "bmi")
+PREREQS.require(TENV, "pmix", "mercury")
 
 # Build the process set shared library, which requires the common
 # library.

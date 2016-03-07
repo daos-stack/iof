@@ -3,7 +3,7 @@ Import('ENV PREREQS')
 import os
 
 TENV = ENV.Clone()
-PREREQS.require(TENV, "pmix", "mercury", "bmi")
+PREREQS.require(TENV, "pmix", "mercury")
 TENV.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
 TENV.Append(CPPPATH=['#proto/process_set/include'])
 COMMON = TENV.Object('rpc_common')
