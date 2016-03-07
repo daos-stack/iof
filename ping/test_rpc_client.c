@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 	hg_context = HG_Context_create(hg_class);
 	assert(hg_context);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc))) {
+	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc, NULL, 0))) {
 		fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
 		exit(0);
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 		if (act_count)
 			break;
 	}
-	if (PMIX_SUCCESS != (rc = PMIx_Finalize())) {
+	if (PMIX_SUCCESS != (rc = PMIx_Finalize(NULL, 0))) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Finalize failed: %d\n",
 			myproc.nspace, myproc.rank, rc);

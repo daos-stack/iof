@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	get_uri(&uri);
 	fprintf(stderr, "server uri: %s\n", uri);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc))) {
+	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc, NULL, 0))) {
 		fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
 		exit(0);
@@ -98,7 +98,7 @@ int main(int argc, char **argv)
 	NA_Context_destroy(na_class, na_context);
 	NA_Finalize(na_class);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Finalize())) {
+	if (PMIX_SUCCESS != (rc = PMIx_Finalize(NULL, 0))) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Finalize failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
