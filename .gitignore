@@ -8,3 +8,6 @@ config.log
 *.tar.gz
 /install/
 iof.conf
+*~
+*.BAK
+\#*#
