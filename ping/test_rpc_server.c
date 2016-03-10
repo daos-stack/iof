@@ -15,8 +15,7 @@
 
 #include "my_rpc_common.h"
 
-extern hg_bool_t test_bulk_cb_done_g;
-int get_uri(char **uri);
+static int get_uri(char **uri);
 
 int main(int argc, char **argv)
 {
@@ -31,8 +30,8 @@ int main(int argc, char **argv)
 	int rc;
 	bool flag;
 	pmix_info_t *info;
-
 	char *uri;
+
 	get_uri(&uri);
 	fprintf(stderr, "server uri: %s\n", uri);
 
@@ -67,6 +66,7 @@ int main(int argc, char **argv)
 	PMIX_INFO_FREE(info, 1);
 
 	na_class = NA_Initialize(uri, NA_TRUE);
+	free(uri);
 	assert(na_class);
 	na_context = NA_Context_create(na_class);
 	assert(na_context);
@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-int get_uri(char **uri)
+static int get_uri(char **uri)
 {
 	int socketfd;
 	struct sockaddr_in tmp_socket;

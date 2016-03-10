@@ -13,7 +13,7 @@
 
 #include "my_rpc_common.h"
 
-hg_return_t my_rpc_test_cb(const struct hg_cb_info *info);
+static hg_return_t my_rpc_test_cb(const struct hg_cb_info *info);
 
 int main(int argc, char **argv)
 {
@@ -25,7 +25,7 @@ int main(int argc, char **argv)
 	hg_handle_t my_hg_handle;
 	na_addr_t my_server_addr;
 	struct my_rpc_test_state *my_rpc_test_state_p;
-	my_rpc_test_in_t in_struct;
+	struct my_rpc_test_in_t in_struct;
 	unsigned int act_count = 0;
 	hg_return_t ret;
 	struct hg_info *hgi;
@@ -117,13 +117,15 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-hg_return_t my_rpc_test_cb(const struct hg_cb_info *info)
+static hg_return_t my_rpc_test_cb(const struct hg_cb_info *info)
 {
-	my_rpc_test_out_t out_struct;
+	struct my_rpc_test_out_t out_struct;
 
 	HG_Get_output(info->handle, &out_struct);
 	fprintf(stdout, "rpc_test finished on remote node, ");
 	fprintf(stdout, "return value: %d\n", out_struct.bb);
+
+	HG_Free_output(info->handle, &out_struct);
 
 	return 0;
 }
