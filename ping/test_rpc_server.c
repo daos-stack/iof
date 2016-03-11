@@ -112,8 +112,20 @@ static int get_uri(char **uri)
 	int socketfd;
 	struct sockaddr_in tmp_socket;
 	char name[256 + 10 + 1];
-	char hname[256];
+
 	socklen_t slen = sizeof(struct sockaddr);
+
+#ifdef __APPLE__
+	/* This is a bit of a hack because of the way that OS X handles
+	 * hostnames, however it does allow the code to run on a single
+	 * apple machine.
+	 */
+	char *hname = "localhost";
+#else
+	char hname[256];
+
+	gethostname(hname, 256);
+#endif
 
 	socketfd = socket(AF_INET, SOCK_STREAM, 0);
 	tmp_socket.sin_family = AF_INET;
@@ -123,7 +135,6 @@ static int get_uri(char **uri)
 	bind(socketfd,
 	     (const struct sockaddr *)&tmp_socket, sizeof(tmp_socket));
 	getsockname(socketfd, (struct sockaddr *)&tmp_socket, &slen);
-	gethostname(hname, 256);
 	snprintf(name, 256 + 10 + 1,
 		 "bmi+tcp://%s:%d", hname, ntohs(tmp_socket.sin_port));
 	*uri = strndup(name, 256 + 10);

@@ -113,6 +113,7 @@ int main(int argc, char **argv)
 	HG_Finalize(hg_class);
 	NA_Context_destroy(na_class, na_context);
 	NA_Finalize(na_class);
+	free(my_rpc_test_state_p);
 
 	return 0;
 }

@@ -31,6 +31,15 @@ hg_return_t my_out_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
+hg_return_t my_rpc_bulk_transfer_cb(const struct hg_bulk_cb_info *info)
+{
+	fprintf(stdout, "my_rpc_bulk_transfer_cb\n");
+	HG_Bulk_free(info->arg);
+	test_bulk_cb_done_g = HG_TRUE;
+
+	return 0;
+}
+
 hg_return_t my_rpc_test_handler(hg_handle_t handle)
 {
 	struct my_rpc_test_in_t in_struct;
@@ -59,11 +68,3 @@ hg_return_t my_rpc_test_handler(hg_handle_t handle)
 	return 0;
 }
 
-hg_return_t my_rpc_bulk_transfer_cb(const struct hg_bulk_cb_info *info)
-{
-	fprintf(stdout, "my_rpc_bulk_transfer_cb\n");
-	HG_Bulk_free(info);
-	test_bulk_cb_done_g = HG_TRUE;
-
-	return 0;
-}
