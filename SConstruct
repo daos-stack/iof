@@ -27,6 +27,8 @@ PREREQS.preload(os.path.join(Dir('#').abspath,
 
 Export('ENV PREREQS')
 
+ENV.Append(CFLAGS=['-g', '-Wall'])
+
 Help(OPTS.GenerateHelpText(ENV))
 
 OPTS.Save(OPTS_FILE, ENV)
@@ -36,6 +38,10 @@ if UNKNOWN:
     print "Unknown variables: %s" % UNKNOWN.keys()
     SetOption("help", True)
 
-SConscript('ping/SConscript', variant_dir="#build/ping")
-
-Default('ping')
+# Pick up any directories under 'proto' which have a SConscript file
+for file in os.listdir('proto'):
+    if not os.path.exists('proto/%s/SConscript' % file):
+        next
+    SConscript('proto/%s/SConscript' % file,
+               variant_dir='#build/iof/proto/%s' % file)
+    Default('proto/%s' % file)

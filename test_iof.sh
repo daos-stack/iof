@@ -21,5 +21,7 @@ if [ -n "$IOF_USE_VALGRIND" ]; then
   CMD_PREFIX="valgrind --xml=yes --xml-file=valgrind.%q{PMIX_RANK}.xml --leak-check=yes"
 fi
 
-orterun --tag-output -np 1  $CMD_PREFIX ./build/ping/test_rpc_server : \
--np 1 $CMD_PREFIX ./build/ping/test_rpc_client
+BUILD_DIR=./build/iof/
+
+orterun --tag-output -np 1  $CMD_PREFIX $BUILD_DIR/proto/ping/test_rpc_server : \
+-np 1 $CMD_PREFIX $BUILD_DIR/proto/ping/test_rpc_client
