@@ -34,9 +34,9 @@ int main(int argc, char **argv)
 	pmix_pdata_t *pdata;
 	bool flag;
 	pmix_info_t *info;
+	char *uri = "bmi+tcp://localhost:8889";
 
 	my_rpc_test_state_p = malloc(sizeof(struct my_rpc_test_state));
-	char *uri = "bmi+tcp://localhost:8889";
 
 	na_class = NA_Initialize(uri, NA_FALSE);
 	assert(na_class);

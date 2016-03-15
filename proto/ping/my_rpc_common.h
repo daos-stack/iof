@@ -14,7 +14,7 @@ hg_return_t my_in_proc_cb(hg_proc_t proc, void *data);
 hg_return_t my_out_proc_cb(hg_proc_t proc, void *data);
 hg_return_t my_rpc_test_handler(hg_handle_t handle);
 
-hg_bool_t test_bulk_cb_done_g;
+extern hg_bool_t test_bulk_cb_done_g;
 
 struct my_rpc_test_state {
 	int32_t cc;
