@@ -38,6 +38,9 @@ if UNKNOWN:
     print "Unknown variables: %s" % UNKNOWN.keys()
     SetOption("help", True)
 
+SConscript('src/SConscript', variant_dir='#build/iof/src')
+Default('src')
+
 # Pick up any directories under 'proto' which have a SConscript file
 for fname in os.listdir('proto'):
     if not os.path.exists('proto/%s/SConscript' % fname):
