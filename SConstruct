@@ -39,9 +39,9 @@ if UNKNOWN:
     SetOption("help", True)
 
 # Pick up any directories under 'proto' which have a SConscript file
-for file in os.listdir('proto'):
-    if not os.path.exists('proto/%s/SConscript' % file):
-        next
-    SConscript('proto/%s/SConscript' % file,
-               variant_dir='#build/iof/proto/%s' % file)
-    Default('proto/%s' % file)
+for fname in os.listdir('proto'):
+    if not os.path.exists('proto/%s/SConscript' % fname):
+        continue
+    SConscript('proto/%s/SConscript' % fname,
+               variant_dir='#build/iof/proto/%s' % fname)
+    Default('proto/%s' % fname)
