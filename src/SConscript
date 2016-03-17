@@ -1,8 +1,7 @@
-
 """Build ping test"""
 Import('ENV PREREQS')
 
-TENV=ENV.Clone()
+TENV = ENV.Clone()
 TENV.Append(CPPPATH=['common/include'])
 COMMON = TENV.Object('common/version')
 
