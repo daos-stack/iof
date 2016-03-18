@@ -15,7 +15,7 @@ import os
 OS_ENV = ENV['ENV']
 OS_ENV["PATH"] = "/foo/bar" + os.pathsep + OS_ENV["PATH"]
 ENV.Replace(ENV=OS_ENV)"""
-    SConscript('SConscript.local')
+    SConscript('SConscript.local', 'ENV')
 # pylint: enable=pointless-string-statement
 
 OPTS = Variables(OPTS_FILE)
