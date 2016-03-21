@@ -27,8 +27,8 @@ PREREQS.preload(os.path.join(Dir('#').abspath,
 
 Export('ENV PREREQS')
 
-ENV.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement', '-std=c99',
-                   '-pedantic'])
+ENV.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement', '-std=gnu99',
+                   '-pedantic', '-Wno-missing-braces'])
 
 Help(OPTS.GenerateHelpText(ENV))
 
