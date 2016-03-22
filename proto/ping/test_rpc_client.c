@@ -58,8 +58,8 @@ int main(int argc, char **argv)
 	proc.rank = PMIX_RANK_WILDCARD;
 	PMIX_INFO_CREATE(info, 1);
 	flag = true;
-	PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL)
-	    if (PMIX_SUCCESS != (rc = PMIx_Fence(&proc, 1, info, 1)))
+	PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
+	if (PMIX_SUCCESS != (rc = PMIx_Fence(&proc, 1, info, 1)))
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Fence failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
