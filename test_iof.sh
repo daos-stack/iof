@@ -8,7 +8,7 @@ set -x
 echo Trying to run Mercury ping test.
 
 if [ -n "$IOF_USE_VALGRIND" ]; then
-  CMD_PREFIX="valgrind --xml=yes --xml-file=valgrind.%q{PMIX_RANK}.xml --leak-check=yes"
+  CMD_PREFIX="valgrind --xml=yes --xml-file=valgrind.%q{PMIX_ID}.xml --leak-check=yes"
 fi
 
 BUILD_DIR=./build/iof
