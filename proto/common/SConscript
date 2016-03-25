@@ -1,0 +1,7 @@
+"""Build ping test"""
+Import('ENV PREREQS')
+
+TENV = ENV.Clone()
+PREREQS.require(TENV, "mercury")
+
+TENV.Library(['proto_common.c'])

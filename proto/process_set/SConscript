@@ -2,7 +2,10 @@
 Import('ENV PREREQS')
 
 TENV = ENV.Clone()
+TENV.Prepend(CPPPATH=['../common/include'])
 PREREQS.require(TENV, "pmix", "mercury", "bmi")
 COMMON = TENV.Object('process_set')
 
-TENV.Program(['test_ps.c', COMMON])
+TENV.Program(['test_ps.c', COMMON],
+             LIBS=['$LIBS', 'proto_common'],
+             LIBPATH=['$LIBPATH', '../common'])

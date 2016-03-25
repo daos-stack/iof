@@ -35,7 +35,8 @@ int main(int argc, char **argv)
 	get_uri(&uri);
 	fprintf(stderr, "server uri: %s\n", uri);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc, NULL, 0))) {
+	rc = PMIx_Init(&myproc, NULL, 0);
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
 		exit(0);
@@ -45,7 +46,8 @@ int main(int argc, char **argv)
 	(void)strncpy(info[0].key, "server-addr", PMIX_MAX_KEYLEN);
 	info[0].value.type = PMIX_STRING;
 	info[0].value.data.string = strdup(uri);
-	if (PMIX_SUCCESS != (rc = PMIx_Publish(info, 1)))
+	rc = PMIx_Publish(info, 1);
+	if (rc != PMIX_SUCCESS)
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Publish failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
@@ -58,7 +60,8 @@ int main(int argc, char **argv)
 	PMIX_INFO_CREATE(info, 1);
 	flag = true;
 	PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
-	if (PMIX_SUCCESS != (rc = PMIx_Fence(&proc, 1, info, 1)))
+	rc = PMIx_Fence(&proc, 1, info, 1);
+	if (rc != PMIX_SUCCESS)
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Fence failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
@@ -70,7 +73,7 @@ int main(int argc, char **argv)
 	assert(na_class);
 	na_context = NA_Context_create(na_class);
 	assert(na_context);
-	hg_class = HG_Init(na_class, na_context, NULL);
+	hg_class = HG_Init(na_class, na_context);
 	assert(hg_class);
 	hg_context = HG_Context_create(hg_class);
 	assert(hg_context);
@@ -84,11 +87,10 @@ int main(int argc, char **argv)
 
 	while (1) {
 		do {
-			ret = HG_Trigger(hg_class,
-					 hg_context, 0, 1, &act_count);
+			ret = HG_Trigger(hg_context, 0, 1, &act_count);
 			total_count += act_count;
 		} while (ret == HG_SUCCESS && act_count);
-		HG_Progress(hg_class, hg_context, 100);
+		HG_Progress(hg_context, 100);
 		if (test_bulk_cb_done_g)
 			break;
 	}
@@ -98,7 +100,8 @@ int main(int argc, char **argv)
 	NA_Context_destroy(na_class, na_context);
 	NA_Finalize(na_class);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Finalize(NULL, 0))) {
+	rc = PMIx_Finalize(NULL, 0);
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Finalize failed: %d\n",
 			myproc.nspace, myproc.rank, rc);

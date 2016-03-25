@@ -11,6 +11,7 @@
 #include <arpa/inet.h>
 
 #include "include/process_set.h"
+#include "proto_common.h"
 
 static int mcl_get_uri(char **uri)
 {
@@ -370,7 +371,7 @@ int mcl_lookup(struct mcl_set *dest_set, int rank,
 			mystate->myproc.nspace, mystate->myproc.rank, rc);
 		return MCL_ERR_PMIX_FAILED;
 	}
-	NA_Addr_lookup_wait(na_class, pdata[0].value.data.string, addr_p);
+	my_na_addr_lookup_wait(na_class, pdata[0].value.data.string, addr_p);
 	dest_set->cached[rank].na_addr =  *addr_p;
 	dest_set->cached[rank].uri = strndup(pdata[0].value.data.string,
 					     MCL_URI_LEN_MAX);

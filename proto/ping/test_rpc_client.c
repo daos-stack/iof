@@ -12,6 +12,7 @@
 #include <mercury_types.h>
 
 #include "my_rpc_common.h"
+#include "proto_common.h"
 
 static hg_return_t my_rpc_test_cb(const struct hg_cb_info *info);
 
@@ -42,12 +43,13 @@ int main(int argc, char **argv)
 	assert(na_class);
 	na_context = NA_Context_create(na_class);
 	assert(na_context);
-	hg_class = HG_Init(na_class, na_context, NULL);
+	hg_class = HG_Init(na_class, na_context);
 	assert(hg_class);
 	hg_context = HG_Context_create(hg_class);
 	assert(hg_context);
 
-	if (PMIX_SUCCESS != (rc = PMIx_Init(&myproc, NULL, 0))) {
+	rc = PMIx_Init(&myproc, NULL, 0);
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
 		exit(0);
@@ -59,7 +61,8 @@ int main(int argc, char **argv)
 	PMIX_INFO_CREATE(info, 1);
 	flag = true;
 	PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
-	if (PMIX_SUCCESS != (rc = PMIx_Fence(&proc, 1, info, 1)))
+	rc = PMIx_Fence(&proc, 1, info, 1);
+	if (rc != PMIX_SUCCESS)
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Fence failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
@@ -68,12 +71,13 @@ int main(int argc, char **argv)
 
 	PMIX_PDATA_CREATE(pdata, 1);
 	(void)strncpy(pdata[0].key, "server-addr", PMIX_MAX_KEYLEN);
-	if (PMIX_SUCCESS != (rc = PMIx_Lookup(pdata, 1, NULL, 0)))
+	rc = PMIx_Lookup(pdata, 1, NULL, 0);
+	if (rc != PMIX_SUCCESS)
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Lookup failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
 
-	NA_Addr_lookup_wait(na_class, pdata[0].value.data.string,
+	my_na_addr_lookup_wait(na_class, pdata[0].value.data.string,
 			    &my_server_addr);
 	PMIX_PDATA_FREE(pdata, 1);
 
@@ -82,12 +86,11 @@ int main(int argc, char **argv)
 				     my_out_proc_cb, my_rpc_test_handler);
 	printf("Id registered on Client is %u\n", my_rpc_id);
 
-	HG_Create(hg_class,
-		  hg_context, my_server_addr, my_rpc_id, &my_hg_handle);
+	HG_Create(hg_context, my_server_addr, my_rpc_id, &my_hg_handle);
 	hgi = HG_Get_info(my_hg_handle);
 	my_rpc_test_state_p->size = 512;
 	my_rpc_test_state_p->buffer = calloc(1, 512);
-	HG_Bulk_create(hgi->hg_bulk_class, 1, &my_rpc_test_state_p->buffer,
+	HG_Bulk_create(hgi->hg_class, 1, &my_rpc_test_state_p->buffer,
 		       &my_rpc_test_state_p->size, HG_BULK_READ_ONLY,
 		       &in_struct.bulk_handle);
 	my_rpc_test_state_p->cc = 18;
@@ -97,14 +100,14 @@ int main(int argc, char **argv)
 
 	while (1) {
 		do {
-			ret = HG_Trigger(hg_class, hg_context, 0, 1,
-					 &act_count);
+			ret = HG_Trigger(hg_context, 0, 1, &act_count);
 		} while (ret == HG_SUCCESS && act_count);
-		HG_Progress(hg_class, hg_context, 100);
+		HG_Progress(hg_context, 100);
 		if (act_count)
 			break;
 	}
-	if (PMIX_SUCCESS != (rc = PMIx_Finalize(NULL, 0))) {
+	rc = PMIx_Finalize(NULL, 0);
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Finalize failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
