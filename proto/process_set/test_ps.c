@@ -43,6 +43,10 @@ int main(int argc, char **argv)
 		}
 	}
 	proc_state = mcl_init(&uri);
+	if (proc_state == NULL) {
+		fprintf(stderr, "mcl_init() failed.\n");
+		return -1;
+	}
 	na_class = NA_Initialize(uri, NA_TRUE);
 	mcl_startup(proc_state, name_of_set, is_service, &set);
 	fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
