@@ -6,6 +6,8 @@ from prereq_tools import PreReqComponent
 OPTS_FILE = os.path.join(Dir('#').abspath, "iof.conf")
 ENV = DefaultEnvironment()
 
+VariantDir('build/iof', '.', duplicate=0)
+
 if os.path.exists("SConscript.local"):
 # pylint: disable=pointless-string-statement
     """Define this file in order to modify environment defaults
@@ -30,8 +32,6 @@ Export('ENV PREREQS')
 ENV.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement', '-std=gnu99',
                    '-pedantic', '-Wno-missing-braces'])
 
-Help(OPTS.GenerateHelpText(ENV))
-
 OPTS.Save(OPTS_FILE, ENV)
 
 UNKNOWN = OPTS.UnknownVariables()
@@ -39,13 +39,18 @@ if UNKNOWN:
     print "Unknown variables: %s" % UNKNOWN.keys()
     SetOption("help", True)
 
-SConscript('src/SConscript', variant_dir='#build/iof/src')
+SConscript('build/iof/src/SConscript')
 Default('src')
 
 # Pick up any directories under 'proto' which have a SConscript file
 for fname in os.listdir('proto'):
     if not os.path.exists('proto/%s/SConscript' % fname):
         continue
-    SConscript('proto/%s/SConscript' % fname,
-               variant_dir='#build/iof/proto/%s' % fname)
+    SConscript('build/iof/proto/%s/SConscript' % fname)
     Default('proto/%s' % fname)
+
+try:
+    #if using SCons 2.4+, provide a more complete help
+    Help(OPTS.GenerateHelpText(ENV), append=True)
+except TypeError:
+    Help(OPTS.GenerateHelpText(ENV))
