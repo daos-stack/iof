@@ -12,6 +12,7 @@
 #include "rpc_handler.h"
 #include "rpc_common.h"
 #include "server_backend.h"
+#include "process_set.h"
 
 struct rpc_handle rpc_handle;
 struct rpc_id rpc_id;
@@ -41,13 +42,8 @@ struct readlink_r_t {
 	int done;
 };
 
-/*Network addresses*/
-na_addr_t svr_addr = NA_ADDR_NULL;
-
-void client_init(void)
+void client_init(hg_class_t *rpc_class, na_addr_t svr_addr)
 {
-	hg_class_t *rpc_class = engine_init(NA_FALSE, "tcp://localhost:1234", 0);
-	engine_addr_lookup("tcp://localhost:1234", &svr_addr);
 	/*getattr() */
 	rpc_id.getattr_id = getattr_register(rpc_class);
 	engine_create_handle(svr_addr, rpc_id.getattr_id,
@@ -212,6 +208,7 @@ static int fs_mkdir(const char *name, mode_t mode)
 	return reply.err_code;
 }
 
+
 static int fs_rmdir(const char *name)
 {
 	struct rpc_cb_basic reply = {0};
@@ -337,7 +334,32 @@ static struct fuse_operations op = {
 
 int main(int argc, char **argv)
 {
-	client_init();
+	na_class_t *na_class = NULL;
+	hg_class_t *rpc_class = NULL;
+	char *uri;
+	struct mcl_set *set;
+	struct mcl_state *proc_state;
+	int is_service = 0;
+	char *name_of_set = "client";
+	char *name_of_target_set = "server";
+	struct mcl_set *dest_set;
+	na_addr_t dest_addr;
+	int ret;
+
+	proc_state = mcl_init(&uri);
+	rpc_class = engine_init(NA_FALSE, uri, 0, &na_class);
+	mcl_startup(proc_state, name_of_set, is_service, &set);
+	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
+	if (ret != MCL_SUCCESS) {
+		fprintf(stderr, "attach failed\n");
+		return 0;
+	}
+	mcl_lookup(dest_set, 0, na_class, &dest_addr);
+	client_init(rpc_class, dest_addr);
 	fuse_main(argc, argv, &op, NULL);
+
+	mcl_set_free(na_class, dest_set);
+	NA_Finalize(na_class);
+	mcl_finalize(proc_state);
 	return 0;
 }

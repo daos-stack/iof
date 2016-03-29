@@ -3,6 +3,7 @@
 #include<stdio.h>
 #include "rpc_common.h"
 #include "rpc_handler.h"
+#include "process_set.h"
 
 /* Will be the wrapper on top of the file system that will register
  * and handle the RPC. It will execute indefinitely.
@@ -13,10 +14,8 @@
  */
 struct rpc_id rpc_id;
 
-void server_init(void)
+void server_init(hg_class_t *rpc_class)
 {
-	hg_class_t *rpc_class = engine_init(NA_TRUE, "tcp://localhost:1234", 1);
-
 	rpc_id.readdir_id = readdir_register(rpc_class);
 
 	rpc_id.getattr_id = getattr_register(rpc_class);
@@ -34,11 +33,23 @@ void server_init(void)
 
 int main(int argc, char **argv)
 {
+	na_class_t *na_class = NULL;
+	hg_class_t *rpc_class = NULL;
+	char *uri;
+	struct mcl_set *set;
+	struct mcl_state *proc_state;
+	int is_service = 1;
+	char *name_of_set = "server";
 	filesystem_init();
-	server_init();
+	proc_state = mcl_init(&uri);
+	rpc_class = engine_init(NA_TRUE, uri, 1, &na_class);
+	server_init(rpc_class);
+	mcl_startup(proc_state, name_of_set, is_service, &set);
 	while (1)
 		sleep(1);
-
-	engine_finalize();
+	/*useless at this point*/
+	mcl_set_free(na_class, set);
+	mcl_finalize(proc_state);
 	return 0;
+
 }

@@ -3,9 +3,7 @@
 #include<pthread.h>
 #include <unistd.h>
 #include "rpc_common.h"
-#include "proto_common.h"
 
-static na_class_t *network_class;
 static na_context_t *na_context;
 static hg_context_t *hg_context;
 static hg_class_t *hg_class;
@@ -16,18 +14,18 @@ static int hg_progress_shutdown_flag;
 static void *progress_fn(void *foo);
 
 hg_class_t *engine_init(na_bool_t listen, const char *local_addr,
-		int start_thread)
+		int start_thread, na_class_t **network_class)
 {
 	int ret;
 
 	/* boilerplate HG initialization steps */
-	network_class = NA_Initialize(local_addr, listen);
+	*network_class = NA_Initialize(local_addr, listen);
 	assert(network_class);
 
-	na_context = NA_Context_create(network_class);
+	na_context = NA_Context_create(*network_class);
 	assert(na_context);
 
-	hg_class = HG_Init_na(network_class, na_context);
+	hg_class = HG_Init_na(*network_class, na_context);
 	assert(hg_class);
 
 	hg_context = HG_Context_create(hg_class);
@@ -81,13 +79,6 @@ void engine_progress(int *done)
 	HG_Trigger(hg_context, 0, 2, &actual_count);
 }
 
-void engine_addr_lookup(const char *name, na_addr_t *addr)
-{
-	na_return_t ret;
-
-	ret = my_na_addr_lookup_wait(network_class, name, addr);
-	assert(ret == NA_SUCCESS);
-}
 
 void engine_create_handle(na_addr_t addr, hg_id_t id, hg_handle_t *handle)
 {
