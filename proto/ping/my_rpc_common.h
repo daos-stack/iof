@@ -31,6 +31,4 @@ struct my_rpc_test_out_t {
 	int32_t bb;
 };
 
-na_return_t
-na_addr_lookup_wait(na_class_t *na_class, const char *name, na_addr_t *addr);
 #endif
