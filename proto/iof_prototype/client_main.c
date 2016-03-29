@@ -30,28 +30,13 @@ struct readdir_r_t {
 	int done;
 };
 
-struct mkdir_r_t {
-	uint64_t err_code;
-	int done;
-};
-
-struct rmdir_r_t {
-	uint64_t err_code;
-	int done;
-};
-
-struct symlink_r_t {
+struct rpc_cb_basic {
 	uint64_t err_code;
 	int done;
 };
 
 struct readlink_r_t {
 	char *dst;
-	uint64_t err_code;
-	int done;
-};
-
-struct unlink_r_t {
 	uint64_t err_code;
 	int done;
 };
@@ -116,7 +101,7 @@ static hg_return_t getattr_callback(const struct hg_cb_info *info)
 static int fs_getattr(const char *name, struct stat *stbuf)
 {
 	uint64_t ret;
-	struct getattr_in_t in;	/* struct to carry input args */
+	struct rpc_request_string in; /* struct to carry input args */
 	struct getattr_r_t reply = {0};
 
 	in.name = name;
@@ -190,15 +175,16 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 	return 0;
 }
 
-static hg_return_t mkdir_callback(const struct hg_cb_info *info)
+static hg_return_t basic_callback(const struct hg_cb_info *info)
 {
-	struct mkdir_out_t out = {0};
-	struct mkdir_r_t *reply;
+	struct rpc_reply_basic out = {0};
+	struct rpc_cb_basic *reply;
 	int ret;
 
 	reply = info->arg;
 	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
+
 	reply->err_code = out.error_code;
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
@@ -211,83 +197,47 @@ static hg_return_t mkdir_callback(const struct hg_cb_info *info)
 static int fs_mkdir(const char *name, mode_t mode)
 {
 	struct mkdir_in_t in;
-	struct mkdir_r_t reply = {0};
+	struct rpc_cb_basic reply = {0};
 	int ret;
 
 	in.name = name;
 	in.mode = mode;
 
-	ret = HG_Forward(rpc_handle.mkdir_handle, mkdir_callback, &reply, &in);
+	ret = HG_Forward(rpc_handle.mkdir_handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
 	while (reply.done == 0)
 		engine_progress(&reply.done);
 
 	return reply.err_code;
-}
-
-static hg_return_t rmdir_callback(const struct hg_cb_info *info)
-{
-	struct rmdir_r_t *reply;
-
-	struct rmdir_out_t out = {0};
-	int ret;
-
-	reply = info->arg;
-	ret = HG_Get_output(info->info.forward.handle, &out);
-	assert(ret == HG_SUCCESS);
-	reply->err_code = out.error_code;
-	ret = HG_Free_output(info->info.forward.handle, &out);
-	assert(ret == HG_SUCCESS);
-
-	reply->done = 1;
-	return HG_SUCCESS;
 }
 
 static int fs_rmdir(const char *name)
 {
-	struct rmdir_r_t reply = {0};
-	struct rmdir_in_t in;
+	struct rpc_cb_basic reply = {0};
+	struct rpc_request_string in;
 	int ret;
 
 	in.name = name;
-	ret = HG_Forward(rpc_handle.rmdir_handle, rmdir_callback, &reply, &in);
+	ret = HG_Forward(rpc_handle.rmdir_handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 	while (reply.done == 0)
 		engine_progress(&reply.done);
 
 	return reply.err_code;
-}
-
-hg_return_t symlink_callback(const struct hg_cb_info *info)
-{
-	struct symlink_r_t *reply;
-	struct symlink_out_t out = {0};
-	int ret;
-
-	reply = info->arg;
-	ret = HG_Get_output(info->info.forward.handle, &out);
-	assert(ret == 0);
-
-	reply->err_code = out.error_code;
-	ret = HG_Free_output(info->info.forward.handle, &out);
-	assert(ret == 0);
-	reply->done = 1;
-
-	return HG_SUCCESS;
 }
 
 static int fs_symlink(const char *dst, const char *name)
 {
 	struct symlink_in_t in;
-	struct symlink_r_t reply = {0};
+	struct rpc_cb_basic reply = {0};
 	int ret;
 
 	in.name = name;
 	in.dst = dst;
 
 	ret =
-	    HG_Forward(rpc_handle.symlink_handle, symlink_callback, &reply,
+	    HG_Forward(rpc_handle.symlink_handle, basic_callback, &reply,
 		       &in);
 	assert(ret == 0);
 	while (reply.done == 0)
@@ -320,7 +270,7 @@ hg_return_t readlink_callback(const struct hg_cb_info *info)
 
 static int fs_readlink(const char *name, char *dst, size_t length)
 {
-	struct readlink_in_t in;
+	struct rpc_request_string in;
 	struct readlink_r_t reply = {0};
 	int ret;
 
@@ -340,8 +290,8 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 
 hg_return_t unlink_callback(const struct hg_cb_info *info)
 {
-	struct unlink_r_t *reply;
-	struct unlink_out_t out;
+	struct rpc_cb_basic *reply;
+	struct rpc_reply_basic out;
 	int ret;
 
 	reply = info->arg;
@@ -360,8 +310,8 @@ hg_return_t unlink_callback(const struct hg_cb_info *info)
 
 static int fs_unlink(const char *name)
 {
-	struct unlink_in_t in;
-	struct unlink_r_t reply = {0};
+	struct rpc_request_string in;
+	struct rpc_cb_basic reply = {0};
 	int ret;
 
 	in.name = name;

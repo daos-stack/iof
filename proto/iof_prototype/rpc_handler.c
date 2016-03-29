@@ -9,9 +9,30 @@
 #include <mercury_proc_string.h>
 #include <errno.h>
 
+hg_return_t string_in_proc_cb(hg_proc_t proc, void *data)
+{
+	hg_return_t ret;
+	struct rpc_request_string *struct_data = data;
+
+	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
+	assert(ret == HG_SUCCESS);
+	return ret;
+}
+
+hg_return_t basic_out_proc_cb(hg_proc_t proc, void *data)
+{
+	hg_return_t ret;
+	struct rpc_reply_basic *struct_data = data;
+
+	ret = hg_proc_hg_uint64_t(proc, &struct_data->error_code);
+	assert(ret == HG_SUCCESS);
+
+	return ret;
+}
+
 static hg_return_t getattr_handler(hg_handle_t handle)
 {
-	struct getattr_in_t in;
+	struct rpc_request_string in;
 	struct getattr_out_t out = {0};
 	uint64_t ret;
 	struct stat *buf;
@@ -56,7 +77,7 @@ static hg_return_t readdir_handler(hg_handle_t handle)
 static hg_return_t mkdir_handler(hg_handle_t handle)
 {
 	struct mkdir_in_t in;
-	struct mkdir_out_t out = {0};
+	struct rpc_reply_basic out = {0};
 	hg_return_t ret;
 
 	ret = HG_Get_input(handle, &in);
@@ -73,8 +94,8 @@ static hg_return_t mkdir_handler(hg_handle_t handle)
 
 static hg_return_t rmdir_handler(hg_handle_t handle)
 {
-	struct rmdir_in_t in;
-	struct rmdir_out_t out = {0};
+	struct rpc_request_string in;
+	struct rpc_reply_basic out = {0};
 	int ret;
 
 	ret = HG_Get_input(handle, &in);
@@ -92,7 +113,7 @@ static hg_return_t rmdir_handler(hg_handle_t handle)
 static hg_return_t symlink_handler(hg_handle_t handle)
 {
 	struct symlink_in_t in;
-	struct symlink_out_t out = {0};
+	struct rpc_reply_basic out = {0};
 	int ret;
 
 	ret = HG_Get_input(handle, &in);
@@ -110,7 +131,7 @@ static hg_return_t symlink_handler(hg_handle_t handle)
 
 static hg_return_t readlink_handler(hg_handle_t handle)
 {
-	struct readlink_in_t in;
+	struct rpc_request_string in;
 	struct readlink_out_t out = {0};
 	int ret;
 
@@ -130,8 +151,8 @@ static hg_return_t readlink_handler(hg_handle_t handle)
 
 static hg_return_t unlink_handler(hg_handle_t handle)
 {
-	struct unlink_in_t in;
-	struct unlink_out_t out = {0};
+	struct rpc_request_string in;
+	struct rpc_reply_basic out = {0};
 	int ret;
 
 	ret = HG_Get_input(handle, &in);
@@ -153,7 +174,7 @@ hg_id_t getattr_register(hg_class_t *rpc_class)
 {
 	hg_id_t tmp;
 
-	tmp = HG_Register_name(rpc_class, "getattr", getattr_in_proc_cb,
+	tmp = HG_Register_name(rpc_class, "getattr", string_in_proc_cb,
 			       getattr_out_proc_cb, getattr_handler);
 	return tmp;
 }
@@ -173,7 +194,7 @@ hg_id_t mkdir_register(hg_class_t *rpc_class)
 
 	tmp =
 	    HG_Register_name(rpc_class, "mkdir", mkdir_in_proc_cb,
-			     mkdir_out_proc_cb, mkdir_handler);
+			     basic_out_proc_cb, mkdir_handler);
 	return tmp;
 }
 
@@ -182,8 +203,8 @@ hg_id_t rmdir_register(hg_class_t *rpc_class)
 	hg_id_t tmp;
 
 	tmp =
-	    HG_Register_name(rpc_class, "rmdir", rmdir_in_proc_cb,
-			     rmdir_out_proc_cb, rmdir_handler);
+	    HG_Register_name(rpc_class, "rmdir", string_in_proc_cb,
+			     basic_out_proc_cb, rmdir_handler);
 	return tmp;
 }
 
@@ -193,7 +214,7 @@ hg_id_t symlink_register(hg_class_t *rpc_class)
 
 	tmp =
 	    HG_Register_name(rpc_class, "symlink", symlink_in_proc_cb,
-			     symlink_out_proc_cb, symlink_handler);
+			     basic_out_proc_cb, symlink_handler);
 	return tmp;
 }
 
@@ -202,7 +223,7 @@ hg_id_t readlink_register(hg_class_t *rpc_class)
 	hg_id_t tmp;
 
 	tmp =
-	    HG_Register_name(rpc_class, "readlink", readlink_in_proc_cb,
+	    HG_Register_name(rpc_class, "readlink", string_in_proc_cb,
 			     readlink_out_proc_cb, readlink_handler);
 	return tmp;
 }
@@ -212,26 +233,15 @@ hg_id_t unlink_register(hg_class_t *rpc_class)
 	hg_id_t tmp;
 
 	tmp =
-	    HG_Register_name(rpc_class, "unlink", unlink_in_proc_cb,
-			     unlink_out_proc_cb, unlink_handler);
+	    HG_Register_name(rpc_class, "unlink", string_in_proc_cb,
+			     basic_out_proc_cb, unlink_handler);
 	return tmp;
-}
-
-/* Serialization function for sending arguments*/
-hg_return_t getattr_in_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct getattr_in_t *struct_data = (struct getattr_in_t *)data;
-
-	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
-	assert(ret == HG_SUCCESS);
-	return ret;
 }
 
 hg_return_t getattr_out_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct getattr_out_t *struct_data = (struct getattr_out_t *)data;
+	struct getattr_out_t *struct_data = data;
 
 	ret =
 	    hg_proc_raw(proc, &struct_data->stbuf, sizeof(struct_data->stbuf));
@@ -246,7 +256,7 @@ hg_return_t getattr_out_proc_cb(hg_proc_t proc, void *data)
 hg_return_t readdir_in_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct readdir_in_t *struct_data = (struct readdir_in_t *)data;
+	struct readdir_in_t *struct_data = data;
 	/* Dir_name */
 	ret = hg_proc_hg_const_string_t(proc, &struct_data->dir_name);
 	assert(ret == HG_SUCCESS);
@@ -259,7 +269,7 @@ hg_return_t readdir_in_proc_cb(hg_proc_t proc, void *data)
 hg_return_t readdir_out_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct readdir_out_t *struct_data = (struct readdir_out_t *)data;
+	struct readdir_out_t *struct_data = data;
 	/* name */
 	ret = hg_proc_raw(proc, &struct_data->name, sizeof(struct_data->name));
 	assert(ret == HG_SUCCESS);
@@ -275,7 +285,7 @@ hg_return_t readdir_out_proc_cb(hg_proc_t proc, void *data)
 hg_return_t mkdir_in_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct mkdir_in_t *struct_data = (struct mkdir_in_t *)data;
+	struct mkdir_in_t *struct_data = data;
 
 	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
 	assert(ret == HG_SUCCESS);
@@ -286,43 +296,10 @@ hg_return_t mkdir_in_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
-hg_return_t mkdir_out_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct mkdir_out_t *struct_data = (struct mkdir_out_t *)data;
-
-	ret = hg_proc_hg_uint64_t(proc, &struct_data->error_code);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
-hg_return_t rmdir_in_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct rmdir_in_t *struct_data = (struct rmdir_in_t *)data;
-
-	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
-hg_return_t rmdir_out_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct rmdir_out_t *struct_data = (struct rmdir_out_t *)data;
-
-	ret = hg_proc_hg_uint64_t(proc, &struct_data->error_code);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
 hg_return_t symlink_in_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct symlink_in_t *struct_data = (struct symlink_in_t *)data;
+	struct symlink_in_t *struct_data = data;
 
 	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
 	assert(ret == HG_SUCCESS);
@@ -332,32 +309,10 @@ hg_return_t symlink_in_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
-hg_return_t symlink_out_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct symlink_out_t *struct_data = (struct symlink_out_t *)data;
-
-	ret = hg_proc_hg_uint64_t(proc, &struct_data->error_code);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
-hg_return_t readlink_in_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct readlink_in_t *struct_data = (struct readlink_in_t *)data;
-
-	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
 hg_return_t readlink_out_proc_cb(hg_proc_t proc, void *data)
 {
 	hg_return_t ret;
-	struct readlink_out_t *struct_data = (struct readlink_out_t *)data;
+	struct readlink_out_t *struct_data = data;
 
 	ret = hg_proc_hg_string_t(proc, &struct_data->dst);
 	assert(ret == HG_SUCCESS);
@@ -368,24 +323,3 @@ hg_return_t readlink_out_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
-hg_return_t unlink_out_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct unlink_out_t *struct_data = (struct unlink_out_t *)data;
-
-	ret = hg_proc_hg_uint64_t(proc, &struct_data->error_code);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
-
-hg_return_t unlink_in_proc_cb(hg_proc_t proc, void *data)
-{
-	hg_return_t ret;
-	struct unlink_in_t *struct_data = (struct unlink_in_t *)data;
-
-	ret = hg_proc_hg_const_string_t(proc, &struct_data->name);
-	assert(ret == HG_SUCCESS);
-
-	return ret;
-}
