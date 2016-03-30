@@ -29,6 +29,7 @@
 #define MCL_ERR_URI_GEN			-5
 #define MCL_ERR_NOMEM			-6 /**< for strdup/strndup */
 #define MCL_ERR_PTHREAD_FAILED		-7 /**< for pthred calls */
+#define MCL_ERR_INVALID_RANK		-8
 
 /** POSIX HOST_NAME_MAX + bmi+tcp://...:... */
 #define MCL_URI_LEN_MAX (HOST_NAME_MAX + 11)

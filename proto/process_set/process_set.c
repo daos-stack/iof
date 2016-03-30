@@ -347,6 +347,9 @@ int mcl_lookup(struct mcl_set *dest_set, int rank,
 	int rc;
 	struct mcl_state *mystate;
 
+	if (rank >= dest_set->size)
+		return MCL_ERR_INVALID_RANK;
+
 	mystate = dest_set->state;
 	grank = dest_set->state->mapping[dest_set->mapping_index][rank];
 	rc = pthread_mutex_lock(&dest_set->lookup_lock);
@@ -375,8 +378,10 @@ int mcl_lookup(struct mcl_set *dest_set, int rank,
 	dest_set->cached[rank].na_addr =  *addr_p;
 	dest_set->cached[rank].uri = strndup(pdata[0].value.data.string,
 					     MCL_URI_LEN_MAX);
-	if (dest_set->cached[rank].uri == NULL)
+	if (!dest_set->cached[rank].uri) {
+		PMIX_PDATA_FREE(pdata, 1);
 		return MCL_ERR_NOMEM;
+	}
 	dest_set->cached[rank].visited = 1;
 	PMIX_PDATA_FREE(pdata, 1);
 	rc = pthread_mutex_unlock(&dest_set->lookup_lock);

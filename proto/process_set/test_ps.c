@@ -21,9 +21,6 @@ int main(int argc, char **argv)
 	char name_of_set[MCL_NAME_LEN_MAX];
 	char name_of_target_set[MCL_NAME_LEN_MAX];
 	int ii;
-	struct mcl_set *dest_set;
-	na_addr_t dest_addr;
-	int ret;
 
 	snprintf(name_of_set, MCL_NAME_LEN_MAX, "%s", "first_set");
 	for (ii = 1; ii < argc; ii++) {
@@ -53,13 +50,24 @@ int main(int argc, char **argv)
 			set->name, set->size, set->self, set->is_local,
 			set->is_service);
 	if (should_attach == 1) {
+		struct mcl_set *dest_set;
+		na_addr_t dest_addr;
+		int ret;
+		int ii;
+
 		ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 		if (ret != MCL_SUCCESS)
 			fprintf(stderr, "attach failed\n");
 		fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
 				dest_set->name, dest_set->size, dest_set->self,
 				dest_set->is_local, dest_set->is_service);
-		mcl_lookup(dest_set, 0, na_class, &dest_addr);
+		for (ii = 0; ii < dest_set->size; ii++) {
+			ret = mcl_lookup(dest_set, ii, na_class, &dest_addr);
+			printf("Remote address (%d) %p\n", ret, dest_addr);
+		}
+		ret = mcl_lookup(dest_set, dest_set->size + 100, na_class,
+				 &dest_addr);
+		printf("Remote address (%d) %p\n", ret, dest_addr);
 		mcl_set_free(na_class, dest_set);
 	}
 
