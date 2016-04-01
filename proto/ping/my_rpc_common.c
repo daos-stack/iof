@@ -32,7 +32,7 @@ hg_return_t my_out_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
-hg_return_t my_rpc_bulk_transfer_cb(const struct hg_bulk_cb_info *info)
+hg_return_t my_rpc_bulk_transfer_cb(const struct hg_cb_info *info)
 {
 	fprintf(stdout, "my_rpc_bulk_transfer_cb\n");
 	HG_Bulk_free(info->arg);

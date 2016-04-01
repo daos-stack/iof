@@ -100,12 +100,12 @@ static hg_return_t getattr_callback(const struct hg_cb_info *info)
 	uint64_t ret;
 
 	reply = info->arg;
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->err_code = out.error_code;
 	memcpy(reply->stbuf, &out.stbuf, sizeof(struct stat));
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->done = 1;
@@ -141,7 +141,7 @@ static hg_return_t readdir_callback(const struct hg_cb_info *info)
 	struct readdir_r_t *reply = info->arg;
 	uint64_t ret;
 
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->err_code = out.error_code;
@@ -149,7 +149,7 @@ static hg_return_t readdir_callback(const struct hg_cb_info *info)
 	strcpy(reply->name, out.name);
 	memcpy(&reply->stat, &out.stat, sizeof(out.stat));
 	reply->complete = out.complete;
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	printf("\n successful");
@@ -197,10 +197,10 @@ static hg_return_t mkdir_callback(const struct hg_cb_info *info)
 	int ret;
 
 	reply = info->arg;
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 	reply->err_code = out.error_code;
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->done = 1;
@@ -234,10 +234,10 @@ static hg_return_t rmdir_callback(const struct hg_cb_info *info)
 	int ret;
 
 	reply = info->arg;
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 	reply->err_code = out.error_code;
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->done = 1;
@@ -266,11 +266,11 @@ hg_return_t symlink_callback(const struct hg_cb_info *info)
 	int ret;
 
 	reply = info->arg;
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
 	reply->err_code = out.error_code;
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 	reply->done = 1;
 
@@ -304,13 +304,13 @@ hg_return_t readlink_callback(const struct hg_cb_info *info)
 
 	reply = info->arg;
 
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
 	reply->err_code = out.error_code;
 	strncpy(reply->dst, out.dst, strlen(out.dst)+1);
 
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
 	reply->done = 1;
@@ -345,12 +345,12 @@ hg_return_t unlink_callback(const struct hg_cb_info *info)
 	int ret;
 
 	reply = info->arg;
-	ret = HG_Get_output(info->handle, &out);
+	ret = HG_Get_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
 	reply->err_code = out.error_code;
 
-	ret = HG_Free_output(info->handle, &out);
+	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
 	reply->done = 1;

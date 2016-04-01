@@ -43,7 +43,7 @@ int main(int argc, char **argv)
 	assert(na_class);
 	na_context = NA_Context_create(na_class);
 	assert(na_context);
-	hg_class = HG_Init(na_class, na_context);
+	hg_class = HG_Init_na(na_class, na_context);
 	assert(hg_class);
 	hg_context = HG_Context_create(hg_class);
 	assert(hg_context);
@@ -125,11 +125,11 @@ static hg_return_t my_rpc_test_cb(const struct hg_cb_info *info)
 {
 	struct my_rpc_test_out_t out_struct;
 
-	HG_Get_output(info->handle, &out_struct);
+	HG_Get_output(info->info.forward.handle, &out_struct);
 	fprintf(stdout, "rpc_test finished on remote node, ");
 	fprintf(stdout, "return value: %d\n", out_struct.bb);
 
-	HG_Free_output(info->handle, &out_struct);
+	HG_Free_output(info->info.forward.handle, &out_struct);
 
 	return 0;
 }

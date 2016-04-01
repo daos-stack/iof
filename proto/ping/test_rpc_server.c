@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 	assert(na_class);
 	na_context = NA_Context_create(na_class);
 	assert(na_context);
-	hg_class = HG_Init(na_class, na_context);
+	hg_class = HG_Init_na(na_class, na_context);
 	assert(hg_class);
 	hg_context = HG_Context_create(hg_class);
 	assert(hg_context);
