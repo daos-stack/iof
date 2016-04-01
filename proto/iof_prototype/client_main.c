@@ -1,6 +1,7 @@
 #define FUSE_USE_VERSION 30
 
 #include <fuse.h>
+#include <fuse/fuse_lowlevel.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,6 +9,7 @@
 #include <time.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <signal.h>
 
 #include "rpc_handler.h"
 #include "rpc_common.h"
@@ -16,6 +18,8 @@
 
 struct rpc_handle rpc_handle;
 struct rpc_id rpc_id;
+
+struct fuse *fuse;
 
 struct getattr_r_t {
 	struct stat *stbuf;
@@ -97,7 +101,7 @@ static hg_return_t getattr_callback(const struct hg_cb_info *info)
 static int fs_getattr(const char *name, struct stat *stbuf)
 {
 	uint64_t ret;
-	struct rpc_request_string in; /* struct to carry input args */
+	struct rpc_request_string in;
 	struct getattr_r_t reply = {0};
 
 	in.name = name;
@@ -110,8 +114,13 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 		       &in);
 	assert(ret == 0);
 
-	while (reply.done == 0)
-		engine_progress(&reply.done);
+	while (reply.done == 0) {
+		ret = engine_progress(&reply.done);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(fuse));
+			return -EINTR;
+		}
+	}
 
 	return reply.err_code;
 }
@@ -157,8 +166,13 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		    HG_Forward(rpc_handle.readdir_handle, readdir_callback,
 			       &reply, &in);
 		assert(ret == 0);
-		while (!reply.done)
-			engine_progress(&reply.done);
+		while (!reply.done) {
+			ret = engine_progress(&reply.done);
+			if (ret != HG_SUCCESS) {
+				fuse_session_exit(fuse_get_session(fuse));
+				return -EINTR;
+			}
+		}
 		if (reply.err_code != 0)
 			return reply.err_code;
 		printf("Calling filler %s\n", reply.name);
@@ -202,8 +216,13 @@ static int fs_mkdir(const char *name, mode_t mode)
 	ret = HG_Forward(rpc_handle.mkdir_handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	while (reply.done == 0)
-		engine_progress(&reply.done);
+	while (reply.done == 0) {
+		ret = engine_progress(&reply.done);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(fuse));
+			return -EINTR;
+		}
+	}
 
 	return reply.err_code;
 }
@@ -218,8 +237,13 @@ static int fs_rmdir(const char *name)
 	in.name = name;
 	ret = HG_Forward(rpc_handle.rmdir_handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (reply.done == 0)
-		engine_progress(&reply.done);
+	while (reply.done == 0) {
+		ret = engine_progress(&reply.done);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(fuse));
+			return -EINTR;
+		}
+	}
 
 	return reply.err_code;
 }
@@ -234,11 +258,15 @@ static int fs_symlink(const char *dst, const char *name)
 	in.dst = dst;
 
 	ret =
-	    HG_Forward(rpc_handle.symlink_handle, basic_callback, &reply,
-		       &in);
+	    HG_Forward(rpc_handle.symlink_handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (reply.done == 0)
-		engine_progress(&reply.done);
+	while (reply.done == 0) {
+		ret = engine_progress(&reply.done);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(fuse));
+			return -EINTR;
+		}
+	}
 
 	return reply.err_code;
 }
@@ -279,8 +307,13 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 		       &in);
 	assert(ret == 0);
 
-	while (reply.done == 0)
-		engine_progress(&reply.done);
+	while (reply.done == 0) {
+		ret = engine_progress(&reply.done);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(fuse));
+			return -EINTR;
+		}
+	}
 
 	return reply.err_code;
 }
@@ -317,7 +350,11 @@ static int fs_unlink(const char *name)
 	assert(ret == 0);
 
 	while (reply.done == 0)
-		engine_progress(&reply.done);
+		ret = engine_progress(&reply.done);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(fuse));
+		return -EINTR;
+	}
 
 	return reply.err_code;
 }
@@ -339,12 +376,17 @@ int main(int argc, char **argv)
 	char *uri;
 	struct mcl_set *set;
 	struct mcl_state *proc_state;
+	struct fuse_chan *ch;
+	char *mountpoint;
+	int foreground, multithreaded;
+	int res;
 	int is_service = 0;
 	char *name_of_set = "client";
 	char *name_of_target_set = "server";
 	struct mcl_set *dest_set;
 	na_addr_t dest_addr;
 	int ret;
+	struct fuse_args args;
 
 	proc_state = mcl_init(&uri);
 	rpc_class = engine_init(NA_FALSE, uri, 0, &na_class);
@@ -356,8 +398,33 @@ int main(int argc, char **argv)
 	}
 	mcl_lookup(dest_set, 0, na_class, &dest_addr);
 	client_init(rpc_class, dest_addr);
-	fuse_main(argc, argv, &op, NULL);
 
+	args.argc = argc;
+	args.argv = argv;
+	args.allocated = 0;
+
+	res =
+	    fuse_parse_cmdline(&args, &mountpoint, &multithreaded, &foreground);
+	if (res == -1)
+		return 0;
+	ch = fuse_mount(mountpoint, &args);
+	if (!ch)
+		fuse_opt_free_args(&args);
+	fuse = fuse_new(ch, &args, &op, sizeof(op), NULL);
+	fuse_opt_free_args(&args);
+
+	res = fuse_set_signal_handlers(fuse_get_session(fuse));
+	assert(res != -1);
+	/* This needs to change to go to unmount instead
+	 * possibly using a goto statement???
+	 */
+	if (multithreaded)
+		res = fuse_loop_mt(fuse);
+	else
+		res = fuse_loop(fuse);
+
+	/*shutdown before returning */
+	fuse_teardown(fuse, mountpoint);
 	mcl_set_free(na_class, dest_set);
 	NA_Finalize(na_class);
 	mcl_finalize(proc_state);

@@ -71,12 +71,14 @@ static void *progress_fn(void *foo)
 	return NULL;
 }
 
-void engine_progress(int *done)
+hg_return_t engine_progress(int *done)
 {
 	unsigned int actual_count;
+	hg_return_t ret;
 
-	HG_Progress(hg_context, 100);
+	ret = HG_Progress(hg_context, 100);
 	HG_Trigger(hg_context, 0, 2, &actual_count);
+	return ret;
 }
 
 
