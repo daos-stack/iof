@@ -1,9 +1,12 @@
 """Build ping test"""
 Import('ENV PREREQS')
+import os
 
 TENV = ENV.Clone()
 TENV.Append(CPPPATH=['common/include'])
 COMMON = TENV.Object('common/version')
 
-TENV.Program(['ionss/ionss.c', COMMON])
-TENV.Program(['cnss/cnss.c', COMMON])
+PROGS = TENV.Program(['ionss/ionss.c', COMMON])
+PROGS += TENV.Program(['cnss/cnss.c', COMMON])
+
+TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)

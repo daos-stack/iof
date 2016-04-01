@@ -1,5 +1,6 @@
 """Build ping test"""
 Import('ENV PREREQS')
+import os
 
 TENV = ENV.Clone()
 PREREQS.require(TENV, "pmix", "mercury", "bmi")
@@ -15,9 +16,12 @@ if ENV['PLATFORM'] == 'darwin':
 else:
     TENV.Append(LIBS=['fuse', 'pthread'])
 
-TENV.Program(['client_main.c', COMMON],
-             LIBS=['$LIBS', 'proto_common'],
-             LIBPATH=['$LIBPATH', '../common'])
-TENV.Program(['server_main.c', COMMON],
-             LIBS=['$LIBS', 'proto_common'],
-             LIBPATH=['$LIBPATH', '../common'])
+PROGS = TENV.Program(['client_main.c', COMMON],
+                     LIBS=['$LIBS', 'proto_common'],
+                     LIBPATH=['$LIBPATH', '../common'])
+PROGS += TENV.Program(['server_main.c', COMMON],
+                      LIBS=['$LIBS', 'proto_common'],
+                      LIBPATH=['$LIBPATH', '../common'])
+
+TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
+TENV.Append(RPATH=os.path.join("$PREFIX", 'lib'))

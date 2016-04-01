@@ -1,11 +1,24 @@
 """Build ping test"""
 Import('ENV PREREQS')
+import os
 
 TENV = ENV.Clone()
 TENV.Prepend(CPPPATH=['../common/include'])
 PREREQS.require(TENV, "pmix", "mercury", "bmi")
-COMMON = TENV.Object('process_set')
 
-TENV.Program(['test_ps.c', COMMON],
-             LIBS=['$LIBS', 'proto_common'],
-             LIBPATH=['$LIBPATH', '../common'])
+# Build the process set shared library, which requires the common
+# library.
+LIBPS = TENV.SharedLibrary('pset', ['process_set.c'],
+                           LIBS=['$LIBS', 'proto_common'],
+                           LIBPATH=['$LIBPATH', '../common'])
+
+# Build the test program.
+PS = TENV.Program(['test_ps.c'],
+                  LIBS=['$LIBS', 'pset', 'proto_common'],
+                  LIBPATH=['$LIBPATH', '../common', '.'])
+
+TENV.Install(os.path.join("$PREFIX", 'lib'), LIBPS)
+TENV.Install(os.path.join("$PREFIX", 'bin'), PS)
+TENV.Install(os.path.join("$PREFIX", 'include'), 'include/process_set.h')
+
+TENV.Append(RPATH=os.path.join("$PREFIX", 'lib'))

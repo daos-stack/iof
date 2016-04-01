@@ -39,6 +39,8 @@ if UNKNOWN:
     print "Unknown variables: %s" % UNKNOWN.keys()
     SetOption("help", True)
 
+ENV.Alias('install', "$PREFIX")
+
 SConscript('build/iof/src/SConscript')
 Default('src')
 

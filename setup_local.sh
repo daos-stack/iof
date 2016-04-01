@@ -10,11 +10,5 @@ if [ "$os" = "Darwin" ]; then
     else
 	export DYLD_LIBRARY_PATH=${WORKSPACE}/install/lib
     fi
-else
-    if [ -n "$LD_LIBRARY_PATH" ]; then
-	export LD_LIBRARY_PATH=${WORKSPACE}/install/lib:$LD_LIBRARY_PATH
-    else
-	export LD_LIBRARY_PATH=${WORKSPACE}/install/lib
-    fi
 fi
-export PATH=${WORKSPACE}/install/bin:$PATH
+export PATH=${WORKSPACE}/install/bin:`pwd`/install/iof/bin:$PATH

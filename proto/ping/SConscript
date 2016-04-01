@@ -1,12 +1,16 @@
 """Build ping test"""
 Import('ENV PREREQS')
+import os
 
 TENV = ENV.Clone()
 TENV.Prepend(CPPPATH=['../common/include'])
 PREREQS.require(TENV, "pmix", "mercury", "bmi")
 COMMON = TENV.Object('my_rpc_common')
 
-TENV.Program(['test_rpc_client.c', COMMON],
-             LIBS=['$LIBS', 'proto_common'],
-             LIBPATH=['$LIBPATH', '../common'])
-TENV.Program(['test_rpc_server.c', COMMON])
+PROGS = TENV.Program(['test_rpc_client.c', COMMON],
+                     LIBS=['$LIBS', 'proto_common'],
+                     LIBPATH=['$LIBPATH', '../common'])
+PROGS += TENV.Program(['test_rpc_server.c', COMMON])
+
+TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
+TENV.Append(RPATH=os.path.join("$PREFIX", 'lib'))

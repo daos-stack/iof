@@ -1,7 +1,11 @@
 """Build ping test"""
 Import('ENV PREREQS')
+import os
 
 TENV = ENV.Clone()
 PREREQS.require(TENV, "mercury")
 
-TENV.Library(['proto_common.c'])
+LIBCOMMON = TENV.SharedLibrary(['proto_common.c'])
+
+TENV.Install(os.path.join("$PREFIX", 'lib'), LIBCOMMON)
+TENV.Install(os.path.join("$PREFIX", 'include'), 'include/proto_common.h')
