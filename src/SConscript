@@ -2,11 +2,29 @@
 Import('ENV PREREQS')
 import os
 
+# Set options which are used throughout the src.
 TENV = ENV.Clone()
+TENV.Append(CFLAGS='-pthread')
+TENV.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
 TENV.Append(CPPPATH=['common/include'])
-COMMON = TENV.Object('common/version')
 
-PROGS = TENV.Program(['ionss/ionss.c', COMMON])
-PROGS += TENV.Program(['cnss/cnss.c', COMMON])
+# Build a static library of the common parts.
+COMMON = TENV.Object('common/version')
+COMMON += TENV.Object('common/v2')
+
+# Now build the IONSS application
+IENV = TENV.Clone()
+if ENV.get('PLATFORM') == 'darwin':
+    IENV.Append(CFLAGS=['-I/usr/local/include/osxfuse'],
+                LIBS=['osxfuse'])
+else:
+    IENV.Append(LIBS=['fuse'])
+
+PROGS = IENV.Program(['ionss/ionss.c', COMMON])
+
+# Build the CNSS application
+CENV = TENV.Clone()
+CENV.Append(LIBS='pthread')
+PROGS += CENV.Program(['cnss/cnss.c', COMMON])
 
 TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)

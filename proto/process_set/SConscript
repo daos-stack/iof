@@ -8,14 +8,15 @@ PREREQS.require(TENV, "pmix", "mercury", "bmi")
 
 # Build the process set shared library, which requires the common
 # library.
-LIBPS = TENV.SharedLibrary('pset', ['process_set.c'],
+LIBPS = TENV.SharedLibrary(target='pset', source=['process_set.c'],
                            LIBS=['$LIBS', 'proto_common'],
-                           LIBPATH=['$LIBPATH', '../common'])
+                           LIBPATH=['$LIBPATH', '#build/iof/proto/common'])
 
 # Build the test program.
 PS = TENV.Program(['test_ps.c'],
                   LIBS=['$LIBS', 'pset', 'proto_common'],
-                  LIBPATH=['$LIBPATH', '../common', '.'])
+                  LIBPATH=['$LIBPATH', '#build/iof/proto/common',
+                           '#build/iof/proto/process_set'])
 
 TENV.Install(os.path.join("$PREFIX", 'lib'), LIBPS)
 TENV.Install(os.path.join("$PREFIX", 'bin'), PS)
