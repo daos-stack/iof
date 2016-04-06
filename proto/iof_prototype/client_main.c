@@ -142,11 +142,19 @@ static hg_return_t readdir_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
-	printf("\n successful");
-
 	reply->done = 1;
 
 	return HG_SUCCESS;
+}
+
+static int fs_opendir(const char *dir, struct fuse_file_info *fi)
+{
+	fi->fh = (uint64_t)strdup(dir);
+
+	if (!fi->fh)
+		return -ENOMEM;
+
+	return 0;
 }
 
 static int
@@ -156,6 +164,13 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 	struct readdir_r_t reply = {0};
 	uint64_t ret;
 	struct readdir_in_t in;
+
+	if (dir_name && strcmp(dir_name, (char *)fi->fh) != 0)
+		return -EINVAL;
+
+	if (!dir_name)
+		dir_name = (char *)fi->fh;
+
 	/* pack arguments */
 	in.offset = 0;
 	in.dir_name = dir_name;
@@ -182,6 +197,12 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 	} while (!reply.complete);
 
 	printf("Finished readdir\n");
+	return 0;
+}
+
+static int fs_closedir(const char *dir, struct fuse_file_info *fi)
+{
+	free((void *)fi->fh);
 	return 0;
 }
 
@@ -360,7 +381,9 @@ static int fs_unlink(const char *name)
 }
 
 static struct fuse_operations op = {
+	.opendir = fs_opendir,
 	.readdir = fs_readdir,
+	.releasedir = fs_closedir,
 	.getattr = fs_getattr,
 	.mkdir = fs_mkdir,
 	.rmdir = fs_rmdir,
