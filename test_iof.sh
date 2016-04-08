@@ -32,16 +32,18 @@ orterun --hostfile hostfile --tag-output -np 1 $CMD_PREFIX test_ps \
 orterun --hostfile hostfile --tag-output -np 4 $CMD_PREFIX test_ps \
     --name test_srv_set --is_service 1
 
+# Disable automatic exit whilst running FUSE so that we can attempt to
+# shutdown correctly.  Instead for FUSE verify that we can create
+# and then read back the target of a sym link.
 set +e
-
-server_main &
-
-SERVER_PID=$!
 
 [ -d child_fs ] || mkdir child_fs
 
-client_main child_fs
+orterun --hostfile hostfile -np 1 $CMD_PREFIX client_main -f child_fs \
+	: -np 1 $CMD_PREFIX server_main &
 
+ORTE_PID=$!
+sleep 2
 ls
 ls child_fs
 cd child_fs
@@ -54,16 +56,31 @@ rm -r d
 ls
 rm d_sym
 ls
+ln -s target origin
+LINK=`readlink origin`
+
 cd ..
 
-
+/bin/kill -TERM $ORTE_PID
+sleep 2
 
 if [ "$os" = "Darwin" ];then
-    sudo umount child_fs
+    umount child_fs
 else
     fusermount -u child_fs
 fi
 
-/bin/kill -9 $SERVER_PID
+if [ -f child_fs/origin ]
+then
+    exit 1
+fi
+
+/bin/kill -TERM $ORTE_PID
+sleep 1
+/bin/kill -TERM $ORTE_PID
 wait
 
+if [ "$LINK" != "target" ]
+then
+    exit 1
+fi
