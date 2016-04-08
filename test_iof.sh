@@ -20,6 +20,9 @@ orterun --tag-output -np 4 cnss : -np 3 ionss
 orterun --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
 	-np 1 $CMD_PREFIX test_rpc_client
 
+#run the global access handle test
+orterun --tag-output -np 1 $CMD_PREFIX test_gah
+
 # Disable automatic exit whilst running FUSE so that we can attempt to
 # shutdown correctly.  Instead for FUSE verify that we can create
 # and then read back the target of a sym link.

@@ -1,7 +1,8 @@
 """Build ping test"""
 import os
 
-HEADERS = ['iof_plugin.h']
+HEADERS = ['iof_plugin.h', 'ios_gah.h']
+COMMON_SRC = ['version.c', 'v2.c', 'ios_gah.c', 'log.c']
 
 def scons():
     """Scons function"""
@@ -17,9 +18,9 @@ def scons():
     prereqs.require(tenv, 'mercury', 'mcl')
 
     # Build a static library of the common parts.
-    common = tenv.Object('common/version')
-    common += tenv.Object('common/v2')
-    common += tenv.Object('common/log')
+    common = []
+    for src in COMMON_SRC:
+        common += tenv.Object(os.path.join('common', src))
 
     # Now build the CNSS application
     cenv = tenv.Clone()
@@ -45,11 +46,10 @@ def scons():
     ienv.Append(LIBS='pthread')
     progs += ienv.Program(['ionss/ionss.c', common])
 
-    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+    # Build tester
+    progs += tenv.Program(['test/test_gah.c', common])
 
-    for header in HEADERS:
-        tenv.Install(os.path.join('$PREFIX', 'include'),
-                     os.path.join('include', header))
+    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 
 if __name__ == "SCons.Script":
     scons()
