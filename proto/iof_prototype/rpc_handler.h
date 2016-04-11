@@ -14,17 +14,6 @@ struct rpc_id {
 	hg_id_t readlink_id;
 	hg_id_t unlink_id;
 };
-
-struct rpc_handle {
-	hg_handle_t getattr_handle;
-	hg_handle_t readdir_handle;
-	hg_handle_t mkdir_handle;
-	hg_handle_t rmdir_handle;
-	hg_handle_t symlink_handle;
-	hg_handle_t readlink_handle;
-	hg_handle_t unlink_handle;
-};
-
 /* Common struct for RPC types which send a single string */
 struct rpc_request_string {
 	const char *name;

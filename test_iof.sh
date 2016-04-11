@@ -21,62 +21,78 @@ orterun --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
 # shutdown correctly.  Instead for FUSE verify that we can create
 # and then read back the target of a sym link.
 set +e
+#Sometimes if things go wrong the directory inside child_fs may not get deleted
+# and will stop the client process because it creates new directories for
+#mounting.
+rm -r child_fs
+mkdir child_fs
 
-[ -d child_fs ] || mkdir child_fs
+N=2
 
-orterun --tag-output -np 1 $CMD_PREFIX client_main -f child_fs \
-	: -np 1 $CMD_PREFIX server_main &
+orterun --tag-output -np 1 $CMD_PREFIX client_main -mnt child_fs \
+		: -np $N $CMD_PREFIX server_main &
 
 ORTE_PID=$!
-
-# The filesystem will be created with an initial directory called "started"
-# created so rather than just sleeping for a time poll for this directory to
-# appear before attempting to use it.  If the directory does not appear after
-# an intiial timeout assume the filesystem is broken.
-[ -d child_fs/started ] || sleep 1
-[ -d child_fs/started ] || sleep 2
-[ -d child_fs/started ] || sleep 4
-if [ -d child_fs/started ]
-then
-  ls
-  ls child_fs
-  cd child_fs
-  mkdir d e
-  rm -r e
-  ls
-  ln -s d d_sym
-  ls
-  rm -r d
-  ls
-  rm d_sym
-  ls
-  ln -s target origin
-  LINK=`readlink origin`
-  cd ..
-else
-  LINK="none"
-fi
+c=0
+while [ $c -lt $N ]
+	do
+	MOUNT_DIR=child_fs/Rank$c
+	[ -d $MOUNT_DIR/started ] || sleep 1
+	[ -d $MOUNT_DIR/started ] || sleep 2
+	[ -d $MOUNT_DIR/started ] || sleep 4
+	[ -d $MOUNT_DIR/started ] || sleep 8
+	[ -d $MOUNT_DIR/started ] || sleep 16
+	if [ -d $MOUNT_DIR/started ];
+	then
+		ls $MOUNT_DIR
+		cd $MOUNT_DIR
+		mkdir d e
+		rm -r e
+		ls
+		ln -s d d_sym
+		ls
+		rm d_sym
+		ls
+		rm -r d
+		ln -s target origin
+		LINK=`readlink origin`
+		cd -
+	else
+		LINK="none"
+		echo "Filesystem not mounted correctly"
+		break
+	fi
+	((c++))
+done
 
 /bin/kill -TERM $ORTE_PID
 sleep 2
 
-if [ "$os" = "Darwin" ];then
-    umount child_fs
-else
-    fusermount -u child_fs
-fi
-
-if [ -h child_fs/origin ]
-then
-    exit 1
-fi
+c=0
+while [ $c -lt $N ]
+do
+	MOUNT_DIR=child_fs/Rank$c
+	if [ "$os" = "Darwin" ];then
+		umount $MOUNT_DIR
+	else
+		fusermount -u $MOUNT_DIR
+	fi
+	if [ -h $MOUNT_DIR/origin ]
+	then
+		echo "Unmount unsuccessful"
+		exit 1
+	fi
+	rm -r $MOUNT_DIR
+	((c++))
+done
 
 /bin/kill -TERM $ORTE_PID
 sleep 1
 /bin/kill -TERM $ORTE_PID
 wait
 
+#Verify if filesystem failed
 if [ "$LINK" != "target" ]
 then
-    exit 1
+	exit 1
 fi
