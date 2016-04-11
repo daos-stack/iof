@@ -45,7 +45,7 @@ static int mcl_get_uri(char **uri)
 		close(socketfd);
 		return MCL_ERR_URI_GEN;
 	}
-	snprintf(name, MCL_URI_LEN_MAX + 1, "bmi+tcp://%s:%d", hname,
+	snprintf(name, MCL_URI_LEN_MAX + 1, "cci+tcp://%s:%d", hname,
 		 ntohs(tmp_socket.sin_port));
 	*uri = strndup(name, MCL_URI_LEN_MAX);
 	if (*uri == NULL)
@@ -181,8 +181,8 @@ static int mcl_publish_self(struct mcl_set *set)
 	return MCL_SUCCESS;
 }
 
-int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
-		struct mcl_set **set)
+int mcl_startup(struct mcl_state *mystate, na_class_t *na_class,
+		char *my_set_name, int is_service, struct mcl_set **set)
 {
 	struct mcl_set *myset;
 	pmix_info_t *info;
@@ -190,11 +190,19 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 	int rc;
 	int ii;
 	pmix_pdata_t *pdata;
+	na_addr_t self_addr;
+	na_size_t self_size = MCL_URI_LEN_MAX + 1;
+	char self[self_size];
 
 	*set = NULL;
 	myset = (struct mcl_set *) calloc(1, sizeof(struct mcl_set));
 	if (myset == NULL)
 		return MCL_ERR_ALLOC;
+	NA_Addr_self(na_class, &self_addr);
+	NA_Addr_to_string(na_class, self, &self_size, self_addr);
+	NA_Addr_free(na_class, self_addr);
+	snprintf(mystate->self_uri, MCL_URI_LEN_MAX + 1, "%s", self);
+
 	/*
 	* every process publishes its own address string using (PMIx_rank,
 	* setname/addrString)
@@ -394,6 +402,7 @@ int mcl_finalize(struct mcl_state *state)
 
 	ret = MCL_SUCCESS;
 	mystate = state;
+	rc = mcl_fence(&mystate->myproc);
 	rc = PMIx_Finalize(NULL, 0);
 	if (rc != PMIX_SUCCESS) {
 		ret = MCL_ERR_PMIX_FAILED;

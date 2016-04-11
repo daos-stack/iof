@@ -4,6 +4,8 @@ Import('ENV PREREQS')
 
 TENV = ENV.Clone()
 TENV.Prepend(CPPPATH=['../common/include'])
+TENV.Append(LIBS=['pthread'])
+TENV.Append(CFLAGS=['-lpthread'])
 PREREQS.require(TENV, "pmix", "mercury")
 
 # Build the process set shared library, which requires the common
@@ -12,8 +14,9 @@ LIBPS = TENV.SharedLibrary(target='pset', source=['process_set.c'],
                            LIBS=['$LIBS', 'proto_common'],
                            LIBPATH=['$LIBPATH', '#build/iof/proto/common'])
 
+COMMON = TENV.Object('test_ps_common')
 # Build the test program.
-PS = TENV.Program(['test_ps.c'],
+PS = TENV.Program(['test_ps.c', COMMON],
                   LIBS=['$LIBS', 'pset', 'proto_common'],
                   LIBPATH=['$LIBPATH', '#build/iof/proto/common',
                            '#build/iof/proto/process_set'])

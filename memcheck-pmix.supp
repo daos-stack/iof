@@ -36,3 +36,49 @@
    fun:na_bmi_initialize
    fun:NA_Initialize
 }
+{
+   Memory memory leak, CCI
+   Memcheck:Leak
+   ...
+   fun:cci_init
+   fun:na_cci_check_protocol
+   fun:NA_Initialize
+}
+{
+   Memory memory leak, CCI
+   Memcheck:Leak
+   ...
+   fun:malloc
+   fun:hg_queue_new
+   fun:NA_Context_create
+}
+{
+   dlopen leaks
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:_dl_open
+}
+{
+   Mercury+CCI partial read
+   Memcheck:Addr4
+   fun:sm_create_path
+   fun:ctp_sm_init
+   fun:cci_init
+   fun:na_cci_check_protocol
+   fun:NA_Initialize
+}
+{
+   Mercury+CCI leaks
+   Memcheck:Leak
+   ...
+   fun:cci_init
+}
+{
+   Mercury+CCI leaks
+   Memcheck:Leak
+   ...
+   fun:handle_connect_request
+   fun:na_cci_progress
+   fun:NA_Progress
+}

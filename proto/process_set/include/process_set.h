@@ -110,8 +110,8 @@ struct mcl_state *mcl_init(char **uri);
  *
  * \return			On success, returns MCL_SUCCESS
  */
-int mcl_startup(struct mcl_state *state, char *my_set_name, int is_service,
-		struct mcl_set **set);
+int mcl_startup(struct mcl_state *state, na_class_t *na_class,
+		char *my_set_name, int is_service, struct mcl_set **set);
 
 /**
  * Attach to a remote service process set.
@@ -165,7 +165,8 @@ int mcl_lookup(struct mcl_set *dest_set, int rank, na_class_t *na_class,
 	       na_addr_t *addr);
 
 /**
- * Finalize the library, cleanup memory.
+ * Finalize the library, cleanup memory. This is effectively a barrier, it
+ * blocks untill all processes have called this function.
  *
  * \param state	[IN]	process-local state
  *

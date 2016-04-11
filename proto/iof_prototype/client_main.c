@@ -390,7 +390,7 @@ int main(int argc, char **argv)
 
 	proc_state = mcl_init(&uri);
 	rpc_class = engine_init(NA_FALSE, uri, 0, &na_class);
-	mcl_startup(proc_state, name_of_set, is_service, &set);
+	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
 	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 	if (ret != MCL_SUCCESS) {
 		fprintf(stderr, "attach failed\n");

@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 	proc_state = mcl_init(&uri);
 	rpc_class = engine_init(NA_TRUE, uri, 1, &na_class);
 	server_init(rpc_class);
-	mcl_startup(proc_state, name_of_set, is_service, &set);
+	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
 	while (1)
 		sleep(1);
 	/*useless at this point*/

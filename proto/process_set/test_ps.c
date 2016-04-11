@@ -6,9 +6,11 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #include "mercury.h"
 #include "include/process_set.h"
+#include "test_ps_common.h"
 
 int main(int argc, char **argv)
 {
@@ -45,8 +47,11 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	na_class = NA_Initialize(uri, NA_TRUE);
+	assert(na_class != NULL);
 	free(uri);
-	mcl_startup(proc_state, name_of_set, is_service, &set);
+	if (is_service)
+		test_create_progress_thread(na_class);
+	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
 	fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
 			set->name, set->size, set->self, set->is_local,
 			set->is_service);
@@ -59,7 +64,7 @@ int main(int argc, char **argv)
 		ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 		if (ret != MCL_SUCCESS)
 			fprintf(stderr, "attach failed\n");
-		fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
+		fprintf(stderr, "dest: name %s size %d rank %d is_local %d is_service %d\n",
 				dest_set->name, dest_set->size, dest_set->self,
 				dest_set->is_local, dest_set->is_service);
 		for (ii = 0; ii < dest_set->size; ii++) {
@@ -68,13 +73,14 @@ int main(int argc, char **argv)
 		}
 		ret = mcl_lookup(dest_set, dest_set->size + 100, na_class,
 				 &dest_addr);
-		printf("Remote address (%d) %p\n", ret, dest_addr);
 		mcl_set_free(na_class, dest_set);
 	}
 
 	mcl_set_free(na_class, set);
-	NA_Finalize(na_class);
 	mcl_finalize(proc_state);
+	if (is_service)
+		test_destroy_progress_thread();
+	NA_Finalize(na_class);
 
 	return 0;
 }
