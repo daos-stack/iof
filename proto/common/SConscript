@@ -1,6 +1,6 @@
 """Build ping test"""
-Import('ENV PREREQS')
 import os
+Import('ENV PREREQS')
 
 TENV = ENV.Clone()
 PREREQS.require(TENV, "mercury")

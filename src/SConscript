@@ -1,6 +1,6 @@
 """Build ping test"""
-Import('ENV PREREQS')
 import os
+Import('ENV PREREQS')
 
 # Set options which are used throughout the src.
 TENV = ENV.Clone()
