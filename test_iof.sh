@@ -9,7 +9,8 @@ echo Trying to run Mercury ping test.
 
 if [ -n "$IOF_USE_VALGRIND" ]; then
 CMD_PREFIX="valgrind --xml=yes --xml-file=valgrind.%q{PMIX_ID}.xml "
-CMD_PREFIX="$CMD_PREFIX --leak-check=yes --suppressions=memcheck-pmix.supp"
+CMD_PREFIX="$CMD_PREFIX --leak-check=yes --suppressions=memcheck-pmix.supp "
+CMD_PREFIX="$CMD_PREFIX --show-reachable=yes"
 fi
 
 echo `hostname` slots=8 > hostfile

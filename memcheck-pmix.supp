@@ -22,9 +22,17 @@
 {
    Generic HG leak.  Needs resolving at a later date.
    Memcheck:Leak
-   match-leak-kinds: definite
-   fun:malloc
+   ...
    fun:hg_core_create
    fun:hg_core_listen
    fun:HG_Core_progress
+}
+{
+   BMI startup leaks.
+   Memcheck:Leak
+   ...
+   fun:BMI_initialize
+   fun:na_bmi_init
+   fun:na_bmi_initialize
+   fun:NA_Initialize
 }
