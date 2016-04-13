@@ -45,6 +45,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	na_class = NA_Initialize(uri, NA_TRUE);
+	free(uri);
 	mcl_startup(proc_state, name_of_set, is_service, &set);
 	fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
 			set->name, set->size, set->self, set->is_local,

@@ -41,6 +41,12 @@ hg_return_t my_rpc_bulk_transfer_cb(const struct hg_cb_info *info)
 	return 0;
 }
 
+hg_return_t my_test_rpc_handle_complete(const struct hg_cb_info *info)
+{
+	free(info->arg);
+	return 0;
+}
+
 hg_return_t my_rpc_test_handler(hg_handle_t handle)
 {
 	struct my_rpc_test_in_t in_struct;
@@ -63,7 +69,8 @@ hg_return_t my_rpc_test_handler(hg_handle_t handle)
 			 HG_BULK_PULL, hgi->addr, in_struct.bulk_handle, 0,
 			 my_bulk_handle, 0, my_rpc_test_state_p.size,
 			 HG_OP_ID_IGNORE);
-	HG_Respond(handle, NULL, &my_rpc_test_state_p, &out_struct);
+	HG_Respond(handle, my_test_rpc_handle_complete,
+		   my_rpc_test_state_p.buffer, &out_struct);
 	HG_Free_input(handle, &in_struct);
 
 	return 0;

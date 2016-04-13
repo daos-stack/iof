@@ -106,6 +106,10 @@ int main(int argc, char **argv)
 		if (act_count)
 			break;
 	}
+	NA_Addr_free(na_class, my_server_addr);
+	HG_Destroy(my_hg_handle);
+	HG_Bulk_free(in_struct.bulk_handle);
+	free(my_rpc_test_state_p->buffer);
 	rc = PMIx_Finalize(NULL, 0);
 	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,

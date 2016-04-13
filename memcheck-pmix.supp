@@ -1,0 +1,30 @@
+{
+   All PMIx leaks.
+   Memcheck:Leak
+   ...
+   fun:pmix_*
+}
+{
+   BMI address lookup leak.
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:BMI_addr_lookup
+}
+{
+   BMI connect based leaks.
+   Memcheck:Leak
+   match-leak-kinds: possible
+   ...
+   fun:tcp_do_work_recv
+   fun:tcp_do_work
+}
+{
+   Generic HG leak.  Needs resolving at a later date.
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:malloc
+   fun:hg_core_create
+   fun:hg_core_listen
+   fun:HG_Core_progress
+}
