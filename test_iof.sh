@@ -39,27 +39,38 @@ set +e
 
 [ -d child_fs ] || mkdir child_fs
 
-orterun --hostfile hostfile -np 1 $CMD_PREFIX client_main -f child_fs \
+orterun --hostfile hostfile --tag-output -np 1 $CMD_PREFIX client_main -f child_fs \
 	: -np 1 $CMD_PREFIX server_main &
 
 ORTE_PID=$!
-sleep 2
-ls
-ls child_fs
-cd child_fs
-mkdir d e
-rm -r e
-ls
-ln -s d d_sym
-ls
-rm -r d
-ls
-rm d_sym
-ls
-ln -s target origin
-LINK=`readlink origin`
 
-cd ..
+# The filesystem will be created with an initial directory called "started"
+# created so rather than just sleeping for a time poll for this directory to
+# appear before attempting to use it.  If the directory does not appear after
+# an intiial timeout assume the filesystem is broken.
+[ -d child_fs/started ] || sleep 1
+[ -d child_fs/started ] || sleep 2
+[ -d child_fs/started ] || sleep 4
+if [ -d child_fs/started ]
+then
+  ls
+  ls child_fs
+  cd child_fs
+  mkdir d e
+  rm -r e
+  ls
+  ln -s d d_sym
+  ls
+  rm -r d
+  ls
+  rm d_sym
+  ls
+  ln -s target origin
+  LINK=`readlink origin`
+  cd ..
+else
+  LINK="none"
+fi
 
 /bin/kill -TERM $ORTE_PID
 sleep 2

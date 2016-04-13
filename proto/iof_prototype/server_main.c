@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 	int is_service = 1;
 	char *name_of_set = "server";
 	filesystem_init();
+	iof_mkdir("/started", 0600);
 	proc_state = mcl_init(&uri);
 	rpc_class = engine_init(NA_TRUE, uri, 1, &na_class);
 	server_init(rpc_class);
