@@ -70,7 +70,7 @@ else
     fusermount -u child_fs
 fi
 
-if [ -f child_fs/origin ]
+if [ -h child_fs/origin ]
 then
     exit 1
 fi
