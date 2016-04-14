@@ -32,6 +32,12 @@ Export('ENV PREREQS')
 ENV.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement', '-std=gnu99',
                    '-pedantic', '-Wno-missing-braces'])
 
+OPTS.Add(BoolVariable('fuse3',
+                      'Use libfuse3 from github',
+                      False))
+
+OPTS.Update(ENV)
+
 OPTS.Save(OPTS_FILE, ENV)
 
 UNKNOWN = OPTS.UnknownVariables()

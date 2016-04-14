@@ -1,7 +1,11 @@
-#define FUSE_USE_VERSION 30
 
-#include <fuse.h>
+#ifdef IOF_USE_FUSE3
+#include <fuse3/fuse.h>
+#include <fuse3/fuse_lowlevel.h>
+#else
+#include <fuse/fuse.h>
 #include <fuse/fuse_lowlevel.h>
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -159,7 +163,11 @@ static int fs_opendir(const char *dir, struct fuse_file_info *fi)
 
 static int
 fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
-	   off_t offset, struct fuse_file_info *fi)
+	off_t offset, struct fuse_file_info *fi
+#ifdef IOF_USE_FUSE3
+	, enum fuse_readdir_flags flags
+#endif
+	)
 {
 	struct readdir_r_t reply = {0};
 	uint64_t ret;
@@ -191,7 +199,11 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		if (reply.err_code != 0)
 			return reply.err_code;
 		printf("Calling filler %s\n", reply.name);
-		filler(buf, reply.name, &reply.stat, 0);
+		filler(buf, reply.name, &reply.stat, 0
+#ifdef IOF_USE_FUSE3
+			, 0
+#endif
+			);
 		in.offset++;
 		reply.done = 0;
 	} while (!reply.complete);
@@ -381,6 +393,9 @@ static int fs_unlink(const char *name)
 }
 
 static struct fuse_operations op = {
+#ifdef IOF_USE_FUSE3
+	.flag_nopath = 1,
+#endif
 	.opendir = fs_opendir,
 	.readdir = fs_readdir,
 	.releasedir = fs_closedir,
@@ -447,7 +462,7 @@ int main(int argc, char **argv)
 		res = fuse_loop(fuse);
 
 	/*shutdown before returning */
-	fuse_teardown(fuse, mountpoint);
+	fuse_destroy(fuse);
 	mcl_set_free(na_class, dest_set);
 	NA_Finalize(na_class);
 	mcl_finalize(proc_state);

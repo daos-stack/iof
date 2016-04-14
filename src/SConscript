@@ -5,7 +5,7 @@ Import('ENV PREREQS')
 # Set options which are used throughout the src.
 TENV = ENV.Clone()
 TENV.Append(CFLAGS='-pthread')
-TENV.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
+TENV.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
 TENV.Append(CPPPATH=['common/include'])
 
 # Build a static library of the common parts.
@@ -14,11 +14,22 @@ COMMON += TENV.Object('common/v2')
 
 # Now build the IONSS application
 IENV = TENV.Clone()
-if ENV.get('PLATFORM') == 'darwin':
-    IENV.Append(CFLAGS=['-I/usr/local/include/osxfuse'],
-                LIBS=['osxfuse'])
+
+# Set the define in SConscript so that it's in place for the PREREQS.require
+# check which will verify fuse3/fuse.h can be loaded.
+IENV.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+
+USE_FUSE3 = IENV.get('fuse3')
+
+if USE_FUSE3:
+    PREREQS.require(IENV, 'fuse')
+    IENV.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
 else:
-    IENV.Append(LIBS=['fuse'])
+    if ENV.get('PLATFORM') == 'darwin':
+        IENV.Append(CPPPATH=['/usr/local/include/osxfuse'],
+                    LIBS=['osxfuse'])
+    else:
+        IENV.Append(LIBS=['fuse'])
 
 PROGS = IENV.Program(['ionss/ionss.c', COMMON])
 
