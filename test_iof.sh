@@ -13,24 +13,23 @@ CMD_PREFIX="$CMD_PREFIX --leak-check=yes --suppressions=memcheck-pmix.supp "
 CMD_PREFIX="$CMD_PREFIX --show-reachable=yes"
 fi
 
-echo `hostname` slots=8 > hostfile
-orterun --hostfile hostfile --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
+orterun --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
 	-np 1 $CMD_PREFIX test_rpc_client
 
 echo Trying to run process set tests.
 
-orterun --hostfile hostfile --tag-output -np 4 $CMD_PREFIX test_ps \
+orterun --tag-output -np 4 $CMD_PREFIX test_ps \
         --name service_set --is_service 1 : \
 	    -np 4 $CMD_PREFIX test_ps --name client_set --is_service 0 \
         --attach_to service_set
 
-orterun --hostfile hostfile --tag-output -np 1 $CMD_PREFIX test_ps \
+orterun --tag-output -np 1 $CMD_PREFIX test_ps \
     --name a --is_service 1 : \
 	-np 1 $CMD_PREFIX test_ps --name b --attach-to c : \
 	-np 1 $CMD_PREFIX test_ps --name a --is_service 1 : \
 	-np 2 $CMD_PREFIX test_ps --name c --is_service --attach-to a
 
-orterun --hostfile hostfile --tag-output -np 4 $CMD_PREFIX test_ps \
+orterun --tag-output -np 4 $CMD_PREFIX test_ps \
     --name test_srv_set --is_service 1
 
 # Disable automatic exit whilst running FUSE so that we can attempt to
@@ -40,7 +39,7 @@ set +e
 
 [ -d child_fs ] || mkdir child_fs
 
-orterun --hostfile hostfile --tag-output -np 1 $CMD_PREFIX client_main -f child_fs \
+orterun --tag-output -np 1 $CMD_PREFIX client_main -f child_fs \
 	: -np 1 $CMD_PREFIX server_main &
 
 ORTE_PID=$!

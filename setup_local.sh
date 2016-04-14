@@ -11,3 +11,5 @@ if [ "$os" = "Darwin" ]; then
 fi
 
 export PATH=${PREFIX}/bin:$PATH
+# Allow overcommit of CPUs.
+export OMPI_MCA_rmaps_base_oversubscribe=1
