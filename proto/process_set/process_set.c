@@ -133,10 +133,52 @@ struct mcl_state *mcl_init(char **uri)
 		return NULL;
 	}
 	mystate->univ_size = val->data.uint32;
-	mystate->num_sets = 0;
 	PMIX_VALUE_RELEASE(val);
 
 	return (struct mcl_state *) mystate;
+}
+
+/* Publish data to PMIx about the local process set.  Only publish if the local
+ * process set is a service process set, all processes publish their own URI
+ * and then process[0] also publishes the size.  Process sets attempting to
+ * attach can then read the size to detect if the process set exists.
+ */
+static int mcl_publish_self(struct mcl_set *set)
+{
+	pmix_info_t *info;
+	pmix_status_t rc;
+	int nkeys = 1;
+
+	if (!set->is_local)
+		return MCL_ERR_INVALID;
+
+	if (!set->is_service)
+		return MCL_SUCCESS;
+
+	if (set->self == 0)
+		nkeys++;
+	PMIX_INFO_CREATE(info, nkeys);
+	snprintf(info[0].key, PMIX_MAX_KEYLEN + 1, "mcl-%s-%d-uri",
+		set->name, set->self);
+	info[0].value.type = PMIX_STRING;
+	info[0].value.data.string = strndup(set->state->self_uri,
+					MCL_URI_LEN_MAX);
+	if (info[0].value.data.string == NULL) {
+		return MCL_ERR_NOMEM;
+		PMIX_INFO_FREE(info, nkeys);
+	}
+	if (set->self == 0) {
+		snprintf(info[1].key, PMIX_MAX_KEYLEN + 1, "mcl-%s-size",
+			set->name);
+		info[1].value.type = PMIX_UINT32;
+		info[1].value.data.uint32 = set->size;
+	}
+
+	rc = PMIx_Publish(info, nkeys);
+	PMIX_INFO_FREE(info, nkeys);
+	if (rc != PMIX_SUCCESS)
+		return MCL_ERR_PMIX_FAILED;
+	return MCL_SUCCESS;
 }
 
 int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
@@ -147,7 +189,6 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 	int ret;
 	int rc;
 	int ii;
-	int jj = 0;
 	pmix_pdata_t *pdata;
 
 	*set = NULL;
@@ -158,7 +199,7 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 	* every process publishes its own address string using (PMIx_rank,
 	* setname/addrString)
 	*/
-	PMIX_INFO_CREATE(info, 2);
+	PMIX_INFO_CREATE(info, 1);
 	snprintf(info[0].key, PMIX_MAX_KEYLEN + 1, "%s-%d-psname",
 		 mystate->myproc.nspace, mystate->myproc.rank);
 	info[0].value.type = PMIX_STRING;
@@ -169,20 +210,8 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 		free(myset);
 		return MCL_ERR_NOMEM;
 	}
-	snprintf(info[1].key, PMIX_MAX_KEYLEN + 1, "%s-%d-uri",
-		 mystate->myproc.nspace, mystate->myproc.rank);
-	info[1].value.type = PMIX_STRING;
-	info[1].value.data.string =
-		strndup(mystate->self_uri, MCL_URI_LEN_MAX);
-	if (info[1].value.data.string == NULL) {
-		PMIX_INFO_FREE(info, 2);
-		free(myset);
-		return MCL_ERR_NOMEM;
-	}
-	if (is_service == 1)
-		rc = PMIx_Publish(info, 2);
-	else
-		rc = PMIx_Publish(info, 1);
+
+	rc = PMIx_Publish(info, 1);
 	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Publish failed: %d\n",
@@ -192,7 +221,7 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 		free(myset);
 		return MCL_ERR_PMIX_FAILED;
 	}
-	PMIX_INFO_FREE(info, 2);
+	PMIX_INFO_FREE(info, 1);
 	/* call fence to ensure the data is received */
 	rc = mcl_fence(&mystate->myproc);
 	if (rc != MCL_SUCCESS) {
@@ -206,69 +235,26 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 		/* generate the key to query my process set name */
 		snprintf(pdata[0].key, PMIX_MAX_KEYLEN + 1, "%s-%d-psname",
 			 mystate->myproc.nspace, ii);
-		rc = PMIx_Lookup(&pdata[0], 1, NULL, 0);
+
+		rc = PMIx_Lookup(pdata, 1, NULL, 0);
 		if (rc != PMIX_SUCCESS) {
 			PMIX_PDATA_FREE(pdata, 1);
 			free(myset);
 			return MCL_ERR_PMIX_FAILED;
 		}
-		/* store the set name locally and create rank mapping */
-		for (jj = 0; jj < mystate->num_sets; jj++) {
-			/* have encountered this set before */
-			if (strncmp(pdata[0].value.data.string,
-				    mystate->psnames[jj],
-				    MCL_NAME_LEN_MAX) == 0) {
-				mystate->mapping[jj][mystate->size_of_set[jj]]
-					= ii;
-				if (mystate->myproc.rank == ii)
-					myset->self =  mystate->size_of_set[jj];
 
-				mystate->size_of_set[jj]++;
-				break;
-			}
+		if (ii == mystate->myproc.rank)
+			myset->self = myset->size;
+
+		if (strncmp(my_set_name, pdata[0].value.data.string,
+				MCL_NAME_LEN_MAX) == 0) {
+			myset->size++;
 		}
-		/* create a new entry for newly found set names */
-		if (jj == mystate->num_sets) {
-			if (mystate->num_sets >= MCL_NUM_SETS_MAX) {
-				PMIX_PDATA_FREE(pdata, 1);
-				free(myset);
-				return MCL_ERR_TOO_MANY_SETS;
-			}
-			mystate->psnames[jj] =
-				strndup(pdata[0].value.data.string,
-						MCL_NAME_LEN_MAX);
-			if (mystate->psnames[jj] == NULL) {
-				PMIX_PDATA_FREE(pdata, 1);
-				free(myset);
-				return MCL_ERR_NOMEM;
-			}
-			mystate->num_sets++;
-			/* create the local rank <--> pmix_rank maping */
-			mystate->mapping[jj][mystate->size_of_set[jj]] = ii;
-			if (mystate->myproc.rank == ii)
-				myset->self =  mystate->size_of_set[jj];
-			mystate->size_of_set[jj]++;
-		}
-	}
-	PMIX_PDATA_FREE(pdata, 1);
-	/* determine if it's a service set or client set */
-	PMIX_PDATA_CREATE(pdata, 1);
-	for (ii = 0; ii < mystate->num_sets; ii++) {
-		snprintf(pdata[0].key, PMIX_MAX_KEYLEN + 1, "%s-%d-uri",
-			 mystate->myproc.nspace, mystate->mapping[ii][0]);
-		rc = PMIx_Lookup(&pdata[0], 1, NULL, 0);
-		if (rc == PMIX_SUCCESS)
-			mystate->is_service_set[ii] = 1;
-		else
-			mystate->is_service_set[ii] = 0;
-		if (strncmp(my_set_name, mystate->psnames[ii],
-			    MCL_NAME_LEN_MAX) == 0)
-			myset->mapping_index = ii;
+
 	}
 	PMIX_PDATA_FREE(pdata, 1);
 
 	myset->is_local = 1;
-	myset->size = mystate->size_of_set[myset->mapping_index];
 	myset->is_service = is_service;
 	myset->name = strndup(my_set_name, MCL_NAME_LEN_MAX);
 	if (myset->name == NULL) {
@@ -276,6 +262,20 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 		return MCL_ERR_NOMEM;
 	}
 	myset->state = mystate;
+
+	/* Now push data into the mcl- namespace */
+	rc = mcl_publish_self(myset);
+	if (rc != MCL_SUCCESS) {
+		free(myset);
+		return rc;
+	}
+
+	rc = mcl_fence(&mystate->myproc);
+	if (rc != MCL_SUCCESS) {
+		free(myset);
+		return rc;
+	}
+
 	rc = pthread_mutex_init(&myset->lookup_lock, NULL);
 	if (rc != 0) {
 		free(myset->name);
@@ -289,8 +289,7 @@ int mcl_startup(struct mcl_state *mystate, char *my_set_name, int is_service,
 int mcl_attach(struct mcl_state *state, char *remote_set_name,
 	       struct mcl_set **set)
 {
-	struct mcl_state *mystate;
-	int ii;
+	pmix_pdata_t *pdata;
 	struct mcl_set *myset;
 	int rc;
 
@@ -306,17 +305,16 @@ int mcl_attach(struct mcl_state *state, char *remote_set_name,
 	myset->is_local = 0;
 	myset->is_service = 1;
 	myset->state = state;
-	mystate = state;
 
-	for (ii = 0; ii < mystate->num_sets; ii++) {
-		if (strncmp(remote_set_name, mystate->psnames[ii],
-			    MCL_NAME_LEN_MAX) == 0) {
-			myset->mapping_index = ii;
-			myset->size = mystate->size_of_set[ii];
-			break;
-		}
-	}
-	if (ii == mystate->num_sets) {
+	PMIX_PDATA_CREATE(pdata, 1);
+
+	snprintf(pdata[0].key, PMIX_MAX_KEYLEN + 1, "mcl-%s-size",
+		remote_set_name);
+	rc = PMIx_Lookup(pdata, 1, NULL, 0);
+	if (rc == PMIX_SUCCESS && pdata[0].value.type == PMIX_UINT32) {
+		myset->size = pdata[0].value.data.uint32;
+	} else {
+		PMIX_PDATA_FREE(pdata, 1);
 		fprintf(stderr,
 			"Error on %s: %d target process set doesn't exist\n",
 			__FILE__, __LINE__);
@@ -324,6 +322,7 @@ int mcl_attach(struct mcl_state *state, char *remote_set_name,
 		free(myset);
 		return MCL_ERR_INVALID_SET_NAME;
 	}
+	PMIX_PDATA_FREE(pdata, 1);
 
 	rc = pthread_mutex_init(&myset->lookup_lock, NULL);
 	if (rc != 0) {
@@ -339,10 +338,6 @@ int mcl_attach(struct mcl_state *state, char *remote_set_name,
 int mcl_lookup(struct mcl_set *dest_set, int rank,
 	       na_class_t *na_class, na_addr_t *addr_p)
 {
-	/*
-	 * every process keeps a rank mapping for every attached process set.
-	 */
-	int grank;
 	pmix_pdata_t *pdata;
 	int rc;
 	struct mcl_state *mystate;
@@ -351,7 +346,6 @@ int mcl_lookup(struct mcl_set *dest_set, int rank,
 		return MCL_ERR_INVALID_RANK;
 
 	mystate = dest_set->state;
-	grank = dest_set->state->mapping[dest_set->mapping_index][rank];
 	rc = pthread_mutex_lock(&dest_set->lookup_lock);
 	if (rc != 0)
 		return MCL_ERR_PTHREAD_FAILED;
@@ -363,10 +357,11 @@ int mcl_lookup(struct mcl_set *dest_set, int rank,
 		return MCL_SUCCESS;
 	}
 	PMIX_PDATA_CREATE(pdata, 1);
-	snprintf(pdata[0].key, PMIX_MAX_NSLEN + 5, "%s-%d-uri",
-		 mystate->myproc.nspace, grank);
+	snprintf(pdata[0].key, PMIX_MAX_NSLEN + 5, "mcl-%s-%d-uri",
+		dest_set->name, rank);
+
 	rc = PMIx_Lookup(&pdata[0], 1, NULL, 0);
-	if (rc != PMIX_SUCCESS) {
+	if (rc != PMIX_SUCCESS || pdata[0].value.type != PMIX_STRING) {
 		pthread_mutex_unlock(&dest_set->lookup_lock);
 		PMIX_PDATA_FREE(pdata, 1);
 		fprintf(stderr,
@@ -396,7 +391,6 @@ int mcl_finalize(struct mcl_state *state)
 	int ret;
 	int rc;
 	struct mcl_state *mystate;
-	int ii;
 
 	ret = MCL_SUCCESS;
 	mystate = state;
@@ -407,8 +401,6 @@ int mcl_finalize(struct mcl_state *state)
 			"Client ns %s rank %d:PMIx_Finalize failed: %d\n",
 			mystate->myproc.nspace, mystate->myproc.rank, rc);
 	}
-	for (ii = 0; ii < mystate->num_sets; ii++)
-		free(mystate->psnames[ii]);
 	free(mystate);
 
 	return ret;

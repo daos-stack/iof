@@ -30,6 +30,7 @@
 #define MCL_ERR_NOMEM			-6 /**< for strdup/strndup */
 #define MCL_ERR_PTHREAD_FAILED		-7 /**< for pthred calls */
 #define MCL_ERR_INVALID_RANK		-8
+#define MCL_ERR_INVALID			-9
 
 /** POSIX HOST_NAME_MAX + bmi+tcp://...:... */
 #define MCL_URI_LEN_MAX (HOST_NAME_MAX + 11)
@@ -40,16 +41,6 @@ struct mcl_state {
 	na_context_t	*na_context;
 	uint32_t	univ_size;
 	char		self_uri[MCL_URI_LEN_MAX + 1];
-	/**< names of all existing process sets */
-	char		*psnames[MCL_NUM_SETS_MAX];
-	/**< number of all existing process sets */
-	int		num_sets;
-	/**< local rank <--> global rank mappings of existing process sets */
-	int		mapping[MCL_NUM_SETS_MAX][MCL_PS_SIZE_MAX];
-	/**< sizes of all existing process sets */
-	int		size_of_set[MCL_NUM_SETS_MAX];
-	/**< wether a set is a service set or not */
-	int		is_service_set[MCL_NUM_SETS_MAX];
 	pmix_proc_t	myproc;
 };
 
@@ -69,8 +60,6 @@ struct uri_entry {
 struct mcl_set {
 	int			size;	/**< size of the set */
 	int			self;	/**< my rank in the process set */
-	/**< index into the rank mapping array in *state below */
-	int			mapping_index;
 	/**< name of the set */
 	char			*name;
 	/**< points to the local process state  */
