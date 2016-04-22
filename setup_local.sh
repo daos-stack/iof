@@ -13,3 +13,5 @@ fi
 export PATH=${PREFIX}/bin:$PATH
 # Allow overcommit of CPUs.
 export OMPI_MCA_rmaps_base_oversubscribe=1
+
+export OMPI_MCA_orte_abort_on_non_zero_status=0
