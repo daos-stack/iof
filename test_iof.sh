@@ -68,6 +68,20 @@ while [ $c -lt $N ]
 	((c++))
 done
 
+#Test for fuse loop exit using extended attributes
+c=0
+while [ $c -lt $N ]
+do
+	MOUNT_DIR=child_fs/Rank$c
+	if [ "$os" = "Darwin" ];then
+		xattr -w user.exit 1 $MOUNT_DIR
+	else
+		setfattr -n user.exit -v 1 $MOUNT_DIR
+	fi
+		((c++))
+done
+
+
 /bin/kill -TERM $ORTE_PID
 sleep 2
 
@@ -75,10 +89,13 @@ c=0
 while [ $c -lt $N ]
 do
 	MOUNT_DIR=child_fs/Rank$c
-	if [ "$os" = "Darwin" ];then
-		umount $MOUNT_DIR
-	else
-		fusermount -u $MOUNT_DIR
+	if mount | grep -q "$MOUNT_DIR"
+	then
+		if [ "$os" = "Darwin" ];then
+			umount $MOUNT_DIR
+		else
+			fusermount -u $MOUNT_DIR
+		fi
 	fi
 	if [ -h $MOUNT_DIR/origin ]
 	then

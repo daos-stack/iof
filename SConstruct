@@ -46,6 +46,18 @@ def scons():
                           False))
 
     opts.Update(env)
+    try:
+        config = Configure(env)
+        cmd = 'setfattr'
+        if platform == 'darwin':
+            cmd = 'xattr'
+
+        if not config.CheckProg(cmd):
+            print '%s command not installed, extended attribute test ' \
+               'will not work' % cmd
+
+    except AttributeError:
+        print 'CheckProg not present'
 
     opts.Save(opts_file, env)
 

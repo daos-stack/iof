@@ -15,6 +15,7 @@
 #include <inttypes.h>
 #include <signal.h>
 #include <pthread.h>
+#include <sys/xattr.h>
 
 #include "rpc_handler.h"
 #include "rpc_common.h"
@@ -441,6 +442,45 @@ static int fs_unlink(const char *name)
 	return reply.err_code;
 }
 
+static int string_to_bool(const char *str, int *value)
+{
+	if (strcmp(str, "1") == 0) {
+		*value = 1;
+		return 1;
+	} else if (strcmp(str, "0") == 0) {
+		*value = 0;
+		return 1;
+	}
+	return 0;
+}
+#ifdef __APPLE__
+
+static int fs_setxattr(const char *path,  const char *name, const char *value,
+			size_t size, int options, uint32_t position)
+#else
+static int fs_setxattr(const char *path, const char *name, const char *value,
+			size_t size, int flags)
+#endif
+{
+	struct fuse_context *context;
+	int ret;
+
+	context = fuse_get_context();
+	if (strcmp(name, "user.exit") == 0) {
+		if (string_to_bool(value, &ret)) {
+			if (ret) {
+				printf("Exiting fuse loop\n");
+				fuse_session_exit(
+					fuse_get_session(context->fuse));
+				return -EINTR;
+			} else
+				return 0;
+		}
+		return -EINVAL;
+	}
+	return -ENOTSUP;
+}
+
 static struct fuse_operations op = {
 #ifdef IOF_USE_FUSE3
 	.flag_nopath = 1,
@@ -454,6 +494,7 @@ static struct fuse_operations op = {
 	.symlink = fs_symlink,
 	.readlink = fs_readlink,
 	.unlink = fs_unlink,
+	.setxattr = fs_setxattr,
 };
 
 static void my_handler(int sig)
