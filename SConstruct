@@ -25,7 +25,7 @@ PREREQS = PreReqComponent(ENV, OPTS)
 PREREQS.preload(os.path.join(Dir('#').abspath,
                              "scons_local",
                              "components.py"),
-                prebuild=["ompi", "mercury"])
+                prebuild=["ompi", "mercury", "mcl"])
 
 Export('ENV PREREQS')
 

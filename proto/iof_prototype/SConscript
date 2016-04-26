@@ -4,7 +4,7 @@ Import('ENV PREREQS')
 
 TENV = ENV.Clone()
 TENV.Append(CPPDEFINES=['FUSE_USE_VERSION=30'])
-PREREQS.require(TENV, "pmix", "mercury")
+PREREQS.require(TENV, "pmix", "mercury", "mcl")
 
 USE_FUSE3 = TENV.get('fuse3')
 
@@ -19,7 +19,6 @@ else:
         TENV.Append(LIBS=['fuse'])
 
 TENV.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
-TENV.Append(CPPPATH=['#proto/process_set/include'])
 COMMON = TENV.Object('rpc_common')
 COMMON += TENV.Object('rpc_handler')
 COMMON += TENV.Object('server_backend')
@@ -27,7 +26,6 @@ COMMON += TENV.Object('server_backend')
 if ENV.get('PLATFORM') == 'posix':
     TENV.Append(LIBS=['pthread'])
 
-TENV.Append(LIBS=['pset'], LIBPATH=['#build/iof/proto/process_set'])
 PROGS = TENV.Program(['client_main.c', COMMON],
                      LIBS=['$LIBS', 'proto_common'],
                      LIBPATH=['$LIBPATH', '../common'])
