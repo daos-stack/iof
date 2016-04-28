@@ -1,16 +1,31 @@
 
-eval `./load_file.py iof.conf`
+VARS_FILE=./.build_vars.sh
+
+if [ ! -f $VARS_FILE ]
+then
+    echo Build vars file $VARS_FILE does not exist
+    echo Cannot continue
+    exit 1
+fi
+
+. $VARS_FILE
 
 os=`uname`
 if [ "$os" = "Darwin" ]; then
     if [ -n "$DYLD_LIBRARY_PATH" ]; then
-	export DYLD_LIBRARY_PATH=${PREFIX}/lib:$DYLD_LIBRARY_PATH
+	export DYLD_LIBRARY_PATH=${SL_LD_LIBRARY_PATH}:$DYLD_LIBRARY_PATH
     else
-	export DYLD_LIBRARY_PATH=${PREFIX}/lib
+	export DYLD_LIBRARY_PATH=${SL_LD_LIBRARY_PATH}
     fi
 fi
 
-export PATH=${PREFIX}/bin:$PATH
+
+if [ -z "$SL_PREFIX" ]
+then
+    SL_PREFIX=`pwd`/install
+fi
+
+export PATH=$SL_PREFIX/bin:${SL_OMPI_PREFIX}/bin:$PATH
 # Allow overcommit of CPUs.
 export OMPI_MCA_rmaps_base_oversubscribe=1
 

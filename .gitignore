@@ -1,4 +1,5 @@
 .gitreview
+.build_vars.sh
 config.log
 /objects/
 /build/

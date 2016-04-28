@@ -57,6 +57,10 @@ for fname in os.listdir('proto'):
     SConscript('build/iof/proto/%s/SConscript' % fname)
     Default('proto/%s' % fname)
 
+# Put this after all SConscript calls so that any imports they require can be
+# included.
+PREREQS.get_build_info().gen_script('.build_vars.sh')
+
 try:
     #if using SCons 2.4+, provide a more complete help
     Help(OPTS.GenerateHelpText(ENV), append=True)
