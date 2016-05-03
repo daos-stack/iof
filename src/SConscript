@@ -12,6 +12,8 @@ def scons():
     tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
     tenv.Append(CPPPATH=['common/include'])
 
+    prereqs.require(tenv, 'mercury', 'mcl')
+
     # Build a static library of the common parts.
     common = tenv.Object('common/version')
     common += tenv.Object('common/v2')

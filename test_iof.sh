@@ -13,6 +13,9 @@ CMD_PREFIX="$CMD_PREFIX --leak-check=yes --suppressions=memcheck-pmix.supp "
 CMD_PREFIX="$CMD_PREFIX --show-reachable=yes"
 fi
 
+# Just launch the program for now and it'll exit cleanly.  More will be needed
+# here when the CNSS and IONSS processes actually do anything.
+orterun --tag-output -np 4 cnss : -np 3 ionss
 
 orterun --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
 	-np 1 $CMD_PREFIX test_rpc_client
