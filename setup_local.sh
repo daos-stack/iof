@@ -1,5 +1,5 @@
 
-VARS_FILE=./.build_vars.sh
+VARS_FILE=./.build_vars-`uname -s`.sh
 
 if [ ! -f $VARS_FILE ]
 then

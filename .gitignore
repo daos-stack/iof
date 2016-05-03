@@ -1,14 +1,14 @@
 .gitreview
-.build_vars.sh
+.build_vars-*.sh
 config.log
 /objects/
 /build/
 /_build.external/
-.sconsign.dblite
+.sconsign-*.dblite
 /.sconf_temp/
 *.tar.gz
 /install/
-iof.conf
+iof-*.conf
 *~
 *.BAK
 \#*#

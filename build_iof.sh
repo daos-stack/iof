@@ -3,6 +3,12 @@
 set -e
 set -x
 
+# Jenkins build script for IOF, this should not be executed directly.
+#
+# In this file .build_vars has a arch suffix for local uses however when
+# installed to ${CORAL_ARTIFACTS} it does not, neither does the .build_vars
+# used from the MCL install.
+
 option=
 IOF_INSTALL=
 
@@ -46,8 +52,8 @@ scons install
 ./test_iof.sh
 
 if [ -n "${IOF_INSTALL}" ]; then
-  cp .build_vars.sh ${IOF_INSTALL}/.
-  cp .build_vars.py ${IOF_INSTALL}/.
+  cp .build_vars-`uname -s`.sh ${IOF_INSTALL}/.build_vars.sh
+  cp .build_vars-`uname -s`.py ${IOF_INSTALL}/.build_vars.py
   ln -sfn ${IOF_INSTALL} ${CORAL_ARTIFACTS}/${JOB_NAME}/latest
 fi
 
