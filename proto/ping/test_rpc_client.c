@@ -28,7 +28,7 @@ int main(int argc, char **argv)
 	struct my_rpc_test_state *my_rpc_test_state_p;
 	struct my_rpc_test_in_t in_struct;
 	unsigned int act_count = 0;
-	hg_return_t ret;
+	int ret = 0;
 	struct hg_info *hgi;
 	pmix_proc_t myproc, proc;
 	int rc;
@@ -52,7 +52,8 @@ int main(int argc, char **argv)
 	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr, "Client ns %s rank %d: PMIx_Init failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
-		exit(0);
+		ret = rc;
+		goto done;
 	}
 	/* call fence to ensure the data is received */
 	PMIX_PROC_CONSTRUCT(&proc);
@@ -62,20 +63,28 @@ int main(int argc, char **argv)
 	flag = true;
 	PMIX_INFO_LOAD(info, PMIX_COLLECT_DATA, &flag, PMIX_BOOL);
 	rc = PMIx_Fence(&proc, 1, info, 1);
-	if (rc != PMIX_SUCCESS)
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Fence failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
+		ret = rc;
+		PMIX_INFO_FREE(info, 1);
+		goto done;
+	}
 
 	PMIX_INFO_FREE(info, 1);
 
 	PMIX_PDATA_CREATE(pdata, 1);
 	(void)strncpy(pdata[0].key, "server-addr", PMIX_MAX_KEYLEN);
 	rc = PMIx_Lookup(pdata, 1, NULL, 0);
-	if (rc != PMIX_SUCCESS)
+	if (rc != PMIX_SUCCESS) {
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Lookup failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
+		ret = rc;
+		PMIX_PDATA_FREE(pdata, 1);
+		goto done;
+	}
 
 	my_na_addr_lookup_wait(na_class, pdata[0].value.data.string,
 			    &my_server_addr);
@@ -115,14 +124,18 @@ int main(int argc, char **argv)
 		fprintf(stderr,
 			"Client ns %s rank %d: PMIx_Finalize failed: %d\n",
 			myproc.nspace, myproc.rank, rc);
+		ret = rc;
+		goto done;
 	}
+
+done:
 	HG_Context_destroy(hg_context);
 	HG_Finalize(hg_class);
 	NA_Context_destroy(na_class, na_context);
 	NA_Finalize(na_class);
 	free(my_rpc_test_state_p);
 
-	return 0;
+	return ret;
 }
 
 static hg_return_t my_rpc_test_cb(const struct hg_cb_info *info)
