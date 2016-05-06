@@ -15,9 +15,13 @@ export IOF_INSTALL="${CORAL_ARTIFACTS}/${JOB_NAME}/${BUILD_NUMBER}"
 PREBUILT_AREA=${MERCURY}:${OMPI}:${MCL}
 option="PREBUILT_PREFIX=${PREBUILT_AREA} PREFIX=${IOF_INSTALL}/iof"
 fi
-scons $option
-scons install
+scons --no-prereq-links $option
+scons --no-prereq-links install
+
+# Run the tests from the Jenkins build job so that if there is a test failure
+# the "latest" symlink is not created.
+./test_iof.sh
 
 if [ -n "${IOF_INSTALL}" ]; then
-ln -sfn ${IOF_INSTALL} ${CORAL_ARTIFACTS}/${JOB_NAME}/latest
+ln -sfn ${BUILD_NUMBER} ${CORAL_ARTIFACTS}/${JOB_NAME}/latest
 fi
