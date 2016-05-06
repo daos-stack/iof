@@ -12,30 +12,30 @@ TENV.Append(CPPPATH=['common/include'])
 COMMON = TENV.Object('common/version')
 COMMON += TENV.Object('common/v2')
 
-# Now build the IONSS application
-IENV = TENV.Clone()
+# Now build the CNSS application
+CENV = TENV.Clone()
 
 # Set the define in SConscript so that it's in place for the PREREQS.require
 # check which will verify fuse3/fuse.h can be loaded.
-IENV.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+CENV.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
 
-USE_FUSE3 = IENV.get('fuse3')
+USE_FUSE3 = CENV.get('fuse3')
 
 if USE_FUSE3:
-    PREREQS.require(IENV, 'fuse')
-    IENV.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
+    PREREQS.require(CENV, 'fuse')
+    CENV.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
 else:
     if ENV.get('PLATFORM') == 'darwin':
-        IENV.Append(CPPPATH=['/usr/local/include/osxfuse'],
+        CENV.Append(CPPPATH=['/usr/local/include/osxfuse'],
                     LIBS=['osxfuse'])
     else:
-        IENV.Append(LIBS=['fuse'])
+        CENV.Append(LIBS=['fuse'])
 
-PROGS = IENV.Program(['ionss/ionss.c', COMMON])
+PROGS = CENV.Program(['cnss/cnss.c', COMMON])
 
-# Build the CNSS application
-CENV = TENV.Clone()
-CENV.Append(LIBS='pthread')
-PROGS += CENV.Program(['cnss/cnss.c', COMMON])
+# Build the IONSS application
+IENV = TENV.Clone()
+IENV.Append(LIBS='pthread')
+PROGS += IENV.Program(['ionss/ionss.c', COMMON])
 
 TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
