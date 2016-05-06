@@ -59,7 +59,9 @@ for fname in os.listdir('proto'):
 
 # Put this after all SConscript calls so that any imports they require can be
 # included.
-PREREQS.get_build_info().gen_script('.build_vars.sh')
+BUILD_INFO = PREREQS.get_build_info()
+BUILD_INFO.gen_script(".build_vars.sh")
+BUILD_INFO.save(".build_vars.py")
 
 try:
     #if using SCons 2.4+, provide a more complete help
