@@ -434,7 +434,8 @@ int main(int argc, char **argv)
 		fprintf(stderr, "attach failed\n");
 		return 0;
 	}
-	mcl_lookup(dest_set, 0, na_class, &dest_addr);
+	ret = mcl_lookup(dest_set, 0, na_class, &dest_addr);
+	assert(ret == MCL_SUCCESS);
 	client_init(rpc_class, dest_addr);
 
 	args.argc = argc;
