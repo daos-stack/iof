@@ -1,37 +1,43 @@
 """Build ping test"""
 import os
-Import('ENV PREREQS')
 
-TENV = ENV.Clone()
-TENV.Append(CPPDEFINES=['FUSE_USE_VERSION=30'])
-PREREQS.require(TENV, "pmix", "mercury", "mcl")
+def scons():
+    """Scons function"""
+    Import('env prereqs')
 
-USE_FUSE3 = TENV.get('fuse3')
+    tenv = env.Clone()
+    tenv.Append(CPPDEFINES=['FUSE_USE_VERSION=30'])
+    prereqs.require(tenv, "pmix", "mercury", "mcl")
 
-if USE_FUSE3:
-    PREREQS.require(TENV, 'fuse')
-    TENV.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
-else:
-    if ENV.get('PLATFORM') == 'darwin':
-        TENV.Append(CPPPATH=['/usr/local/include/osxfuse'],
-                    LIBS=['osxfuse'])
+    use_fuse3 = tenv.get('fuse3')
+
+    if use_fuse3:
+        prereqs.require(tenv, 'fuse')
+        tenv.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
     else:
-        TENV.Append(LIBS=['fuse'])
+        if env.get('PLATFORM') == 'darwin':
+            tenv.Append(CPPPATH=['/usr/local/include/osxfuse'],
+                        LIBS=['osxfuse'])
+        else:
+            tenv.Append(LIBS=['fuse'])
 
-TENV.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
-COMMON = TENV.Object('rpc_common')
-COMMON += TENV.Object('rpc_handler')
-COMMON += TENV.Object('server_backend')
+    tenv.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
+    common = tenv.Object('rpc_common')
+    common += tenv.Object('rpc_handler')
+    common += tenv.Object('server_backend')
 
-if ENV.get('PLATFORM') == 'posix':
-    TENV.Append(LIBS=['pthread'])
+    if env.get('PLATFORM') == 'posix':
+        tenv.Append(LIBS=['pthread'])
 
-PROGS = TENV.Program(['client_main.c', COMMON],
-                     LIBS=['$LIBS', 'proto_common'],
-                     LIBPATH=['$LIBPATH', '../common'])
-PROGS += TENV.Program(['server_main.c', COMMON],
-                      LIBS=['$LIBS', 'proto_common'],
-                      LIBPATH=['$LIBPATH', '../common'])
+    progs = tenv.Program(['client_main.c', common],
+                         LIBS=['$LIBS', 'proto_common'],
+                         LIBPATH=['$LIBPATH', '../common'])
+    progs += tenv.Program(['server_main.c', common],
+                          LIBS=['$LIBS', 'proto_common'],
+                          LIBPATH=['$LIBPATH', '../common'])
 
-TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
-TENV.Append(RPATH=os.path.join("$PREFIX", 'lib'))
+    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+    tenv.Append(RPATH=os.path.join("$PREFIX", 'lib'))
+
+if __name__ == "SCons.Script":
+    scons()

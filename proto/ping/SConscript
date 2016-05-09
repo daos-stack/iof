@@ -1,16 +1,24 @@
 """Build ping test"""
 import os
-Import('ENV PREREQS')
 
-TENV = ENV.Clone()
-TENV.Prepend(CPPPATH=['../common/include'])
-PREREQS.require(TENV, "pmix", "mercury")
-COMMON = TENV.Object('my_rpc_common')
+def scons():
+    """Scons function"""
 
-PROGS = TENV.Program(['test_rpc_client.c', COMMON],
-                     LIBS=['$LIBS', 'proto_common'],
-                     LIBPATH=['$LIBPATH', '../common'])
-PROGS += TENV.Program(['test_rpc_server.c', COMMON])
+    Import('env prereqs')
 
-TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
-TENV.Append(RPATH=os.path.join("$PREFIX", 'lib'))
+    tenv = env.Clone()
+    tenv.Prepend(CPPPATH=['../common/include'])
+    prereqs.require(tenv, "pmix", "mercury")
+    common = tenv.Object('my_rpc_common')
+
+    progs = tenv.Program(['test_rpc_client.c', common],
+                         LIBS=['$LIBS', 'proto_common'],
+                         LIBPATH=['$LIBPATH', '../common'])
+    progs += tenv.Program(['test_rpc_server.c', common])
+
+    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+    tenv.Append(RPATH=os.path.join("$PREFIX", 'lib'))
+
+if __name__ == "SCons.Script":
+    scons()
+

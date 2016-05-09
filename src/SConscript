@@ -1,41 +1,46 @@
 """Build ping test"""
 import os
-Import('ENV PREREQS')
 
-# Set options which are used throughout the src.
-TENV = ENV.Clone()
-TENV.Append(CFLAGS='-pthread')
-TENV.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
-TENV.Append(CPPPATH=['common/include'])
+def scons():
+    """Scons function"""
 
-# Build a static library of the common parts.
-COMMON = TENV.Object('common/version')
-COMMON += TENV.Object('common/v2')
+    Import('env prereqs')
 
-# Now build the CNSS application
-CENV = TENV.Clone()
+    # Set options which are used throughout the src.
+    tenv = env.Clone()
+    tenv.Append(CFLAGS='-pthread')
+    tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+    tenv.Append(CPPPATH=['common/include'])
 
-# Set the define in SConscript so that it's in place for the PREREQS.require
-# check which will verify fuse3/fuse.h can be loaded.
-CENV.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+    # Build a static library of the common parts.
+    common = tenv.Object('common/version')
+    common += tenv.Object('common/v2')
 
-USE_FUSE3 = CENV.get('fuse3')
+    # Now build the CNSS application
+    cenv = tenv.Clone()
 
-if USE_FUSE3:
-    PREREQS.require(CENV, 'fuse')
-    CENV.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
-else:
-    if ENV.get('PLATFORM') == 'darwin':
-        CENV.Append(CPPPATH=['/usr/local/include/osxfuse'],
-                    LIBS=['osxfuse'])
+    # Set the define in SConscript so that it's in place for the prereqs.require
+    # check which will verify fuse3/fuse.h can be loaded.
+    cenv.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+
+    if cenv.get('fuse3'):
+        prereqs.require(cenv, 'fuse')
+        cenv.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
     else:
-        CENV.Append(LIBS=['fuse'])
+        if env.get('PLATFORM') == 'darwin':
+            cenv.Append(CPPPATH=['/usr/local/include/osxfuse'],
+                        LIBS=['osxfuse'])
+        else:
+            cenv.Append(LIBS=['fuse'])
 
-PROGS = CENV.Program(['cnss/cnss.c', COMMON])
+    progs = cenv.Program(['cnss/cnss.c', common])
 
-# Build the IONSS application
-IENV = TENV.Clone()
-IENV.Append(LIBS='pthread')
-PROGS += IENV.Program(['ionss/ionss.c', COMMON])
+    # Build the IONSS application
+    ienv = tenv.Clone()
+    ienv.Append(LIBS='pthread')
+    progs += ienv.Program(['ionss/ionss.c', common])
 
-TENV.Install(os.path.join("$PREFIX", 'bin'), PROGS)
+    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+
+if __name__ == "SCons.Script":
+    scons()

@@ -3,73 +3,80 @@ import os
 import sys
 sys.path.insert(0, os.path.join(Dir('#').abspath, "scons_local"))
 from prereq_tools import PreReqComponent
-PLATFORM = os.uname()[0]
-OPTS_FILE = os.path.join(Dir('#').abspath, 'iof-%s.conf' % PLATFORM)
-ENV = DefaultEnvironment()
-ARCH_DIR = 'build/%s' % PLATFORM
-VariantDir(ARCH_DIR, '.', duplicate=0)
 
-if os.path.exists("SConscript.local"):
-# pylint: disable=pointless-string-statement
-    """Define this file in order to modify environment defaults
-#For example:
-Import('ENV')
-import os
-OS_ENV = ENV['ENV']
-OS_ENV["PATH"] = "/foo/bar" + os.pathsep + OS_ENV["PATH"]
-ENV.Replace(ENV=OS_ENV)"""
-    SConscript('SConscript.local', 'ENV')
-# pylint: enable=pointless-string-statement
+def scons():
+    """Scons function"""
 
-if os.path.exists('iof.conf') and not os.path.exists(OPTS_FILE):
-    print 'Renaming legacy conf file'
-    os.rename('iof.conf', OPTS_FILE)
+    platform = os.uname()[0]
+    opts_file = os.path.join(Dir('#').abspath, 'iof-%s.conf' % platform)
+    env = DefaultEnvironment()
+    arch_dir = 'build/%s' % platform
+    VariantDir(arch_dir, '.', duplicate=0)
 
-OPTS = Variables(OPTS_FILE)
-PREREQS = PreReqComponent(ENV, OPTS, arch=PLATFORM)
-PREREQS.preload(os.path.join(Dir('#').abspath,
-                             "scons_local",
-                             "components.py"),
-                prebuild=["ompi", "mercury", "mcl"])
+    if os.path.exists("SConscript.local"):
+        # pylint: disable=pointless-string-statement
+        """Define this file in order to modify environment defaults
+        #For example:
+        Import('env')
+        import os
+        OS_ENV = ENV['ENV']
+        OS_ENV["PATH"] = "/foo/bar" + os.pathsep + OS_ENV["PATH"]
+        env.Replace(ENV=OS_ENV)"""
+        SConscript('SConscript.local', 'env')
+        # pylint: enable=pointless-string-statement
 
-Export('ENV PREREQS')
+    if os.path.exists('iof.conf') and not os.path.exists(opts_file):
+        print 'Renaming legacy conf file'
+        os.rename('iof.conf', opts_file)
 
-ENV.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement', '-std=gnu99',
-                   '-pedantic', '-Wno-missing-braces'])
+    opts = Variables(opts_file)
+    prereqs = PreReqComponent(env, opts, arch=platform)
+    prereqs.preload(os.path.join(Dir('#').abspath,
+                                 "scons_local",
+                                 "components.py"),
+                    prebuild=["ompi", "mercury", "mcl"])
 
-OPTS.Add(BoolVariable('fuse3',
-                      'Use libfuse3 from github',
-                      False))
+    Export('env prereqs')
 
-OPTS.Update(ENV)
+    env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
+                       '-std=gnu99', '-pedantic', '-Wno-missing-braces'])
 
-OPTS.Save(OPTS_FILE, ENV)
+    opts.Add(BoolVariable('fuse3',
+                          'Use libfuse3 from github',
+                          False))
 
-UNKNOWN = OPTS.UnknownVariables()
-if UNKNOWN:
-    print "Unknown variables: %s" % UNKNOWN.keys()
-    SetOption("help", True)
+    opts.Update(env)
 
-ENV.Alias('install', "$PREFIX")
+    opts.Save(opts_file, env)
 
-SConscript('%s/src/SConscript' % ARCH_DIR)
-Default('src')
+    unknown = opts.UnknownVariables()
+    if unknown:
+        print "Unknown variables: %s" % unknown.keys()
+        SetOption("help", True)
 
-# Pick up any directories under 'proto' which have a SConscript file
-for fname in os.listdir('proto'):
-    if not os.path.exists('proto/%s/SConscript' % fname):
-        continue
-    SConscript('%s/proto/%s/SConscript' % (ARCH_DIR, fname))
-    Default('proto/%s' % fname)
+    env.Alias('install', "$PREFIX")
 
-# Put this after all SConscript calls so that any imports they require can be
-# included.
-BUILD_INFO = PREREQS.get_build_info()
-BUILD_INFO.gen_script(".build_vars-%s.sh" % PLATFORM)
-BUILD_INFO.save(".build_vars-%s.py" % PLATFORM)
+    SConscript('%s/src/SConscript' % arch_dir)
+    Default('src')
 
-try:
-    #if using SCons 2.4+, provide a more complete help
-    Help(OPTS.GenerateHelpText(ENV), append=True)
-except TypeError:
-    Help(OPTS.GenerateHelpText(ENV))
+    # Pick up any directories under 'proto' which have a SConscript file
+    for fname in os.listdir('proto'):
+        if not os.path.exists('proto/%s/SConscript' % fname):
+            continue
+        SConscript('%s/proto/%s/SConscript' % (arch_dir, fname))
+        Default('proto/%s' % fname)
+
+    # Put this after all SConscript calls so that any imports they require can
+    # be included.
+    build_info = prereqs.get_build_info()
+    build_info.gen_script(".build_vars-%s.sh" % platform)
+    build_info.save(".build_vars-%s.py" % platform)
+
+    try:
+        #if using SCons 2.4+, provide a more complete help
+        Help(opts.GenerateHelpText(env), append=True)
+    except TypeError:
+        Help(opts.GenerateHelpText(env))
+
+if __name__ == "SCons.Script":
+    scons()

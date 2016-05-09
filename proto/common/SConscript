@@ -1,11 +1,20 @@
 """Build ping test"""
 import os
-Import('ENV PREREQS')
 
-TENV = ENV.Clone()
-PREREQS.require(TENV, "mercury")
+def scons():
+    """Scons function"""
 
-LIBCOMMON = TENV.SharedLibrary(target='proto_common', source=['proto_common.c'])
 
-TENV.Install(os.path.join("$PREFIX", 'lib'), LIBCOMMON)
-TENV.Install(os.path.join("$PREFIX", 'include'), 'include/proto_common.h')
+    Import('env prereqs')
+
+    tenv = env.Clone()
+    prereqs.require(tenv, "mercury")
+
+    libcommon = tenv.SharedLibrary(target='proto_common',
+                                   source=['proto_common.c'])
+
+    tenv.Install(os.path.join("$PREFIX", 'lib'), libcommon)
+    tenv.Install(os.path.join("$PREFIX", 'include'), 'include/proto_common.h')
+
+if __name__ == "SCons.Script":
+    scons()
