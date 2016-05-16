@@ -37,4 +37,4 @@ export OMPI_MCA_rmaps_base_oversubscribe=1
 export OMPI_MCA_orte_abort_on_non_zero_status=0
 
 # Use /tmp for temporary files.  This is required for OS X.
-export ORTE_MCA_orte_tmpdir_base=/tmp
+export OMPI_MCA_orte_tmpdir_base=/tmp
