@@ -75,9 +75,14 @@ hg_return_t engine_progress(int *done)
 {
 	unsigned int actual_count;
 	hg_return_t ret;
+	int rep_count = 0;
 
-	ret = HG_Progress(hg_context, 100);
-	HG_Trigger(hg_context, 0, 2, &actual_count);
+	do {
+		ret = HG_Progress(hg_context, 1000);
+		HG_Trigger(hg_context, 0, 1, &actual_count);
+		if (*done)
+			return HG_SUCCESS;
+	} while (rep_count++ < 5);
 	return ret;
 }
 
