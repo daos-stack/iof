@@ -1,6 +1,8 @@
 """Build ping test"""
 import os
 
+HEADERS = ['iof_plugin.h']
+
 def scons():
     """Scons function"""
 
@@ -44,6 +46,10 @@ def scons():
     progs += ienv.Program(['ionss/ionss.c', common])
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+
+    for header in HEADERS:
+        tenv.Install(os.path.join('$PREFIX', 'include'),
+                     os.path.join('include', header))
 
 if __name__ == "SCons.Script":
     scons()
