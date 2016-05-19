@@ -536,10 +536,6 @@ static void *thread_function(void *data)
 		t_args->error_code = res;
 	}
 
-#ifdef IOF_USE_FUSE3
-	fuse_destroy(fuse);
-	return NULL;
-#endif
 	fuse_unmount(t_args->mountpoint, ch);
 	fuse_destroy(fuse);
 	return NULL;
