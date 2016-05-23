@@ -49,7 +49,7 @@ def scons():
     try:
         config = Configure(env)
         cmd = 'setfattr'
-        if platform == 'darwin':
+        if platform == 'Darwin':
             cmd = 'xattr'
 
         if not config.CheckProg(cmd):
