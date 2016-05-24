@@ -2,7 +2,7 @@
 import os
 
 HEADERS = ['iof_plugin.h']
-COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c']
+COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_common.c']
 
 def scons():
     """Scons function"""
@@ -14,6 +14,7 @@ def scons():
     tenv.Append(CFLAGS='-pthread')
     tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
     tenv.Append(CPPPATH=['common/include'])
+    tenv.Append(LIBS='pthread')
 
     prereqs.require(tenv, 'mercury', 'mcl')
 
@@ -43,7 +44,6 @@ def scons():
 
     # Build the IONSS application
     ienv = tenv.Clone()
-    ienv.Append(LIBS='pthread')
     progs += ienv.Program(['ionss/ionss.c', common])
 
     Default(progs)
