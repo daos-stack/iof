@@ -11,19 +11,21 @@
 
 struct fs_info info;
 
-static void _dir_init(struct fs_dir *dir, const char *name, mode_t mode)
+static void _ent_init(struct fs_ent *ent, const char *name, mode_t mode)
 {
 	time_t seconds = time(NULL);
 
-	LOCK_INIT(&dir->ent.lock);
+	LOCK_INIT(&ent->lock);
 
-	dir->ent.stat.st_ctime = seconds;
-	dir->ent.stat.st_atime = seconds;
-	dir->ent.stat.st_mtime = seconds;
+	ent->stat.st_ctime = seconds;
+	ent->stat.st_atime = seconds;
+	ent->stat.st_mtime = seconds;
 
-	strncpy(dir->ent.name, name, MAX_NAME_LEN);
-	dir->ent.stat.st_mode = S_IFDIR | mode;
-	dir->ent.stat.st_nlink = 1;
+	strncpy(ent->name, name, MAX_NAME_LEN);
+	ent->stat.st_mode = mode;
+	ent->stat.st_nlink = 1;
+	ent->stat.st_uid = getuid();
+	ent->stat.st_gid = getgid();
 }
 
 int filesystem_init(void)
@@ -42,11 +44,9 @@ struct fs_desc *new_fs_desc()
 		return NULL;
 
 	memset(desc, 0, sizeof(*desc));
-	_dir_init(&desc->top_dir, "", 0700);
+	_ent_init(&desc->top_dir.ent, "", S_IFDIR | 0700);
 
 	desc->top_dir.ent.stat.st_nlink = 2;
-	desc->top_dir.ent.stat.st_uid = getuid();
-	desc->top_dir.ent.stat.st_gid = getgid();
 
 	desc->inode_count = (1024 * 64);
 	LOCK_INIT(&desc->alloc_lock);
@@ -98,7 +98,7 @@ struct fs_dir *find_p_dir(const char *name, char **basename,
 
 		while (child_dir) {
 			if ((strncmp(child_dir->ent.name, name, dir_len) == 0)
-			    && (child_dir->ent.name[dir_len] == '\0'))
+				&& (child_dir->ent.name[dir_len] == '\0'))
 				break;
 
 			child_dir = (struct fs_dir *)child_dir->ent.ent_next;
@@ -473,36 +473,24 @@ struct fs_dir *new_dir(const char *name, mode_t mode)
 {
 	struct fs_dir *dir = malloc(sizeof(struct fs_dir));
 
+	if (!dir)
+		return NULL;
 	memset(dir, 0, sizeof(*dir));
 
-	_dir_init(dir, name, mode);
-
-	dir->ent.stat.st_uid = getuid();
-	dir->ent.stat.st_gid = getgid();
-
+	_ent_init(&dir->ent, name, S_IFDIR | mode);
 	return dir;
 }
 
 struct fs_link *new_link(const char *name)
 {
 	struct fs_link *link = malloc(sizeof(struct fs_link));
-	time_t seconds = time(NULL);
 
 	if (!link)
 		return NULL;
 	memset(link, 0, sizeof(*link));
 
-	LOCK_INIT(&link->ent.lock);
+	_ent_init(&link->ent, name, S_IFLNK | 0755);
 
-	link->ent.stat.st_ctime = seconds;
-	link->ent.stat.st_atime = seconds;
-	link->ent.stat.st_mtime = seconds;
-
-	strncpy(link->ent.name, name, MAX_NAME_LEN);
-	link->ent.stat.st_nlink = 1;
-	link->ent.stat.st_mode = S_IFLNK | 0755;
-	link->ent.stat.st_uid = getuid();
-	link->ent.stat.st_gid = getgid();
 	return link;
 }
 
