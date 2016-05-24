@@ -1,6 +1,7 @@
 
 #include <stdio.h>
 #include "version.h"
+#include "log.h"
 #include <mercury.h>
 #include <process_set.h>
 
@@ -13,11 +14,13 @@ int main(void)
 
 	char *version = iof_get_version();
 
-	printf("CNSS version: %s %d\n", version, gv());
+	iof_log_init("cnss");
+
+	IOF_LOG_INFO("CNSS version: %s %d", version, gv());
 
 	proc_state = mcl_init(&uri);
 	if (proc_state == NULL) {
-		fprintf(stderr, "mcl_init() failed.\n");
+		IOF_LOG_ERROR("mcl_init() failed.", 0);
 		return 1;
 	}
 	na_class = NA_Initialize(uri, NA_TRUE);
@@ -25,11 +28,14 @@ int main(void)
 	free(uri);
 
 	mcl_startup(proc_state, na_class, "cnss", 0, &set);
-	fprintf(stderr, "name %s size %d rank %d is_local %d is_service %d\n",
-			set->name, set->size, set->self, set->is_local,
-			set->is_service);
+	IOF_LOG_INFO("name %s size %d rank %d is_local %d is_service %d",
+		     set->name, set->size, set->self, set->is_local,
+		     set->is_service);
 
 	mcl_finalize(proc_state);
 	NA_Finalize(na_class);
+
+	iof_log_close();
+
 	return 0;
 }

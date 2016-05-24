@@ -17,6 +17,7 @@ def scons():
     # Build a static library of the common parts.
     common = tenv.Object('common/version')
     common += tenv.Object('common/v2')
+    common += tenv.Object('common/log')
 
     # Now build the CNSS application
     cenv = tenv.Clone()
