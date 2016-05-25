@@ -39,7 +39,8 @@ def scons():
     Export('env prereqs')
 
     env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
-                       '-std=gnu99', '-pedantic', '-Wno-missing-braces'])
+                       '-std=gnu99', '-pedantic', '-Wno-missing-braces',
+                       '-Wno-gnu-zero-variadic-macro-arguments'])
 
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',
