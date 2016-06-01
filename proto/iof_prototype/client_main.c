@@ -546,7 +546,7 @@ int main(int argc, char **argv)
 	na_class_t *na_class = NULL;
 	hg_class_t *rpc_class = NULL;
 	char *uri;
-	struct mcl_set *set;
+	struct mcl_set *set = NULL;
 	struct mcl_state *proc_state;
 	pthread_t *worker_thread;
 	struct thread_args *t_args;
@@ -559,12 +559,14 @@ int main(int argc, char **argv)
 	int is_service = 0;
 	char *name_of_set = "client";
 	char *name_of_target_set = "server";
-	struct mcl_set *dest_set;
+	struct mcl_set *dest_set = NULL;
 	int ret;
 
 	proc_state = mcl_init(&uri);
-	rpc_class = engine_init(NA_FALSE, uri, 0, &na_class);
+	na_class = NA_Initialize(uri, NA_FALSE);
 	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
+	rpc_class = proc_state->hg_class;
+	engine_init(0, proc_state);
 	rpc_id = create_id(rpc_class);
 	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 	if (ret != MCL_SUCCESS) {
@@ -640,7 +642,11 @@ int main(int argc, char **argv)
 	free(worker_thread);
 	mcl_finalize(proc_state);
 	/* Move to after fence */
-	mcl_set_free(na_class, dest_set);
+	if (dest_set)
+		mcl_set_free(na_class, dest_set);
+	if (set)
+		mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
+
 	return ret;
 }

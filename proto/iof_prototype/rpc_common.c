@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include "rpc_common.h"
 
-static na_context_t *na_context;
 static hg_context_t *hg_context;
 static hg_class_t *hg_class;
 
@@ -13,23 +12,12 @@ static int hg_progress_shutdown_flag;
 
 static void *progress_fn(void *foo);
 
-hg_class_t *engine_init(na_bool_t listen, const char *local_addr,
-		int start_thread, na_class_t **network_class)
+hg_class_t *engine_init(int start_thread, struct mcl_state *state)
 {
 	int ret;
 
-	/* boilerplate HG initialization steps */
-	*network_class = NA_Initialize(local_addr, listen);
-	assert(network_class);
-
-	na_context = NA_Context_create(*network_class);
-	assert(na_context);
-
-	hg_class = HG_Init_na(*network_class, na_context);
-	assert(hg_class);
-
-	hg_context = HG_Context_create(hg_class);
-	assert(hg_context);
+	hg_class = state->hg_class;
+	hg_context = state->hg_context;
 
 	if (start_thread) {
 		ret = pthread_create(&hg_progress_tid, NULL, progress_fn, NULL);

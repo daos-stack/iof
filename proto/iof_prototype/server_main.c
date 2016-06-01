@@ -43,15 +43,20 @@ int main(int argc, char **argv)
 	filesystem_init();
 	iof_mkdir("/started", 0600);
 	proc_state = mcl_init(&uri);
-	rpc_class = engine_init(NA_TRUE, uri, 1, &na_class);
-	server_init(rpc_class);
+	na_class = NA_Initialize(uri, NA_TRUE);
 	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
+	rpc_class = proc_state->hg_class;
+	engine_init(0, proc_state);
+	server_init(rpc_class);
 	while (1)
 		sleep(1);
 	/*useless at this point*/
 	mcl_finalize(proc_state);
 	/* free after fence */
-	mcl_set_free(na_class, set);
+	if (set)
+		mcl_set_free(na_class, set);
+	NA_Finalize(na_class);
+
 	return 0;
 
 }
