@@ -638,8 +638,9 @@ int main(int argc, char **argv)
 		free(t_args[i].mountpoint);
 	free(t_args);
 	free(worker_thread);
+	mcl_finalize(proc_state);
+	/* Move to after fence */
 	mcl_set_free(na_class, dest_set);
 	NA_Finalize(na_class);
-	mcl_finalize(proc_state);
 	return ret;
 }

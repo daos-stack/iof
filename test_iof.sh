@@ -17,9 +17,6 @@ fi
 # here when the CNSS and IONSS processes actually do anything.
 orterun --tag-output -np 4 cnss : -np 3 ionss
 
-orterun --tag-output -np 1  $CMD_PREFIX test_rpc_server : \
-	-np 1 $CMD_PREFIX test_rpc_client
-
 #run the global access handle test
 orterun --tag-output -np 1 $CMD_PREFIX test_gah
 

@@ -49,8 +49,9 @@ int main(int argc, char **argv)
 	while (1)
 		sleep(1);
 	/*useless at this point*/
-	mcl_set_free(na_class, set);
 	mcl_finalize(proc_state);
+	/* free after fence */
+	mcl_set_free(na_class, set);
 	return 0;
 
 }
