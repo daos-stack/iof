@@ -17,9 +17,6 @@ fi
 # here when the CNSS and IONSS processes actually do anything.
 orterun --tag-output -np 4 cnss : -np 3 ionss
 
-#run the global access handle test
-orterun --tag-output -np 1 $CMD_PREFIX test_gah
-
 # Disable automatic exit whilst running FUSE so that we can attempt to
 # shutdown correctly.  Instead for FUSE verify that we can create
 # and then read back the target of a sym link.

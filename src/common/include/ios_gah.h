@@ -10,6 +10,8 @@ enum ios_return {
 	IOS_ERR_CRC_MISMATCH,		/**< CRC mismatch */
 	IOS_ERR_VERSION_MISMATCH,	/**< version mismatch */
 	IOS_ERR_NOMEM,			/**< Memory not available */
+	IOS_ERR_OUT_OF_RANGE,		/**< Handle ID out of range */
+	IOS_ERR_EXPIRED,		/**< Handle has expired */
 	IOS_ERR_OTHER			/**< All other errors */
 };
 
@@ -18,8 +20,8 @@ enum ios_return {
 /** 128 bit GAH handle */
 struct ios_gah {
 	uint64_t revision:48;	/**< 0-based revision NO. of the fid */
-	uint8_t root;	/**< The rank who owns the GAH */
-	uint8_t base;	/**< Rank who owns the first byte of the file */
+	uint8_t root;		/**< The rank who owns the GAH */
+	uint8_t base;		/**< Rank who owns the first byte of the file */
 	uint8_t version;	/**< The version of the protocol */
 	uint64_t fid:24;	/**< The file id of the file*/
 	uint64_t reserved:24;	/**< Reserved for future use */
@@ -82,7 +84,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *ios_gah_store,
 		struct ios_gah *gah, int self_rank, int base, void *internal);
 
 /**
- * Deallocaets a global access handle.
+ * Deallocates a global access handle.
  *
  * \param ios_gah_store [IN]		Global access handle data structure.
  * \param gah		[IN/OUT]	On exit, the global access handle
@@ -97,13 +99,13 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
 /**
  * Retrieve opaque data structure corresponding to a given global access handle.
  *
- * \param gah_store [IN]		Global access handle data struture
- * \param gah [IN]			Global access ahndle
+ * \param gah_store [IN]		Global access handle data structure
+ * \param gah [IN]			Global access handle
  * \param info [OUT]			On success, *info contains the opaque
  *					data struture associated with gah. On
  *					failure, equals NULL
  *
- * \return				On success reutns IOS_SUCCESS
+ * \return				On success returns IOS_SUCCESS
  */
 enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
 		struct ios_gah *gah, void **internal);

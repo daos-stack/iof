@@ -1,0 +1,45 @@
+"""Unit tests"""
+import os
+
+TEST_SRC = ['utest_gah.c']
+
+def scons():
+    """Scons function"""
+
+    Import('tenv')
+    # Run config in a new environment so the environment isn't polluted
+    # causing tests to be rebuilt when utest target is used
+    config_env = tenv.Clone()
+    config = Configure(config_env)
+    if not config.CheckHeader('CUnit/Basic.h') or \
+       not config.CheckLib('cunit'):
+        print "\n*****************************************************"
+        print "CUnit packages must be installed to enable unit tests"
+        print "*****************************************************\n"
+        # Just returning is the desired behavior here.  The utest target
+        # has yet to be defined so the build will just fail.
+        config.Finish()
+        return
+    config.Finish()
+
+    test_env = tenv.Clone()
+    test_env.AppendUnique(LIBS=['cunit'])
+    test_env.AppendUnique(CPPPATH=['../common/include'])
+    tests = []
+    for test in TEST_SRC:
+        tests.append(test_env.Program([test, '../common/ios_gah.o']))
+
+    Default(tests)
+
+    # Run tests in a new environment so a rebuilt of the tests isn't triggered
+    # by changes to the environment
+    run_env = test_env.Clone()
+
+    run_tests = run_env.RunTests(tests)
+
+    run_env.Alias('utest', run_tests)
+
+    AlwaysBuild(run_tests)
+
+if __name__ == "SCons.Script":
+    scons()

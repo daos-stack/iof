@@ -47,8 +47,8 @@ def scons():
                           False))
 
     opts.Update(env)
+    config = Configure(env)
     try:
-        config = Configure(env)
         cmd = 'setfattr'
         if platform == 'Darwin':
             cmd = 'xattr'
@@ -59,6 +59,7 @@ def scons():
 
     except AttributeError:
         print 'CheckProg not present'
+    config.Finish()
 
     opts.Save(opts_file, env)
 
@@ -70,7 +71,6 @@ def scons():
     env.Alias('install', "$PREFIX")
 
     SConscript('%s/src/SConscript' % arch_dir)
-    Default('src')
 
     # Pick up any directories under 'proto' which have a SConscript file
     for fname in os.listdir('proto'):

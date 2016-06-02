@@ -46,10 +46,10 @@ def scons():
     ienv.Append(LIBS='pthread')
     progs += ienv.Program(['ionss/ionss.c', common])
 
-    # Build tester
-    progs += tenv.Program(['test/test_gah.c', common])
-
+    Default(progs)
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+
+    SConscript('utest/SConscript', exports='tenv')
 
 if __name__ == "SCons.Script":
     scons()

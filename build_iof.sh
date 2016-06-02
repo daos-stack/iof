@@ -47,6 +47,9 @@ fi
 scons $option
 scons install
 
+scons utest
+scons utest --utest-mode=memcheck
+
 # Run the tests from the Jenkins build job so that if there is a test failure
 # the "latest" symlink is not created.
 ./test_iof.sh
