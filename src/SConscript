@@ -47,7 +47,14 @@ def scons():
     progs += ienv.Program(['ionss/ionss.c', common])
 
     Default(progs)
+
+    # Build tester
+    test_targets = tenv.SharedObject('test/iof_test_log')
+
+    Default(test_targets)
+
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+    Export('test_targets')
 
     SConscript('utest/SConscript')
 

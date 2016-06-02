@@ -17,10 +17,14 @@
 #include <pthread.h>
 #include <sys/xattr.h>
 
+#include <process_set.h>
+
+#include "iof_test_log.h"
 #include "rpc_handler.h"
 #include "rpc_common.h"
 #include "server_backend.h"
-#include "process_set.h"
+
+static int client_log_handle;
 
 int shutdown;
 struct rpc_state {
@@ -66,7 +70,7 @@ struct rpc_id *create_id(hg_class_t *rpc_class)
 
 	rpc_id = malloc(sizeof(struct rpc_id));
 	if (rpc_id == NULL) {
-		printf("Cant allocate memory\n");
+		IOF_TESTLOG_ERROR("Cant allocate memory");
 		exit(1);
 	}
 	rpc_id->getattr_id = getattr_register(rpc_class);
@@ -116,7 +120,7 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 			     &handle);
 
 	/* Send RPC */
-	printf("Reply is at %p\n", (void *)&reply);
+	IOF_TESTLOG_INFO("Reply is at %p", (void *)&reply);
 	ret =
 	    HG_Forward(handle, getattr_callback, &reply,
 		       &in);
@@ -144,7 +148,7 @@ static hg_return_t readdir_callback(const struct hg_cb_info *info)
 	assert(ret == HG_SUCCESS);
 
 	reply->err_code = out.error_code;
-	printf("%s\n", out.name);
+	IOF_TESTLOG_INFO("%s", out.name);
 	strcpy(reply->name, out.name);
 	memcpy(&reply->stat, &out.stat, sizeof(out.stat));
 	reply->complete = out.complete;
@@ -208,7 +212,7 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		}
 		if (reply.err_code != 0)
 			return reply.err_code;
-		printf("Calling filler %s\n", reply.name);
+		IOF_TESTLOG_INFO("Calling filler %s", reply.name);
 		filler(buf, reply.name, &reply.stat, 0
 #ifdef IOF_USE_FUSE3
 			, 0
@@ -469,7 +473,7 @@ static int fs_setxattr(const char *path, const char *name, const char *value,
 	if (strcmp(name, "user.exit") == 0) {
 		if (string_to_bool(value, &ret)) {
 			if (ret) {
-				printf("Exiting fuse loop\n");
+				IOF_TESTLOG_INFO("Exiting fuse loop");
 				fuse_session_exit(
 					fuse_get_session(context->fuse));
 				return -EINTR;
@@ -517,13 +521,13 @@ static void *thread_function(void *data)
 	ch = fuse_mount(t_args->mountpoint, &args);
 	if (!ch) {
 		fuse_opt_free_args(&args);
-		printf("Could not successfully mount\n");
+		IOF_TESTLOG_ERROR("Could not successfully mount");
 		t_args->error_code = 1;
 		return NULL;
 	}
 	fuse = fuse_new(ch, &args, &op, sizeof(op), &t_args->rpc_state);
 	if (!fuse) {
-		printf("Could not initialize fuse\n");
+		IOF_TESTLOG_ERROR("Could not initialize fuse");
 		t_args->error_code = 1;
 		fuse_opt_free_args(&args);
 		return NULL;
@@ -532,7 +536,7 @@ static void *thread_function(void *data)
 	/*Blocking*/
 	res = fuse_loop(fuse);
 	if (res != 0) {
-		printf("Fuse loop exited with ret = %d\n", res);
+		IOF_TESTLOG_ERROR("Fuse loop exited with ret = %d", res);
 		t_args->error_code = res;
 	}
 
@@ -562,6 +566,7 @@ int main(int argc, char **argv)
 	struct mcl_set *dest_set = NULL;
 	int ret;
 
+	iof_testlog_init("client_main");
 	proc_state = mcl_init(&uri);
 	na_class = NA_Initialize(uri, NA_FALSE);
 	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
@@ -570,7 +575,7 @@ int main(int argc, char **argv)
 	rpc_id = create_id(rpc_class);
 	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 	if (ret != MCL_SUCCESS) {
-		fprintf(stderr, "attach failed\n");
+		IOF_TESTLOG_ERROR("attach failed");
 		exit(1);
 	}
 	shutdown = 0;
@@ -583,8 +588,8 @@ int main(int argc, char **argv)
 			new_argv[new_argc++] = argv[i];
 	}
 	if (!base_mount) {
-		fprintf(stderr,
-		"Please provide a valid base mount point with -mnt option\n");
+		IOF_TESTLOG_ERROR(
+		"Please provide a valid base mount point with -mnt option");
 		exit(1);
 	}
 	if (((signal(SIGTERM, my_handler)) == SIG_ERR) ||
@@ -615,7 +620,7 @@ int main(int argc, char **argv)
 		ret = mcl_lookup(dest_set, i, na_class,
 				&t_args[i].rpc_state.dest_addr);
 		if (ret != MCL_SUCCESS) {
-			fprintf(stderr, "Server address lookup failed\n");
+			IOF_TESTLOG_ERROR("Server address lookup failed");
 			exit(1);
 		}
 		pthread_create(&worker_thread[i], NULL, thread_function,
@@ -647,6 +652,6 @@ int main(int argc, char **argv)
 	if (set)
 		mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
-
+	iof_testlog_close();
 	return ret;
 }

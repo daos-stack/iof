@@ -2,7 +2,11 @@
 import os
 import sys
 sys.path.insert(0, os.path.join(Dir('#').abspath, "scons_local"))
-from prereq_tools import PreReqComponent
+try:
+    from prereq_tools import PreReqComponent
+except ImportError:
+    raise ImportError \
+          ("\'prereq_tools\' module not found; run \'git submodule update\'")
 
 def scons():
     """Scons function"""
@@ -39,8 +43,7 @@ def scons():
     Export('env prereqs')
 
     env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
-                       '-std=gnu99', '-pedantic', '-Wno-missing-braces',
-                       '-Wno-gnu-zero-variadic-macro-arguments'])
+                       '-std=gnu99', '-pedantic', '-Wno-missing-braces'])
 
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',

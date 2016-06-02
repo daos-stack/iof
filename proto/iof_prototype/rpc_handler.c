@@ -8,6 +8,7 @@
 #include "server_backend.h"
 #include <mercury_proc_string.h>
 #include <errno.h>
+#include "iof_test_log.h"
 
 hg_return_t string_in_proc_cb(hg_proc_t proc, void *data)
 {
@@ -39,11 +40,11 @@ static hg_return_t getattr_handler(hg_handle_t handle)
 
 	ret = HG_Get_input(handle, &in);
 	assert(ret == HG_SUCCESS);
-	printf("got RPC\n");
+	IOF_TESTLOG_INFO("got RPC");
 
 	buf = &out.stbuf;
 	/* send arguments to the local filesystem */
-	printf("Calling getattr %s %p\n", in.name, (void *)buf);
+	IOF_TESTLOG_INFO("Calling getattr %s %p", in.name, (void *)buf);
 	out.error_code = iof_getattr(in.name, buf);
 	ret = HG_Free_input(handle, &in);
 	assert(ret == HG_SUCCESS);
@@ -62,7 +63,7 @@ static hg_return_t readdir_handler(hg_handle_t handle)
 	ret = HG_Get_input(handle, &in);
 	assert(ret == HG_SUCCESS);
 	/* in has the input args now */
-	printf("got  RPC\n");
+	IOF_TESTLOG_INFO("got  RPC");
 
 	out.complete =
 	    iof_readdir(out.name, in.dir_name, &out.error_code, in.offset,

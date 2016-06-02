@@ -1,9 +1,12 @@
 """Build ping test"""
 import os
 
+COMMON_SRC = ['rpc_common.c', 'rpc_handler.c', 'server_backend.c']
+TEST_SRC = ['client_main.c', 'server_main.c']
+
 def scons():
     """Scons function"""
-    Import('env prereqs')
+    Import('env prereqs test_targets')
 
     tenv = env.Clone()
     tenv.Append(CPPDEFINES=['FUSE_USE_VERSION=30'])
@@ -22,19 +25,17 @@ def scons():
             tenv.Append(LIBS=['fuse'])
 
     tenv.Append(CFLAGS=['-D_FILE_OFFSET_BITS=64'])
-    common = tenv.Object('rpc_common')
-    common += tenv.Object('rpc_handler')
-    common += tenv.Object('server_backend')
+    tenv.Append(CPPPATH=['../../src/test'])
+    common = []
+    for obj in COMMON_SRC:
+        common += tenv.Object(obj)
 
     if env.get('PLATFORM') == 'posix':
         tenv.Append(LIBS=['pthread'])
 
-    progs = tenv.Program(['client_main.c', common],
-                         LIBS=['$LIBS', 'proto_common'],
-                         LIBPATH=['$LIBPATH', '../common'])
-    progs += tenv.Program(['server_main.c', common],
-                          LIBS=['$LIBS', 'proto_common'],
-                          LIBPATH=['$LIBPATH', '../common'])
+    progs = []
+    for src in TEST_SRC:
+        progs += tenv.Program([src, common, test_targets])
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
     tenv.Append(RPATH=os.path.join("$PREFIX", 'lib'))

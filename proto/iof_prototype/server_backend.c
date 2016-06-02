@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <errno.h>
 #include "server_backend.h"
+#include "iof_test_log.h"
 
 struct fs_info info;
 
@@ -72,7 +73,7 @@ struct fs_dir *find_p_dir(const char *name, char **basename,
 		if (basename)
 			*basename = NULL;
 		if (write) {
-			printf("locking root in write mode\n");
+			IOF_TESTLOG_INFO("locking root in write mode");
 			WRITE_LOCK(&top_dir->ent.lock);
 		} else {
 			READ_LOCK(&top_dir->ent.lock);
@@ -84,7 +85,7 @@ struct fs_dir *find_p_dir(const char *name, char **basename,
 	dir_len = next_delim(&name[1]);
 
 	if (write && name[dir_len + 1] == '\0') {
-		printf("locking / in write mode\n");
+		IOF_TESTLOG_INFO("locking / in write mode");
 		WRITE_LOCK(&top_dir->ent.lock);
 	} else {
 		READ_LOCK(&top_dir->ent.lock);
@@ -287,7 +288,7 @@ struct fs_dir *find_dir(const char *name, struct fs_dir *top_dir, int write)
 
 	if (strncmp(name, "/", 2) == 0) {
 		if (write) {
-			printf("locking root in write mode\n");
+			IOF_TESTLOG_INFO("locking root in write mode");
 			WRITE_LOCK(&top_dir->ent.lock);
 		} else {
 			READ_LOCK(&top_dir->ent.lock);

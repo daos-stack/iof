@@ -2,17 +2,17 @@
 #define __LOG_H__
 #include <mcl_log.h>
 
-#define IOF_LOG_DEBUG(format, ...)	\
-	MCL_LOG_DEBUG(iof_log_handle, (format), ## __VA_ARGS__)
+#define IOF_LOG_DEBUG(...)	\
+	MCL_LOG_DEBUG(iof_log_handle, __VA_ARGS__)
 
-#define IOF_LOG_INFO(format, ...)	\
-	MCL_LOG_INFO(iof_log_handle, (format), ## __VA_ARGS__)
+#define IOF_LOG_INFO(...)	\
+	MCL_LOG_INFO(iof_log_handle, __VA_ARGS__)
 
-#define IOF_LOG_WARNING(format, ...)	\
-	MCL_LOG_WARNING(iof_log_handle, (format), ## __VA_ARGS__)
+#define IOF_LOG_WARNING(...)	\
+	MCL_LOG_WARNING(iof_log_handle, __VA_ARGS__)
 
-#define IOF_LOG_ERROR(format, ...)	\
-	MCL_LOG_ERROR(iof_log_handle, (format), ## __VA_ARGS__)
+#define IOF_LOG_ERROR(...)	\
+	MCL_LOG_ERROR(iof_log_handle, __VA_ARGS__)
 
 #if defined(__cplusplus)
 extern "C" {

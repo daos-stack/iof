@@ -3,7 +3,8 @@
 #include<stdio.h>
 #include "rpc_common.h"
 #include "rpc_handler.h"
-#include "process_set.h"
+#include <process_set.h>
+#include "iof_test_log.h"
 
 /* Will be the wrapper on top of the file system that will register
  * and handle the RPC. It will execute indefinitely.
@@ -40,6 +41,9 @@ int main(int argc, char **argv)
 	struct mcl_state *proc_state;
 	int is_service = 1;
 	char *name_of_set = "server";
+
+
+	iof_testlog_init("server_main");
 	filesystem_init();
 	iof_mkdir("/started", 0600);
 	proc_state = mcl_init(&uri);
@@ -56,7 +60,7 @@ int main(int argc, char **argv)
 	if (set)
 		mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
-
+	iof_testlog_close();
 	return 0;
 
 }
