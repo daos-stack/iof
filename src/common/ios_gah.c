@@ -176,6 +176,8 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 {
 	enum ios_return rc = IOS_SUCCESS;
 
+	if (gah_store == NULL)
+		return IOS_ERR_INVALID_PARAM;
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	if (gah_store->size == gah_store->capacity) {
@@ -256,14 +258,14 @@ enum ios_return ios_gah_check_version(struct ios_gah *gah)
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	return (gah->version == IOS_GAH_VERSION)
-		? 0 : 1;
+		? IOS_SUCCESS : IOS_ERR_VERSION_MISMATCH;
 }
 
 enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank)
 {
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
-	return gah->root == self_rank ? 0 : 1;
+	return gah->root == self_rank ? IOS_SUCCESS : IOS_ERR_OTHER;
 }
 
 char *ios_gah_to_str(struct ios_gah *gah)
