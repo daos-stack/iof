@@ -49,7 +49,7 @@ def scons():
     Default(progs)
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 
-    SConscript('utest/SConscript', exports='tenv')
+    SConscript('utest/SConscript')
 
 if __name__ == "SCons.Script":
     scons()

@@ -6,10 +6,10 @@ TEST_SRC = ['utest_gah.c']
 def scons():
     """Scons function"""
 
-    Import('tenv')
+    Import('env')
     # Run config in a new environment so the environment isn't polluted
     # causing tests to be rebuilt when utest target is used
-    config_env = tenv.Clone()
+    config_env = env.Clone()
     config = Configure(config_env)
     if not config.CheckHeader('CUnit/Basic.h') or \
        not config.CheckLib('cunit'):
@@ -22,7 +22,7 @@ def scons():
         return
     config.Finish()
 
-    test_env = tenv.Clone()
+    test_env = env.Clone()
     test_env.AppendUnique(LIBS=['cunit'])
     test_env.AppendUnique(CPPPATH=['../common/include'])
     tests = []
