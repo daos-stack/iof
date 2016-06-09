@@ -24,7 +24,6 @@
 #include "rpc_common.h"
 #include "server_backend.h"
 
-static int client_log_handle;
 
 int shutdown;
 struct rpc_state {
