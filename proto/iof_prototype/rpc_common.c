@@ -59,7 +59,7 @@ static void *progress_fn(void *foo)
 	return NULL;
 }
 
-hg_return_t engine_progress(int *done)
+hg_return_t engine_progress(struct mcl_event *done)
 {
 	unsigned int actual_count;
 	hg_return_t ret;
@@ -68,12 +68,11 @@ hg_return_t engine_progress(int *done)
 	do {
 		ret = HG_Progress(hg_context, 1000);
 		HG_Trigger(hg_context, 0, 1, &actual_count);
-		if (*done)
+		if (mcl_event_test(done))
 			return HG_SUCCESS;
 	} while (rep_count++ < 5);
 	return ret;
 }
-
 
 void engine_create_handle(na_addr_t addr, hg_id_t id, hg_handle_t *handle)
 {

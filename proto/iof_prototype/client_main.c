@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <sys/xattr.h>
 
+#include <mcl_event.h>
 #include <process_set.h>
 
 #include "iof_test_log.h"
@@ -40,8 +41,8 @@ struct thread_args {
 
 struct getattr_r_t {
 	struct stat *stbuf;
-	int done;
 	int err_code;
+	struct mcl_event event;
 };
 
 struct readdir_r_t {
@@ -49,18 +50,18 @@ struct readdir_r_t {
 	uint64_t err_code;
 	char name[255];
 	struct stat stat;
-	int done;
+	struct mcl_event event;
 };
 
 struct rpc_cb_basic {
 	uint64_t err_code;
-	int done;
+	struct mcl_event event;
 };
 
 struct readlink_r_t {
 	char *dst;
 	uint64_t err_code;
-	int done;
+	struct mcl_event event;
 };
 
 struct rpc_id *create_id(hg_class_t *rpc_class)
@@ -97,7 +98,7 @@ static hg_return_t getattr_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
-	reply->done = 1;
+	mcl_event_set(&reply->event);
 
 	return HG_SUCCESS;
 }
@@ -113,6 +114,7 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 
 	in.name = name;
 	reply.stbuf = stbuf;
+	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
 	engine_create_handle(state->dest_addr, state->rpc_id->getattr_id,
@@ -125,8 +127,8 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 		       &in);
 	assert(ret == 0);
 
-	while (reply.done == 0) {
-		ret = engine_progress(&reply.done);
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
 		if (ret != HG_SUCCESS) {
 			fuse_session_exit(fuse_get_session(context->fuse));
 			return -EINTR;
@@ -154,7 +156,7 @@ static hg_return_t readdir_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
-	reply->done = 1;
+	mcl_event_set(&reply->event);
 
 	return HG_SUCCESS;
 }
@@ -190,6 +192,8 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 	if (!dir_name)
 		dir_name = (char *)fi->fh;
 
+	mcl_event_clear(&reply.event);
+
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
 	engine_create_handle(state->dest_addr, state->rpc_id->readdir_id,
@@ -201,8 +205,8 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		    HG_Forward(handle, readdir_callback,
 			       &reply, &in);
 		assert(ret == 0);
-		while (!reply.done) {
-			ret = engine_progress(&reply.done);
+		while (!mcl_event_test(&reply.event)) {
+			ret = engine_progress(&reply.event);
 			if (ret != HG_SUCCESS) {
 				fuse_session_exit(fuse_get_session(
 					context->fuse));
@@ -218,7 +222,7 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 #endif
 			);
 		in.offset++;
-		reply.done = 0;
+		mcl_event_clear(&reply.event);
 	} while (!reply.complete);
 
 	ret = HG_Destroy(handle);
@@ -246,7 +250,7 @@ static hg_return_t basic_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == HG_SUCCESS);
 
-	reply->done = 1;
+	mcl_event_set(&reply->event);
 
 	return HG_SUCCESS;
 }
@@ -267,11 +271,13 @@ static int fs_mkdir(const char *name, mode_t mode)
 	in.name = name;
 	in.mode = mode;
 
+	mcl_event_set(&reply.event);
+
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	while (reply.done == 0) {
-		ret = engine_progress(&reply.done);
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
 		if (ret != HG_SUCCESS) {
 			fuse_session_exit(fuse_get_session(context->fuse));
 			return -EINTR;
@@ -291,6 +297,7 @@ static int fs_rmdir(const char *name)
 	struct rpc_state *state;
 	hg_handle_t handle;
 
+	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
 	engine_create_handle(state->dest_addr, state->rpc_id->rmdir_id,
@@ -298,8 +305,8 @@ static int fs_rmdir(const char *name)
 	in.name = name;
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (reply.done == 0) {
-		ret = engine_progress(&reply.done);
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
 		if (ret != HG_SUCCESS) {
 			fuse_session_exit(fuse_get_session(context->fuse));
 			return -EINTR;
@@ -319,6 +326,7 @@ static int fs_symlink(const char *dst, const char *name)
 	struct rpc_state *state;
 	hg_handle_t handle;
 
+	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	in.name = name;
 	in.dst = dst;
@@ -329,8 +337,8 @@ static int fs_symlink(const char *dst, const char *name)
 	ret =
 	    HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (reply.done == 0) {
-		ret = engine_progress(&reply.done);
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
 		if (ret != HG_SUCCESS) {
 			fuse_session_exit(fuse_get_session(context->fuse));
 			return -EINTR;
@@ -358,7 +366,7 @@ hg_return_t readlink_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
-	reply->done = 1;
+	mcl_event_set(&reply->event);
 
 	return HG_SUCCESS;
 }
@@ -372,6 +380,7 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 	struct rpc_state *state;
 	hg_handle_t handle;
 
+	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	in.name = name;
 	reply.dst = dst;
@@ -384,8 +393,8 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 		       &in);
 	assert(ret == 0);
 
-	while (reply.done == 0) {
-		ret = engine_progress(&reply.done);
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
 		if (ret != HG_SUCCESS) {
 			fuse_session_exit(fuse_get_session(context->fuse));
 			return -EINTR;
@@ -411,7 +420,7 @@ hg_return_t unlink_callback(const struct hg_cb_info *info)
 	ret = HG_Free_output(info->info.forward.handle, &out);
 	assert(ret == 0);
 
-	reply->done = 1;
+	mcl_event_set(&reply->event);
 
 	return HG_SUCCESS;
 }
@@ -425,6 +434,7 @@ static int fs_unlink(const char *name)
 	struct rpc_state *state;
 	hg_handle_t handle;
 
+	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
 	engine_create_handle(state->dest_addr, state->rpc_id->unlink_id,
@@ -434,11 +444,12 @@ static int fs_unlink(const char *name)
 	    HG_Forward(handle, unlink_callback, &reply, &in);
 	assert(ret == 0);
 
-	while (reply.done == 0)
-		ret = engine_progress(&reply.done);
-	if (ret != HG_SUCCESS) {
-		fuse_session_exit(fuse_get_session(context->fuse));
-		return -EINTR;
+	while (!mcl_event_test(&reply.event)) {
+		ret = engine_progress(&reply.event);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(context->fuse));
+			return -EINTR;
+		}
 	}
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
