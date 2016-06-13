@@ -127,13 +127,12 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 		       &in);
 	assert(ret == 0);
 
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;
@@ -205,14 +204,12 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		    HG_Forward(handle, readdir_callback,
 			       &reply, &in);
 		assert(ret == 0);
-		while (!mcl_event_test(&reply.event)) {
-			ret = engine_progress(&reply.event);
-			if (ret != HG_SUCCESS) {
-				fuse_session_exit(fuse_get_session(
-					context->fuse));
+		ret = engine_progress(&reply.event);
+		if (ret != HG_SUCCESS) {
+			fuse_session_exit(fuse_get_session(context->fuse));
 				return -EINTR;
-			}
 		}
+
 		if (reply.err_code != 0)
 			return reply.err_code;
 		IOF_TESTLOG_INFO("Calling filler %s", reply.name);
@@ -276,13 +273,12 @@ static int fs_mkdir(const char *name, mode_t mode)
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;
@@ -305,13 +301,13 @@ static int fs_rmdir(const char *name)
 	in.name = name;
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;
@@ -337,13 +333,13 @@ static int fs_symlink(const char *dst, const char *name)
 	ret =
 	    HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;
@@ -393,13 +389,12 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 		       &in);
 	assert(ret == 0);
 
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;
@@ -444,13 +439,12 @@ static int fs_unlink(const char *name)
 	    HG_Forward(handle, unlink_callback, &reply, &in);
 	assert(ret == 0);
 
-	while (!mcl_event_test(&reply.event)) {
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
-			fuse_session_exit(fuse_get_session(context->fuse));
-			return -EINTR;
-		}
+	ret = engine_progress(&reply.event);
+	if (ret != HG_SUCCESS) {
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
 	}
+
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
 	return reply.err_code;

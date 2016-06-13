@@ -59,19 +59,42 @@ static void *progress_fn(void *foo)
 	return NULL;
 }
 
+/* Block waiting for event to fire, or a timeout to occour.
+ *
+ * A timeout is six or more seconds with no network activity.
+ */
 hg_return_t engine_progress(struct mcl_event *done)
 {
-	unsigned int actual_count;
-	hg_return_t ret;
-	int rep_count = 0;
+	int timeout_count = 0;
 
 	do {
-		ret = HG_Progress(hg_context, 1000);
-		HG_Trigger(hg_context, 0, 1, &actual_count);
-		if (mcl_event_test(done))
-			return HG_SUCCESS;
-	} while (rep_count++ < 5);
-	return ret;
+		unsigned int actual_count;
+		hg_return_t ret;
+
+		/* First drain the completion queue to process all events,
+		 * checking for the done event along the way
+		 */
+		do {
+			actual_count = 0;
+			HG_Trigger(hg_context, 0, 5, &actual_count);
+			if (mcl_event_test(done))
+				return HG_SUCCESS;
+		} while (actual_count > 0);
+
+		/* Now block on the network waiting for activity */
+		ret = HG_Progress(hg_context, 2000);
+
+		/* If there was a timeout then record it, if there was activity
+		 * then clear the timeout, if there is anything else then return
+		 */
+		if (ret == HG_TIMEOUT)
+			timeout_count++;
+		else if (ret == HG_SUCCESS)
+			timeout_count = 0;
+		else
+			return ret;
+	} while (timeout_count < 3);
+	return HG_TIMEOUT;
 }
 
 void engine_create_handle(na_addr_t addr, hg_id_t id, hg_handle_t *handle)
