@@ -6,6 +6,12 @@
 
 os=`uname`
 MOUNT_DIR=child_fs
+if [ -d testDir ]; then
+    MOUNT_DIR=testDir/child_fs
+else
+    MOUNT_DIR=child_fs
+fi
+
 if find $MOUNT_DIR/ -maxdepth 0 -empty | read v;then
 	echo "Clean"
 else

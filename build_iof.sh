@@ -52,7 +52,15 @@ scons utest --utest-mode=memcheck
 
 # Run the tests from the Jenkins build job so that if there is a test failure
 # the "latest" symlink is not created.
-./test_iof.sh
+if [ -n "$IOF_USE_VALGRIND" ]; then
+  python3.4 test/iof_test_fs.py memcheck
+  mv ${WORKSPACE}/testLogs/test_fs_*/valgrind.*.xml .
+  python3.4 test/iof_test_ionss.py memcheck
+  mv ${WORKSPACE}/testLogs/nss_*/valgrind.*.xml .
+else
+  python3.4 test/iof_test_fs.py
+  python3.4 test/iof_test_ionss.py
+fi
 
 if [ -n "${IOF_INSTALL}" ]; then
   cp .build_vars-`uname -s`.sh ${IOF_INSTALL}/.build_vars.sh
