@@ -18,11 +18,13 @@ struct mcl_state;
 struct cnss_plugin_cb {
 	void *handle;
 	int fuse_version;
-	char *(*get_config_option)(char *); /* A wrapper around getenv */
+	const char *(*get_config_option)(const char *); /* A wrapper
+							 * around getenv
+							 */
 
 	/* Startup FUSE clients ? */
 	void *(*register_fuse_fs)(void *handle, struct fuse_operations*,
-				  char *);
+				  const char *);
 	int (*deregister_fuse_fs)(void *handle, void *);
 
 	/* CPPR needs to be able to access the "global file system" so needs
