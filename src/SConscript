@@ -2,7 +2,7 @@
 import os
 
 HEADERS = ['iof_plugin.h']
-COMMON_SRC = ['version.c', 'v2.c', 'ios_gah.c', 'log.c']
+COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c']
 
 def scons():
     """Scons function"""

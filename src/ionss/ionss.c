@@ -20,7 +20,7 @@ int main(void)
 
 	proc_state = mcl_init(&uri);
 	if (proc_state == NULL) {
-		IOF_LOG_ERROR("mcl_init() failed.", 0);
+		IOF_LOG_ERROR("mcl_init() failed.");
 		return 1;
 	}
 	na_class = NA_Initialize(uri, NA_TRUE);
