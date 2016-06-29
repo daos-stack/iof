@@ -15,7 +15,7 @@ fi
 
 # Just launch the program for now and it'll exit cleanly.  More will be needed
 # here when the CNSS and IONSS processes actually do anything.
-orterun --tag-output -np 4 cnss : -np 3 ionss
+orterun --tag-output -np 4 $CMD_PREFIX cnss : -np 3 $CMD_PREFIX ionss
 
 # Disable automatic exit whilst running FUSE so that we can attempt to
 # shutdown correctly.  Instead for FUSE verify that we can create

@@ -89,8 +89,9 @@ int main(void)
 		IOF_LOG_ERROR("NA Class not initialised");
 		return 1;
 	}
-	mcl_startup(cnss_state, na_class, "CNSS", 0, &cnss_set);
-	ret = mcl_attach(cnss_state, "IONSS", &ionss_set);
+	free(uri);
+	mcl_startup(cnss_state, na_class, "cnss", 0, &cnss_set);
+	ret = mcl_attach(cnss_state, "ionss", &ionss_set);
 	if (ret != MCL_SUCCESS) {
 		IOF_LOG_ERROR("Attach to IONSS Failed");
 		return 1;
@@ -117,10 +118,13 @@ int main(void)
 			IOF_LOG_INFO("Filesystem ID %"PRIu64, tmp->id);
 		}
 	}
+	if (query.list != NULL)
+		free(query.list);
 
 	mcl_finalize(cnss_state);
 	mcl_set_free(na_class, ionss_set);
 	mcl_set_free(na_class, cnss_set);
 	NA_Finalize(na_class);
+	iof_log_close();
 	return ret;
 }
