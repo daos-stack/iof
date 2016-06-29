@@ -61,7 +61,7 @@ struct cnss_plugin {
 typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
 
 /* The name of the init symbol defined in the plugin library */
-const char *cnss_plugin_init_symbol = "cnss_plugin_init";
+#define CNSS_PLUGIN_INIT_SYMBOL "cnss_plugin_init"
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network
