@@ -21,7 +21,6 @@ static enum ios_return ios_gah_store_increase_capacity(
 		struct ios_gah_store *gah_store, size_t delta)
 {
 	int ii;
-	struct ios_gah_ent *tmp_ptr;
 
 	/** allocate more space and copy old data over */
 	struct ios_gah_ent *new_data;
@@ -40,19 +39,15 @@ static enum ios_return ios_gah_store_increase_capacity(
 	}
 	/** setup the pointer array */
 	for (ii = 0; ii < delta; ii++) {
-		gah_store->ptr_array[gah_store->capacity + ii] =
-			new_data + ii;
-		gah_store->ptr_array[gah_store->capacity + ii]->fid =
-			gah_store->capacity + ii;
+		gah_store->ptr_array[gah_store->capacity + ii] = &new_data[ii];
 	}
-	/** point tail to the new tail */
-	tmp_ptr = &(gah_store->avail_entries);
-	for (ii = 0; ii < delta; ii++) {
-		tmp_ptr->next =
-			gah_store->ptr_array[gah_store->capacity + ii];
-		tmp_ptr = tmp_ptr->next;
+	for (ii = gah_store->capacity; ii < gah_store->capacity + delta; ii++) {
+		gah_store->ptr_array[ii]->fid = ii;
+
+		/** point tail to the new tail */
+		STAILQ_INSERT_TAIL(&gah_store->free_list,
+				   gah_store->ptr_array[ii], list);
 	}
-	gah_store->tail = tmp_ptr;
 	gah_store->capacity = new_cap;
 
 	return IOS_SUCCESS;
@@ -94,7 +89,6 @@ static uint8_t my_crc8(uint8_t *data, size_t len)
 static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
 {
 	int ii;
-	struct ios_gah_ent *tmp_ptr;
 
 	gah_store->size = 0;
 	gah_store->capacity = IOS_GAH_STORE_INIT_CAPACITY;
@@ -110,18 +104,18 @@ static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
 		free(gah_store->data);
 		return IOS_ERR_NOMEM;
 	}
+
+	STAILQ_INIT(&gah_store->free_list);
+
 	/** setup the pointer array */
 	for (ii = 0; ii < IOS_GAH_STORE_INIT_CAPACITY; ii++) {
-		gah_store->ptr_array[ii] = gah_store->data + ii;
+		gah_store->ptr_array[ii] = &gah_store->data[ii];
 		gah_store->ptr_array[ii]->fid = ii;
+
+		/** setup the linked list */
+		STAILQ_INSERT_TAIL(&gah_store->free_list,
+				   gah_store->ptr_array[ii], list);
 	}
-	/** setup the linked list */
-	tmp_ptr = &(gah_store->avail_entries);
-	for (ii = 0; ii < IOS_GAH_STORE_INIT_CAPACITY; ii++) {
-		tmp_ptr->next = gah_store->ptr_array[ii];
-		tmp_ptr = tmp_ptr->next;
-	}
-	gah_store->tail = tmp_ptr;
 
 	return IOS_SUCCESS;
 }
@@ -174,28 +168,31 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 		struct ios_gah *gah, int self_rank, int base, void *data)
 {
+	struct ios_gah_ent *ent;
 	enum ios_return rc = IOS_SUCCESS;
 
 	if (gah_store == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
-	if (gah_store->size == gah_store->capacity) {
+	if (STAILQ_EMPTY(&gah_store->free_list)) {
 		rc = ios_gah_store_increase_capacity(gah_store,
 				IOS_GAH_STORE_DELTA);
 		if (rc != IOS_SUCCESS)
 			return rc;
 	}
+
 	/** take one gah from the head of the list */
-	gah->fid = gah_store->avail_entries.next->fid;
-	gah_store->avail_entries.next =
-		gah_store->avail_entries.next->next;
-	gah_store->ptr_array[gah->fid]->next = NULL;
+	ent = STAILQ_FIRST(&gah_store->free_list);
+	STAILQ_REMOVE_HEAD(&gah_store->free_list, list);
+
+	ent->in_use = 1;
+	ent->internal = data;
+
+	gah->fid = ent->fid;
+	gah->revision = ent->revision++;
 	/** setup the gah */
-	gah->revision = gah_store->ptr_array[gah->fid]->revision++;
 	gah->version = IOS_GAH_VERSION;
-	gah_store->ptr_array[gah->fid]->in_use = 1;
-	gah_store->ptr_array[gah->fid]->internal = data;
 	gah->root = self_rank;
 	gah->base = base;
 	gah->crc = my_crc8((uint8_t *) gah, 120/8);
@@ -211,10 +208,10 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	gah_store->ptr_array[gah->fid]->in_use = 0;
+
 	/** append the reclaimed entry to the list of availble entires */
-	gah_store->tail->next = gah_store->ptr_array[gah->fid];
-	gah_store->tail = gah_store->tail->next;
-	gah_store->tail->next = NULL;
+	STAILQ_INSERT_HEAD(&gah_store->free_list,
+			   gah_store->ptr_array[gah->fid], list);
 
 	gah_store->size--;
 

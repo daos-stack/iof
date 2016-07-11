@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <inttypes.h>
 #include <sys/types.h>
+#include <sys/queue.h>
 
 enum ios_return {
 	IOS_SUCCESS = 0,
@@ -32,11 +33,13 @@ struct ios_gah {
 /** metadata associated with the file */
 struct ios_gah_ent {
 	void *internal;
-	struct ios_gah_ent *next;
+	STAILQ_ENTRY(ios_gah_ent) list;
 	uint64_t in_use;
 	uint64_t revision;
 	uint64_t fid;	/**< The file id of the file*/
 };
+
+STAILQ_HEAD(ios_list, ios_gah_ent);
 
 /**
  * structure with dynamically-sized storage to keep the file metadata.
@@ -50,10 +53,9 @@ struct ios_gah_store {
 	struct ios_gah_ent *data;
 	/** array of pointers to file entries */
 	struct ios_gah_ent **ptr_array;
+
 	/** list of available file entries */
-	struct ios_gah_ent avail_entries;
-	/** pointer to the tail of the list of free entries */
-	struct ios_gah_ent *tail;
+	struct ios_list free_list;
 };
 
 /**
