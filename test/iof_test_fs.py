@@ -58,7 +58,9 @@ def setUpModule():
         os.chdir("..")
         rootpath = os.getcwd()
     platform = os.uname()[0]
-    opts_file = rootpath + "/.build_vars-%s.py" % platform
+    opts_file = rootpath + "/.build_vars-%s.json" % platform
+    if not os.path.exists(opts_file):
+        opts_file = rootpath + "/.build_vars.json"
     print("TestIof use file: %s" % opts_file)
     with open(opts_file, "r") as info_file:
         info = json.load(info_file)

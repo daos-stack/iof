@@ -64,7 +64,7 @@ fi
 
 if [ -n "${IOF_INSTALL}" ]; then
   cp .build_vars-`uname -s`.sh ${IOF_INSTALL}/.build_vars.sh
-  cp .build_vars-`uname -s`.py ${IOF_INSTALL}/.build_vars.py
+  cp .build_vars-`uname -s`.json ${IOF_INSTALL}/.build_vars.json
   ln -sfn ${IOF_INSTALL} ${CORAL_ARTIFACTS}/${JOB_NAME}/latest
 fi
 

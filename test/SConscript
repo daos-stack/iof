@@ -1,0 +1,15 @@
+"""install test scripts"""
+
+TESTSCRIPTS = ["iof_test_fs.py", "iof_test_ionss.py"]
+
+def scons():
+    """Run scons"""
+
+    Import('env')
+
+    for script in TESTSCRIPTS:
+        env.Install("$PREFIX/TESTING/scripts", script)
+
+if __name__ == 'SCons.Script':
+    scons()
+

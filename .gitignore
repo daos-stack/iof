@@ -1,5 +1,6 @@
 .gitreview
 .build_vars-*.sh
+.build_vars-*.json
 .build_vars-*.py
 config.log
 config-*.log

@@ -8,6 +8,23 @@ except ImportError:
     raise ImportError \
           ("\'prereq_tools\' module not found; run \'git submodule update\'")
 
+def save_build_info(env, prereqs, platform):
+    """Save the build information"""
+
+    build_info = prereqs.get_build_info()
+
+    #Save the build info locally
+    json_build_vars = '.build_vars-%s.json' % platform
+    sh_build_vars = '.build_vars-%s.sh' % platform
+    build_info.gen_script(sh_build_vars)
+    build_info.save(json_build_vars)
+
+    #Install the build info to the testing directory
+    env.InstallAs('$PREFIX/TESTING/.build_vars.sh',
+                  sh_build_vars)
+    env.InstallAs('$PREFIX/TESTING/.build_vars.json',
+                  json_build_vars)
+
 def scons():
     """Scons function"""
 
@@ -74,6 +91,7 @@ def scons():
     env.Alias('install', "$PREFIX")
 
     SConscript('%s/src/SConscript' % arch_dir)
+    SConscript('%s/test/SConscript' % arch_dir)
 
     # Pick up any directories under 'proto' which have a SConscript file
     for fname in os.listdir('proto'):
@@ -84,9 +102,7 @@ def scons():
 
     # Put this after all SConscript calls so that any imports they require can
     # be included.
-    build_info = prereqs.get_build_info()
-    build_info.gen_script(".build_vars-%s.sh" % platform)
-    build_info.save(".build_vars-%s.py" % platform)
+    save_build_info(env, prereqs, platform)
 
     try:
         #if using SCons 2.4+, provide a more complete help
