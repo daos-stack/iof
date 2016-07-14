@@ -14,7 +14,7 @@
 
 hg_class_t *engine_init(int start_thread, struct mcl_state *state);
 void engine_finalize(void);
-void engine_create_handle(na_addr_t addr, hg_id_t id, hg_handle_t *handle);
+void engine_create_handle(hg_addr_t addr, hg_id_t id, hg_handle_t *handle);
 hg_return_t engine_progress(struct mcl_event *done);
 
 #endif

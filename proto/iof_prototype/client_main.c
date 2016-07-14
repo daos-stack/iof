@@ -29,7 +29,7 @@
 int shutdown;
 struct rpc_state {
 	struct rpc_id *rpc_id;
-	na_addr_t dest_addr;
+	hg_addr_t dest_addr;
 };
 struct thread_args {
 	char *mountpoint;

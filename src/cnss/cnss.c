@@ -32,7 +32,7 @@ static hg_return_t query_callback(const struct hg_cb_info *info)
 }
 
 /*Send RPC to PSR to get information about projected filesystems*/
-static int ioc_get_projection_info(struct mcl_state *state, na_addr_t psr_addr,
+static int ioc_get_projection_info(struct mcl_state *state, hg_addr_t psr_addr,
 			struct iof_psr_query *query, hg_id_t rpc_id)
 {
 	hg_handle_t handle;
@@ -67,7 +67,7 @@ int main(void)
 	struct mcl_state *cnss_state;
 	na_class_t *na_class = NULL;
 	struct mcl_set *ionss_set;
-	na_addr_t psr_addr;
+	hg_addr_t psr_addr;
 	int ret;
 	int i;
 	hg_id_t rpc_id;
