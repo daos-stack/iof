@@ -56,9 +56,6 @@ int main(int argc, char **argv)
 		sleep(1);
 	/*useless at this point*/
 	mcl_finalize(proc_state);
-	/* free after fence */
-	if (set)
-		mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
 	iof_testlog_close();
 	return 0;

@@ -121,9 +121,8 @@ int main(void)
 	if (query.list != NULL)
 		free(query.list);
 
+	mcl_detach(cnss_state, ionss_set);
 	mcl_finalize(cnss_state);
-	mcl_set_free(na_class, ionss_set);
-	mcl_set_free(na_class, cnss_set);
 	NA_Finalize(na_class);
 	iof_log_close();
 	return ret;

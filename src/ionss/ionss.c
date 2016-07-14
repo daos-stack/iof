@@ -38,7 +38,6 @@ int main(void)
 			NULL, iof_query_out_proc_cb, iof_query_handler);
 	IOF_LOG_INFO("Id registered on server:%d", rpc_id);
 	mcl_finalize(proc_state);
-	mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
 	iof_log_close();
 

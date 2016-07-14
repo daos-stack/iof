@@ -649,12 +649,8 @@ int main(int argc, char **argv)
 		free(t_args[i].mountpoint);
 	free(t_args);
 	free(worker_thread);
+	mcl_detach(proc_state, dest_set);
 	mcl_finalize(proc_state);
-	/* Move to after fence */
-	if (dest_set)
-		mcl_set_free(na_class, dest_set);
-	if (set)
-		mcl_set_free(na_class, set);
 	NA_Finalize(na_class);
 	iof_testlog_close();
 	return ret;
