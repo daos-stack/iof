@@ -37,7 +37,7 @@ def scons():
     for src in TEST_SRC:
         progs += tenv.Program([src, common, test_targets])
 
-    tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
+    tenv.Install(os.path.join("$PREFIX", 'TESTING', 'tests'), progs)
     tenv.Append(RPATH=os.path.join("$PREFIX", 'lib'))
 
 if __name__ == "SCons.Script":

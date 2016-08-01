@@ -84,6 +84,7 @@ def scons():
 
     SConscript('%s/src/SConscript' % arch_dir)
     SConscript('%s/test/SConscript' % arch_dir)
+    SConscript('%s/scons_local/test_runner/SConscript' % arch_dir)
 
     # Pick up any directories under 'proto' which have a SConscript file
     for fname in os.listdir('proto'):

@@ -4,170 +4,129 @@ iof cnss / ionss test
 
 Usage:
 
-Should be executed from the iof root directory. The results are placed in the
+Execute from the install/Linux/TESTING directory. The results are placed in the
 testLogs/nss directory. Any test_ps output is under
-testLogs/nss/1(process set)/rank<number>. There you will find anything written
-to stdout and stderr. The output from memcheck and callgrind are in the nss
-directory. At the end of a test run, the last nss directory is renamed to
-nss<date stamp>
+<file yaml>_loop#/<module.name.execStrategy.id>/1(process set)/rank<number>.
+There you will find anything written to stdout and stderr. The output from
+memcheck and callgrind are in the nss directory. At the end of a test run,
+the last nss directory is renamed to nss<date stamp>
 
-python3 test/iof_test_ionss.py
+python3 test_runner srcipts/iof_test_ionss.yml
 
 To use valgrind memory checking
-python3 test/iof_test_ionss.py memcheck
+set TR_USE_VALGRIND in iof_test_ionss.yml to memcheck
 
 To use valgrind call (callgrind) profiling
-python3 test/iof_test_ionss.py callgrind
+set TR_USE_VALGRIND in iof_test_ionss.yml to callgrind
 
 """
-#pylint: disable=too-many-locals
-#pylint: disable=too-many-branches
-#pylint: disable=too-many-statements
 
 import os
-import sys
 import unittest
 import shlex
 import subprocess
-import json
-from datetime import datetime
+import time
+
+def setUpModule():
+    """ set up test environment """
+
+    print("\nTestnss: module setup begin")
+    print("Testnss: module setup end\n\n")
+
+def tearDownModule():
+    """teardown module for test"""
+    print("Testnss: module tearDown begin")
+    testmsg = "terminate any cnss processes"
+    cmdstr = "pkill cnss"
+    launch_test(testmsg, cmdstr)
+    testmsg = "terminate any ionss processes"
+    cmdstr = "pkill ionss"
+    launch_test(testmsg, cmdstr)
+    print("Testnss: module tearDown end\n\n")
+
+def launch_test(msg, cmdstr):
+    """Launch process set test"""
+    print("Testnss: start %s - input string:\n %s\n" % (msg, cmdstr))
+    cmdarg = shlex.split(cmdstr)
+    start_time = time.time()
+    procrtn = subprocess.call(cmdarg, timeout=180,
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL)
+    elapsed = time.time() - start_time
+    print("Testnss: %s - return code: %d test duration: %d\n" %
+          (msg, procrtn, elapsed))
+    return procrtn
+def logdir_name(fullname):
+    """create the log directory name"""
+    names = fullname.split('.')
+    items = names[-1].split('_', maxsplit=2)
+    return "/" + items[2]
+
+def add_prefix_logdir(testcase_name):
+    """add the log directory to the prefix"""
+    prefix = ""
+    ompi_path = os.getenv('IOF_OMPI_PATH', "")
+    ompi_prefix = os.getenv('IOF_OMPI_PREFIX', "")
+    log_path = os.getenv("IOF_TESTLOG", "nss") + logdir_name(testcase_name)
+    os.makedirs(log_path, exist_ok=True)
+    use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
+    if use_valgrind == 'memcheck':
+        suppressfile = os.path.join(os.getenv('IOF_MCL_PATH', ".."), "etc", \
+                       "memcheck-mcl.supp")
+        prefix = "valgrind --xml=yes" + \
+            " --xml-file=" + log_path + "/valgrind.%q{PMIX_ID}.xml" + \
+            " --leak-check=yes --gen-suppressions=all" + \
+            " --suppressions=" + suppressfile + " --show-reachable=yes"
+    elif use_valgrind == "callgrind":
+        prefix = "valgrind --tool=callgrind --callgrind-out-file=" + \
+                 log_path + "/callgrind.%q{PMIX_ID}.out"
+
+    if os.path.exists("./orted-uri"):
+        dvmfile = " --hnp file:orted-uri "
+    else:
+        dvmfile = " "
+    if ompi_prefix:
+        use_prefix = " --prefix %s" % ompi_prefix
+    else:
+        use_prefix = ""
+    cmdstr = "%sorterun%s--output-filename %s%s" % \
+             (ompi_path, dvmfile, log_path, use_prefix)
+
+    return (cmdstr, prefix)
+
+def add_server_client():
+    """create the server and client prefix"""
+    cn = os.getenv('IOF_TEST_CN')
+    if cn:
+        local_cn = " -H %s " % cn
+    else:
+        local_cn = " "
+    ion = os.getenv('IOF_TEST_ION')
+    if ion:
+        local_ion = " -H %s " % ion
+    else:
+        local_ion = " "
+
+    return (local_cn, local_ion)
+
 
 class Testnss(unittest.TestCase):
     """Simple test"""
 
-    cmd = "orterun --output-filename testLogs/nss"
-
     def setUp(self):
         print("Testnss: setUp begin")
-        print("Testnss: Setting up for simple test.")
-
-        info = {}
-        rootpath = os.getcwd()
-        print("Testnss: path: %s" % rootpath)
-        print("Testnss: input: %s" % sys.argv[0])
-        where = os.path.dirname(sys.argv[0])
-        print("Testnss: input file: %s" % (where))
-        if not where:
-            rootpath = ".."
-        platform = os.uname()[0]
-        opts_file = rootpath + "/.build_vars-%s.json" % platform
-        if not os.path.exists(opts_file):
-            opts_file = rootpath + "/.build_vars.json"
-        print("Testnss: use file: %s" % opts_file)
-        with open(opts_file, "r") as info_file:
-            info = json.load(info_file)
-
-        path = os.getenv("PATH")
-        if path.find(info['OMPI_PREFIX']) < 0:
-            path = info['OMPI_PREFIX'] + "/bin:" + path
-        if path.find(info['PREFIX']) < 0:
-            path = info['PREFIX'] + "/bin:" + path
-        os.environ['PATH'] = path
-        os.environ['OMPI_MCA_rmaps_base_oversubscribe'] = "1"
-        os.environ['OMPI_MCA_orte_abort_on_non_zero_status'] = "0"
-        # Use /tmp for temporary files.  This is required for OS X.
-        if platform == "Darwin":
-            os.environ['OMPI_MCA_orte_tmpdir_base'] = "/tmp"
-            dyld = os.getenv("DYLD_LIBRARY_PATH", default="")
-            lib_paths = []
-            for var in sorted(info.keys()):
-                if not isinstance(info[var], str):
-                    continue
-                if not "PREFIX" in var:
-                    continue
-                if info[var] == "/usr":
-                    continue
-                lib = os.path.join(info[var], "lib")
-                lib64 = os.path.join(info[var], "lib64")
-                if os.path.exists(lib) and lib not in lib_paths:
-                    lib_paths.insert(0, lib)
-                if os.path.exists(lib64) and lib64 not in lib_paths:
-                    lib_paths.insert(0, lib64)
-            os.environ['DYLD_LIBRARY_PATH'] = os.pathsep.join(lib_paths) + dyld
-
-        if len(sys.argv) > 1:
-            if sys.argv[1] == "memcheck":
-                os.environ['MCL_USE_VALGRIND'] = "memcheck"
-                prefix = "valgrind --xml=yes" + \
-                    " --xml-file=testLogs/nss/valgrind.%q{PMIX_ID}.xml" + \
-                    " --leak-check=yes --show-reachable=yes" + \
-                   " --suppressions=" + info['MCL_PREFIX'] + \
-                    "/etc/memcheck-mcl.supp"
-
-            if sys.argv[1] == "callgrind":
-                os.environ['MCL_USE_VALGRIND'] = "callgrind"
-                prefix = "valgrind --tool=callgrind --callgrind-out-file=" + \
-                         "testLogs/nss/callgrind.%q{PMIX_ID}.out"
-        else:
-            prefix = ""
-        self.local_server = " -np 4 %s cnss :" % prefix
-        self.local_client = " -np 3 %s ionss" % prefix
-        if os.path.exists("testLogs/nss"):
-            newname = "testLogs/nss_%s" % datetime.now().isoformat()
-            os.rename("testLogs/nss", newname)
-        os.makedirs("testLogs/nss")
         print("Testnss: setUp end\n")
 
     def tearDown(self):
         print("Testnss: tearDown begin")
-        print("Testnss: Tearing down environment for simple test.")
-        if os.getenv("MCL_USE_VALGRIND") == "callgrind":
-            srcfile = " %s/src/cnss/*.c" % os.getcwd() + \
-                      " %s/src/ionss/*.c" % os.getcwd()
-            os.chdir("testLogs/nss")
-            dirlist = os.listdir('.')
-            for infile in dirlist:
-                if os.path.isfile(infile) and infile.find(".out"):
-                    outfile = infile.replace("out", "gp.out")
-                    cmdarg = "callgrind_annotate " + infile + srcfile
-                    print(cmdarg)
-                    with open(outfile, 'w') as out:
-                        subprocess.call(cmdarg, timeout=30, shell=True,
-                                        stdout=out,
-                                        stderr=subprocess.STDOUT)
-
-        if os.path.exists("testLogs/nss"):
-            newname = "testLogs/nss_%s" % datetime.now().isoformat()
-            os.rename("testLogs/nss", newname)
         print("Testnss: tearDown end\n\n")
 
-    def launch_client_server(self):
-        """Launch simple test"""
-        cmdstr = self.cmd + self.local_server + self.local_client
-        cmdarg = shlex.split(cmdstr)
-        print("Testnss: input string: %s\n" % cmdstr)
-        procrtn = subprocess.call(cmdarg, timeout=30,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
-        print("Testnss: return string: %d\n" % procrtn)
-        return procrtn
-
-    def test_simple_test(self):
+    def test_ionss_simple_test(self):
         """Simple test"""
-        self.assertFalse(self.launch_client_server())
-
-
-def main():
-    """Simple test runner"""
-    suite = unittest.TestLoader().loadTestsFromTestCase(Testnss)
-    results = unittest.TestResult()
-    suite.run(results)
-    print("******************************************************************")
-    print("Number test run: %s" % results.testsRun)
-    if results.wasSuccessful() is True:
-        print("Test was successful\n")
-        exit(0)
-    else:
-        print("Test failed")
-    print("\nNumber test errors: %d" % len(results.errors))
-    for x in results.errors:
-        for l in x:
-            print(l)
-    print("\nNumber test failures: %d" % len(results.failures))
-    for x in results.failures:
-        for l in x:
-            print(l)
-    exit(1)
-
-if __name__ == "__main__":
-    main()
+        testmsg = self.shortDescription()
+        (cmd, prefix) = add_prefix_logdir(self.id())
+        (cnss, ionss) = add_server_client()
+        local_server = "%s-np 4 %s ionss :" % (ionss, prefix)
+        local_client = "%s-np 3 %s cnss" % (cnss, prefix)
+        cmdstr = cmd + local_server + local_client
+        self.assertFalse(launch_test(testmsg, cmdstr))

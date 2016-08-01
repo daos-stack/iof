@@ -1,0 +1,23 @@
+description: "fs test module"
+
+defaultENV:
+    OMPI_MCA_rmaps_base_oversubscribe: "1"
+    IOF_MOUNT_DIR: "testDir/child_fs"
+    IOF_USE_CLIENTS: "1"
+    IOF_USE_SERVERS: "2"
+
+module:
+    name: "iof_test_fs"
+    subLogKey: "IOF_TESTLOG"
+    setKeyFromHost: ["IOF_TEST_CN", "IOF_TEST_ION"]
+    setKeyFromInfo:
+        - [IOF_MCL_PATH, MCL_PREFIX, ""]
+        - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
+    srcDir: "proto/iof_prototype"
+
+directives:
+    loop: "no"
+
+execStrategy:
+    - id: default
+      setEnvVars:

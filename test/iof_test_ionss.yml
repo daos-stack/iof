@@ -1,0 +1,20 @@
+description: "ionss test module"
+
+defaultENV:
+    OMPI_MCA_rmaps_base_oversubscribe: "1"
+
+module:
+    name: "iof_test_ionss"
+    subLogKey: "IOF_TESTLOG"
+    setKeyFromHost: ["IOF_TEST_ION", "IOF_TEST_CN"]
+    setKeyFromInfo:
+        - [IOF_MCL_PATH, MCL_PREFIX, ""]
+        - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
+    srcDir: ["src/cnss", "src/ionss"]
+
+directives:
+    loop: "no"
+
+execStrategy:
+    - id: 1
+      setEnvVars:
