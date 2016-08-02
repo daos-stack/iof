@@ -38,11 +38,13 @@ static int ioc_get_projection_info(struct mcl_state *state, hg_addr_t psr_addr,
 	hg_handle_t handle;
 	int ret;
 	struct query_reply reply = {0};
+	struct mcl_context *mcl_context = NULL;
 
 	reply.query = query;
 	mcl_event_clear(&reply.event);
+	mcl_context = mcl_get_context(state);
 
-	ret = HG_Create(state->mcl_context->context, psr_addr, rpc_id, &handle);
+	ret = HG_Create(mcl_context->context, psr_addr, rpc_id, &handle);
 	if (ret != HG_SUCCESS) {
 		IOF_LOG_ERROR("Handle not created");
 		return ret;
@@ -52,9 +54,10 @@ static int ioc_get_projection_info(struct mcl_state *state, hg_addr_t psr_addr,
 		IOF_LOG_ERROR("Could not send RPC tp PSR");
 		return ret;
 	}
-	while (!mcl_event_test(&reply.event))
-		sched_yield();
+	/*make progress*/
+	mcl_progress(mcl_context, &reply.event);
 	ret = HG_Destroy(handle);
+	mcl_remove_context(mcl_context);
 	if (ret != HG_SUCCESS)
 		IOF_LOG_ERROR("Could not destroy handle");
 	return ret;

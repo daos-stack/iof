@@ -1,6 +1,8 @@
 #include <sys/stat.h>
+#include <mercury.h>
+#include <mercury_macros.h>
+#include <mcl_event.h>
 #include "server_backend.h"
-#include "rpc_common.h"
 
 #ifndef RPC_HANDLER_H
 #define RPC_HANDLER_H

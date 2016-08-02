@@ -1,7 +1,6 @@
 #include <assert.h>
 #include<unistd.h>
 #include<stdio.h>
-#include "rpc_common.h"
 #include "rpc_handler.h"
 #include <process_set.h>
 #include "iof_test_log.h"
@@ -50,11 +49,7 @@ int main(int argc, char **argv)
 	na_class = NA_Initialize(uri, NA_TRUE);
 	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
 	rpc_class = proc_state->hg_class;
-	engine_init(0, proc_state);
 	server_init(rpc_class);
-	while (1)
-		sleep(1);
-	/*useless at this point*/
 	mcl_finalize(proc_state);
 	NA_Finalize(na_class);
 	iof_testlog_close();

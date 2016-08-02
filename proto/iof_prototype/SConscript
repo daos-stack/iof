@@ -1,7 +1,7 @@
 """Build ping test"""
 import os
 
-COMMON_SRC = ['rpc_common.c', 'rpc_handler.c', 'server_backend.c']
+COMMON_SRC = ['rpc_handler.c', 'server_backend.c']
 TEST_SRC = ['client_main.c', 'server_main.c']
 
 def scons():

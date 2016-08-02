@@ -3,7 +3,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <assert.h>
-#include "rpc_common.h"
 #include "rpc_handler.h"
 #include "server_backend.h"
 #include <mercury_proc_string.h>

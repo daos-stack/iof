@@ -16,13 +16,13 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sys/xattr.h>
+#include <time.h>
 
 #include <mcl_event.h>
 #include <process_set.h>
 
 #include "iof_test_log.h"
 #include "rpc_handler.h"
-#include "rpc_common.h"
 #include "server_backend.h"
 
 
@@ -30,6 +30,7 @@ int shutdown;
 struct rpc_state {
 	struct rpc_id *rpc_id;
 	hg_addr_t dest_addr;
+	struct mcl_context *mcl_context;
 };
 struct thread_args {
 	char *mountpoint;
@@ -63,6 +64,35 @@ struct readlink_r_t {
 	uint64_t err_code;
 	struct mcl_event event;
 };
+/*
+ * Usage of this function does not prototype the product functionality and is a
+ * temporary arrangement to handle server death and unmount fuse mount.
+ *
+ */
+int iof_progress(struct mcl_context *mcl_context, struct mcl_event *cb_event,
+		int iof_timeout)
+{
+	int ret;
+	clock_t start, end;
+	double time_spent;
+	double timeout;
+
+	timeout = (double)iof_timeout/1000;
+
+	ret = 0;
+	start = clock();
+	while (!mcl_event_test(cb_event)) {
+		mcl_progress(mcl_context, NULL);
+		end = clock();
+		time_spent = (double) (end-start)/CLOCKS_PER_SEC;
+		if ((timeout - time_spent) <= 0) {
+			ret = 1;
+			break;
+		}
+	}
+
+	return ret;
+}
 
 struct rpc_id *create_id(hg_class_t *rpc_class)
 {
@@ -109,6 +139,7 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 	uint64_t ret;
 	struct rpc_state *state;
 	hg_handle_t handle;
+	struct mcl_context *mcl_context;
 	struct rpc_request_string in;
 	struct getattr_r_t reply = {0};
 
@@ -117,8 +148,11 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->getattr_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->getattr_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create getattr handle");
 
 	/* Send RPC */
 	IOF_TESTLOG_INFO("Reply is at %p", (void *)&reply);
@@ -127,14 +161,15 @@ static int fs_getattr(const char *name, struct stat *stbuf)
 		       &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(state->mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
-
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
+
 	return reply.err_code;
 }
 
@@ -183,6 +218,7 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 	uint64_t ret;
 	struct readdir_in_t in;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	if (dir_name && strcmp(dir_name, (char *)fi->fh) != 0)
@@ -195,8 +231,11 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->readdir_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->readdir_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create readdir handle");
 	in.offset = 0;
 	in.dir_name = dir_name;
 	do {
@@ -204,10 +243,11 @@ fs_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
 		    HG_Forward(handle, readdir_callback,
 			       &reply, &in);
 		assert(ret == 0);
-		ret = engine_progress(&reply.event);
-		if (ret != HG_SUCCESS) {
+		ret = iof_progress(state->mcl_context, &reply.event, 6000);
+		if (ret) {
+			IOF_TESTLOG_ERROR("Exiting Fuse loop");
 			fuse_session_exit(fuse_get_session(context->fuse));
-				return -EINTR;
+			return -EINTR;
 		}
 
 		if (reply.err_code != 0)
@@ -259,12 +299,16 @@ static int fs_mkdir(const char *name, mode_t mode)
 	struct rpc_cb_basic reply = {0};
 	int ret;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->mkdir_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->mkdir_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create mkdir handle");
 	in.name = name;
 	in.mode = mode;
 
@@ -273,8 +317,9 @@ static int fs_mkdir(const char *name, mode_t mode)
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(state->mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
@@ -291,22 +336,28 @@ static int fs_rmdir(const char *name)
 	struct rpc_request_string in;
 	int ret;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->rmdir_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->rmdir_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create rmdir handle");
 	in.name = name;
 	ret = HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
+
 
 	ret = HG_Destroy(handle);
 	assert(ret == HG_SUCCESS);
@@ -320,6 +371,7 @@ static int fs_symlink(const char *dst, const char *name)
 	struct rpc_cb_basic reply = {0};
 	int ret;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	mcl_event_clear(&reply.event);
@@ -327,15 +379,19 @@ static int fs_symlink(const char *dst, const char *name)
 	in.name = name;
 	in.dst = dst;
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->symlink_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->symlink_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create symlink handle");
 
 	ret =
 	    HG_Forward(handle, basic_callback, &reply, &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
@@ -374,6 +430,7 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 	struct readlink_r_t reply = {0};
 	int ret;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	mcl_event_clear(&reply.event);
@@ -381,16 +438,19 @@ static int fs_readlink(const char *name, char *dst, size_t length)
 	in.name = name;
 	reply.dst = dst;
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->readlink_id,
-			     &handle);
-
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->readlink_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create readlink handle");
 	ret =
 	    HG_Forward(handle, readlink_callback, &reply,
 		       &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
@@ -427,20 +487,25 @@ static int fs_unlink(const char *name)
 	struct rpc_cb_basic reply = {0};
 	int ret;
 	struct rpc_state *state;
+	struct mcl_context *mcl_context;
 	hg_handle_t handle;
 
 	mcl_event_clear(&reply.event);
 	context = fuse_get_context();
 	state = (struct rpc_state *)context->private_data;
-	engine_create_handle(state->dest_addr, state->rpc_id->unlink_id,
-			     &handle);
+	mcl_context = state->mcl_context;
+	ret = HG_Create(mcl_context->context, state->dest_addr,
+			state->rpc_id->unlink_id, &handle);
+	if (ret)
+		IOF_TESTLOG_ERROR("Couldnt create unlink handle");
 	in.name = name;
 	ret =
 	    HG_Forward(handle, unlink_callback, &reply, &in);
 	assert(ret == 0);
 
-	ret = engine_progress(&reply.event);
-	if (ret != HG_SUCCESS) {
+	ret = iof_progress(mcl_context, &reply.event, 6000);
+	if (ret) {
+		IOF_TESTLOG_ERROR("Exiting Fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
@@ -543,6 +608,7 @@ static void *thread_function(void *data)
 		IOF_TESTLOG_ERROR("Fuse loop exited with ret = %d", res);
 		t_args->error_code = res;
 	}
+	mcl_remove_context(t_args->rpc_state.mcl_context);
 
 	fuse_unmount(t_args->mountpoint, ch);
 	fuse_destroy(fuse);
@@ -575,7 +641,6 @@ int main(int argc, char **argv)
 	na_class = NA_Initialize(uri, NA_FALSE);
 	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
 	rpc_class = proc_state->hg_class;
-	engine_init(0, proc_state);
 	rpc_id = create_id(rpc_class);
 	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 	if (ret != MCL_SUCCESS) {
@@ -620,6 +685,7 @@ int main(int argc, char **argv)
 		t_args[i].argv = new_argv;
 		t_args[i].error_code = 0;
 		t_args[i].rpc_state.rpc_id = rpc_id;
+		t_args[i].rpc_state.mcl_context = mcl_get_context(proc_state);
 
 		ret = mcl_lookup(dest_set, i, na_class,
 				&t_args[i].rpc_state.dest_addr);
@@ -630,9 +696,6 @@ int main(int argc, char **argv)
 		pthread_create(&worker_thread[i], NULL, thread_function,
 			       (void *)&t_args[i]);
 	}
-
-	while (shutdown == 0)
-		sleep(1);
 
 	for (i = 0; i < dest_set->size; i++)
 		pthread_join(worker_thread[i], NULL);
