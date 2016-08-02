@@ -42,7 +42,7 @@ static int ioc_get_projection_info(struct mcl_state *state, hg_addr_t psr_addr,
 	reply.query = query;
 	mcl_event_clear(&reply.event);
 
-	ret = HG_Create(state->hg_context, psr_addr, rpc_id, &handle);
+	ret = HG_Create(state->mcl_context->context, psr_addr, rpc_id, &handle);
 	if (ret != HG_SUCCESS) {
 		IOF_LOG_ERROR("Handle not created");
 		return ret;

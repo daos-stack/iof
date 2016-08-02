@@ -5,7 +5,6 @@
 #include "rpc_common.h"
 
 static hg_context_t *hg_context;
-static hg_class_t *hg_class;
 
 static pthread_t hg_progress_tid;
 static int hg_progress_shutdown_flag;
@@ -16,15 +15,14 @@ hg_class_t *engine_init(int start_thread, struct mcl_state *state)
 {
 	int ret;
 
-	hg_class = state->hg_class;
-	hg_context = state->hg_context;
+	hg_context = state->mcl_context->context;
 
 	if (start_thread) {
 		ret = pthread_create(&hg_progress_tid, NULL, progress_fn, NULL);
 		assert(ret == 0);
 	}
 
-	return hg_class;
+	return state->hg_class;
 }
 
 void engine_finalize(void)
