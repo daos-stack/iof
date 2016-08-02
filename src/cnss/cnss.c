@@ -1,131 +1,232 @@
 #include <stdio.h>
-#include "version.h"
-#include "log.h"
 #include <mercury.h>
 #include <inttypes.h>
 #include <process_set.h>
 #include <mercury.h>
 #include <errno.h>
-#include "process_set.h"
+#include <dlfcn.h>
+
+#include <process_set.h>
+#include <mcl_event.h>
+
 #include "iof_common.h"
-#include "mcl_event.h"
+#include "version.h"
+#include "log.h"
+#include "iof.h"
 
-
-struct query_reply {
-	struct mcl_event event;
-	int err_code;
-	struct iof_psr_query *query;
+struct plugin_entry {
+	struct cnss_plugin *plugin;
+	size_t size;
+	LIST_ENTRY(plugin_entry) list;
+	int active;
 };
 
-static hg_return_t query_callback(const struct hg_cb_info *info)
+LIST_HEAD(cnss_plugin_list, plugin_entry);
+
+#define FN_TO_PVOID(fn) (*((void **)&(fn)))
+
+/*
+ * Helper macro only, do not use other then in CALL_PLUGIN_*
+ *
+ * Unfortunatly because of this macros use of continue it does not work
+ * correctly if contained in a do - while loop.
+ */
+#define CHECK_PLUGIN_FUNCTION(ITER, FN)					\
+	if (!ITER->active)						\
+		continue;						\
+	if (!ITER->plugin->FN)						\
+		continue;						\
+	if ((offsetof(struct cnss_plugin, FN) + sizeof(void *)) > ITER->size) \
+		continue;						\
+	IOF_LOG_INFO("Plugin %s(%p) calling %s at %p",			\
+		ITER->plugin->name,					\
+		(void *)ITER->plugin->handle,				\
+		#FN,							\
+		FN_TO_PVOID(ITER->plugin->FN))
+
+/*
+ * Call a function in each registered and active plugin
+ */
+#define CALL_PLUGIN_FN(LIST, FN)					\
+	do {								\
+		struct plugin_entry *_li;				\
+		IOF_LOG_INFO("Calling plugin %s", #FN);			\
+		LIST_FOREACH(_li, LIST, list) {				\
+			CHECK_PLUGIN_FUNCTION(_li, FN);			\
+			_li->plugin->FN(_li->plugin->handle);		\
+		}							\
+		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
+	} while (0)
+
+/*
+ * Call a function in each registered and active plugin, providing additional
+ * parameters.
+ */
+#define CALL_PLUGIN_FN_PARAM(LIST, FN, ...)				\
+	do {								\
+		struct plugin_entry *_li;				\
+		IOF_LOG_INFO("Calling plugin %s", #FN);			\
+		LIST_FOREACH(_li, LIST, list) {				\
+			CHECK_PLUGIN_FUNCTION(_li, FN);			\
+			_li->plugin->FN(_li->plugin->handle, __VA_ARGS__); \
+		}							\
+		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
+	} while (0)
+
+/* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
+static int add_plugin(struct cnss_plugin_list *plugin_list,
+		      cnss_plugin_init_t fn)
 {
-	struct query_reply *reply;
-	int ret;
+	struct plugin_entry *entry;
+	int rc;
 
-	reply = info->arg;
-	ret = HG_Get_output(info->info.forward.handle, reply->query);
-	if (ret != HG_SUCCESS)
-		IOF_LOG_ERROR("Cant unpack output of RPC");
-	reply->err_code = ret;
-	mcl_event_set(&reply->event);
-	return HG_SUCCESS;
-}
+	IOF_LOG_INFO("Loading plugin at entry point %p", FN_TO_PVOID(fn));
 
-/*Send RPC to PSR to get information about projected filesystems*/
-static int ioc_get_projection_info(struct mcl_state *state, hg_addr_t psr_addr,
-			struct iof_psr_query *query, hg_id_t rpc_id)
-{
-	hg_handle_t handle;
-	int ret;
-	struct query_reply reply = {0};
-	struct mcl_context *mcl_context = NULL;
+	entry = calloc(1, sizeof(struct plugin_entry));
+	if (!entry)
+		return -1;
 
-	reply.query = query;
-	mcl_event_clear(&reply.event);
-	mcl_context = mcl_get_context(state);
-
-	ret = HG_Create(mcl_context->context, psr_addr, rpc_id, &handle);
-	if (ret != HG_SUCCESS) {
-		IOF_LOG_ERROR("Handle not created");
-		return ret;
+	rc = fn(&entry->plugin, &entry->size);
+	if (rc != 0) {
+		free(entry);
+		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
+			     FN_TO_PVOID(fn), rc);
+		return 0;
 	}
-	ret = HG_Forward(handle, query_callback, &reply, NULL);
-	if (ret != HG_SUCCESS) {
-		IOF_LOG_ERROR("Could not send RPC tp PSR");
-		return ret;
+
+	LIST_INSERT_HEAD(plugin_list, entry, list);
+
+	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
+		     entry->plugin->name,
+		     (void *)entry->plugin->handle,
+		     FN_TO_PVOID(fn));
+
+	if (entry->plugin->version == CNSS_PLUGIN_VERSION) {
+		entry->active = 1;
+	} else {
+		IOF_LOG_INFO("Plugin %s(%p) version incorrect %x %x, disabling",
+			     entry->plugin->name,
+			     (void *)entry->plugin->handle,
+			     entry->plugin->version,
+			     CNSS_PLUGIN_VERSION);
 	}
-	/*make progress*/
-	mcl_progress(mcl_context, &reply.event);
-	ret = HG_Destroy(handle);
-	mcl_remove_context(mcl_context);
-	if (ret != HG_SUCCESS)
-		IOF_LOG_ERROR("Could not destroy handle");
-	return ret;
+
+	if (sizeof(struct cnss_plugin) != entry->size) {
+		IOF_LOG_INFO("Plugin %s(%p) size incorrect %zd %zd, some functions may be disabled",
+			     entry->plugin->name,
+			     (void *)entry->plugin->handle,
+			     entry->size,
+			     sizeof(struct cnss_plugin));
+	}
+
+	return 0;
 }
 
 int main(void)
 {
 	char *uri;
 	struct mcl_set *cnss_set;
-	struct mcl_state *cnss_state;
+	struct mcl_state *state;
 	na_class_t *na_class = NULL;
 	struct mcl_set *ionss_set;
-	hg_addr_t psr_addr;
 	int ret;
-	int i;
-	hg_id_t rpc_id;
-	struct iof_psr_query query = {0};
-	struct iof_fs_info *tmp = NULL;
+	struct plugin_entry *list_iter;
+	struct cnss_plugin_list plugin_list;
+	int service_process_set = 0;
+	char *plugin_file = NULL;
 
 	char *version = iof_get_version();
 	iof_log_init("cnss");
 
 	IOF_LOG_INFO("CNSS version: %s", version);
 
-	cnss_state = mcl_init(&uri);
-	if (cnss_state == NULL) {
+	LIST_INIT(&plugin_list);
+
+	/* Load the build-in iof "plugin" */
+	ret = add_plugin(&plugin_list, iof_plugin_init);
+	if (ret != 0)
+		return 1;
+
+	/* Check to see if an additional plugin file has been requested and
+	 * attempt to load it
+	 */
+	plugin_file = getenv("CNSS_PLUGIN_FILE");
+	if (plugin_file) {
+		void *dl_handle = dlopen(plugin_file, 0);
+		cnss_plugin_init_t fn = NULL;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+
+		if (dl_handle)
+			fn = (cnss_plugin_init_t)dlsym(dl_handle, CNSS_PLUGIN_INIT_SYMBOL);
+
+#pragma GCC diagnostic pop
+
+		IOF_LOG_INFO("Loading plugin file %s %p %p",
+			     plugin_file,
+			     dl_handle,
+			     FN_TO_PVOID(fn));
+		if (fn) {
+			ret = add_plugin(&plugin_list, fn);
+			if (ret != 0)
+				return 1;
+		}
+	}
+
+	state = mcl_init(&uri);
+	if (!state) {
 		IOF_LOG_ERROR("mcl_init() failed");
 		return 1;
 	}
 	na_class = NA_Initialize(uri, NA_FALSE);
-	if (na_class == NULL) {
+	if (!na_class) {
 		IOF_LOG_ERROR("NA Class not initialised");
 		return 1;
 	}
 	free(uri);
-	mcl_startup(cnss_state, na_class, "cnss", 0, &cnss_set);
-	ret = mcl_attach(cnss_state, "ionss", &ionss_set);
+
+	/* Walk the list of plugins and if any require the use of a service
+	 * process set across the CNSS nodes then create one
+	 */
+	LIST_FOREACH(list_iter, &plugin_list, list) {
+		if (list_iter->active && list_iter->plugin->require_service)
+			service_process_set = 1;
+	}
+
+	IOF_LOG_INFO("Forming %s process set",
+		     service_process_set ? "service" : "client");
+
+	mcl_startup(state, na_class, "cnss", 1, &cnss_set);
+
+	/*
+	 * Call plugin start.  As discussed this should be called prior to
+	 * mcl_startup() however currently hg_class is not available at
+	 * that point so call it here instead.
+	 */
+	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, NULL, 0);
+
+	ret = mcl_attach(state, "ionss", &ionss_set);
 	if (ret != MCL_SUCCESS) {
 		IOF_LOG_ERROR("Attach to IONSS Failed");
 		return 1;
 	}
-	ret = mcl_lookup(ionss_set, ionss_set->psr_rank, cnss_state->mcl_context, &psr_addr);
-	if (ret != MCL_SUCCESS) {
-		IOF_LOG_ERROR("PSR Address lookup failed");
-		return 1;
+
+	CALL_PLUGIN_FN_PARAM(&plugin_list, post_start, ionss_set);
+
+	CALL_PLUGIN_FN(&plugin_list, flush);
+
+	mcl_detach(state, ionss_set);
+	mcl_finalize(state);
+	CALL_PLUGIN_FN(&plugin_list, finish);
+
+	while (!LIST_EMPTY(&plugin_list)) {
+		struct plugin_entry *entry = LIST_FIRST(&plugin_list);
+
+		LIST_REMOVE(entry, list);
+		free(entry);
 	}
 
-	rpc_id = HG_Register_name(cnss_state->hg_class, "Projection_query",
-			NULL, iof_query_out_proc_cb, iof_query_handler);
-	IOF_LOG_INFO("Id registered on CNSS:%d", rpc_id);
-	/*Query PSR*/
-	ret = ioc_get_projection_info(cnss_state, psr_addr, &query, rpc_id);
-	if (ret != 0)
-		IOF_LOG_ERROR("Query operation failed");
-	else {
-		for (i = 0; i < query.num; i++) {
-			tmp = &query.list[i];
-			if (tmp->mode == 0)
-				IOF_LOG_INFO("Filesystem mode: Private");
-			IOF_LOG_INFO("Projected Mount %s", tmp->mnt);
-			IOF_LOG_INFO("Filesystem ID %"PRIu64, tmp->id);
-		}
-	}
-	if (query.list != NULL)
-		free(query.list);
-
-	mcl_detach(cnss_state, ionss_set);
-	mcl_finalize(cnss_state);
 	NA_Finalize(na_class);
 	iof_log_close();
 	return ret;

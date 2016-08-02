@@ -36,12 +36,15 @@ struct cnss_plugin_cb {
 
 /* Function lookup table provided by plugin to CNSS. */
 struct cnss_plugin {
-	void *handle;  /** Handle passed back to all callback functions */
+	int version; /** Set to CNSS_PLUGIN_VERSION for startup checks */
 	int require_service; /** Does the plugin need CNSS to be a service
 			      *  process set
 			      */
+	char *name;    /** Short string used to prefix log information */
+	void *handle;  /** Handle passed back to all callback functions */
 	int (*start)(void *, struct mcl_state *, struct cnss_plugin_cb *,
 		     size_t); /* Called once at startup, should return 0 */
+	int (*post_start)(void *, struct mcl_set *set);
 	void (*client_attached)(void *, int); /* Notify plugin of a new
 					       * local process
 					       */
@@ -62,6 +65,18 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
 
 /* The name of the init symbol defined in the plugin library */
 #define CNSS_PLUGIN_INIT_SYMBOL "cnss_plugin_init"
+
+/* Runtime version checking.
+ * The plugin must define .version to this value or it will be disabled at
+ * runtime.
+ *
+ * Additionally, offsets of members within cnss_plugin are checked at runtime so
+ * it is safe to expand the API by appending new members, whilst maintaining
+ * binary compatability, however if any members are moved to different offsets
+ * or change parameters or meaning then change this version to force a
+ * re-compile of existing plugins.
+ */
+#define CNSS_PLUGIN_VERSION 0x10f001
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

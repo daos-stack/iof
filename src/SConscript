@@ -3,6 +3,7 @@ import os
 
 HEADERS = ['iof_plugin.h']
 COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_common.c']
+CNSS_SRC = ['cnss.c', 'iof_main.c']
 
 def scons():
     """Scons function"""
@@ -14,6 +15,7 @@ def scons():
     tenv.Append(CFLAGS='-pthread')
     tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
     tenv.Append(CPPPATH=['common/include'])
+    tenv.Append(CPPPATH=['include'])
     tenv.Append(LIBS='pthread')
 
     prereqs.require(tenv, 'mercury', 'mcl')
@@ -30,6 +32,9 @@ def scons():
     # check which will verify fuse3/fuse.h can be loaded.
     cenv.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
 
+    if env.get('PLATFORM') != 'darwin':
+        cenv.Append(LIBS='dl')
+
     if cenv.get('fuse3'):
         prereqs.require(cenv, 'fuse')
         cenv.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
@@ -40,7 +45,10 @@ def scons():
         else:
             cenv.Append(LIBS=['fuse'])
 
-    progs = cenv.Program(['cnss/cnss.c', common])
+    cnss_obj = []
+    for src in CNSS_SRC:
+        cnss_obj += cenv.Object(os.path.join('cnss', src))
+    progs = cenv.Program('cnss/cnss', common + cnss_obj)
 
     # Build the IONSS application
     ienv = tenv.Clone()
