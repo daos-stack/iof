@@ -54,8 +54,8 @@ hg_return_t iof_query_handler(hg_handle_t handle)
 	/* This is random made-up value for now */
 	query.num = 2;
 
-	list = malloc(query.num * sizeof(struct iof_fs_info));
-	if (list == NULL) {
+	list = calloc(query.num, sizeof(struct iof_fs_info));
+	if (!list) {
 		IOF_LOG_ERROR("Failed memory allocation");
 		return -ENOMEM;
 	}
