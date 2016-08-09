@@ -687,7 +687,7 @@ int main(int argc, char **argv)
 		t_args[i].rpc_state.rpc_id = rpc_id;
 		t_args[i].rpc_state.mcl_context = mcl_get_context(proc_state);
 
-		ret = mcl_lookup(dest_set, i, na_class,
+		ret = mcl_lookup(dest_set, i, t_args[i].rpc_state.mcl_context,
 				&t_args[i].rpc_state.dest_addr);
 		if (ret != MCL_SUCCESS) {
 			IOF_TESTLOG_ERROR("Server address lookup failed");

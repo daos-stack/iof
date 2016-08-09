@@ -99,7 +99,7 @@ int main(void)
 		IOF_LOG_ERROR("Attach to IONSS Failed");
 		return 1;
 	}
-	ret = mcl_lookup(ionss_set, ionss_set->psr_rank, na_class, &psr_addr);
+	ret = mcl_lookup(ionss_set, ionss_set->psr_rank, cnss_state->mcl_context, &psr_addr);
 	if (ret != MCL_SUCCESS) {
 		IOF_LOG_ERROR("PSR Address lookup failed");
 		return 1;
