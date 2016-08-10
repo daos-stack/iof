@@ -73,18 +73,18 @@ int iof_progress(struct mcl_context *mcl_context, struct mcl_event *cb_event,
 		int iof_timeout)
 {
 	int ret;
-	clock_t start, end;
+	struct timespec start, end;
 	double time_spent;
 	double timeout;
 
 	timeout = (double)iof_timeout/1000;
 
 	ret = 0;
-	start = clock();
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	while (!mcl_event_test(cb_event)) {
 		mcl_progress(mcl_context, NULL);
-		end = clock();
-		time_spent = (double) (end-start)/CLOCKS_PER_SEC;
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		time_spent = (double) end.tv_sec - start.tv_sec;
 		if ((timeout - time_spent) <= 0) {
 			ret = 1;
 			break;
