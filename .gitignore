@@ -20,3 +20,4 @@ iof-*.conf
 /testDir/
 /testLogs/
 pylint.log
+.checkpatch-camelcase.git.
