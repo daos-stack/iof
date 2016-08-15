@@ -16,8 +16,12 @@
 #include <signal.h>
 #include <pthread.h>
 #include <sys/xattr.h>
+#ifdef __APPLE__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#else
 #include <time.h>
-
+#endif
 #include <mcl_event.h>
 #include <process_set.h>
 
@@ -64,6 +68,23 @@ struct readlink_r_t {
 	uint64_t err_code;
 	struct mcl_event event;
 };
+
+void get_my_time(struct timespec *ts)
+{
+#ifdef __APPLE__
+	clock_serv_t cclock;
+	mach_timespec_t mts;
+
+	host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
+	clock_get_time(cclock, &mts);
+	mach_port_deallocate(mach_task_self(), cclock);
+	ts->tv_sec = mts.tv_sec;
+	ts_tv_nsec = mts.tv_nsec;
+#else
+	clock_gettime(CLOCK_MONOTONIC, ts);
+#endif
+
+}
 /*
  * Usage of this function does not prototype the product functionality and is a
  * temporary arrangement to handle server death and unmount fuse mount.
@@ -80,10 +101,10 @@ int iof_progress(struct mcl_context *mcl_context, struct mcl_event *cb_event,
 	timeout = (double)iof_timeout/1000;
 
 	ret = 0;
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	get_my_time(&start);
 	while (!mcl_event_test(cb_event)) {
 		mcl_progress(mcl_context, NULL);
-		clock_gettime(CLOCK_MONOTONIC, &end);
+		get_my_time(&end);
 		time_spent = (double) end.tv_sec - start.tv_sec;
 		if ((timeout - time_spent) <= 0) {
 			ret = 1;
