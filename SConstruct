@@ -34,24 +34,16 @@ def scons():
     arch_dir = 'build/%s' % platform
     VariantDir(arch_dir, '.', duplicate=0)
 
-    if os.path.exists("SConscript.local"):
-        # pylint: disable=pointless-string-statement
-        """Define this file in order to modify environment defaults
-        #For example:
-        Import('env')
-        import os
-        OS_ENV = ENV['ENV']
-        OS_ENV["PATH"] = "/foo/bar" + os.pathsep + OS_ENV["PATH"]
-        env.Replace(ENV=OS_ENV)"""
-        SConscript('SConscript.local', 'env')
-        # pylint: enable=pointless-string-statement
-
     if os.path.exists('iof.conf') and not os.path.exists(opts_file):
         print 'Renaming legacy conf file'
         os.rename('iof.conf', opts_file)
 
     opts = Variables(opts_file)
     prereqs = PreReqComponent(env, opts, arch=platform)
+
+    if os.path.exists("SConscript.local"):
+        SConscript('SConscript.local', 'env')
+
     prereqs.preload(os.path.join(Dir('#').abspath,
                                  "scons_local",
                                  "components.py"),
