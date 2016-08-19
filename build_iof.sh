@@ -21,12 +21,27 @@ if [ -n "$WORKSPACE" ]; then
   if [ "${JOB_NAME}" != "iof-update-scratch" ]; then
     latest=$(readlink -f ${CORAL_ARTIFACTS}/iof-update-scratch/latest)
     vars=${latest}/.build_vars.sh
+
     if [ -f ${vars} ]; then
-      #Use the last good version
+      #These can be used to override the "last good version"
+      #when there are breaking changes.   Jenkins will use
+      #$GOOD_* only if it is newer than the last version
+      #used by master
+      GOOD_MCL=${CORAL_ARTIFACTS}/mcl-update-scratch/194
+      GOOD_OMPI=${CORAL_ARTIFACTS}/ompi-update-scratch/89
+      GOOD_MERCURY=${CORAL_ARTIFACTS}/mercury-update-scratch/125
       source ${vars}
-      MERCURY=${SL_MERCURY_PREFIX}/..
-      OMPI=${SL_OMPI_PREFIX}/..
-      MCL=${SL_MCL_PREFIX}/..
+      for lib in MERCURY OMPI MCL; do
+        blessed_varname=SL_${lib}_PREFIX
+        good_varname=GOOD_${lib}
+        blessed_num=$(basename $(dirname ${!blessed_varname}))
+        good_num=`basename ${!good_varname}`
+        if [ $good_num -gt $blessed_num ]; then
+          declare $lib=${!good_varname}
+        else
+          declare $lib=$(dirname ${!blessed_varname})
+        fi
+      done
     fi
   else
     latest=$(readlink -f ${MCL})
