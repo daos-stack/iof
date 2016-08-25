@@ -34,7 +34,7 @@ export PATH=$SL_PREFIX/bin:${SL_OMPI_PREFIX}/bin:$PATH
 export OMPI_MCA_rmaps_base_oversubscribe=1
 
 # Prevent orte from killing the job on single process failure
-export OMPI_MCA_orte_abort_on_non_zero_status=0
+# export OMPI_MCA_orte_abort_on_non_zero_status=0
 
 # Use /tmp for temporary files.  This is required for OS X.
 export OMPI_MCA_orte_tmpdir_base=/tmp
