@@ -638,9 +638,7 @@ static void *thread_function(void *data)
 
 int main(int argc, char **argv)
 {
-	na_class_t *na_class = NULL;
 	hg_class_t *rpc_class = NULL;
-	char *uri;
 	struct mcl_set *set = NULL;
 	struct mcl_state *proc_state;
 	pthread_t *worker_thread;
@@ -658,11 +656,10 @@ int main(int argc, char **argv)
 	int ret;
 
 	iof_testlog_init("client_main");
-	proc_state = mcl_init(&uri);
-	na_class = NA_Initialize(uri, NA_FALSE);
-	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
+	proc_state = mcl_init();
 	rpc_class = proc_state->hg_class;
 	rpc_id = create_id(rpc_class);
+	mcl_startup(proc_state, name_of_set, is_service, &set);
 	ret = mcl_attach(proc_state, name_of_target_set, &dest_set);
 	if (ret != MCL_SUCCESS) {
 		IOF_TESTLOG_ERROR("attach failed");
@@ -735,7 +732,6 @@ int main(int argc, char **argv)
 	free(worker_thread);
 	mcl_detach(proc_state, dest_set);
 	mcl_finalize(proc_state);
-	NA_Finalize(na_class);
 	iof_testlog_close();
 	return ret;
 }

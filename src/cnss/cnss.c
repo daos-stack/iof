@@ -124,10 +124,8 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 
 int main(void)
 {
-	char *uri;
 	struct mcl_set *cnss_set;
 	struct mcl_state *state;
-	na_class_t *na_class = NULL;
 	struct mcl_set *ionss_set;
 	int ret;
 	struct plugin_entry *list_iter;
@@ -174,17 +172,11 @@ int main(void)
 		}
 	}
 
-	state = mcl_init(&uri);
+	state = mcl_init();
 	if (!state) {
 		IOF_LOG_ERROR("mcl_init() failed");
 		return 1;
 	}
-	na_class = NA_Initialize(uri, NA_FALSE);
-	if (!na_class) {
-		IOF_LOG_ERROR("NA Class not initialised");
-		return 1;
-	}
-	free(uri);
 
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
@@ -197,14 +189,8 @@ int main(void)
 	IOF_LOG_INFO("Forming %s process set",
 		     service_process_set ? "service" : "client");
 
-	mcl_startup(state, na_class, "cnss", 1, &cnss_set);
-
-	/*
-	 * Call plugin start.  As discussed this should be called prior to
-	 * mcl_startup() however currently hg_class is not available at
-	 * that point so call it here instead.
-	 */
 	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, NULL, 0);
+	mcl_startup(state, "cnss", 1, &cnss_set);
 
 	ret = mcl_attach(state, "ionss", &ionss_set);
 	if (ret != MCL_SUCCESS) {
@@ -227,7 +213,6 @@ int main(void)
 		free(entry);
 	}
 
-	NA_Finalize(na_class);
 	iof_log_close();
 	return ret;
 }

@@ -33,9 +33,7 @@ void server_init(hg_class_t *rpc_class)
 
 int main(int argc, char **argv)
 {
-	na_class_t *na_class = NULL;
 	hg_class_t *rpc_class = NULL;
-	char *uri;
 	struct mcl_set *set;
 	struct mcl_state *proc_state;
 	int is_service = 1;
@@ -45,13 +43,11 @@ int main(int argc, char **argv)
 	iof_testlog_init("server_main");
 	filesystem_init();
 	iof_mkdir("/started", 0600);
-	proc_state = mcl_init(&uri);
-	na_class = NA_Initialize(uri, NA_TRUE);
-	mcl_startup(proc_state, na_class, name_of_set, is_service, &set);
+	proc_state = mcl_init();
 	rpc_class = proc_state->hg_class;
 	server_init(rpc_class);
+	mcl_startup(proc_state, name_of_set, is_service, &set);
 	mcl_finalize(proc_state);
-	NA_Finalize(na_class);
 	iof_testlog_close();
 	return 0;
 
