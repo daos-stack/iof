@@ -67,6 +67,7 @@ import shutil
 import shlex
 import subprocess
 import time
+import getpass
 
 PREFIX = ""
 TESTLOG = ""
@@ -98,6 +99,8 @@ def setUpModule():
 def tearDownModule():
     """ teardown module """
     print("TestIof: module tearDown begin")
+    cmd = ["sh", "test_iof_clean.sh"]
+    subprocess.call(cmd, timeout=30)
     print("TestIof: module tearDown end\n\n")
 
 class TestIof():
@@ -178,9 +181,22 @@ class TestIofMain(unittest.TestCase):
     def setUp(self):
         print("TestIof setUp begin")
         print("TestIof: Setting up for fs test.")
+        ompi_path = os.getenv('IOF_OMPI_PATH', "")
+        if os.path.exists("./orted-uri"):
+            dvmfile = " --hnp file:orted-uri "
+        else:
+            dvmfile = " "
+        ompi_prefix = os.getenv('IOF_OMPI_PREFIX', "")
+        if ompi_prefix:
+            use_prefix = " --prefix %s " % ompi_prefix
+        else:
+            use_prefix = ""
+        if getpass.getuser() == "root":
+            allow_root = " --allow-run-as-root"
+        else:
+            allow_root = ""
         self.number_servers = int(os.getenv("IOF_USE_SERVERS", "2"))
         self.number_clients = int(os.getenv("IOF_USE_CLIENTS", "1"))
-        ompi_path = os.getenv('MCL_OMPI_PATH', "")
         server_list = os.getenv('IOF_TEST_ION', "")
         client_list = os.getenv('IOF_TEST_CN', "")
         if server_list:
@@ -198,10 +214,11 @@ class TestIofMain(unittest.TestCase):
         if os.path.exists(mnt):
             shutil.rmtree(mnt)
         os.makedirs(mnt)
-        cmd = "%sorterun --output-filename %s" \
-              "%s-np 1 %s tests/client_main -mnt %s :" \
+        cmd = "%sorterun%s--output-filename %s%s%s -x PATH" \
+              "%s-np %d %s tests/client_main -mnt %s :" \
               "%s-np %d %s tests/server_main" % \
-              (ompi_path, TESTLOG, clients, PREFIX, mnt, \
+              (ompi_path, dvmfile, TESTLOG, use_prefix, allow_root, \
+               clients, self.number_clients, PREFIX, mnt, \
                servers, self.number_servers, PREFIX)
         print("TestIof: start processes")
         cmdarg = shlex.split(cmd)
@@ -293,11 +310,7 @@ class TestIofMain(unittest.TestCase):
 
         child = TestIof(self.mnt, self.startdir)
         for k in range(self.number_servers):
-            try:
-                linkname = child.simpleTest(k)
-            except Exception as e:
-                print("TestIof: test failed %s", e)
-                return 1
+            linkname = child.simpleTest(k)
             self.assertEqual(linkname, 'target')
 
         for k in range(self.number_servers):

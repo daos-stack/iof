@@ -2,9 +2,10 @@ description: "fs test module"
 
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
-    IOF_MOUNT_DIR: "testDir/child_fs"
+    IOF_MOUNT_DIR: "/tmp/testDir/child_fs"
     IOF_USE_CLIENTS: "1"
     IOF_USE_SERVERS: "2"
+    MCL_LOG_LEVEL: "4"
 
 module:
     name: "iof_test_fs"
@@ -13,6 +14,7 @@ module:
     setKeyFromInfo:
         - [IOF_MCL_PATH, MCL_PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
+        - [IOF_OMPI_PATH, OMPI_PREFIX, "/bin/"]
     srcDir: "proto/iof_prototype"
 
 directives:

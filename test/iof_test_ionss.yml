@@ -2,6 +2,7 @@ description: "ionss test module"
 
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
+    MCL_LOG_LEVEL: "4"
 
 module:
     name: "iof_test_ionss"
@@ -10,6 +11,8 @@ module:
     setKeyFromInfo:
         - [IOF_MCL_PATH, MCL_PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
+        - [IOF_OMPI_PATH, OMPI_PREFIX, "/bin/"]
+        - [IOF_TEST_PATH, PREFIX, "/bin"]
     srcDir: ["src/cnss", "src/ionss"]
 
 directives:

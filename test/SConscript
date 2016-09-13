@@ -47,6 +47,7 @@ def scons():
         env.Install("$PREFIX/TESTING/scripts", script)
     # move the testing config files (.yml) to the TESTING scrpits directory
     env.Install("$PREFIX/TESTING/scripts", Glob("*.yml"))
+    env.Install("$PREFIX/TESTING", "test_iof_clean.sh")
 
 if __name__ == 'SCons.Script':
     scons()

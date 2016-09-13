@@ -62,6 +62,7 @@ import unittest
 import shlex
 import subprocess
 import time
+import getpass
 
 def setUpModule():
     """ set up test environment """
@@ -125,8 +126,12 @@ def add_prefix_logdir(testcase_name):
         use_prefix = " --prefix %s" % ompi_prefix
     else:
         use_prefix = ""
-    cmdstr = "%sorterun%s--output-filename %s%s" % \
-             (ompi_path, dvmfile, log_path, use_prefix)
+    if getpass.getuser() == "root":
+        allow_root = " --allow-run-as-root"
+    else:
+        allow_root = ""
+    cmdstr = "%sorterun%s--output-filename %s%s%s -x PATH" % \
+             (ompi_path, dvmfile, log_path, allow_root, use_prefix)
 
     return (cmdstr, prefix)
 
@@ -162,7 +167,8 @@ class Testnss(unittest.TestCase):
         testmsg = self.shortDescription()
         (cmd, prefix) = add_prefix_logdir(self.id())
         (cnss, ionss) = add_server_client()
-        local_server = "%s-np 4 %s ionss :" % (ionss, prefix)
-        local_client = "%s-np 3 %s cnss" % (cnss, prefix)
+        test_path = os.getenv('IOF_TEST_PATH', "")
+        local_server = "%s-np 4 %s %s/ionss :" % (ionss, prefix, test_path)
+        local_client = "%s-np 3 %s %s/cnss" % (cnss, prefix, test_path)
         cmdstr = cmd + local_server + local_client
         self.assertFalse(launch_test(testmsg, cmdstr))
