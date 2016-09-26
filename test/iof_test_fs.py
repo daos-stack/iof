@@ -82,7 +82,7 @@ def setUpModule():
     use_valgrind = os.getenv("TR_USE_VALGRIND")
     print("Setting up for valgrind: %s" % use_valgrind)
     if use_valgrind == "memcheck":
-        suppressfile = os.path.join(os.getenv('IOF_MCL_PATH', ".."), "etc", \
+        suppressfile = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "etc", \
                        "memcheck-mcl.supp")
         PREFIX = "valgrind --xml=yes" + \
             " --xml-file=" + TESTLOG + "/valgrind.%q{PMIX_ID}.xml" + \
@@ -93,6 +93,11 @@ def setUpModule():
                  TESTLOG + "/callgrind.%q{PMIX_ID}.out"
     else:
         PREFIX = ""
+
+    ompi_lib_path = os.path.join(os.getenv('IOF_OMPI_PREFIX', ".."), "lib")
+    mcl_lib_path = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "lib")
+    ld_lib_path = ompi_lib_path  + ":" + mcl_lib_path
+    os.environ["LD_LIBRARY_PATH"] = ld_lib_path
 
     print("TestIof: module setup end\n")
 
@@ -181,7 +186,7 @@ class TestIofMain(unittest.TestCase):
     def setUp(self):
         print("TestIof setUp begin")
         print("TestIof: Setting up for fs test.")
-        ompi_path = os.getenv('IOF_OMPI_PATH', "")
+        ompi_bin = os.getenv('IOF_OMPI_BIN', "")
         if os.path.exists("./orted-uri"):
             dvmfile = " --hnp file:orted-uri "
         else:
@@ -214,12 +219,13 @@ class TestIofMain(unittest.TestCase):
         if os.path.exists(mnt):
             shutil.rmtree(mnt)
         os.makedirs(mnt)
-        cmd = "%sorterun%s--output-filename %s%s%s -x PATH" \
-              "%s-np %d %s tests/client_main -mnt %s :" \
-              "%s-np %d %s tests/server_main" % \
-              (ompi_path, dvmfile, TESTLOG, use_prefix, allow_root, \
-               clients, self.number_clients, PREFIX, mnt, \
-               servers, self.number_servers, PREFIX)
+        pass_env = " -x PATH -x LD_LIBRARY_PATH"
+        cmd = "%sorterun%s--output-filename %s%s%s" \
+              "%s%s-np %d %s tests/client_main -mnt %s :" \
+              "%s%s-np %d %s tests/server_main" % \
+              (ompi_bin, dvmfile, TESTLOG, use_prefix, allow_root, \
+               pass_env, clients, self.number_clients, PREFIX, mnt, \
+               pass_env, servers, self.number_servers, PREFIX)
         print("TestIof: start processes")
         cmdarg = shlex.split(cmd)
         print("TestIof: input string: %s\n" % cmd)

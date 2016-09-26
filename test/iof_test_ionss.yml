@@ -9,10 +9,11 @@ module:
     subLogKey: "IOF_TESTLOG"
     setKeyFromHost: ["IOF_TEST_ION", "IOF_TEST_CN"]
     setKeyFromInfo:
-        - [IOF_MCL_PATH, MCL_PREFIX, ""]
+        - [IOF_PATH, PREFIX, ""]
+        - [IOF_MCL_PREFIX, MCL_PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
-        - [IOF_OMPI_PATH, OMPI_PREFIX, "/bin/"]
-        - [IOF_TEST_PATH, PREFIX, "/bin"]
+        - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
+        - [IOF_TEST_BIN, PREFIX, "/bin"]
     srcDir: ["src/cnss", "src/ionss"]
 
 directives:

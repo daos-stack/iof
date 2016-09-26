@@ -12,9 +12,9 @@ module:
     subLogKey: "IOF_TESTLOG"
     setKeyFromHost: ["IOF_TEST_CN", "IOF_TEST_ION"]
     setKeyFromInfo:
-        - [IOF_MCL_PATH, MCL_PREFIX, ""]
+        - [IOF_MCL_PREFIX, MCL_PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
-        - [IOF_OMPI_PATH, OMPI_PREFIX, "/bin/"]
+        - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
     srcDir: "proto/iof_prototype"
 
 directives:

@@ -68,6 +68,10 @@ def setUpModule():
     """ set up test environment """
 
     print("\nTestnss: module setup begin")
+    ompi_lib_path = os.path.join(os.getenv('IOF_OMPI_PREFIX', ".."), "lib")
+    mcl_lib_path = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "lib")
+    ld_lib_path = ompi_lib_path  + ":" + mcl_lib_path
+    os.environ["LD_LIBRARY_PATH"] = ld_lib_path
     print("Testnss: module setup end\n\n")
 
 def tearDownModule():
@@ -102,13 +106,13 @@ def logdir_name(fullname):
 def add_prefix_logdir(testcase_name):
     """add the log directory to the prefix"""
     prefix = ""
-    ompi_path = os.getenv('IOF_OMPI_PATH', "")
+    ompi_bin = os.getenv('IOF_OMPI_BIN', "")
     ompi_prefix = os.getenv('IOF_OMPI_PREFIX', "")
     log_path = os.getenv("IOF_TESTLOG", "nss") + logdir_name(testcase_name)
     os.makedirs(log_path, exist_ok=True)
     use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
     if use_valgrind == 'memcheck':
-        suppressfile = os.path.join(os.getenv('IOF_MCL_PATH', ".."), "etc", \
+        suppressfile = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "etc", \
                        "memcheck-mcl.supp")
         prefix = "valgrind --xml=yes" + \
             " --xml-file=" + log_path + "/valgrind.%q{PMIX_ID}.xml" + \
@@ -130,8 +134,8 @@ def add_prefix_logdir(testcase_name):
         allow_root = " --allow-run-as-root"
     else:
         allow_root = ""
-    cmdstr = "%sorterun%s--output-filename %s%s%s -x PATH" % \
-             (ompi_path, dvmfile, log_path, allow_root, use_prefix)
+    cmdstr = "%sorterun%s--output-filename %s%s%s" % \
+             (ompi_bin, dvmfile, log_path, allow_root, use_prefix)
 
     return (cmdstr, prefix)
 
@@ -167,8 +171,11 @@ class Testnss(unittest.TestCase):
         testmsg = self.shortDescription()
         (cmd, prefix) = add_prefix_logdir(self.id())
         (cnss, ionss) = add_server_client()
-        test_path = os.getenv('IOF_TEST_PATH', "")
-        local_server = "%s-np 4 %s %s/ionss :" % (ionss, prefix, test_path)
-        local_client = "%s-np 3 %s %s/cnss" % (cnss, prefix, test_path)
+        test_path = os.getenv('IOF_TEST_BIN', "")
+        pass_env = " -x PATH -x LD_LIBRARY_PATH"
+        local_server = "%s%s-np 4 %s %s/ionss :" % \
+                       (pass_env, ionss, prefix, test_path)
+        local_client = "%s%s-np 3 %s %s/cnss" % \
+                       (pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_server + local_client
         self.assertFalse(launch_test(testmsg, cmdstr))
