@@ -94,11 +94,6 @@ def setUpModule():
     else:
         PREFIX = ""
 
-    ompi_lib_path = os.path.join(os.getenv('IOF_OMPI_PREFIX', ".."), "lib")
-    mcl_lib_path = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "lib")
-    ld_lib_path = ompi_lib_path  + ":" + mcl_lib_path
-    os.environ["LD_LIBRARY_PATH"] = ld_lib_path
-
     print("TestIof: module setup end\n")
 
 def tearDownModule():

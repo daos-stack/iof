@@ -68,10 +68,6 @@ def setUpModule():
     """ set up test environment """
 
     print("\nTestnss: module setup begin")
-    ompi_lib_path = os.path.join(os.getenv('IOF_OMPI_PREFIX', ".."), "lib")
-    mcl_lib_path = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), "lib")
-    ld_lib_path = ompi_lib_path  + ":" + mcl_lib_path
-    os.environ["LD_LIBRARY_PATH"] = ld_lib_path
     print("Testnss: module setup end\n\n")
 
 def tearDownModule():
