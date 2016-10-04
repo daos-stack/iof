@@ -36,6 +36,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdio.h>
+#include <string.h>
 #include <mercury.h>
 #include <inttypes.h>
 #include <process_set.h>
@@ -50,6 +51,7 @@
 #include "version.h"
 #include "log.h"
 #include "iof.h"
+#include "ctrl_common.h"
 
 struct plugin_entry {
 	struct cnss_plugin *plugin;
@@ -159,21 +161,97 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 	return 0;
 }
 
+static const char *get_config_option(const char *var)
+{
+	return getenv((const char *)var);
+}
+
+static struct cnss_plugin_cb cnss_plugin_cb = {
+#ifdef IOF_USE_FUSE3
+	.fuse_version = 3,
+#else /* ! IOF_USE_FUSE3 */
+	.fuse_version = 2,
+#endif /* IOF_USE_FUSE3 */
+	.get_config_option = get_config_option,
+	.register_ctrl_variable = ctrl_register_variable,
+	.register_ctrl_event = ctrl_register_event,
+	.register_ctrl_counter = ctrl_register_counter,
+	.register_ctrl_constant = ctrl_register_constant,
+};
+
+int cnss_shutdown(void *arg)
+{
+	/* TODO: broadcast the shutdown to other CNSS nodes */
+
+	return 0;
+}
+
+int cnss_client_attach(int client_id, void *arg)
+{
+	struct cnss_plugin_list *plugin_list;
+
+	plugin_list = (struct cnss_plugin_list *)arg;
+
+	if (plugin_list == NULL)
+		return 0;
+
+	CALL_PLUGIN_FN_PARAM(plugin_list, client_attached, client_id);
+
+	return 0;
+}
+
+int cnss_client_detach(int client_id, void *arg)
+{
+	struct cnss_plugin_list *plugin_list;
+
+	plugin_list = (struct cnss_plugin_list *)arg;
+
+	if (plugin_list == NULL)
+		return 0;
+
+	CALL_PLUGIN_FN_PARAM(plugin_list, client_detached, client_id);
+
+	return 0;
+}
+
 int main(void)
 {
 	struct mcl_set *cnss_set;
 	struct mcl_state *state;
 	struct mcl_set *ionss_set;
-	int ret;
+	char *plugin_file = NULL;
+	const char *prefix;
+	char *version = iof_get_version();
 	struct plugin_entry *list_iter;
 	struct cnss_plugin_list plugin_list;
+	int ret;
 	int service_process_set = 0;
-	char *plugin_file = NULL;
+	char *ctrl_prefix;
 
-	char *version = iof_get_version();
 	iof_log_init("cnss");
 
 	IOF_LOG_INFO("CNSS version: %s", version);
+
+	prefix = getenv("CNSS_PREFIX");
+
+	if (prefix == NULL) {
+		IOF_LOG_ERROR("CNSS_PREFIX is required");
+		return -1;
+	}
+
+	ret = asprintf(&ctrl_prefix, "%s/.ctrl", prefix);
+
+	if (ret == -1) {
+		IOF_LOG_ERROR("Could not allocate memory for ctrl prefix");
+		return -1;
+	}
+
+	ret = ctrl_fs_start(ctrl_prefix);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Could not start ctrl fs");
+		return -1;
+	}
+	free(ctrl_prefix);
 
 	LIST_INIT(&plugin_list);
 
@@ -194,7 +272,8 @@ int main(void)
 #pragma GCC diagnostic ignored "-Wpedantic"
 
 		if (dl_handle)
-			fn = (cnss_plugin_init_t)dlsym(dl_handle, CNSS_PLUGIN_INIT_SYMBOL);
+			fn = (cnss_plugin_init_t)dlsym(dl_handle,
+						       CNSS_PLUGIN_INIT_SYMBOL);
 
 #pragma GCC diagnostic pop
 
@@ -226,7 +305,8 @@ int main(void)
 	IOF_LOG_INFO("Forming %s process set",
 		     service_process_set ? "service" : "client");
 
-	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, NULL, 0);
+	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, &cnss_plugin_cb,
+			     sizeof(cnss_plugin_cb));
 	mcl_startup(state, "cnss", 1, &cnss_set);
 
 	ret = mcl_attach(state, "ionss", &ionss_set);
@@ -237,10 +317,18 @@ int main(void)
 
 	CALL_PLUGIN_FN_PARAM(&plugin_list, post_start, ionss_set);
 
+	register_cnss_controls(cnss_set->size, &plugin_list);
+	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
+
 	CALL_PLUGIN_FN(&plugin_list, flush);
 
+	/* TODO: This doesn't seem right.   After flush, plugins can still
+	 * actively send RPCs.   We really need a barrier here.  Then
+	 * call finish.   Then finalize.
+	 */
 	mcl_detach(state, ionss_set);
 	mcl_finalize(state);
+
 	CALL_PLUGIN_FN(&plugin_list, finish);
 
 	while (!LIST_EMPTY(&plugin_list)) {

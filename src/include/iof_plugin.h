@@ -50,6 +50,23 @@ extern "C" {
 
 struct fuse_operations;
 struct mcl_state;
+struct mcl_set;
+
+/* Optional callback invoked when a read is done on a ctrl fs variable */
+typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
+/* Optional callback invoked when a write is done on a ctrl fs variable */
+typedef int (*ctrl_fs_write_cb_t)(const char *value, void *cb_arg);
+
+/* Optional callback invoked when an open is done on a ctrl fs counter */
+typedef int (*ctrl_fs_open_cb_t)(int value, void *cb_arg);
+/* Optional callback invoked when a close is done on a ctrl fs counter */
+typedef int (*ctrl_fs_close_cb_t)(int value, void *cb_arg);
+/* Optional callback invoked when ctrl fs is shutting down */
+typedef int (*ctrl_fs_destroy_cb_t)(void *cb_arg);
+/* Optional callback invoked when a trigger is done on a ctrl fs event.
+ * A trigger occurs on any modification to the underlying file.
+ */
+typedef int (*ctrl_fs_trigger_cb_t)(void *cb_arg);
 
 /* Function lookup table provided by CNSS to plugin */
 struct cnss_plugin_cb {
@@ -63,6 +80,35 @@ struct cnss_plugin_cb {
 	void *(*register_fuse_fs)(void *handle, struct fuse_operations*,
 				  const char *);
 	int (*deregister_fuse_fs)(void *handle, void *);
+
+	/* Registers a variable, exported as a control file system file
+	 * and associates optional callbacks with read and write events.
+	 */
+	int (*register_ctrl_variable)(const char *path,
+				      ctrl_fs_read_cb_t read_cb,
+				      ctrl_fs_write_cb_t write_cb,
+				      ctrl_fs_destroy_cb_t destroy_cb,
+				      void *cb_arg);
+	/* Registers an event, exported as a control file system file
+	 * and associates optional callbacks with change events.
+	 */
+	int (*register_ctrl_event)(const char *path,
+				   ctrl_fs_trigger_cb_t trigger_cb,
+				   ctrl_fs_destroy_cb_t destroy_cb,
+				   void *cb_arg);
+	/* Registers a counter, exported as a control file system file
+	 * and associates optional callbacks with open/close events.
+	 */
+	int (*register_ctrl_counter)(const char *path, int start, int increment,
+				     ctrl_fs_open_cb_t open_cb,
+				     ctrl_fs_close_cb_t close_cb,
+				     ctrl_fs_destroy_cb_t destroy_cb,
+				     void *cb_arg);
+	/*
+	 * Control fs constant registration.  Output should be what you want
+	 * to see when you cat <path>.
+	 */
+	int (*register_ctrl_constant)(const char *path, const char *output);
 
 	/* CPPR needs to be able to access the "global file system" so needs
 	 * to enumerate over projection to be able to pick a destination and

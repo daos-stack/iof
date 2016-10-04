@@ -257,14 +257,12 @@ class TestIofMain(unittest.TestCase):
             umount_cmd = ['fusermount', '-u']
         else:
             umount_cmd = ['umount']
-        for k in range(self.number_servers):
-            directory = "%s/Rank%d" % (mnt, k)
-            umount_cmd.append(str(directory))
-            if ismounted[k]:
-                print("TestIof: unmounting file system %s" % directory)
-                print("TestIof: %s" % umount_cmd)
-                subprocess.call(umount_cmd, timeout=30)
-            umount_cmd.remove(str(directory))
+        for k in ismounted:
+            umount_cmd.append(str(k))
+            print("TestIof: unmounting file system %s" % directory)
+            print("TestIof: %s" % umount_cmd)
+            subprocess.call(umount_cmd, timeout=30)
+            umount_cmd.remove(str(k))
         self.proc.poll()
         if self.proc.returncode is None:
             print("TestIof: Again stopping processes :%s" % self.proc.pid)

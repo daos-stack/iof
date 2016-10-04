@@ -63,32 +63,64 @@ import shlex
 import subprocess
 import time
 import getpass
+import tempfile
+
+def get_all_node_cmd():
+    """Get prefix to run command to run all all CNs"""
+    cn = os.getenv('IOF_TEST_CN')
+    if cn:
+        return "pdsh -R ssh -w %s " % cn
+    return ""
 
 def setUpModule():
     """ set up test environment """
 
     print("\nTestnss: module setup begin")
+    tempdir = tempfile.mkdtemp()
+    os.environ["CNSS_PREFIX"] = tempdir
+    allnode_cmd = get_all_node_cmd()
+    testmsg = "create %s on all CNs" % tempdir
+    cmdstr = "%smkdir -p %s " % (allnode_cmd, tempdir)
+    launch_test(testmsg, cmdstr)
     print("Testnss: module setup end\n\n")
 
 def tearDownModule():
     """teardown module for test"""
+
     print("Testnss: module tearDown begin")
     testmsg = "terminate any cnss processes"
     cmdstr = "pkill cnss"
-    launch_test(testmsg, cmdstr)
     testmsg = "terminate any ionss processes"
     cmdstr = "pkill ionss"
     launch_test(testmsg, cmdstr)
+    allnode_cmd = get_all_node_cmd()
+    testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
+    cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
+    launch_test(testmsg, cmdstr)
+
     print("Testnss: module tearDown end\n\n")
 
-def launch_test(msg, cmdstr):
+def launch_test(msg, cmdstr, cnss=False):
     """Launch process set test"""
     print("Testnss: start %s - input string:\n %s\n" % (msg, cmdstr))
     cmdarg = shlex.split(cmdstr)
     start_time = time.time()
-    procrtn = subprocess.call(cmdarg, timeout=180,
-                              stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL)
+    proc = subprocess.Popen(cmdarg,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    procrtn = 0
+    if cnss:
+        testmsg = "Tell CNs to shutdown"
+        shutdown = os.path.join(os.getcwd(), "scripts/signal_shutdown.sh")
+        subcmd = "%s %s" % (shutdown, os.environ["CNSS_PREFIX"])
+        allnode_cmd = get_all_node_cmd()
+        cmdstr = "%s%s" % (allnode_cmd, subcmd)
+        print("Execute %s" % cmdstr)
+        procrtn = launch_test(testmsg, cmdstr)
+    if procrtn != 0:
+        print("Failed to initiate shutdown.  Failing test")
+    else:
+        procrtn = proc.wait(timeout=180)
     elapsed = time.time() - start_time
     print("Testnss: %s - return code: %d test duration: %d\n" %
           (msg, procrtn, elapsed))
@@ -139,14 +171,14 @@ def add_server_client():
     """create the server and client prefix"""
     cn = os.getenv('IOF_TEST_CN')
     if cn:
-        local_cn = " -H %s " % cn
+        local_cn = " -H %s -N 1 " % cn
     else:
-        local_cn = " "
+        local_cn = " -np 1 "
     ion = os.getenv('IOF_TEST_ION')
     if ion:
-        local_ion = " -H %s " % ion
+        local_ion = " -H %s -N 1 " % ion
     else:
-        local_ion = " "
+        local_ion = " -np 1"
 
     return (local_cn, local_ion)
 
@@ -168,10 +200,10 @@ class Testnss(unittest.TestCase):
         (cmd, prefix) = add_prefix_logdir(self.id())
         (cnss, ionss) = add_server_client()
         test_path = os.getenv('IOF_TEST_BIN', "")
-        pass_env = " -x PATH -x LD_LIBRARY_PATH"
-        local_server = "%s%s-np 4 %s %s/ionss :" % \
+        pass_env = " -x PATH -x LD_LIBRARY_PATH -x CNSS_PREFIX"
+        local_server = "%s%s %s %s/ionss :" % \
                        (pass_env, ionss, prefix, test_path)
-        local_client = "%s%s-np 3 %s %s/cnss" % \
+        local_client = "%s%s %s %s/cnss" % \
                        (pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_server + local_client
-        self.assertFalse(launch_test(testmsg, cmdstr))
+        self.assertFalse(launch_test(testmsg, cmdstr, cnss=True))

@@ -35,14 +35,45 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """Unit tests"""
-import os
 
-TEST_SRC = ['utest_gah.c']
+CUNIT_SRC = ['utest_gah.c', 'test_ctrl_fs.c']
+VALGRIND_EXCLUSIONS = ['test_ctrl_fs.c']
+OBJS = {'utest_gah.c':['../common/ios_gah.o'],
+        'test_ctrl_fs.c':['../cnss/ctrl_fs.o', '../cnss/ctrl_common.o',
+                          '../common/log.o']
+       }
+DEPS = {'test_ctrl_fs.c':['mcl']}
+CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include']}
+LIBS = {'test_ctrl_fs.c':['pthread']}
+DEFINES = {}
+
+def compile_tests(env, sources, prereqs):
+    """compile the tests"""
+    tests = []
+    for test in sources:
+        if GetOption('utest_mode') != 'native':
+            if test in VALGRIND_EXCLUSIONS:
+                continue
+        src_list = [test]
+        if test in OBJS:
+            src_list += OBJS[test]
+        tenv = env.Clone()
+        if test in DEPS:
+            for dep in DEPS[test]:
+                prereqs.require(tenv, dep)
+        if test in CPPPATH:
+            tenv.AppendUnique(CPPPATH=CPPPATH[test])
+        if test in LIBS:
+            tenv.AppendUnique(LIBS=LIBS[test])
+        if test in DEFINES:
+            tenv.AppendUnique(CPPDEFINES=DEFINES[test])
+        tests += tenv.Program(src_list)
+    return tests
 
 def scons():
     """Scons function"""
 
-    Import('env')
+    Import('env prereqs')
     # Run config in a new environment so the environment isn't polluted
     # causing tests to be rebuilt when utest target is used
     config_env = env.Clone()
@@ -59,11 +90,20 @@ def scons():
     config.Finish()
 
     test_env = env.Clone()
-    test_env.AppendUnique(LIBS=['cunit'])
+    if test_env.get('fuse3'):
+        DEPS['test_ctrl_fs.c'].append('fuse')
+        DEFINES['test_ctrl_fs.c'] = ['IOF_USE_FUSE3=1']
+    else:
+        if test_env.get('PLATFORM') == 'darwin':
+            CPPPATH['test_ctrl_fs.c'].append('/usr/local/include/osxfuse')
+            LIBS['test_ctrl_fs.c'].append('osxfuse')
+        else:
+            LIBS['test_ctrl_fs.c'].append('fuse')
     test_env.AppendUnique(CPPPATH=['../common/include'])
+    cunit_env = test_env.Clone()
+    cunit_env.AppendUnique(LIBS=['cunit'])
     tests = []
-    for test in TEST_SRC:
-        tests.append(test_env.Program([test, '../common/ios_gah.o']))
+    tests += compile_tests(cunit_env, CUNIT_SRC, prereqs)
 
     Default(tests)
 

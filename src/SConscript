@@ -39,7 +39,7 @@ import os
 
 HEADERS = ['iof_plugin.h']
 COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_common.c']
-CNSS_SRC = ['cnss.c', 'iof_main.c']
+CNSS_SRC = ['cnss.c', 'iof_main.c', 'ctrl_common.c', 'ctrl_fs.c']
 
 def scons():
     """Scons function"""
@@ -48,8 +48,8 @@ def scons():
 
     # Set options which are used throughout the src.
     tenv = env.Clone()
-    tenv.Append(CFLAGS='-pthread')
-    tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+    tenv.Append(CFLAGS=['-pthread'])
+    tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64', '_GNU_SOURCE'])
     tenv.Append(CPPPATH=['common/include'])
     tenv.Append(CPPPATH=['include'])
     tenv.Append(LIBS='pthread')
