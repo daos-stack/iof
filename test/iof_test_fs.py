@@ -182,8 +182,8 @@ class TestIofMain(unittest.TestCase):
         print("TestIof setUp begin")
         print("TestIof: Setting up for fs test.")
         ompi_bin = os.getenv('IOF_OMPI_BIN', "")
-        if os.path.exists("./orted-uri"):
-            dvmfile = " --hnp file:orted-uri "
+        if os.getenv('TR_USE_URL', ""):
+            dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URL')
         else:
             dvmfile = " "
         ompi_prefix = os.getenv('IOF_OMPI_PREFIX', "")
