@@ -41,12 +41,23 @@
  */
 #include <unistd.h>
 
-#ifndef __IOF_PLUGIN_H__
-#define __IOF_PLUGIN_H__
+#ifndef __CNSS_PLUGIN_H__
+#define __CNSS_PLUGIN_H__
 
 #if defined(__cplusplus)
 extern "C" {
 #endif
+
+#define CNSS_SUCCESS		0
+#define CNSS_ERR_PREFIX		1 /*CNSS prefix is not set in the environment*/
+#define CNSS_ERR_NOMEM		2 /*no memory*/
+#define CNSS_ERR_PLUGIN		3 /*failed to load or initialize plugin*/
+#define CNSS_ERR_FUSE		4 /*failed to register or deregister FUSE*/
+#define CNSS_ERR_MCL		5 /*MCL failed*/
+#define CNSS_BAD_DATA		6 /*bad data*/
+#define CNSS_ERR_CTRL_FS	7 /*ctrl fs did not start or shutdown*/
+#define CNSS_ERR_PTHREAD	8 /*failed to create or destroy CNSS threads*/
+
 
 struct fuse_operations;
 struct mcl_state;
@@ -78,8 +89,7 @@ struct cnss_plugin_cb {
 
 	/* Startup FUSE clients ? */
 	void *(*register_fuse_fs)(void *handle, struct fuse_operations*,
-				  const char *);
-	int (*deregister_fuse_fs)(void *handle, void *);
+				  const char *, void *);
 
 	/* Registers a variable, exported as a control file system file
 	 * and associates optional callbacks with read and write events.
@@ -172,4 +182,4 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
 }
 #endif
 
-#endif /* __IOF_PLUGIN_H__ */
+#endif /* __CNSS_PLUGIN_H__ */

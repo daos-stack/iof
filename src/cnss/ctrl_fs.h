@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-#include "iof_plugin.h"
+#include "cnss_plugin.h"
 
 /* Starts the control file system, mounted at <prefix> */
 int ctrl_fs_start(const char *prefix);

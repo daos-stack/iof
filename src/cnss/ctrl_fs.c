@@ -733,13 +733,6 @@ static void *ctrl_thread_func(void *arg)
 
 	if (rc != 0)
 		IOF_LOG_ERROR("Fuse loop exited with %d", rc);
-
-	return NULL;
-}
-
-static void cleanup_ctrl_fs(void)
-{
-	IOF_LOG_INFO("Cleaning up ctrl fs");
 	if (ctrl_fs.ch != NULL)
 #ifdef IOF_USE_FUSE3
 		fuse_unmount(ctrl_fs.fuse);
@@ -748,6 +741,13 @@ static void cleanup_ctrl_fs(void)
 #endif
 	if (ctrl_fs.fuse != NULL)
 		fuse_destroy(ctrl_fs.fuse);
+
+	return NULL;
+}
+
+static void cleanup_ctrl_fs(void)
+{
+	IOF_LOG_INFO("Cleaning up ctrl fs");
 	free(ctrl_fs.prefix);
 }
 

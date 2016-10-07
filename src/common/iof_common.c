@@ -60,7 +60,7 @@ hg_return_t iof_query_out_proc_cb(hg_proc_t proc, void *data)
 		struct_data->list = calloc(struct_data->num,
 				sizeof(struct iof_fs_info));
 	if (struct_data->list == NULL)
-		return -ENOMEM;
+		return IOF_ERR_NOMEM;
 
 	for (i = 0; i < struct_data->num; i++) {
 		ret = hg_proc_hg_uint8_t(proc, &struct_data->list[i].mode);
@@ -77,34 +77,111 @@ hg_return_t iof_query_out_proc_cb(hg_proc_t proc, void *data)
 	return ret;
 }
 
+hg_return_t iof_string_in_proc_cb(hg_proc_t proc, void *data)
+{
+	hg_return_t ret;
+	struct iof_string_in *in_data = (struct iof_string_in *)data;
+
+	ret = hg_proc_hg_const_string_t(proc, &in_data->name);
+	if (ret)
+		IOF_LOG_ERROR("Could not pack string args");
+	ret = hg_proc_hg_uint64_t(proc, &in_data->my_fs_id);
+	if (ret)
+		IOF_LOG_ERROR("Could not pack string args");
+	return ret;
+}
+
+hg_return_t iof_getattr_out_proc_cb(hg_proc_t proc, void *data)
+{
+	hg_return_t ret;
+	struct iof_getattr_out *out_data = (struct iof_getattr_out *)data;
+
+	ret = hg_proc_raw(proc, &out_data->stbuf, sizeof(out_data->stbuf));
+
+	if (ret)
+		IOF_LOG_ERROR("Could not pack getattr output");
+
+	ret = hg_proc_hg_uint64_t(proc, &out_data->err);
+	if (ret)
+		IOF_LOG_ERROR("Could not pack getattr output");
+	return ret;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
  */
 hg_return_t iof_query_handler(hg_handle_t handle)
 {
-	struct iof_psr_query query;
-	struct iof_fs_info *list = NULL;
-	int i;
+	struct iof_psr_query *query;
 	int ret;
+	struct hg_info *hgi;
 
-	/* This is random made-up value for now */
-	query.num = 2;
-
-	list = calloc(query.num, sizeof(struct iof_fs_info));
-	if (!list) {
-		IOF_LOG_ERROR("Failed memory allocation");
-		return -ENOMEM;
-	}
-	for (i = 0; i < query.num; i++) {
-		list[i].mode = 0;
-		list[i].id = i;
-		sprintf(list[i].mnt, "/Rank%d", i);
-	}
-	query.list = list;
-	ret = HG_Respond(handle, NULL, NULL, &query);
+	hgi = HG_Get_info(handle);
+	if (!hgi)
+		return IOF_ERR_INTERNAL;
+	query = (struct iof_psr_query *)HG_Registered_data(hgi->hg_class,
+								hgi->id);
+	ret = HG_Respond(handle, NULL, NULL, query);
 	if (ret != HG_SUCCESS)
 		IOF_LOG_ERROR("RPC response not sent from IONSS");
-	free(list);
+	return ret;
+}
+
+int iof_get_path(int id, const char *old_path,
+		struct iof_psr_query *projection, char *new_path)
+{
+	char *mnt;
+	int ret;
+
+	/*lookup mnt by ID in projection data structure*/
+	if (id >= projection->num) {
+		IOF_LOG_ERROR("Filesystem ID invalid");
+		return IOF_BAD_DATA;
+	}
+
+	mnt = projection->list[id].mnt;
+	/*add io node tempdir prefix*/
+	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s/%s%s", ion_tempdir, mnt,
+			old_path);
+	if (ret > IOF_MAX_PATH_LEN)
+		return IOF_ERR_OVERFLOW;
+	IOF_LOG_DEBUG("New Path: %s", new_path);
+
+	return IOF_SUCCESS;
+}
+
+hg_return_t iof_getattr_handler(hg_handle_t handle)
+{
+	struct iof_string_in in;
+	struct iof_getattr_out out = {0};
+	uint64_t ret;
+	struct hg_info *hgi;
+	char new_path[IOF_MAX_PATH_LEN];
+	struct iof_psr_query *query;
+
+	hgi = HG_Get_info(handle);
+	if (!hgi)
+		return IOF_ERR_INTERNAL;
+	query = (struct iof_psr_query *)HG_Registered_data(hgi->hg_class,
+								hgi->id);
+	ret = HG_Get_input(handle, &in);
+	if (ret)
+		IOF_LOG_ERROR("Could not retreive input");
+	IOF_LOG_DEBUG("RPC_recieved with path:%s", in.name);
+	memset(&new_path[0], 0, sizeof(new_path));
+	ret = (uint64_t)iof_get_path(in.my_fs_id, in.name, query, &new_path[0]);
+	if (ret) {
+		IOF_LOG_ERROR("could not construct filesystem path, ret = %lu",
+				ret);
+		out.err = ret;
+	} else
+		out.err = stat(new_path, &out.stbuf);
+	ret = HG_Respond(handle, NULL, NULL, &out);
+	if (ret)
+		IOF_LOG_ERROR("getattr: response not sent from IONSS");
+	ret = HG_Free_input(handle, &in);
+	if (ret)
+		IOF_LOG_ERROR("Could not free input");
 	return ret;
 }

@@ -36,13 +36,33 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "iof_plugin.h"
+#include "cnss_plugin.h"
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
-struct cnss_state {
+/*For IOF Plugin*/
+struct iof_state {
+	/*mcl state*/
 	struct mcl_state *mcl_state;
+	/*context for IOF operations*/
 	struct mcl_context *context;
+	/*address of PSR*/
+	hg_addr_t psr_addr;
+	/*CNSS Prefix*/
+	char cnss_prefix[IOF_PREFIX_MAX];
+
+	/*RPC registration ID's for IOF*/
 	hg_id_t projection_query;
+	hg_id_t getattr_id;
+};
+/*handle passed to all CNSS callbacks*/
+struct iof_handle {
+	struct iof_state *state;
+	struct cnss_plugin_cb *cb;
 };
 
+/*for each projection*/
+struct fs_handle {
+	struct iof_state *iof_state;
+	int my_fs_id;
+};

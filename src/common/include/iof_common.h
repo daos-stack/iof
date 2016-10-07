@@ -40,11 +40,27 @@
 #include <mercury.h>
 #include <mercury_proc.h>
 #include <mercury_proc_string.h>
+#include <sys/stat.h>
 #include <process_set.h>
 
+#define IOF_SUCCESS		0
+#define IOF_ERR_MOUNT		1
+#define IOF_ERR_NOMEM		2
+#define IOF_ERR_PROJECTION	3
+#define IOF_ERR_OVERFLOW	4
+#define IOF_ERR_MCL		5
+#define IOF_BAD_DATA		6
+#define IOF_NOT_SUPP		7 /*Not supported*/
+#define	IOF_ERR_INTERNAL	8
+
+#define IOF_NAME_LEN_MAX 256
+#define IOF_PREFIX_MAX 80
+#define IOF_MAX_PATH_LEN 4096
+
+const char *ion_tempdir;
 struct iof_fs_info {
 	/*Associated mount point*/
-	char mnt[80];
+	char mnt[IOF_NAME_LEN_MAX];
 	/*id of filesystem*/
 	uint64_t id;
 	/*mode of projection, set to 0 for private mode*/
@@ -56,8 +72,26 @@ struct iof_psr_query {
 	uint64_t num;
 };
 
+struct iof_string_in {
+	const char *name;
+	uint64_t my_fs_id;
+};
+
+struct iof_err_out {
+	uint64_t err_code;
+};
+
+struct iof_getattr_out {
+	struct stat stbuf;
+	uint64_t err;
+};
 /* This currently returns dummy data */
 hg_return_t iof_query_handler(hg_handle_t handle);
 hg_return_t iof_query_out_proc_cb(hg_proc_t proc, void *data);
+
+hg_return_t iof_string_in_proc_cb(hg_proc_t proc, void *data);
+hg_return_t iof_getattr_out_proc_cb(hg_proc_t proc, void *data);
+
+hg_return_t iof_getattr_handler(hg_handle_t handle);
 
 #endif

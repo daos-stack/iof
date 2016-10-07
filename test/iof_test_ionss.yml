@@ -7,7 +7,7 @@ defaultENV:
 module:
     name: "iof_test_ionss"
     subLogKey: "IOF_TESTLOG"
-    setKeyFromHost: ["IOF_TEST_ION", "IOF_TEST_CN"]
+    setKeyFromHost: ["IOF_TEST_CN", "IOF_TEST_ION"]
     setKeyFromInfo:
         - [IOF_PREFIX, PREFIX, ""]
         - [IOF_MCL_PREFIX, MCL_PREFIX, ""]

@@ -43,10 +43,18 @@
 #include <mercury.h>
 #include <errno.h>
 #include <dlfcn.h>
-
+#ifdef IOF_USE_FUSE3
+#include <fuse3/fuse.h>
+#include <fuse3/fuse_lowlevel.h>
+#else
+#include <fuse/fuse.h>
+#include <fuse/fuse_lowlevel.h>
+#endif
 #include <process_set.h>
 #include <mcl_event.h>
+#include <sys/xattr.h>
 
+#include "cnss_plugin.h"
 #include "iof_common.h"
 #include "version.h"
 #include "log.h"
@@ -62,6 +70,23 @@ struct plugin_entry {
 };
 
 LIST_HEAD(cnss_plugin_list, plugin_entry);
+
+LIST_HEAD(fs_list, fs_info);
+
+struct cnss_info {
+	struct fs_list fs_head;
+};
+
+struct fs_info {
+	char *mnt;
+	struct fuse *fuse;
+	struct fuse_chan *ch;
+	pthread_t thread;
+	struct fs_handle *fs_handle;
+
+	LIST_ENTRY(fs_info) entries;
+};
+
 
 #define FN_TO_PVOID(fn) (*((void **)&(fn)))
 
@@ -124,14 +149,14 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 
 	entry = calloc(1, sizeof(struct plugin_entry));
 	if (!entry)
-		return -1;
+		return IOF_ERR_NOMEM;
 
 	rc = fn(&entry->plugin, &entry->size);
 	if (rc != 0) {
 		free(entry);
 		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
 			     FN_TO_PVOID(fn), rc);
-		return 0;
+		return CNSS_SUCCESS;
 	}
 
 	entry->dl_handle = dl_handle;
@@ -161,7 +186,142 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 			     sizeof(struct cnss_plugin));
 	}
 
-	return 0;
+	return CNSS_SUCCESS;
+}
+
+/*Creates a fuse filesystem for any plugin that needs one*/
+static void *register_fuse(void *handle, struct fuse_operations *ops,
+			const char *mnt, void *private_data)
+{
+	struct fs_info *info = NULL;
+	struct cnss_info *cnss_info = (struct cnss_info *)handle;
+	struct fuse_args args = {0};
+	char *dash_d = "-d";
+
+	if (!mnt) {
+		IOF_LOG_ERROR("Invalid Mount point");
+		return NULL;
+	}
+
+	args.argc = 1;
+	args.argv = &dash_d;
+	args.allocated = 0;
+
+	info = calloc(1, sizeof(struct fs_info));
+	if (!info) {
+		IOF_LOG_ERROR("Could not allocate fuse info");
+		goto cleanup;
+	}
+
+	info->mnt = strdup(mnt);
+	if (!info->mnt) {
+		IOF_LOG_ERROR("Could not allocate mnt");
+		goto cleanup;
+	}
+	if ((mkdir(info->mnt, 0755) && errno != EEXIST)) {
+		IOF_LOG_ERROR("Could not create directory %s for mounting",
+				info->mnt);
+		goto cleanup;
+	}
+
+	info->ch = fuse_mount(info->mnt, &args);
+	if (!info->ch) {
+		IOF_LOG_ERROR("Could not successfully mount %s", info->mnt);
+		goto cleanup;
+	}
+	info->fs_handle = private_data;
+	info->fuse = fuse_new(info->ch, &args, ops,
+			sizeof(struct fuse_operations), private_data);
+	if (!info->fuse) {
+		IOF_LOG_ERROR("Could not initialize fuse");
+		fuse_opt_free_args(&args);
+		fuse_unmount(info->mnt, info->ch);
+		goto cleanup;
+	}
+
+	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
+
+	fuse_opt_free_args(&args);
+
+	LIST_INSERT_HEAD(&cnss_info->fs_head, info, entries);
+
+	return info;
+cleanup:
+	if (info->mnt)
+		free(info->mnt);
+	if (private_data)
+		free(private_data);
+	if (info)
+		free(info);
+
+	return NULL;
+
+}
+
+static int deregister_fuse(struct fs_info *info)
+{
+	char *val = "1";
+
+	fuse_session_exit(fuse_get_session(info->fuse));
+	setxattr(info->mnt, "user.exit", val, strlen(val), 0);
+	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
+	pthread_join(info->thread, 0);
+	LIST_REMOVE(info, entries);
+
+	free(info->mnt);
+	free(info->fs_handle);
+	free(info);
+	return CNSS_SUCCESS;
+}
+
+static void *loop_fn(void *args)
+{
+	int ret;
+	struct fs_info *info = (struct fs_info *)args;
+
+	/*Blocking*/
+	ret = fuse_loop(info->fuse);
+
+	if (ret != 0)
+		IOF_LOG_DEBUG("Fuse loop exited with return code: %d", ret);
+
+	fuse_unmount(info->mnt, info->ch);
+	fuse_destroy(info->fuse);
+	return NULL;
+}
+
+int launch_fs(struct cnss_info *cnss_info)
+{
+	int ret;
+	struct fs_info *info;
+
+	LIST_FOREACH(info, &cnss_info->fs_head, entries) {
+		IOF_LOG_INFO("Starting a FUSE filesystem at %s", info->mnt);
+		ret = pthread_create(&info->thread, NULL, loop_fn,
+				info);
+		if (ret) {
+			IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
+					info->mnt);
+			fuse_unmount(info->mnt, info->ch);
+			fuse_destroy(info->fuse);
+			return CNSS_ERR_PTHREAD;
+		}
+	}
+	return ret;
+}
+
+void shutdown_fs(struct cnss_info *cnss_info)
+{
+	int ret;
+	struct fs_info *info;
+
+	ret = CNSS_SUCCESS;
+	while (!LIST_EMPTY(&cnss_info->fs_head)) {
+		info = LIST_FIRST(&cnss_info->fs_head);
+		ret = deregister_fuse(info);
+		if (ret)
+			IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
+	}
 }
 
 static const char *get_config_option(const char *var)
@@ -180,6 +340,7 @@ static struct cnss_plugin_cb cnss_plugin_cb = {
 	.register_ctrl_event = ctrl_register_event,
 	.register_ctrl_counter = ctrl_register_counter,
 	.register_ctrl_constant = ctrl_register_constant,
+	.register_fuse_fs = register_fuse,
 };
 
 int cnss_shutdown(void *arg)
@@ -227,6 +388,8 @@ int main(void)
 	char *version = iof_get_version();
 	struct plugin_entry *list_iter;
 	struct cnss_plugin_list plugin_list;
+	struct cnss_info *cnss_info;
+
 	int ret;
 	int service_process_set = 0;
 	char *ctrl_prefix;
@@ -239,20 +402,20 @@ int main(void)
 
 	if (prefix == NULL) {
 		IOF_LOG_ERROR("CNSS_PREFIX is required");
-		return -1;
+		return CNSS_ERR_PREFIX;
 	}
 
 	ret = asprintf(&ctrl_prefix, "%s/.ctrl", prefix);
 
 	if (ret == -1) {
 		IOF_LOG_ERROR("Could not allocate memory for ctrl prefix");
-		return -1;
+		return CNSS_ERR_NOMEM;
 	}
 
 	ret = ctrl_fs_start(ctrl_prefix);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not start ctrl fs");
-		return -1;
+		return CNSS_ERR_CTRL_FS;
 	}
 	free(ctrl_prefix);
 
@@ -261,7 +424,7 @@ int main(void)
 	/* Load the build-in iof "plugin" */
 	ret = add_plugin(&plugin_list, iof_plugin_init, NULL);
 	if (ret != 0)
-		return 1;
+		return CNSS_ERR_PLUGIN;
 
 	/* Check to see if an additional plugin file has been requested and
 	 * attempt to load it
@@ -287,14 +450,14 @@ int main(void)
 		if (fn) {
 			ret = add_plugin(&plugin_list, fn, dl_handle);
 			if (ret != 0)
-				return 1;
+				return CNSS_ERR_PLUGIN;
 		}
 	}
 
 	state = mcl_init();
 	if (!state) {
 		IOF_LOG_ERROR("mcl_init() failed");
-		return 1;
+		return CNSS_ERR_MCL;
 	}
 
 	/* Walk the list of plugins and if any require the use of a service
@@ -308,6 +471,13 @@ int main(void)
 	IOF_LOG_INFO("Forming %s process set",
 		     service_process_set ? "service" : "client");
 
+	cnss_info = calloc(1, sizeof(struct cnss_info));
+	if (!cnss_info)
+		return CNSS_ERR_NOMEM;
+
+	LIST_INIT(&cnss_info->fs_head);
+	cnss_plugin_cb.handle = cnss_info;
+
 	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, &cnss_plugin_cb,
 			     sizeof(cnss_plugin_cb));
 	mcl_startup(state, "cnss", 1, &cnss_set);
@@ -315,11 +485,12 @@ int main(void)
 	ret = mcl_attach(state, "ionss", &ionss_set);
 	if (ret != MCL_SUCCESS) {
 		IOF_LOG_ERROR("Attach to IONSS Failed");
-		return 1;
+		return CNSS_ERR_MCL;
 	}
 
 	CALL_PLUGIN_FN_PARAM(&plugin_list, post_start, ionss_set);
 
+	launch_fs(cnss_info);
 	register_cnss_controls(cnss_set->size, &plugin_list);
 	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
 
@@ -329,6 +500,7 @@ int main(void)
 	 * actively send RPCs.   We really need a barrier here.  Then
 	 * call finish.   Then finalize.
 	 */
+	shutdown_fs(cnss_info);
 	mcl_detach(state, ionss_set);
 	mcl_finalize(state);
 
@@ -344,5 +516,6 @@ int main(void)
 	}
 
 	iof_log_close();
+	free(cnss_info);
 	return ret;
 }
