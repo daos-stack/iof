@@ -17,7 +17,6 @@ iof-*.conf
 *.BAK
 .*.swp
 \#*#
-/testDir/
-/testLogs/
+/valgrind_results/
 pylint.log
 .checkpatch-camelcase.git.

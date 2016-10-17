@@ -58,6 +58,13 @@ static hg_return_t query_callback(const struct hg_cb_info *info)
 	ret = HG_Get_output(info->info.forward.handle, reply->query);
 	if (ret != HG_SUCCESS)
 		IOF_LOG_ERROR("Cant unpack output of RPC");
+	/* Decrement the ref count.  Safe to do here because no data
+	 * is allocated but the handle can't be destroyed until the
+	 * reference count is 0.
+	 */
+	ret = HG_Free_output(info->info.forward.handle, reply->query);
+	if (ret != HG_SUCCESS)
+		IOF_LOG_ERROR("Error freeing output");
 	reply->err_code = ret;
 	mcl_event_set(&reply->event);
 	return HG_SUCCESS;
@@ -82,6 +89,7 @@ static int ioc_get_projection_info(struct mcl_context *mcl_context,
 	}
 	ret = HG_Forward(handle, query_callback, &reply, NULL);
 	if (ret != HG_SUCCESS) {
+		HG_Destroy(handle); /* Ignore errors */
 		IOF_LOG_ERROR("Could not send RPC tp PSR");
 		return ret;
 	}

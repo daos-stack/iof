@@ -1226,6 +1226,7 @@ int ctrl_fs_start(const char *prefix)
 		goto out;
 	}
 #endif
+	fuse_opt_free_args(&args);
 
 	rc = pthread_create(&ctrl_fs.thread, NULL,
 			    ctrl_thread_func, NULL);

@@ -55,6 +55,7 @@
 
 struct plugin_entry {
 	struct cnss_plugin *plugin;
+	void *dl_handle;
 	size_t size;
 	LIST_ENTRY(plugin_entry) list;
 	int active;
@@ -114,7 +115,7 @@ LIST_HEAD(cnss_plugin_list, plugin_entry);
 
 /* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
 static int add_plugin(struct cnss_plugin_list *plugin_list,
-		      cnss_plugin_init_t fn)
+		      cnss_plugin_init_t fn, void *dl_handle)
 {
 	struct plugin_entry *entry;
 	int rc;
@@ -132,6 +133,8 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 			     FN_TO_PVOID(fn), rc);
 		return 0;
 	}
+
+	entry->dl_handle = dl_handle;
 
 	LIST_INSERT_HEAD(plugin_list, entry, list);
 
@@ -256,7 +259,7 @@ int main(void)
 	LIST_INIT(&plugin_list);
 
 	/* Load the build-in iof "plugin" */
-	ret = add_plugin(&plugin_list, iof_plugin_init);
+	ret = add_plugin(&plugin_list, iof_plugin_init, NULL);
 	if (ret != 0)
 		return 1;
 
@@ -282,7 +285,7 @@ int main(void)
 			     dl_handle,
 			     FN_TO_PVOID(fn));
 		if (fn) {
-			ret = add_plugin(&plugin_list, fn);
+			ret = add_plugin(&plugin_list, fn, dl_handle);
 			if (ret != 0)
 				return 1;
 		}
@@ -335,6 +338,8 @@ int main(void)
 		struct plugin_entry *entry = LIST_FIRST(&plugin_list);
 
 		LIST_REMOVE(entry, list);
+		if (entry->dl_handle != NULL)
+			dlclose(entry->dl_handle);
 		free(entry);
 	}
 

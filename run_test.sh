@@ -58,6 +58,11 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_fs.yml scripts/iof_test_ionss.yml
+  python3.4 test_runner scripts/iof_test_ionss.yml
+  TESTLOGS="/testLogs/testRun"
+  TESTECHODIR="iof_test_ionss_loop0/iof_test_ionss_1"
   cd -
+  RESULTS="valgrind_results"
+  if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
+  cp -R ${TESTDIR}${TESTLOGS}*/${TESTECHODIR}/*/valgrind*.xml ${RESULTS}/.
 fi
