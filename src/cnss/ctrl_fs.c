@@ -952,6 +952,8 @@ static int ctrl_read(const char *fname,
 	if (rc != 0 || node == NULL || node->initialized == 0)
 		return -ENOENT;
 
+	memset(buf, 0, size);
+
 	if (node->ctrl_type == CTRL_CONSTANT)
 		payload = GET_DATA(node, con, buf);
 	else if (node->ctrl_type == CTRL_VARIABLE) {
