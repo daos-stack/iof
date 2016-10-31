@@ -150,8 +150,8 @@ def add_prefix_logdir(testcase_name):
         prefix = "valgrind --tool=callgrind --callgrind-out-file=" + \
                  log_path + "/callgrind.%q{PMIX_ID}.out"
 
-    if os.getenv('TR_USE_URL', ""):
-        dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URL')
+    if os.getenv('TR_USE_URI', ""):
+        dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URI')
     else:
         dvmfile = " "
     if ompi_prefix:
