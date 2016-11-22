@@ -68,10 +68,6 @@ def setUpModule():
     """ set up test environment """
     iofcommontestsuite.commonSetUpModule()
 
-def tearDownModule():
-    """teardown module for test"""
-    iofcommontestsuite.commonTearDownModule()
-
 class Testnss(iofcommontestsuite.CommonTestSuite):
     """Simple test"""
 
@@ -85,9 +81,11 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
         """tear down the test"""
         self.logger.info("Testnss: tearDown begin")
         testmsg = self.shortDescription()
-        procrtn = self.common_stop_process(testmsg, self.proc)
+        if self.proc is not None:
+            procrtn = self.common_stop_process(testmsg, self.proc)
         self.assertFalse(procrtn)
         self.logger.info("Testnss: tearDown end\n\n")
+        self.commonTearDownModule()
 
     def test_ionss_simple_test(self):
         """Simple test"""
@@ -97,9 +95,8 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
         fs = ' '.join(self.fs_list)
         test_path = os.getenv('IOF_TEST_BIN', "")
         pass_env = " -x PATH -x LD_LIBRARY_PATH -x CNSS_PREFIX"
-        ion_env = " -x ION_TEMPDIR"
-        local_server = "%s%s%s %s %s/ionss %s" % \
-                       (pass_env, ion_env, ionss, prefix, test_path, fs)
+        local_server = "%s%s %s %s/ionss %s" % \
+                       (pass_env, ionss, prefix, test_path, fs)
         local_client = "%s%s %s %s/cnss :" % \
                        (pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_client + local_server

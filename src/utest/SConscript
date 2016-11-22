@@ -42,7 +42,7 @@ OBJS = {'utest_gah.c':['../common/ios_gah.o'],
         'test_ctrl_fs.c':['../cnss/ctrl_fs.o', '../cnss/ctrl_common.o',
                           '../common/log.o']
        }
-DEPS = {'test_ctrl_fs.c':['mcl']}
+DEPS = {'test_ctrl_fs.c':['cart']}
 CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include']}
 LIBS = {'test_ctrl_fs.c':['pthread']}
 DEFINES = {}

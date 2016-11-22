@@ -37,10 +37,7 @@
  */
 #include <stdio.h>
 #include <string.h>
-#include <mercury.h>
 #include <inttypes.h>
-#include <process_set.h>
-#include <mercury.h>
 #include <errno.h>
 #include <dlfcn.h>
 #ifdef IOF_USE_FUSE3
@@ -50,12 +47,12 @@
 #include <fuse/fuse.h>
 #include <fuse/fuse_lowlevel.h>
 #endif
-#include <process_set.h>
-#include <mcl_event.h>
 #include <sys/xattr.h>
+#include <sys/queue.h>
+#include <crt_api.h>
+#include <crt_util/common.h>
 
 #include "cnss_plugin.h"
-#include "iof_common.h"
 #include "version.h"
 #include "log.h"
 #include "iof.h"
@@ -149,7 +146,7 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 
 	entry = calloc(1, sizeof(struct plugin_entry));
 	if (!entry)
-		return IOF_ERR_NOMEM;
+		return CNSS_ERR_NOMEM;
 
 	rc = fn(&entry->plugin, &entry->size);
 	if (rc != 0) {
@@ -380,9 +377,8 @@ int cnss_client_detach(int client_id, void *arg)
 
 int main(void)
 {
-	struct mcl_set *cnss_set;
-	struct mcl_state *state;
-	struct mcl_set *ionss_set;
+	char *cnss = "CNSS";
+	char *ionss = "IONSS";
 	char *plugin_file = NULL;
 	const char *prefix;
 	char *version = iof_get_version();
@@ -394,7 +390,7 @@ int main(void)
 	int service_process_set = 0;
 	char *ctrl_prefix;
 
-	iof_log_init("cnss");
+	iof_log_init("CN", "CNSS");
 
 	IOF_LOG_INFO("CNSS version: %s", version);
 
@@ -454,12 +450,6 @@ int main(void)
 		}
 	}
 
-	state = mcl_init();
-	if (!state) {
-		IOF_LOG_ERROR("mcl_init() failed");
-		return CNSS_ERR_MCL;
-	}
-
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
 	 */
@@ -477,21 +467,22 @@ int main(void)
 
 	LIST_INIT(&cnss_info->fs_head);
 	cnss_plugin_cb.handle = cnss_info;
-
-	CALL_PLUGIN_FN_PARAM(&plugin_list, start, state, &cnss_plugin_cb,
-			     sizeof(cnss_plugin_cb));
-	mcl_startup(state, "cnss", 1, &cnss_set);
-
-	ret = mcl_attach(state, "ionss", &ionss_set);
-	if (ret != MCL_SUCCESS) {
-		IOF_LOG_ERROR("Attach to IONSS Failed");
-		return CNSS_ERR_MCL;
+	/*initialize CaRT*/
+	ret = crt_init(cnss, ionss, 0);
+	if (ret) {
+		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
+		return CNSS_ERR_CART;
 	}
 
-	CALL_PLUGIN_FN_PARAM(&plugin_list, post_start, ionss_set);
+
+	CALL_PLUGIN_FN_PARAM(&plugin_list, start, ionss, &cnss_plugin_cb,
+			     sizeof(cnss_plugin_cb));
+
+
+	CALL_PLUGIN_FN(&plugin_list, post_start);
 
 	launch_fs(cnss_info);
-	register_cnss_controls(cnss_set->size, &plugin_list);
+	register_cnss_controls(1, &plugin_list);
 	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
 
 	CALL_PLUGIN_FN(&plugin_list, flush);
@@ -501,11 +492,9 @@ int main(void)
 	 * call finish.   Then finalize.
 	 */
 	shutdown_fs(cnss_info);
-	mcl_detach(state, ionss_set);
-	mcl_finalize(state);
-
 	CALL_PLUGIN_FN(&plugin_list, finish);
 
+	ret = crt_finalize();
 	while (!LIST_EMPTY(&plugin_list)) {
 		struct plugin_entry *entry = LIST_FIRST(&plugin_list);
 

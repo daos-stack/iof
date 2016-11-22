@@ -50,7 +50,7 @@ fi
 if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_fs.yml scripts/iof_test_ionss.yml
+  python3.4 test_runner scripts/iof_test_ionss.yml
   cd -
 fi
 

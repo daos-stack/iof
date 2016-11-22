@@ -5,6 +5,7 @@
 #include <utime.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <stdbool.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include "log.h"
@@ -190,7 +191,8 @@ int main(int argc, char **argv)
 {
 	char *prefix;
 	char buf[32];
-	char ctrl_prefix[32];
+	char cmd_buf[32];
+	char *end;
 	int foo = 0;
 	int opt;
 	int num_failures;
@@ -213,7 +215,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	strcpy(buf, "/tmp/XXXXXX");
+	strcpy(buf, "/tmp/iofXXXXXX");
 
 	prefix = mkdtemp(buf);
 
@@ -222,15 +224,18 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	printf("Testing ctrl_fs in %s\n", prefix);
+	end = buf + strlen(buf);
 
-	setenv("MCL_LOG_DIR", prefix, 1);
-	setenv("MCL_LOG_LEVEL", "4", 1);
-	iof_log_init("ctrl_fs_test");
+	printf("Testing ctrl_fs in %s\n", buf);
+	strcpy(end, "/iof.log");
 
-	sprintf(ctrl_prefix, "%s/.ctrl", prefix);
+	setenv("CRT_LOG_FILE", buf, 1);
+	setenv("IOF_LOG_MASK", "INFO,ctrl=DEBUG", 1);
+	iof_log_init("ctrl", "ctrl_fs_test");
 
-	ctrl_fs_start(ctrl_prefix);
+	strcpy(end, "/.ctrl");
+
+	ctrl_fs_start(buf);
 
 	register_cnss_controls(3, NULL);
 
@@ -239,15 +244,15 @@ int main(int argc, char **argv)
 	ctrl_register_constant("/large", large_constant);
 	ctrl_register_constant("/class/bar/hello", "Hello World");
 
-	num_failures = run_tests(ctrl_prefix);
+	num_failures = run_tests(buf);
 	if (num_failures != 0)
 		printf("%d ctrl_fs tests failed\n", num_failures);
 	else
 		printf("All ctrl_fs tests passed\n");
 
 	if (!interactive) { /* Invoke shutdown */
-		sprintf(ctrl_prefix, "%s/.ctrl/shutdown", prefix);
-		utime(ctrl_prefix, NULL);
+		strcpy(end, "/.ctrl/shutdown");
+		utime(buf, NULL);
 	}
 
 	ctrl_fs_wait();
@@ -255,8 +260,9 @@ int main(int argc, char **argv)
 	iof_log_close();
 
 	if (!interactive) { /* Delete the temporary directory */
-		sprintf(ctrl_prefix, "rm -rf %s", prefix);
-		system(ctrl_prefix);
+		*end = 0;
+		sprintf(cmd_buf, "rm -rf %s", prefix);
+		system(cmd_buf);
 	}
 
 	return num_failures;

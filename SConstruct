@@ -83,12 +83,12 @@ def scons():
     prereqs.preload(os.path.join(Dir('#').abspath,
                                  "scons_local",
                                  "components.py"),
-                    prebuild=["ompi", "mercury", "mcl"])
+                    prebuild=["ompi", "cart"])
 
     Export('env prereqs')
 
     env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
-                       '-std=gnu99', '-pedantic', '-Wno-missing-braces'])
+                       '-std=gnu99', '-Wno-missing-braces'])
 
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',
@@ -122,12 +122,6 @@ def scons():
     SConscript('%s/test/SConscript' % arch_dir)
     SConscript('%s/scons_local/test_runner/SConscript' % arch_dir)
 
-    # Pick up any directories under 'proto' which have a SConscript file
-    for fname in os.listdir('proto'):
-        if not os.path.exists('proto/%s/SConscript' % fname):
-            continue
-        SConscript('%s/proto/%s/SConscript' % (arch_dir, fname))
-        Default('proto/%s' % fname)
 
     # Put this after all SConscript calls so that any imports they require can
     # be included.

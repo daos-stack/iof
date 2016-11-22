@@ -38,13 +38,19 @@
 #include "log.h"
 
 int iof_log_handle;
-
-void iof_log_init(const char *component)
+void iof_log_init(const char *shortname, const char *longname)
 {
-	iof_log_handle = mcl_log_open(component, false);
+	char *masks = NULL;
+
+	masks = getenv("IOF_LOG_MASK");
+
+	crt_log_init();
+	iof_log_handle = crt_log_allocfacility(shortname, longname);
+	if (masks != NULL)
+		crt_log_setmasks(masks, -1);
 }
 
 void iof_log_close(void)
 {
-	mcl_log_close(iof_log_handle);
+	crt_log_fini();
 }

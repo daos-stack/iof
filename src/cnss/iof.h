@@ -42,18 +42,17 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
 /*For IOF Plugin*/
 struct iof_state {
-	/*mcl state*/
-	struct mcl_state *mcl_state;
-	/*context for IOF operations*/
-	struct mcl_context *context;
-	/*address of PSR*/
-	hg_addr_t psr_addr;
+	/*destination group*/
+	crt_group_t *dest_group;
+	/*destination endpoint*/
+	crt_endpoint_t dest_ep;
+	/*cart context*/
+	crt_context_t crt_ctx;
+	/*iof progress thread tid*/
+	pthread_t tid;
 	/*CNSS Prefix*/
-	char cnss_prefix[IOF_PREFIX_MAX];
+	char *cnss_prefix;
 
-	/*RPC registration ID's for IOF*/
-	hg_id_t projection_query;
-	hg_id_t getattr_id;
 };
 /*handle passed to all CNSS callbacks*/
 struct iof_handle {

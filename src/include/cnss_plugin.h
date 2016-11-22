@@ -53,15 +53,13 @@ extern "C" {
 #define CNSS_ERR_NOMEM		2 /*no memory*/
 #define CNSS_ERR_PLUGIN		3 /*failed to load or initialize plugin*/
 #define CNSS_ERR_FUSE		4 /*failed to register or deregister FUSE*/
-#define CNSS_ERR_MCL		5 /*MCL failed*/
+#define CNSS_ERR_CART		5 /*CaRT failed*/
 #define CNSS_BAD_DATA		6 /*bad data*/
 #define CNSS_ERR_CTRL_FS	7 /*ctrl fs did not start or shutdown*/
 #define CNSS_ERR_PTHREAD	8 /*failed to create or destroy CNSS threads*/
 
 
 struct fuse_operations;
-struct mcl_state;
-struct mcl_set;
 
 /* Optional callback invoked when a read is done on a ctrl fs variable */
 typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
@@ -135,9 +133,9 @@ struct cnss_plugin {
 			      */
 	char *name;    /** Short string used to prefix log information */
 	void *handle;  /** Handle passed back to all callback functions */
-	int (*start)(void *, struct mcl_state *, struct cnss_plugin_cb *,
+	int (*start)(void *, char *dest_name, struct cnss_plugin_cb *,
 		     size_t); /* Called once at startup, should return 0 */
-	int (*post_start)(void *, struct mcl_set *set);
+	int (*post_start)(void *);
 	void (*client_attached)(void *, int); /* Notify plugin of a new
 					       * local process
 					       */

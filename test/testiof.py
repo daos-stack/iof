@@ -24,9 +24,8 @@ class TestIof():
             for mntfile in os.listdir(entry):
                 myfile = os.path.join(entry, mntfile)
                 fd = open(myfile, "r")
-                mnt_path = fd.readline()
-                abs_path = os.path.join(self.startdir, mnt_path)
-                stat_obj = os.stat(abs_path)
+                mnt_path = fd.readline().strip()
+                stat_obj = os.stat(mnt_path)
                 self.logger.info(stat_obj)
             return True
 

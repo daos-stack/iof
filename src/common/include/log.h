@@ -37,19 +37,37 @@
  */
 #ifndef __LOG_H__
 #define __LOG_H__
-#include <mcl_log.h>
+#include <sys/types.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <crt_util/clog.h>
 
-#define IOF_LOG_DEBUG(...)	\
-	MCL_LOG_DEBUG(iof_log_handle, __VA_ARGS__)
-
-#define IOF_LOG_INFO(...)	\
-	MCL_LOG_INFO(iof_log_handle, __VA_ARGS__)
+#define IOF_LOG_FAC(fac, type, fmt, ...)				\
+	do {								\
+		if (fac == 0) {						\
+			fprintf(stderr, #type ": %s:%d:%d:%s() " fmt	\
+				"\n", __FILE__, getpid(), __LINE__,	\
+				__func__, ## __VA_ARGS__);		\
+			break;						\
+		}							\
+		crt_log(fac | CLOG_##type, "%s:%d:%d:%s() " fmt "\n",	\
+			__FILE__, getpid(), __LINE__, __func__,		\
+			## __VA_ARGS__);				\
+	} while (0)
 
 #define IOF_LOG_WARNING(...)	\
-	MCL_LOG_WARNING(iof_log_handle, __VA_ARGS__)
+	IOF_LOG_FAC(iof_log_handle, WARN, __VA_ARGS__)
 
 #define IOF_LOG_ERROR(...)	\
-	MCL_LOG_ERROR(iof_log_handle, __VA_ARGS__)
+	IOF_LOG_FAC(iof_log_handle, ERR, __VA_ARGS__)
+
+#define IOF_LOG_DEBUG(...)	\
+	IOF_LOG_FAC(iof_log_handle, DBG, __VA_ARGS__)
+
+#define IOF_LOG_INFO(...)	\
+	IOF_LOG_FAC(iof_log_handle, INFO, __VA_ARGS__)
+
 
 #if defined(__cplusplus)
 extern "C" {
@@ -57,7 +75,7 @@ extern "C" {
 
 extern int iof_log_handle;
 
-void iof_log_init(const char *component);
+void iof_log_init(const char *shortname, const char *longname);
 void iof_log_close(void);
 
 #if defined(__cplusplus)

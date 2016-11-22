@@ -37,27 +37,32 @@
  */
 #ifndef IOF_COMMON_H
 #define IOF_COMMON_H
-#include <mercury.h>
-#include <mercury_proc.h>
-#include <mercury_proc_string.h>
 #include <sys/stat.h>
-#include <process_set.h>
+#include <crt_api.h>
+#include <crt_util/common.h>
+#include <string.h>
 
 #define IOF_SUCCESS		0
 #define IOF_ERR_MOUNT		1
 #define IOF_ERR_NOMEM		2
 #define IOF_ERR_PROJECTION	3
 #define IOF_ERR_OVERFLOW	4
-#define IOF_ERR_MCL		5
+#define IOF_ERR_CART		5
 #define IOF_BAD_DATA		6
 #define IOF_NOT_SUPP		7 /*Not supported*/
 #define	IOF_ERR_INTERNAL	8
+#define IOF_ERR_PTHREAD		9
 
 #define IOF_NAME_LEN_MAX 256
 #define IOF_PREFIX_MAX 80
 #define IOF_MAX_PATH_LEN 4096
 
-const char *ion_tempdir;
+/* IOF Registration op codes for RPC's*/
+
+#define GETATTR_OP  (0xA1)
+#define QUERY_PSR_OP (0x100)
+#define SHUTDOWN_OP (0x200)
+
 struct iof_fs_info {
 	/*Associated mount point*/
 	char mnt[IOF_NAME_LEN_MAX];
@@ -68,30 +73,52 @@ struct iof_fs_info {
 };
 
 struct iof_psr_query {
-	struct iof_fs_info *list;
-	uint64_t num;
+	crt_iov_t query_list;
 };
 
 struct iof_string_in {
-	const char *name;
+	crt_string_t path;
 	uint64_t my_fs_id;
 };
 
-struct iof_err_out {
-	uint64_t err_code;
-};
-
 struct iof_getattr_out {
-	struct stat stbuf;
+	crt_iov_t stat;
 	uint64_t err;
 };
-/* This currently returns dummy data */
-hg_return_t iof_query_handler(hg_handle_t handle);
-hg_return_t iof_query_out_proc_cb(hg_proc_t proc, void *data);
 
-hg_return_t iof_string_in_proc_cb(hg_proc_t proc, void *data);
-hg_return_t iof_getattr_out_proc_cb(hg_proc_t proc, void *data);
+struct psr_in {
+	char *str;
+};
 
-hg_return_t iof_getattr_handler(hg_handle_t handle);
+/*input/output format for RPC's*/
+
+struct crt_msg_field *string_in[] = {
+	&CMF_STRING,
+	&CMF_UINT64
+};
+
+struct crt_msg_field *getattr_out[] = {
+	&CMF_IOVEC,
+	&CMF_UINT64
+};
+
+struct crt_msg_field *psr_query[] = {
+	&CMF_IOVEC
+};
+
+struct crt_msg_field *psr_query_in[] = {
+	&CMF_UINT64
+};
+
+/*query RPC format*/
+struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
+							psr_query_in,
+							psr_query);
+
+/*getattr*/
+
+struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
+							string_in,
+							getattr_out);
 
 #endif

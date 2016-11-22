@@ -2,8 +2,8 @@ description: "ionss test module"
 
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
-    MCL_LOG_LEVEL: "4"
     TR_REDIRECT_OUTPUT: ""
+    IOF_LOG_MASK: "INFO"
 
 module:
     name: "iof_test_ionss"
@@ -11,7 +11,7 @@ module:
     setKeyFromHost: ["IOF_TEST_CN", "IOF_TEST_ION"]
     setKeyFromInfo:
         - [IOF_PREFIX, PREFIX, ""]
-        - [IOF_MCL_PREFIX, MCL_PREFIX, ""]
+        - [IOF_CART_PREFIX, CART_PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]

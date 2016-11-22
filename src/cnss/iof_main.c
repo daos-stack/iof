@@ -40,6 +40,8 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <dirent.h>
+#include <libgen.h>
 #ifdef IOF_USE_FUSE3
 #include <fuse3/fuse.h>
 #include <fuse3/fuse_lowlevel.h>
@@ -54,15 +56,15 @@
 #include "log.h"
 #include "ctrl_fs.h"
 
-struct query_reply {
-	struct mcl_event event;
-	int err_code;
-	struct iof_psr_query *query;
+struct getattr_cb_r {
+	int complete;
+	int err;
+	struct stat *stat;
 };
 
-struct getattr_cb_r {
-	struct iof_getattr_out out;
-	struct mcl_event event;
+struct query_cb_r {
+	int complete;
+	struct iof_psr_query **query;
 };
 
 static int string_to_bool(const char *str, int *value)
@@ -77,114 +79,101 @@ static int string_to_bool(const char *str, int *value)
 	return 0;
 }
 
-void get_my_time(struct timespec *ts)
+/*on-demand progress*/
+static int iof_progress(crt_context_t crt_ctx, int num_retries,
+		unsigned int wait_len_ms, int *complete_flag)
 {
-#ifdef __APPLE__
-	clock_serv_t cclock;
-	mach_timespec_t mts;
+	int		retry;
+	int		rc;
 
-	host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
-	clock_get_time(cclock, &mts);
-	mach_port_deallocate(mach_task_self(), cclock);
-	ts->tv_sec = mts.tv_sec;
-	ts->tv_nsec = mts.tv_nsec;
-#else
-	clock_gettime(CLOCK_MONOTONIC, ts);
-#endif
-
-}
-/*
- * using timeout here is only a temporary fix and
- * will be removed after migration to CaRT
- *
- */
-int iof_progress(struct mcl_context *mcl_context, struct mcl_event *cb_event,
-		int iof_timeout)
-{
-	int ret;
-	struct timespec start, end;
-	double time_spent;
-	double timeout;
-
-	timeout = (double)iof_timeout/1000;
-
-	ret = 0;
-	get_my_time(&start);
-	while (!mcl_event_test(cb_event)) {
-		mcl_progress(mcl_context, NULL);
-		get_my_time(&end);
-		time_spent = (double) end.tv_sec - start.tv_sec;
-		if ((timeout - time_spent) <= 0) {
-			ret = 1;
+	for (retry = 0; retry < num_retries; retry++) {
+		rc = crt_progress(crt_ctx, wait_len_ms * 1000, NULL, NULL);
+		if (rc != 0 && rc != -CER_TIMEDOUT) {
+			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 			break;
 		}
+		if (*complete_flag)
+			return 0;
+		sched_yield();
 	}
-
-	return ret;
+	return -ETIMEDOUT;
 }
 
-static hg_return_t getattr_cb(const struct hg_cb_info *info)
+static int getattr_cb(const struct crt_cb_info *cb_info)
 {
 	struct getattr_cb_r *reply = NULL;
-	int ret;
+	crt_rpc_t *getattr_rpc;
+	struct iof_getattr_out *out = NULL;
 
-	IOF_LOG_DEBUG("Callback invoked");
-	reply = info->arg;
-	ret = HG_Get_output(info->info.forward.handle, &reply->out);
-	if (ret)
-		IOF_LOG_ERROR("could not retrieve getattr output");
-	mcl_event_set(&reply->event);
-	return ret;
+	getattr_rpc = cb_info->cci_rpc;
+	reply = (struct getattr_cb_r *) cb_info->cci_arg;
+
+	out = crt_reply_get(getattr_rpc);
+	if (out == NULL) {
+		IOF_LOG_ERROR("Could not get getattr output");
+		reply->complete = 1;
+		return IOF_ERR_CART;
+	}
+	memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
+	reply->err = out->err;
+	reply->complete = 1;
+	return IOF_SUCCESS;
 }
 
 static int iof_getattr(const char *path, struct stat *stbuf)
 {
 	struct fuse_context *context;
 	uint64_t ret;
-	hg_handle_t rpc_handle;
-	struct iof_string_in in;
+	struct iof_string_in *in = NULL;
 	struct getattr_cb_r reply = {0};
 	struct fs_handle *fs_handle;
-	struct mcl_context *mcl_context = NULL;
 	struct iof_state *iof_state = NULL;
+	crt_rpc_t *getattr_rpc = NULL;
 
 	/*retrieve handle*/
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
-	mcl_context = fs_handle->iof_state->context;
 	iof_state = fs_handle->iof_state;
+	if (iof_state == NULL) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
 	IOF_LOG_DEBUG("Path: %s", path);
 
-	in.name = path;
-	in.my_fs_id = (uint64_t)fs_handle->my_fs_id;
-	mcl_event_clear(&reply.event);
-
-	ret = HG_Create(mcl_context->context, iof_state->psr_addr,
-			iof_state->getattr_id, &rpc_handle);
-	if (ret) {
-		IOF_LOG_ERROR("Getattr: Handle not created");
-		return -ENOMEM;
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, GETATTR_OP,
+			&getattr_rpc);
+	if (ret || getattr_rpc == NULL) {
+		IOF_LOG_ERROR("Could not create getattr request, ret = %lu",
+				ret);
+		return -EIO;
 	}
-	ret = HG_Forward(rpc_handle, getattr_cb, &reply, &in);
-	if (ret)
-		IOF_LOG_ERROR("Getattr: RPC not sent");
 
-	ret = iof_progress(mcl_context, &reply.event, 6000);
+	in = crt_req_get(getattr_rpc);
+	in->path = (crt_string_t) path;
+	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+
+	reply.complete = 0;
+	reply.stat = stbuf;
+
+	ret = crt_req_send(getattr_rpc, getattr_cb, &reply);
 	if (ret) {
+		IOF_LOG_ERROR("Could not send getattr rpc, ret = %lu", ret);
+		return -EIO;
+	}
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
+	if (ret) {
+		/*TODO: check is PSR is alive before exiting fuse*/
 		IOF_LOG_ERROR("Getattr: exiting fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
-	memcpy(stbuf, &reply.out.stbuf, sizeof(struct stat));
-	ret = HG_Free_output(rpc_handle, &reply.out);
-	ret = HG_Destroy(rpc_handle);
-	if (ret)
-		IOF_LOG_ERROR("Getattr: could not destroy handle");
-
-	return reply.out.err;
-
+	return reply.err;
 }
 
+/*
+ * Temporary way of shutting down. This fuse callback is currently not going to
+ * IONSS
+ */
 #ifdef __APPLE__
 
 static int iof_setxattr(const char *path,  const char *name, const char *value,
@@ -231,131 +220,172 @@ static struct fuse_operations ops = {
 	.setxattr = iof_setxattr,
 };
 
-static hg_return_t query_callback(const struct hg_cb_info *info)
+static int query_callback(const struct crt_cb_info *cb_info)
 {
-	struct query_reply *reply;
+	struct query_cb_r *reply;
 	int ret;
+	crt_rpc_t *query_rpc;
 
-	reply = info->arg;
-	ret = HG_Get_output(info->info.forward.handle, reply->query);
-	if (ret != HG_SUCCESS)
-		IOF_LOG_ERROR("Cant unpack output of RPC");
-	/* Decrement the ref count.  Safe to do here because no data
-	 * is allocated but the handle can't be destroyed until the
-	 * reference count is 0.
-	 */
-	ret = HG_Free_output(info->info.forward.handle, reply->query);
-	if (ret != HG_SUCCESS)
-		IOF_LOG_ERROR("Error freeing output");
-	reply->err_code = ret;
-	mcl_event_set(&reply->event);
-	return IOF_SUCCESS;
-}
+	query_rpc = cb_info->cci_rpc;
+	reply = (struct query_cb_r *) cb_info->cci_arg;
 
-/*Send RPC to PSR to get information about projected filesystems*/
-static int ioc_get_projection_info(struct mcl_context *mcl_context,
-				   hg_addr_t psr_addr,
-				   struct iof_psr_query *query, hg_id_t rpc_id)
-{
-	hg_handle_t handle;
-	int ret;
-	struct query_reply reply = {0};
-
-	reply.query = query;
-	mcl_event_clear(&reply.event);
-
-	ret = HG_Create(mcl_context->context, psr_addr, rpc_id, &handle);
-	if (ret != HG_SUCCESS) {
-		IOF_LOG_ERROR("Handle not created");
-		return ret;
+	*reply->query = crt_reply_get(query_rpc);
+	if (*reply->query == NULL) {
+		IOF_LOG_ERROR("Could not get query reply");
+		return IOF_ERR_CART;
 	}
-	ret = HG_Forward(handle, query_callback, &reply, NULL);
-	if (ret != HG_SUCCESS) {
-		HG_Destroy(handle); /* Ignore errors */
-		IOF_LOG_ERROR("Could not send RPC tp PSR");
-		return ret;
-	}
-	mcl_progress(mcl_context, &reply.event);
-	ret = HG_Destroy(handle);
-	if (ret != HG_SUCCESS)
-		IOF_LOG_ERROR("Could not destroy handle");
+
+	ret = crt_req_addref(query_rpc);
+	if (ret)
+		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
+				ret);
+	reply->complete = 1;
 	return ret;
 }
 
-int iof_reg(void *foo, struct mcl_state *state, struct cnss_plugin_cb *cb,
-	    size_t cb_size)
+/*Send RPC to PSR to get information about projected filesystems*/
+static int ioc_get_projection_info(struct iof_state *iof_state,
+				   struct iof_psr_query **query,
+				   crt_rpc_t **query_rpc)
+{
+	int ret;
+	struct query_cb_r reply = {0};
+	struct psr_in *in = NULL;
+
+	reply.complete = 0;
+	reply.query = query;
+
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+				QUERY_PSR_OP, query_rpc);
+	if (ret || (*query_rpc == NULL)) {
+		IOF_LOG_ERROR("failed to create query rpc request, ret = %d",
+				ret);
+		return ret;
+	}
+
+	in = crt_req_get(*query_rpc);
+	in->str = "sign on rpc";
+
+	ret = crt_req_send(*query_rpc, query_callback, &reply);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send query RPC, ret = %d", ret);
+		return ret;
+	}
+
+	/*make on-demand progress*/
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
+	if (ret)
+		IOF_LOG_ERROR("Could not complete PSR query");
+
+	return ret;
+}
+
+
+int iof_reg(void *foo, char *dest_name, struct cnss_plugin_cb *cb,
+		size_t cb_size)
 {
 	struct iof_handle *handle = (struct iof_handle *)foo;
 	struct iof_state *iof_state;
 	char *prefix;
+	int ret;
+	DIR *prefix_dir;
 
 	if (!handle->state) {
 		handle->state = calloc(1, sizeof(struct iof_state));
 		if (!handle->state)
 			return IOF_ERR_NOMEM;
 	}
+	IOF_LOG_DEBUG("Plugin start invoked");
 	/*initialize iof state*/
 	iof_state = handle->state;
-	iof_state->mcl_state = state;
-	iof_state->context = mcl_get_context(state);
+	/*do a group lookup*/
+	iof_state->dest_group = crt_group_lookup(dest_name);
+
+	/*initialize destination endpoint*/
+	iof_state->dest_ep.ep_grp = 0; /*primary group*/
+	/*TODO: Use exported PSR from cart*/
+	iof_state->dest_ep.ep_rank = 0;
+	iof_state->dest_ep.ep_tag = 0;
+
+	ret = crt_context_create(NULL, &iof_state->crt_ctx);
+	if (ret)
+		IOF_LOG_ERROR("Context not created");
 	prefix = getenv("CNSS_PREFIX");
-	if (snprintf(iof_state->cnss_prefix, IOF_PREFIX_MAX, prefix) >
-			IOF_PREFIX_MAX)
-		return IOF_ERR_OVERFLOW;
-	iof_state->projection_query = HG_Register_name(state->hg_class,
-							"Projection_query",
-							NULL,
-							iof_query_out_proc_cb,
-							iof_query_handler);
-	IOF_LOG_INFO("Id registered on CNSS: %d", iof_state->projection_query);
-	iof_state->getattr_id = HG_Register_name(state->hg_class, "getattr",
-				iof_string_in_proc_cb,
-				iof_getattr_out_proc_cb,
-				iof_getattr_handler);
+	iof_state->cnss_prefix = realpath(prefix, NULL);
+	prefix_dir = opendir(iof_state->cnss_prefix);
+	if (prefix_dir)
+		closedir(prefix_dir);
+	else {
+		if (mkdir(iof_state->cnss_prefix, 0755)) {
+			IOF_LOG_ERROR("Could not create cnss_prefix");
+			return CNSS_ERR_PREFIX;
+		}
+	}
+
+	/*registrations*/
+	ret = crt_rpc_register(QUERY_PSR_OP, &QUERY_RPC_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Query rpc registration failed with ret: %d",
+				ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(GETATTR_OP, &GETATTR_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("getattr registration failed with ret: %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(SHUTDOWN_OP, NULL);
+	if (ret) {
+		IOF_LOG_ERROR("shutdown registration failed with ret: %d", ret);
+		return ret;
+	}
 
 	handle->cb = cb;
 
-	return IOF_SUCCESS;
+	return ret;
 }
 
-int iof_post_start(void *foo, struct mcl_set *set)
+int iof_post_start(void *foo)
 {
 	struct iof_handle *iof_handle = (struct iof_handle *)foo;
-	struct iof_psr_query query = {0};
+	struct iof_psr_query *query = NULL;
 	int ret;
 	int i;
+	int fs_num;
 	char mount[IOF_NAME_LEN_MAX];
 	char ctrl_path[IOF_NAME_LEN_MAX];
 	char base_mount[IOF_NAME_LEN_MAX];
 	struct cnss_plugin_cb *cb;
 	struct iof_state *iof_state = NULL;
 	struct fs_handle *fs_handle = NULL;
+	struct iof_fs_info *tmp;
+	crt_rpc_t *query_rpc = NULL;
 
 	ret = IOF_SUCCESS;
 	iof_state = iof_handle->state;
 	cb = iof_handle->cb;
 
-	ret = mcl_lookup(set, set->psr_rank, iof_state->context,
-			 &iof_state->psr_addr);
-	if (ret != MCL_SUCCESS) {
-		IOF_LOG_ERROR("PSR Address lookup failed");
-		return IOF_ERR_MCL;
-	}
 
 	/*Query PSR*/
-	ret = ioc_get_projection_info(iof_state->context, iof_state->psr_addr,
-				&query, iof_state->projection_query);
-	if (ret != 0) {
+	ret = ioc_get_projection_info(iof_state, &query, &query_rpc);
+	if (ret || (query == NULL)) {
 		IOF_LOG_ERROR("Query operation failed");
 		return IOF_ERR_PROJECTION;
 	}
 
-	for (i = 0; i < query.num; i++) {
+	/*calculate number of projections*/
+	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
+	IOF_LOG_DEBUG("Number of filesystems projected: %d", fs_num);
 
-		struct iof_fs_info *tmp = &query.list[i];
+	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
 
-		snprintf(base_mount, IOF_PREFIX_MAX, iof_state->cnss_prefix);
-		if (tmp->mode == 0) {
+	strncpy(base_mount, iof_state->cnss_prefix, IOF_NAME_LEN_MAX);
+	for (i = 0; i < fs_num; i++) {
+		char *base_name;
+
+		if (tmp[i].mode == 0) {
 			fs_handle = calloc(1, sizeof(struct fs_handle));
 			if (!fs_handle)
 				return IOF_ERR_NOMEM;
@@ -366,32 +396,31 @@ int iof_post_start(void *foo, struct mcl_set *set)
 			return IOF_NOT_SUPP;
 
 
-		if (mkdir(base_mount, 0755) && errno != EEXIST) {
-			IOF_LOG_ERROR("Could not create base mount %s",
-					base_mount);
-			continue;
-		}
 		snprintf(ctrl_path, IOF_NAME_LEN_MAX, "/iof/PA/mount%d", i);
 		IOF_LOG_DEBUG("Ctrl path is: %s%s", iof_state->cnss_prefix,
 								ctrl_path);
 
-		IOF_LOG_DEBUG("Projected Mount %s", tmp->mnt);
-		snprintf(mount, IOF_NAME_LEN_MAX, "%s/%s\n", base_mount,
-								tmp->mnt);
+		base_name = basename(tmp[i].mnt);
+
+		IOF_LOG_DEBUG("Projected Mount %s", base_name);
+		snprintf(mount, IOF_NAME_LEN_MAX, "%s/%s", base_mount,
+								base_name);
 		IOF_LOG_INFO("Mountpoint for this projection: %s", mount);
 
 		/*Register the mount point with the control filesystem*/
 		cb->register_ctrl_constant(ctrl_path, mount);
 
-		fs_handle->my_fs_id = tmp->id;
-		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp->id);
+		fs_handle->my_fs_id = tmp[i].id;
+		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
 		if (cb->register_fuse_fs(cb->handle, &ops, mount, fs_handle)
 								!= NULL)
 			IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
 
 	}
 
-	free(query.list);
+	ret = crt_req_decref(query_rpc);
+	if (ret)
+		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
 	return ret;
 }
 
@@ -402,12 +431,45 @@ void iof_flush(void *handle)
 
 }
 
+static int shutdown_cb(const struct crt_cb_info *cb_info)
+{
+	int *complete;
+
+	complete = (int *)cb_info->cci_arg;
+
+	*complete = 1;
+
+	return IOF_SUCCESS;
+}
+
 void iof_finish(void *handle)
 {
+	int ret;
+	crt_rpc_t *shut_rpc;
+	int complete;
 	struct iof_handle *iof_handle = (struct iof_handle *)handle;
 	struct iof_state *iof_state = iof_handle->state;
 
+	/*send a detach RPC to IONSS*/
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			SHUTDOWN_OP, &shut_rpc);
+	if (ret)
+		IOF_LOG_ERROR("Could not create shutdown request ret = %d",
+				ret);
+
+	complete = 0;
+	ret = crt_req_send(shut_rpc, shutdown_cb, &complete);
+	if (ret)
+		IOF_LOG_ERROR("shutdown RPC not sent");
+
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &complete);
+	if (ret)
+		IOF_LOG_ERROR("Could not progress shutdown RPC");
+	ret = crt_context_destroy(iof_state->crt_ctx, 0);
+	if (ret)
+		IOF_LOG_ERROR("Could not destroy context");
 	IOF_LOG_INFO("Called iof_finish with %p", handle);
+	free(iof_state->cnss_prefix);
 	free(iof_state);
 	free(iof_handle);
 }

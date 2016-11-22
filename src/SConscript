@@ -38,7 +38,7 @@
 import os
 
 HEADERS = ['cnss_plugin.h']
-COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_common.c']
+COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c']
 CNSS_SRC = ['cnss.c', 'iof_main.c', 'ctrl_common.c', 'ctrl_fs.c']
 
 def scons():
@@ -54,7 +54,7 @@ def scons():
     tenv.Append(CPPPATH=['include'])
     tenv.Append(LIBS='pthread')
 
-    prereqs.require(tenv, 'mercury', 'mcl')
+    prereqs.require(tenv, 'cart')
 
     # Build a static library of the common parts.
     common = []
@@ -92,17 +92,12 @@ def scons():
 
     Default(progs)
 
-    # Build tester
-    test_targets = tenv.SharedObject('test/iof_test_log')
-
-    Default(test_targets)
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 
     for header in HEADERS:
         tenv.Install(os.path.join("$PREFIX", 'include'), 'include/%s' % header)
 
-    Export('test_targets')
 
     SConscript('utest/SConscript')
 

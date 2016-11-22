@@ -87,37 +87,18 @@ def commonSetUpModule():
     cts.common_manage_ionss_dir()
     print("Testnss: module setup end\n\n")
 
-def commonTearDownModule():
-    """teardown module for test"""
-
-    print("Testnss: module tearDown begin")
-    testmsg = "terminate any cnss processes"
-    cmdstr = "pkill cnss"
-    testmsg = "terminate any ionss processes"
-    cmdstr = "pkill ionss"
-    cts = CommonTestSuite()
-    cts.common_launch_test(testmsg, cmdstr)
-    allnode_cmd = cts.common_get_all_cn_cmd()
-    testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
-    cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
-    cts.common_launch_test(testmsg, cmdstr)
-    allnode_cmd = cts.common_get_all_ion_cmd()
-    testmsg = "remove %s on all IONs" % os.environ["ION_TEMPDIR"]
-    cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["ION_TEMPDIR"])
-    cts.common_launch_test(testmsg, cmdstr)
-    print("Testnss: module tearDown end\n\n")
-
 class CommonTestSuite(unittest.TestCase):
     """Attributes common to the IOF tests"""
     fs_list = []
     logger = logging.getLogger("TestRunnerLogger")
+    __ion_dir = None
 
     @staticmethod
     def common_get_all_cn_cmd():
         """Get prefix to run command to run all all CNs"""
         cn = os.getenv('IOF_TEST_CN')
         if cn:
-            return "pdsh -R ssh -w %s " % cn
+            return "pdsh -S -R ssh -w %s " % cn
         return ""
 
     @staticmethod
@@ -125,13 +106,13 @@ class CommonTestSuite(unittest.TestCase):
         """Get prefix to run command on all CNs"""
         ion = os.getenv('IOF_TEST_ION')
         if ion:
-            return "pdsh -R ssh -w %s " % ion
+            return "pdsh -S -R ssh -w %s " % ion
         return ""
 
     def common_manage_ionss_dir(self):
         """create dirs for IONSS backend"""
         ion_dir = tempfile.mkdtemp()
-        os.environ["ION_TEMPDIR"] = ion_dir
+        self.__ion_dir = ion_dir
         allnode_cmd = self.common_get_all_ion_cmd()
         testmsg = "create base ION dirs %s" % ion_dir
         cmdstr = "%smkdir -p %s " % (allnode_cmd, ion_dir)
@@ -139,8 +120,8 @@ class CommonTestSuite(unittest.TestCase):
         i = 2
         while i > 0:
             fs = "FS_%s" % i
-            self.fs_list.append(fs)
             abs_path = os.path.join(ion_dir, fs)
+            self.fs_list.append(abs_path)
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "%smkdir -p %s" % (allnode_cmd, abs_path)
             self.common_launch_test(testmsg, cmdstr)
@@ -217,8 +198,8 @@ class CommonTestSuite(unittest.TestCase):
         os.makedirs(log_path, exist_ok=True)
         use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
         if use_valgrind == 'memcheck':
-            suppressfile = os.path.join(os.getenv('IOF_MCL_PREFIX', ".."), \
-                           "etc", "memcheck-mcl.supp")
+            suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."), \
+                           "etc", "memcheck-cart.supp")
             prefix = "valgrind --xml=yes" + \
                 " --xml-file=" + log_path + "/valgrind.%q{PMIX_ID}.xml" + \
                 " --leak-check=yes --gen-suppressions=all" + \
@@ -249,13 +230,34 @@ class CommonTestSuite(unittest.TestCase):
         """create the server and client prefix"""
         cn = os.getenv('IOF_TEST_CN')
         if cn:
-            local_cn = " -H %s -N 1 " % cn
+            local_cn = " -H %s -n 1 " % cn
         else:
             local_cn = " -np 1 "
         ion = os.getenv('IOF_TEST_ION')
         if ion:
-            local_ion = " -H %s -N 1 " % ion
+            local_ion = " -H %s -n 1 " % ion
         else:
             local_ion = " -np 1"
 
         return (local_cn, local_ion)
+
+    def commonTearDownModule(self):
+        """teardown module for test"""
+
+        print("Testnss: module tearDown begin")
+        testmsg = "terminate any cnss processes"
+        cmdstr = "pkill cnss"
+        testmsg = "terminate any ionss processes"
+        cmdstr = "pkill ionss"
+        cts = CommonTestSuite()
+        cts.common_launch_test(testmsg, cmdstr)
+        allnode_cmd = cts.common_get_all_cn_cmd()
+        testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
+        cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
+        cts.common_launch_test(testmsg, cmdstr)
+        allnode_cmd = cts.common_get_all_ion_cmd()
+        if self.__ion_dir is not None:
+            testmsg = "remove %s on all IONs" % self.__ion_dir
+            cmdstr = "%srm -rf %s " % (allnode_cmd, self.__ion_dir)
+            cts.common_launch_test(testmsg, cmdstr)
+        print("Testnss: module tearDown end\n\n")
