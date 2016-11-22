@@ -2,12 +2,14 @@
 import os
 import time
 import argparse
+import logging
 
 class TestIof():
     """IOF filesystem tests in private access mode"""
 
     startdir = None
     ctrl_dir = None
+    logger = logging.getLogger("TestRunnerLogger")
 
     def __init__(self, cnss_prefix):
         self.startdir = cnss_prefix
@@ -16,7 +18,7 @@ class TestIof():
 
     def iof_fs_test(self):
         """Test private access mount points"""
-        print("starting to stat the mountpoint")
+        self.logger.info("starting to stat the mountpoint")
         entry = os.path.join(self.ctrl_dir, "iof", "PA")
         if os.path.isdir(entry):
             for mntfile in os.listdir(entry):
@@ -25,11 +27,11 @@ class TestIof():
                 mnt_path = fd.readline()
                 abs_path = os.path.join(self.startdir, mnt_path)
                 stat_obj = os.stat(abs_path)
-                print(stat_obj)
+                self.logger.info(stat_obj)
             return True
 
         else:
-            print("Mount points not found")
+            self.logger.info("Mount points not found")
             return False
 
     def iofstarted(self):
@@ -40,7 +42,7 @@ class TestIof():
             i = i - 1
             time.sleep(1)
             if os.path.exists(filename) is True:
-                print(os.stat(filename))
+                self.logger.info(os.stat(filename))
                 break
         return i
 
@@ -58,7 +60,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IOF Test case Arguments')
     parser.add_argument('cnss_prefix')
     args = parser.parse_args()
-    print("CNSS Prefix: %s" % args.cnss_prefix)
+    print("CNSS Prefix: %s", args.cnss_prefix)
     mytest = TestIof(args.cnss_prefix)
     mytest.iofstarted()
     mytest.iof_fs_test()
