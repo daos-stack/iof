@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='IOF Test case Arguments')
     parser.add_argument('cnss_prefix')
     args = parser.parse_args()
-    print("CNSS Prefix: %s", args.cnss_prefix)
+    print("CNSS Prefix: ", args.cnss_prefix)
     mytest = TestIof(args.cnss_prefix)
     mytest.iofstarted()
     mytest.iof_fs_test()

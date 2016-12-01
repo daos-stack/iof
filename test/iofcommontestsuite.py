@@ -57,6 +57,10 @@ set TR_USE_VALGRIND in iof_test_ionss.yml to memcheck
 To use valgrind call (callgrind) profiling
 set TR_USE_VALGRIND in iof_test_ionss.yml to callgrind
 
+To redirect output to the log file,
+set TR_REDIRECT_OUTPUT in iof_test_ionss.yml
+The test_runner wil set it to redirect the output to the log file.
+By default the output is displayed on the screen.
 """
 #pylint: disable=too-many-locals
 #pylint: disable=broad-except
@@ -147,9 +151,12 @@ class CommonTestSuite(unittest.TestCase):
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
           msg, cmdstr)
         cmdarg = shlex.split(cmdstr)
-        procrtn = subprocess.call(cmdarg, timeout=180,
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL)
+        if not os.getenv('TR_REDIRECT_OUTPUT', ""):
+            procrtn = subprocess.call(cmdarg, timeout=180)
+        else:
+            procrtn = subprocess.call(cmdarg, timeout=180,
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.DEVNULL)
         return procrtn
 
     def common_launch_process(self, msg, cmdstr):
@@ -157,9 +164,12 @@ class CommonTestSuite(unittest.TestCase):
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
           msg, cmdstr)
         cmdarg = shlex.split(cmdstr)
-        proc = subprocess.Popen(cmdarg,
-                                stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL)
+        if not os.getenv('TR_REDIRECT_OUTPUT', ""):
+            proc = subprocess.Popen(cmdarg)
+        else:
+            proc = subprocess.Popen(cmdarg,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL)
         return proc
 
     def common_stop_process(self, msg, proc):
