@@ -32,7 +32,7 @@ static int read_foo(char *buf, size_t len, void *arg)
 {
 	int *foo = (int *)arg;
 
-	snprintf(buf, len, "%d\n", *foo);
+	snprintf(buf, len, "%d", *foo);
 
 	return 0;
 }
@@ -91,7 +91,7 @@ static int check_file_read(const char *prefix, const char *fname,
 	IOF_LOG_INFO("Finished reading %s", buf);
 	IOF_LOG_INFO("Comparing to %s", expected);
 
-	if (strcmp(buf, expected) != 0) {
+	if (strncmp(buf, expected, 256) != 0) {
 		printf("Value unexpected in %s: (%s != %s).  Test"
 		       " %s:%d failed\n", fname, buf, expected, source, line);
 		return 1;
@@ -152,17 +152,23 @@ static int check_file_write(const char *prefix, const char *fname,
 	return 0;
 }
 
-
 #define CHECK_FILE_READ(prefix, name, expected) \
 	check_file_read(prefix, name, expected, __FILE__, __LINE__)
 
 #define CHECK_FILE_WRITE(prefix, name, value) \
 	check_file_write(prefix, name, value, __FILE__, __LINE__)
 
+/* Test that large values get truncated properly */
+#define TOO_LARGE 8192
+static char large_constant[TOO_LARGE];
+
 static int run_tests(const char *ctrl_prefix)
 {
 	int num_failures = 0;
 
+	/* Only checks the first 256 bytes so this check will work */
+	num_failures += CHECK_FILE_READ(ctrl_prefix, "/large",
+					large_constant);
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/hello",
 					"Hello World\n");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "0\n");
@@ -189,6 +195,8 @@ int main(int argc, char **argv)
 	int opt;
 	int num_failures;
 	bool interactive = false;
+
+	memset(large_constant, 'a', TOO_LARGE);
 
 	for (;;) {
 		opt = getopt(argc, argv, "i");
@@ -228,7 +236,8 @@ int main(int argc, char **argv)
 
 	ctrl_register_variable("/class/bar/foo", read_foo,
 			       write_foo, NULL, &foo);
-	ctrl_register_constant("/class/bar/hello", "Hello World\n");
+	ctrl_register_constant("/large", large_constant);
+	ctrl_register_constant("/class/bar/hello", "Hello World");
 
 	num_failures = run_tests(ctrl_prefix);
 	if (num_failures != 0)

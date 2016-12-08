@@ -651,7 +651,6 @@ int ctrl_register_constant(const char *path, const char *value)
 		IOF_LOG_ERROR("Bad file %s specified in %s", basename, path);
 
 	strncpy(GET_DATA(node, con, buf), value, CTRL_DATA_MAX);
-	GET_DATA(node, con, buf)[CTRL_DATA_MAX - 1] = 0;
 	__sync_synchronize();
 	node->initialized = 1;
 
@@ -939,7 +938,7 @@ static int ctrl_read(const char *fname,
 	char mybuf[CTRL_DATA_MAX];
 	struct ctrl_node *node;
 	const char *payload;
-	int len;
+	size_t len;
 	int rc;
 
 	if (!ctrl_fs.started)
@@ -962,7 +961,6 @@ static int ctrl_read(const char *fname,
 
 		read_cb = GET_DATA(node, var, read_cb);
 
-		strcpy(mybuf, "\n");
 		if (read_cb != NULL) {
 			rc = read_cb(mybuf, CTRL_DATA_MAX, cb_arg);
 			if (rc != 0) {
@@ -970,29 +968,23 @@ static int ctrl_read(const char *fname,
 				return -ENOENT;
 			}
 		}
-		/* Ensure we don't overflow */
-		mybuf[CTRL_DATA_MAX - 1] = 0;
 		payload = mybuf;
 	} else if (node->ctrl_type == CTRL_COUNTER) {
-		sprintf(mybuf, "%d\n", (int)finfo->fh);
+		sprintf(mybuf, "%d", (int)finfo->fh);
 		payload = mybuf;
 	}
 
-	len = strlen(payload) + 1; /* Include the 'null' byte */
-
-	/* Offset unsupported */
-	if (size > len)
-		memcpy(buf, payload, len);
-	else {
-		/* Truncate */
-		memcpy(buf, payload, size);
-		buf[size - 1] = 0;
+	len = snprintf(buf, size, "%s\n", payload);
+	if (len >= size) {
+		len = size;
+		IOF_LOG_WARNING("Truncated value for %s", fname);
+		buf[size - 1] = '\n';
 	}
 
-	IOF_LOG_INFO("Done copying contents to output buffer %s size is %ld",
-		     fname, size);
+	IOF_LOG_INFO("Done copying contents to output buffer %s len is %ld",
+		     fname, len);
 
-	return size;
+	return len;
 }
 
 static int ctrl_mknod(const char *path,
