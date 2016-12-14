@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <crt_util/clog.h>
 
 #define IOF_LOG_FAC(fac, type, fmt, ...)				\
