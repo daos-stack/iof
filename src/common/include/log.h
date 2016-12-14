@@ -51,8 +51,8 @@
 				__func__, ## __VA_ARGS__);		\
 			break;						\
 		}							\
-		crt_log(fac | CLOG_##type, "%s:%d:%d:%s() " fmt "\n",	\
-			__FILE__, getpid(), __LINE__, __func__,		\
+		crt_log(fac | CLOG_##type, "%s:%d:%s() " fmt "\n",	\
+			__FILE__,  __LINE__, __func__,			\
 			## __VA_ARGS__);				\
 	} while (0)
 

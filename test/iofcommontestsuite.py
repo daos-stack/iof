@@ -128,7 +128,7 @@ class CommonTestSuite(unittest.TestCase):
             i = i - 1
 
     def common_launch_test(self, msg, cmdstr):
-        """Launch a test"""
+        """Launch a test and wait for it to complete"""
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
           msg, cmdstr)
         cmdarg = shlex.split(cmdstr)
@@ -153,9 +153,15 @@ class CommonTestSuite(unittest.TestCase):
                                     stderr=subprocess.DEVNULL)
         return proc
 
-    def common_stop_process(self, msg, proc):
-        """wait for processes to terminate"""
-        self.logger.info("Test: %s - stopping processes :%s", msg, proc.pid)
+    def common_stop_process(self, proc):
+        """wait for processes to terminate
+
+        Wait for up to 60 seconds for the process to die on it's own, then if
+        still running attept to kill it.
+
+        Return the error code of the process, or -1 if the process was killed.
+        """
+        self.logger.info("Test: stopping processes :%s", proc.pid)
         i = 60
         procrtn = None
         while i:
@@ -178,7 +184,7 @@ class CommonTestSuite(unittest.TestCase):
                 self.logger.info("Killing processes: %s", proc.pid)
                 proc.kill()
 
-        self.logger.info("Test: %s - return code: %s\n", msg, procrtn)
+        self.logger.info("Test: return code: %s\n", procrtn)
         return procrtn
 
     @staticmethod
@@ -192,7 +198,6 @@ class CommonTestSuite(unittest.TestCase):
         """add the log directory to the prefix"""
         prefix = ""
         ompi_bin = os.getenv('IOF_OMPI_BIN', "")
-        ompi_prefix = os.getenv('IOF_OMPI_PREFIX', "")
         log_path = os.getenv("IOF_TESTLOG", "nss") + \
           self.common_logdir_name(testcase_name)
         os.makedirs(log_path, exist_ok=True)
@@ -212,16 +217,12 @@ class CommonTestSuite(unittest.TestCase):
             dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URI')
         else:
             dvmfile = " "
-        if ompi_prefix:
-            use_prefix = " --prefix %s" % ompi_prefix
-        else:
-            use_prefix = ""
         if getpass.getuser() == "root":
             allow_root = " --allow-run-as-root"
         else:
             allow_root = ""
-        cmdstr = "%sorterun%s--output-filename %s%s%s" % \
-                 (ompi_bin, dvmfile, log_path, allow_root, use_prefix)
+        cmdstr = "%sorterun%s--output-filename %s%s" % \
+                 (ompi_bin, dvmfile, log_path, allow_root)
 
         return (cmdstr, prefix)
 

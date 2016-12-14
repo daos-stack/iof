@@ -57,10 +57,6 @@ set TR_USE_VALGRIND in iof_test_ionss.yml to callgrind
 
 """
 
-#pylint: disable=too-many-locals
-#pylint: disable=broad-except
-#pylint: disable=import-error
-
 import os
 import iofcommontestsuite
 
@@ -80,10 +76,11 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
     def tearDown(self):
         """tear down the test"""
         self.logger.info("Testnss: tearDown begin")
-        testmsg = self.shortDescription()
         if self.proc is not None:
-            procrtn = self.common_stop_process(testmsg, self.proc)
-        self.assertFalse(procrtn)
+            procrtn = self.common_stop_process(self.proc)
+            if procrtn != 0:
+                self.fail("Stopping job returned %d" % procrtn)
+
         self.logger.info("Testnss: tearDown end\n\n")
         self.commonTearDownModule()
 
@@ -94,17 +91,24 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
         (cnss, ionss) = self.common_add_server_client()
         fs = ' '.join(self.fs_list)
         test_path = os.getenv('IOF_TEST_BIN', "")
-        pass_env = " -x PATH -x LD_LIBRARY_PATH -x CNSS_PREFIX"
+        pass_env = " -x IOF_LOG_MASK -x CNSS_PREFIX"
         local_server = "%s%s %s %s/ionss %s" % \
                        (pass_env, ionss, prefix, test_path, fs)
         local_client = "%s%s %s %s/cnss :" % \
                        (pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_client + local_server
         self.proc = self.common_launch_process(testmsg, cmdstr)
-        self.assertIsNotNone(self.proc)
+        if self.proc is None:
+            self.fail("Unable to launch (c|io)nss")
         allnode_cmd = self.common_get_all_cn_cmd()
         cnss_prefix = os.environ["CNSS_PREFIX"]
         cmdstr = "%s python3.4 %s/testiof.py %s" % \
                  (allnode_cmd, os.path.dirname(os.path.abspath(__file__)), \
                   cnss_prefix)
-        self.common_launch_test(testmsg, cmdstr)
+        rc = self.common_launch_test(testmsg, cmdstr)
+        self.logger.info("Proc is %d", rc)
+        if rc != 0:
+            self.fail("testiof.py returned %d" % rc)
+        rc = self.common_stop_process(self.proc)
+        if rc != 0:
+            self.fail("Stopping job returned" % rc)
