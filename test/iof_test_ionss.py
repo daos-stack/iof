@@ -111,4 +111,5 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
             self.fail("testiof.py returned %d" % rc)
         rc = self.common_stop_process(self.proc)
         if rc != 0:
-            self.fail("Stopping job returned" % rc)
+            self.fail("Stopping job returned %d" % rc)
+        self.proc = None

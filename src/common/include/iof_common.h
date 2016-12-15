@@ -59,9 +59,11 @@
 
 /* IOF Registration op codes for RPC's*/
 
-#define GETATTR_OP  (0xA1)
-#define QUERY_PSR_OP (0x100)
-#define SHUTDOWN_OP (0x200)
+#define GETATTR_OP	(0x200)
+#define QUERY_PSR_OP	(0x201)
+#define SHUTDOWN_OP	(0x202)
+#define OPENDIR_OP	(0x203)
+#define CLOSEDIR_OP	(0x204)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -87,6 +89,17 @@ struct iof_getattr_out {
 	int err;
 };
 
+struct iof_opendir_out {
+	crt_iov_t gah;
+	int rc;
+	int err;
+};
+
+struct iof_closedir_in {
+	crt_iov_t gah;
+	uint64_t my_fs_id;
+};
+
 struct psr_in {
 	char *str;
 };
@@ -98,7 +111,8 @@ struct crt_msg_field *string_in[] = {
 	&CMF_UINT64
 };
 
-struct crt_msg_field *getattr_out[] = {
+/* A Generic RPC type which contains a iovec and two status fields */
+struct crt_msg_field *iov_pair[] = {
 	&CMF_IOVEC,
 	&CMF_INT,
 	&CMF_INT
@@ -112,6 +126,11 @@ struct crt_msg_field *psr_query_in[] = {
 	&CMF_UINT64
 };
 
+struct crt_msg_field *closedir_in[] = {
+	&CMF_IOVEC,
+	&CMF_UINT64
+};
+
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							psr_query_in,
@@ -121,6 +140,14 @@ struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 
 struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
 							string_in,
-							getattr_out);
+							iov_pair);
+
+struct crt_req_format OPENDIR_FMT = DEFINE_CRT_REQ_FMT("opendir",
+							string_in,
+							iov_pair);
+
+struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
+							closedir_in,
+							NULL);
 
 #endif

@@ -39,11 +39,15 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <dirent.h>
+
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
+#include "ios_gah.h"
 
-static  struct iof_fs_info *fs_list;
+static struct iof_fs_info *fs_list;
+static struct ios_gah_store *gs;
 static int num_fs;
 static int shutdown;
 
@@ -131,6 +135,104 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 		IOF_LOG_ERROR("getattr: response not sent, ret = %lu", ret);
 	return 0;
 }
+
+int iof_opendir_handler(crt_rpc_t *rpc)
+{
+	struct iof_string_in *in = NULL;
+	struct iof_opendir_out *out = NULL;
+	uint64_t ret;
+	char new_path[IOF_MAX_PATH_LEN];
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		return 0;
+	}
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		return 0;
+	}
+
+	IOF_LOG_DEBUG("Checking path %s", in->path);
+	ret = (uint64_t)iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (ret) {
+		IOF_LOG_ERROR("could not construct filesystem path, ret = %lu",
+			      ret);
+		out->err = ret;
+	} else {
+		DIR *dir_h;
+		struct ios_gah gah;
+
+		out->err = 0;
+		dir_h = opendir(new_path);
+		if (dir_h) {
+			char *s;
+
+			/*
+			 * TODO, Set the root here.
+			 */
+			ios_gah_allocate(gs, &gah, 0, 0, dir_h);
+			s = ios_gah_to_str(&gah);
+			IOF_LOG_INFO("Allocated %s", s);
+			IOF_LOG_DEBUG("Dirp is %p", dir_h);
+			free(s);
+
+			out->rc = 0;
+			crt_iov_set(&out->gah, &gah, sizeof(gah));
+		} else {
+			out->rc = errno;
+		}
+	}
+
+	IOF_LOG_DEBUG("path %s result err %d rc %d",
+		      in->path, out->err, out->rc);
+
+	ret = crt_reply_send(rpc);
+	if (ret)
+		IOF_LOG_ERROR("getattr: response not sent, ret = %lu", ret);
+	return 0;
+}
+
+int iof_closedir_handler(crt_rpc_t *rpc)
+{
+	struct iof_closedir_in *in = NULL;
+	uint64_t ret;
+	DIR *dir_p = NULL;
+	char *d;
+	int rc;
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		return 0;
+	}
+
+	d = ios_gah_to_str(in->gah.iov_buf);
+	IOF_LOG_INFO("Deallocating %s", d);
+	free(d);
+
+	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&dir_p);
+	if (rc != IOS_SUCCESS)
+		IOF_LOG_DEBUG("Failed to load DIR* from gah %p %d",
+			      in->gah.iov_buf, rc);
+
+	if (dir_p) {
+		IOF_LOG_DEBUG("Closing %p", dir_p);
+		rc = closedir(dir_p);
+		if (rc != 0)
+			IOF_LOG_DEBUG("Failed to close directory %p", dir_p);
+	}
+
+	ios_gah_deallocate(gs, in->gah.iov_buf);
+
+	ret = crt_reply_send(rpc);
+	if (ret)
+		IOF_LOG_ERROR("getattr: response not sent, ret = %lu", ret);
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -179,6 +281,19 @@ int ionss_register(void)
 		return ret;
 	}
 
+	ret = crt_rpc_srv_register(OPENDIR_OP, &OPENDIR_FMT,
+				   iof_opendir_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(CLOSEDIR_OP, &CLOSEDIR_FMT,
+				   iof_closedir_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register closedir RPC, ret = %d", ret);
+		return ret;
+	}
 
 	return ret;
 }
@@ -256,6 +371,8 @@ int main(int argc, char **argv)
 	}
 	ionss_register();
 
+	gs = ios_gah_init();
+
 	shutdown = 0;
 	ret = pthread_create(&progress_tid, NULL, progress_thread, crt_ctx);
 
@@ -271,6 +388,7 @@ int main(int argc, char **argv)
 	if (ret)
 		IOF_LOG_ERROR("Could not finalize cart");
 
+	ios_gah_destroy(gs);
 cleanup:
 	if (fs_list)
 		free(fs_list);

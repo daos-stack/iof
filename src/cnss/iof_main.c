@@ -55,6 +55,7 @@
 #include "iof.h"
 #include "log.h"
 #include "ctrl_fs.h"
+#include "ios_gah.h"
 
 struct getattr_cb_r {
 	int complete;
@@ -63,9 +64,25 @@ struct getattr_cb_r {
 	struct stat *stat;
 };
 
+struct opendir_cb_r {
+	struct dir_handle *dh;
+	int complete;
+	int err;
+	int rc;
+};
+
+struct closedir_cb_r {
+	int complete;
+};
+
 struct query_cb_r {
 	int complete;
 	struct iof_psr_query **query;
+};
+
+struct dir_handle {
+	char *name;
+	struct ios_gah gah;
 };
 
 static int string_to_bool(const char *str, int *value)
@@ -209,21 +226,191 @@ static int iof_setxattr(const char *path, const char *name, const char *value,
 	return -ENOTSUP;
 }
 
+static int opendir_cb(const struct crt_cb_info *cb_info)
+{
+	struct opendir_cb_r *reply = NULL;
+	struct iof_opendir_out *out = NULL;
+	crt_rpc_t *rpc = cb_info->cci_rpc;
 
-static int iof_readdir(const char *dir_name, void *buf, fuse_fill_dir_t filler,
-		off_t offset, struct fuse_file_info *fi
+	reply = (struct opendir_cb_r *)cb_info->cci_arg;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not get opendir output");
+		reply->complete = 1;
+		return 0;
+	}
+	if (out->err == 0 && out->rc == 0)
+		memcpy(&reply->dh->gah, out->gah.iov_buf,
+		       sizeof(struct ios_gah));
+	reply->err = out->err;
+	reply->rc = out->rc;
+	reply->complete = 1;
+	return 0;
+}
+
+static int iof_opendir(const char *dir, struct fuse_file_info *fi)
+{
+	struct fuse_context *context;
+	struct dir_handle *dir_handle;
+	uint64_t ret;
+	struct iof_string_in *in = NULL;
+	struct opendir_cb_r reply = {0};
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state = NULL;
+	crt_rpc_t *rpc = NULL;
+
+	dir_handle = calloc(1, sizeof(struct dir_handle));
+	if (!dir_handle)
+		return -EIO;
+	dir_handle->name = strdup(dir);
+	if (!dir_handle->name) {
+		free(dir_handle);
+		return -EIO;
+	}
+
+	fi->fh = (uint64_t)dir_handle;
+
+	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
+
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
+
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPENDIR_OP,
+			     &rpc);
+	if (ret || !rpc) {
+		IOF_LOG_ERROR("Could not create opendir request, ret = %lu",
+			      ret);
+		return -EIO;
+	}
+
+	in = crt_req_get(rpc);
+	in->path = (crt_string_t)dir;
+	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+
+	reply.dh = dir_handle;
+	reply.complete = 0;
+
+	ret = crt_req_send(rpc, opendir_cb, &reply);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send opendir rpc, ret = %lu", ret);
+		return -EIO;
+	}
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
+	if (ret) {
+		/*TODO: check is PSR is alive before exiting fuse*/
+		IOF_LOG_ERROR("Opendir: exiting fuse loop");
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
+	}
+
+	if (reply.err == 0 && reply.rc == 0) {
+		char *d = ios_gah_to_str(&dir_handle->gah);
+
+		IOF_LOG_INFO("Dah %s", d);
+		free(d);
+	}
+
+	IOF_LOG_DEBUG("path %s rc %d",
+		      dir, reply.err == 0 ? -reply.rc : -EIO);
+
+	return reply.err == 0 ? -reply.rc : -EIO;
+}
+
+static int
+iof_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
+	    off_t offset, struct fuse_file_info *fi
 #ifdef IOF_USE_FUSE3
-	, enum fuse_readdir_flags flags
+	    , enum fuse_readdir_flags flags
 #endif
 	)
 {
-	IOF_LOG_INFO("Readdir: Not currently implemented");
-	return -EINVAL;
+	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
+
+	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
+
+	return -EIO;
+}
+
+static int closedir_cb(const struct crt_cb_info *cb_info)
+{
+	struct closedir_cb_r *reply = (struct closedir_cb_r *)cb_info->cci_arg;
+
+	reply->complete = 1;
+	return 0;
+}
+
+static int iof_closedir(const char *dir, struct fuse_file_info *fi)
+{
+	struct fuse_context *context;
+	uint64_t ret;
+	struct iof_closedir_in *in = NULL;
+	struct closedir_cb_r reply = {0};
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state = NULL;
+	crt_rpc_t *rpc = NULL;
+
+	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
+
+	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
+
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
+
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			     CLOSEDIR_OP, &rpc);
+	if (ret || !rpc) {
+		IOF_LOG_ERROR("Could not create closedir request, ret = %lu",
+			      ret);
+		return -EIO;
+	}
+
+	in = crt_req_get(rpc);
+	crt_iov_set(&in->gah, &dir_handle->gah, sizeof(struct ios_gah));
+
+	ret = crt_req_send(rpc, closedir_cb, &reply);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send closedir rpc, ret = %lu", ret);
+		return -EIO;
+	}
+
+	{
+		char *d = ios_gah_to_str(&dir_handle->gah);
+
+		IOF_LOG_INFO("Dah %s", d);
+		free(d);
+	}
+
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
+	if (ret) {
+		/*TODO: check is PSR is alive before exiting fuse*/
+		IOF_LOG_ERROR("Closedir: exiting fuse loop");
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return -EINTR;
+	}
+
+	if (dir_handle->name)
+		free(dir_handle->name);
+	free(dir_handle);
+	return 0;
 }
 
 static struct fuse_operations ops = {
+	.flag_nopath = 1,
 	.getattr = iof_getattr,
+	.opendir = iof_opendir,
 	.readdir = iof_readdir,
+	.releasedir = iof_closedir,
 	.setxattr = iof_setxattr,
 };
 
@@ -356,6 +543,18 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	ret = crt_rpc_register(SHUTDOWN_OP, NULL);
 	if (ret) {
 		IOF_LOG_ERROR("shutdown registration failed with ret: %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(OPENDIR_OP, &OPENDIR_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(CLOSEDIR_OP, &CLOSEDIR_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register closedir RPC, ret = %d", ret);
 		return ret;
 	}
 
