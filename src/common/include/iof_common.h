@@ -83,7 +83,8 @@ struct iof_string_in {
 
 struct iof_getattr_out {
 	crt_iov_t stat;
-	uint64_t err;
+	int rc;
+	int err;
 };
 
 struct psr_in {
@@ -99,7 +100,8 @@ struct crt_msg_field *string_in[] = {
 
 struct crt_msg_field *getattr_out[] = {
 	&CMF_IOVEC,
-	&CMF_UINT64
+	&CMF_INT,
+	&CMF_INT
 };
 
 struct crt_msg_field *psr_query[] = {

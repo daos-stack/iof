@@ -94,28 +94,41 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 	in = crt_req_get(getattr_rpc);
 	if (in == NULL) {
 		IOF_LOG_ERROR("Could not retrieve input args");
-		return IOF_ERR_CART;
+		return 0;
 	}
 
 	out = crt_reply_get(getattr_rpc);
 	if (out == NULL) {
 		IOF_LOG_ERROR("Could not retrieve output args");
-		return IOF_ERR_CART;
+		return 0;
 	}
 
-	IOF_LOG_DEBUG("RPC_recieved with path:%s", in->path);
+	IOF_LOG_DEBUG("Checking path %s", in->path);
 	ret = (uint64_t)iof_get_path(in->my_fs_id, in->path, &new_path[0]);
 	if (ret) {
 		IOF_LOG_ERROR("could not construct filesystem path, ret = %lu",
 				ret);
 		out->err = ret;
-	} else
-		out->err = stat(new_path, &stbuf);
-	crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+	} else {
+		int rc;
+
+		out->err = 0;
+		rc = stat(new_path, &stbuf);
+		if (rc == 0) {
+			out->rc = 0;
+			crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+		} else {
+			out->rc = errno;
+		}
+	}
+
+	IOF_LOG_DEBUG("path %s result err %d rc %d",
+		      in->path, out->err, out->rc);
+
 	ret = crt_reply_send(getattr_rpc);
 	if (ret)
 		IOF_LOG_ERROR("getattr: response not sent, ret = %lu", ret);
-	return ret;
+	return 0;
 }
 /*
  * Process filesystem query from CNSS

@@ -59,6 +59,7 @@
 struct getattr_cb_r {
 	int complete;
 	int err;
+	int rc;
 	struct stat *stat;
 };
 
@@ -114,8 +115,10 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 		reply->complete = 1;
 		return IOF_ERR_CART;
 	}
-	memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
+	if (out->err == 0 && out->rc == 0)
+		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
 	reply->err = out->err;
+	reply->rc = out->rc;
 	reply->complete = 1;
 	return IOF_SUCCESS;
 }
@@ -167,7 +170,11 @@ static int iof_getattr(const char *path, struct stat *stbuf)
 		fuse_session_exit(fuse_get_session(context->fuse));
 		return -EINTR;
 	}
-	return reply.err;
+
+	IOF_LOG_DEBUG("path %s rc %d",
+		      path, reply.err == 0 ? -reply.rc : -EIO);
+
+	return reply.err == 0 ? -reply.rc : -EIO;
 }
 
 /*
