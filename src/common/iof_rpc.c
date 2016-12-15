@@ -77,6 +77,12 @@ struct crt_msg_field *closedir_in[] = {
 	&CMF_UINT64
 };
 
+struct crt_msg_field *read_in[] = {
+	&CMF_IOVEC,
+	&CMF_UINT64,
+	&CMF_UINT64,
+};
+
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
@@ -109,3 +115,7 @@ struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
 struct crt_req_format CREATE_FMT = DEFINE_CRT_REQ_FMT("create",
 						create_in,
 						iov_pair);
+
+struct crt_req_format READ_FMT = DEFINE_CRT_REQ_FMT("read",
+						    read_in,
+						    iov_pair);

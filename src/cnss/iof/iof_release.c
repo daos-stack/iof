@@ -94,6 +94,17 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
+	if (!handle->gah_valid) {
+		IOF_LOG_INFO("Release with bad handle %p",
+			     handle);
+
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		free(handle);
+		return -EIO;
+	}
+
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
 			    CLOSE_OP, &rpc);
 	if (rc || !rpc) {

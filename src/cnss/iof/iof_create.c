@@ -159,11 +159,13 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
+	IOF_LOG_DEBUG("path %s rc %d",
+		      handle->name, rc);
+
 	if (rc != 0)
 		free(handle);
 
-	IOF_LOG_DEBUG("path %s rc %d",
-		      file, rc);
+	handle->gah_valid = 1;
 
 	return rc;
 }

@@ -89,7 +89,6 @@ struct dir_handle {
 /* Data which is stored against an open file handle */
 struct iof_file_handle {
 	struct ios_gah gah;
-	int handle_valid;
 	int gah_valid;
 	char name[];
 };
@@ -118,5 +117,7 @@ int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *);
 
 #endif
+
+int ioc_read(const char *, char *, size_t, off_t, struct fuse_file_info *);
 
 #endif

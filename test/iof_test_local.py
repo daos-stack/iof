@@ -263,9 +263,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         fd = open(filename, 'r')
         fd.close()
 
-    @unittest.skip("Feature not working yet")
     def test_file_read(self):
-        """Read file a file"""
+        """Read from a file"""
 
         tfile = os.path.join(self.export_dir, 'a_file')
 

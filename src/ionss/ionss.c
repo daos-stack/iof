@@ -599,6 +599,70 @@ out:
 	return 0;
 }
 
+int iof_read_handler(crt_rpc_t *rpc)
+{
+	struct iof_read_in *in;
+	struct iof_data_out *out;
+	struct ionss_file_handle *handle = NULL;
+	void *data;
+	size_t bytes_read;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(in->gah.iov_buf);
+
+		IOF_LOG_INFO("Reading from %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      in->gah.iov_buf, rc);
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Reading from %d", handle->fd);
+
+	data = malloc(in->len);
+	if (!data) {
+		out->err = IOF_ERR_NOMEM;
+		goto out;
+	}
+
+	errno = 0;
+	bytes_read = pread(handle->fd, data, in->len, in->base);
+	if (bytes_read == -1)
+		out->rc = errno;
+	else
+		crt_iov_set(&out->data, data, bytes_read);
+
+out:
+	rc = crt_reply_send(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (data)
+		free(data);
+
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -684,6 +748,13 @@ int ionss_register(void)
 
 	ret = crt_rpc_srv_register(CREATE_OP, &CREATE_FMT,
 				   iof_create_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(READ_OP, &READ_FMT,
+				   iof_read_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
 		return ret;

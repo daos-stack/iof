@@ -69,6 +69,7 @@
 #define OPEN_OP		(0x206)
 #define CLOSE_OP	(0x207)
 #define CREATE_OP	(0x208)
+#define READ_OP		(0x209)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -137,6 +138,18 @@ struct iof_closedir_in {
 	uint64_t my_fs_id;
 };
 
+struct iof_read_in {
+	crt_iov_t gah;
+	uint64_t base;
+	uint64_t len;
+};
+
+struct iof_data_out {
+	crt_iov_t data;
+	int rc;
+	int err;
+};
+
 extern struct crt_req_format READDIR_FMT;
 
 extern struct crt_req_format QUERY_RPC_FMT;
@@ -152,5 +165,7 @@ extern struct crt_req_format OPEN_FMT;
 extern struct crt_req_format CLOSE_FMT;
 
 extern struct crt_req_format CREATE_FMT;
+
+extern struct crt_req_format READ_FMT;
 
 #endif

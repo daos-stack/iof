@@ -47,33 +47,22 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct open_cb_r {
-	struct iof_file_handle *fh;
+struct read_cb_r {
+	struct iof_data_out *out;
+	struct iof_file_handle *handle;
+	crt_rpc_t *rpc;
 	int complete;
 	int err;
 	int rc;
 };
 
-struct iof_file_handle *ioc_fh_new(const char *name)
+static int read_cb(const struct crt_cb_info *cb_info)
 {
-	struct iof_file_handle *handle;
-	size_t name_len = strlen(name) + 1;
+	struct read_cb_r *reply = NULL;
+	struct iof_data_out *out;
+	int rc;
 
-	handle = calloc(1, name_len + sizeof(*handle));
-	if (!handle)
-		return NULL;
-	strncpy(handle->name, name, name_len);
-
-	return handle;
-}
-
-static int open_cb(const struct crt_cb_info *cb_info)
-{
-	struct open_cb_r *reply = NULL;
-	struct iof_open_out *out = NULL;
-	crt_rpc_t *rpc = cb_info->cci_rpc;
-
-	reply = (struct open_cb_r *)cb_info->cci_arg;
+	reply = (struct read_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -91,39 +80,59 @@ static int open_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	out = crt_reply_get(rpc);
+	out = crt_reply_get(cb_info->cci_rpc);
 	if (!out) {
-		IOF_LOG_ERROR("Could not get open output");
-		reply->err = IOF_ERR_CART;
+		IOF_LOG_ERROR("Could not get reply");
+		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
-	if (out->err == 0 && out->rc == 0)
-		memcpy(&reply->fh->gah, out->gah.iov_buf,
-		       sizeof(struct ios_gah));
-	reply->err = out->err;
-	reply->rc = out->rc;
+
+	if (out->err) {
+		IOF_LOG_ERROR("Error from target %d", out->err);
+
+		if (out->err == IOF_GAH_INVALID)
+			reply->handle->gah_valid = 0;
+
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
+
+	if (out->rc) {
+		reply->rc = out->rc;
+		reply->complete = 1;
+		return 0;
+	}
+
+	rc = crt_req_addref(cb_info->cci_rpc);
+	if (rc) {
+		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
+			      rc);
+		reply->err = EIO;
+	} else {
+		reply->out = out;
+		reply->rpc = cb_info->cci_rpc;
+	}
+
 	reply->complete = 1;
 	return 0;
 }
 
-int ioc_open(const char *file, struct fuse_file_info *fi)
+int ioc_read(const char *file, char *buff, size_t len, off_t position,
+	     struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	struct iof_file_handle *handle;
-	uint64_t ret;
-	struct iof_string_in *in = NULL;
-	struct open_cb_r reply = {0};
+	struct iof_read_in *in;
+	struct read_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	handle = ioc_fh_new(file);
-	if (!handle)
-		return -ENOMEM;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 
-	IOF_LOG_INFO("file %s handle %p", file, handle);
+	IOF_LOG_INFO("path %s %s handle %p", file, handle->name, handle);
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
@@ -133,51 +142,53 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPEN_OP,
-			     &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %lu",
-			      ret);
+	if (!handle->gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		free(handle);
+		return -EIO;
+	}
+
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    READ_OP, &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
 		return -EIO;
 	}
 
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+	crt_iov_set(&in->gah, &handle->gah, sizeof(struct ios_gah));
+	in->base = position;
+	in->len = len;
 
-	reply.fh = handle;
-	reply.complete = 0;
+	reply.handle = handle;
 
-	ret = crt_req_send(rpc, open_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %lu", ret);
+	rc = crt_req_send(rpc, read_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
-	if (rc) {
-		free(handle);
+	if (rc)
 		return -rc;
-	}
 
-	if (reply.err == 0 && reply.rc == 0) {
-		char *d = ios_gah_to_str(&handle->gah);
+	if (reply.err)
+		return -reply.err;
 
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
-	}
+	if (reply.rc != 0)
+		return -reply.rc;
 
-	rc = reply.err == 0 ? -reply.rc : -EIO;
+	len = reply.out->data.iov_len;
 
-	IOF_LOG_DEBUG("path %s handle %p rc %d",
-		      handle->name, rc == 0 ? handle : NULL, rc);
+	if (len > 0)
+		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
 
-	if (rc == 0) {
-		fi->fh = (uint64_t)handle;
-		handle->gah_valid = 1;
-	} else {
-		free(handle);
-	}
+	rc = crt_req_decref(reply.rpc);
+	if (rc)
+		IOF_LOG_ERROR("decref returned %d", rc);
 
-	return rc;
+	return len;
 }
 

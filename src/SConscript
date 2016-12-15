@@ -45,6 +45,7 @@ RPC_SRC = ['closedir',
            'getattr',
            'open',
            'opendir',
+           'read',
            'readdir',
            'release']
 
