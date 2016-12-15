@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,11 +64,35 @@ struct getattr_cb_r {
 	struct stat *stat;
 };
 
+/* Data which is stored against an open directory handle */
+struct dir_handle {
+	/* The name of the directory */
+	char *name;
+	/* The handle for accessing the directory on the IONSS */
+	struct ios_gah gah;
+	/* Any RPC reference held across readdir() calls */
+	crt_rpc_t *rpc;
+	/* Pointer to any retreived data from readdir() RPCs */
+	struct iof_readdir_reply *replies;
+	int reply_count;
+	/* Set to 1 initially, but 0 if there is a unrecoverable error */
+	int handle_valid;
+	/* Set to 0 if the server rejects the GAH at any point */
+	int gah_valid;
+};
+
 struct opendir_cb_r {
 	struct dir_handle *dh;
 	int complete;
 	int err;
 	int rc;
+};
+
+struct readdir_cb_r {
+	int complete;
+	crt_rpc_t *rpc;
+	int err;
+	struct iof_readdir_out *out;
 };
 
 struct closedir_cb_r {
@@ -78,11 +102,6 @@ struct closedir_cb_r {
 struct query_cb_r {
 	int complete;
 	struct iof_psr_query **query;
-};
-
-struct dir_handle {
-	char *name;
-	struct ios_gah gah;
 };
 
 static int string_to_bool(const char *str, int *value)
@@ -234,15 +253,35 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 
 	reply = (struct opendir_cb_r *)cb_info->cci_arg;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get opendir output");
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  On timeout return EAGAIN, all other errors
+		 * return EIO.
+		 *
+		 * TODO: Handle target eviction here
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		if (cb_info->cci_rc == -CER_TIMEDOUT)
+			reply->rc = EAGAIN;
+		else
+			reply->rc = EIO;
 		reply->complete = 1;
 		return 0;
 	}
-	if (out->err == 0 && out->rc == 0)
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not get opendir output");
+		reply->rc = EIO;
+		reply->complete = 1;
+		return 0;
+	}
+	if (out->err == 0 && out->rc == 0) {
 		memcpy(&reply->dh->gah, out->gah.iov_buf,
 		       sizeof(struct ios_gah));
+		reply->dh->gah_valid = 1;
+		reply->dh->handle_valid = 1;
+	}
 	reply->err = out->err;
 	reply->rc = out->rc;
 	reply->complete = 1;
@@ -269,7 +308,6 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	fi->fh = (uint64_t)dir_handle;
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
@@ -278,6 +316,8 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 	iof_state = fs_handle->iof_state;
 	if (!iof_state) {
 		IOF_LOG_ERROR("Could not retrieve iof state");
+		free(dir_handle->name);
+		free(dir_handle);
 		return -EIO;
 	}
 
@@ -286,6 +326,8 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 	if (ret || !rpc) {
 		IOF_LOG_ERROR("Could not create opendir request, ret = %lu",
 			      ret);
+		free(dir_handle->name);
+		free(dir_handle);
 		return -EIO;
 	}
 
@@ -299,6 +341,8 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 	ret = crt_req_send(rpc, opendir_cb, &reply);
 	if (ret) {
 		IOF_LOG_ERROR("Could not send opendir rpc, ret = %lu", ret);
+		free(dir_handle->name);
+		free(dir_handle);
 		return -EIO;
 	}
 	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
@@ -306,20 +350,204 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 		/*TODO: check is PSR is alive before exiting fuse*/
 		IOF_LOG_ERROR("Opendir: exiting fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
+		free(dir_handle->name);
+		free(dir_handle);
 		return -EINTR;
 	}
 
 	if (reply.err == 0 && reply.rc == 0) {
 		char *d = ios_gah_to_str(&dir_handle->gah);
 
+		fi->fh = (uint64_t)dir_handle;
+
 		IOF_LOG_INFO("Dah %s", d);
 		free(d);
+	} else {
+		free(dir_handle->name);
+		free(dir_handle);
 	}
 
 	IOF_LOG_DEBUG("path %s rc %d",
 		      dir, reply.err == 0 ? -reply.rc : -EIO);
 
 	return reply.err == 0 ? -reply.rc : -EIO;
+}
+
+/* The callback of the readdir RPC.
+ *
+ * All this function does is take a reference on the data and return.
+ */
+static int readdir_cb(const struct crt_cb_info *cb_info)
+{
+	struct readdir_cb_r *reply = cb_info->cci_arg;
+	int ret;
+
+	if (cb_info->cci_rc != 0) {
+		/* Error handling, as directory handles are stateful if there
+		 * is any error then we have to disable the local dir_handle
+		 *
+		 */
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
+
+	reply->out = crt_reply_get(cb_info->cci_rpc);
+	if (!reply->out) {
+		reply->err = EIO;
+		IOF_LOG_ERROR("Could not get query reply");
+		reply->complete = 1;
+		return 0;
+	}
+
+	ret = crt_req_addref(cb_info->cci_rpc);
+	if (ret) {
+		reply->err = EIO;
+		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
+			      ret);
+		reply->complete = 1;
+		return 0;
+	}
+
+	reply->rpc = cb_info->cci_rpc;
+	reply->complete = 1;
+	return 0;
+}
+
+/*
+ * Send, and wait for a readdir() RPC.  Populate the dir_handle with the
+ * replies, count and rpc which a reference is held on.
+ *
+ */
+static int readdir_get_data(struct fuse_context *context,
+			    struct dir_handle *dir_handle,
+			    off_t offset)
+{
+	struct fs_handle *fs_handle = (struct fs_handle *)context->private_data;
+	struct iof_state *iof_state = fs_handle->iof_state;
+	struct iof_readdir_in *in = NULL;
+	struct readdir_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
+
+	int ret;
+
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return EIO;
+	}
+
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			     READDIR_OP, &rpc);
+	if (ret || !rpc) {
+		IOF_LOG_ERROR("Could not create request, ret = %d",
+			      ret);
+		return EIO;
+	}
+
+	in = crt_req_get(rpc);
+	crt_iov_set(&in->gah, &dir_handle->gah, sizeof(struct ios_gah));
+	in->offsef = offset;
+	in->my_fs_id = fs_handle->my_fs_id;
+
+	ret = crt_req_send(rpc, readdir_cb, &reply);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send rpc, ret = %d", ret);
+		return EIO;
+	}
+
+	ret = iof_progress(iof_state->crt_ctx, 50, 6000,
+			   &reply.complete);
+	if (ret) {
+		/*TODO: check is PSR is alive before exiting fuse*/
+		IOF_LOG_ERROR("Readedir: exiting fuse loop");
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return EINTR;
+	}
+
+	if (reply.err != 0)
+		return reply.err;
+
+	if (reply.out->err != 0) {
+		if (reply.out->err == IOF_GAH_INVALID)
+			dir_handle->gah_valid = 0;
+		IOF_LOG_ERROR("Error from target %d", reply.out->err);
+		crt_req_decref(reply.rpc);
+		return EIO;
+	}
+
+	dir_handle->reply_count = reply.out->replies.iov_len /
+		sizeof(struct iof_readdir_reply);
+	IOF_LOG_DEBUG("More data received %d %p", dir_handle->reply_count,
+		      reply.out->replies.iov_buf);
+
+	if (dir_handle->reply_count != 0) {
+		dir_handle->replies = reply.out->replies.iov_buf;
+		dir_handle->rpc = reply.rpc;
+	} else {
+		crt_req_decref(reply.rpc);
+		dir_handle->replies = NULL;
+		dir_handle->rpc = NULL;
+	}
+
+	return 0;
+}
+
+/* Mark a previously fetched handle complete */
+static void readdir_next_reply_consume(struct dir_handle *dir_handle)
+{
+	if (dir_handle->reply_count == 0 && dir_handle->rpc) {
+		crt_req_decref(dir_handle->rpc);
+		dir_handle->rpc = NULL;
+	}
+}
+
+/* Fetch a pointer to the next reply entry from the target
+ *
+ * Replies are read from the server in batches, configurable on the server side,
+ * the client keeps a array of received but unprocessed replies.  This function
+ * returns a new reply if possible, either from the from the front of the local
+ * array, or if the array is empty by sending a new RPC.
+ *
+ * There is no caching on the server, and when the server responds to a RPC it
+ * can include zero or more replies.
+ */
+static int readdir_next_reply(struct fuse_context *context,
+			      struct dir_handle *dir_handle,
+			      off_t offset,
+			      struct iof_readdir_reply **reply)
+{
+	int rc;
+
+	*reply = NULL;
+
+	/* Check for available data and fetch more if none */
+	if (dir_handle->reply_count == 0) {
+		IOF_LOG_DEBUG("Fetching more data");
+		if (dir_handle->rpc) {
+			crt_req_decref(dir_handle->rpc);
+			dir_handle->rpc = NULL;
+		}
+		rc = readdir_get_data(context, dir_handle, offset);
+		if (rc != 0) {
+			dir_handle->handle_valid = 0;
+			return rc;
+		}
+	}
+
+	if (dir_handle->reply_count == 0) {
+		IOF_LOG_DEBUG("No more replies");
+		if (dir_handle->rpc) {
+			crt_req_decref(dir_handle->rpc);
+			dir_handle->rpc = NULL;
+		}
+		return 0;
+	}
+
+	*reply = dir_handle->replies;
+	dir_handle->replies++;
+	dir_handle->reply_count--;
+
+	return 0;
 }
 
 static int
@@ -330,16 +558,100 @@ iof_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 #endif
 	)
 {
+	struct fuse_context *context;
+	int ret;
+
 	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
 
 	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
 
-	return -EIO;
+	/* If the handle has been reported as invalid in the past then do not
+	 * process any more requests at this stage.
+	 */
+	if (!dir_handle->handle_valid)
+		return -EIO;
+
+	context = fuse_get_context();
+
+	{
+		char *d = ios_gah_to_str(&dir_handle->gah);
+
+		IOF_LOG_INFO("Dah %s", d);
+		free(d);
+	}
+
+	do {
+		struct iof_readdir_reply *dir_reply;
+
+		ret = readdir_next_reply(context, dir_handle, offset,
+					 &dir_reply);
+
+		IOF_LOG_DEBUG("err %d buf %p", ret, dir_reply);
+
+		if (ret != 0)
+			return -ret;
+
+		/* Check for end of directory.  When the end of the directory
+		 * stream is reached on the server then we exit here.
+		 */
+		if (!dir_reply)
+			return 0;
+
+		IOF_LOG_DEBUG("reply last %d rc %d stat_rc %d",
+			      dir_reply->last, dir_reply->read_rc,
+			      dir_reply->stat_rc);
+
+		/* Check for error.  Error on the remote readdir() call exits
+		 * here
+		 */
+		if (dir_reply->read_rc != 0) {
+			ret = dir_reply->read_rc;
+			readdir_next_reply_consume(dir_handle);
+			return -ret;
+		}
+
+		if (dir_reply->last != 0) {
+			readdir_next_reply_consume(dir_handle);
+			IOF_LOG_INFO("Returning no more data");
+			return 0;
+		}
+
+		/* Process any new information received in this RPC.  The
+		 * server will have returned a directory entry name and
+		 * possibly a struct stat.
+		 *
+		 * POSIX: If the directory has been renamed since the opendir()
+		 * call and before the readdir() then the remote stat() may
+		 * have failed so check for that here.
+		 */
+
+		ret = filler(buf, dir_reply->d_name,
+			     dir_reply->stat_rc == 0 ? &dir_reply->stat :  NULL,
+			     0
+#ifdef IOF_USE_FUSE3
+			     , 0
+#endif
+			     );
+
+		IOF_LOG_DEBUG("New file %s %d", dir_reply->d_name, ret);
+
+		/* Check for filler() returning full.  The filler function
+		 * returns -1 once the internal FUSE buffer is full so check
+		 * for that case and exit the loop here.
+		 */
+	} while (ret == 0);
+	readdir_next_reply_consume(dir_handle);
+	IOF_LOG_INFO("Returning zero");
+	return 0;
 }
 
 static int closedir_cb(const struct crt_cb_info *cb_info)
 {
 	struct closedir_cb_r *reply = (struct closedir_cb_r *)cb_info->cci_arg;
+
+	/* There is no error handling needed here, as all client state will be
+	 * destroyed on return anyway.
+	 */
 
 	reply->complete = 1;
 	return 0;
@@ -354,17 +666,30 @@ static int iof_closedir(const char *dir, struct fuse_file_info *fi)
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
+	int rc = 0;
 
 	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
 
 	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
+
+	/* If the GAH has been reported as invalid by the server in the past
+	 * then do not attempt to do anything with it.
+	 *
+	 * However, even if the local handle has been reported invalid then
+	 * still continue to release the GAH on the server side.
+	 */
+	if (!dir_handle->gah_valid) {
+		rc = EIO;
+		goto out;
+	}
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
 	iof_state = fs_handle->iof_state;
 	if (!iof_state) {
 		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
+		rc = EIO;
+		goto out;
 	}
 
 	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
@@ -372,7 +697,8 @@ static int iof_closedir(const char *dir, struct fuse_file_info *fi)
 	if (ret || !rpc) {
 		IOF_LOG_ERROR("Could not create closedir request, ret = %lu",
 			      ret);
-		return -EIO;
+		rc = EIO;
+		goto out;
 	}
 
 	in = crt_req_get(rpc);
@@ -381,7 +707,8 @@ static int iof_closedir(const char *dir, struct fuse_file_info *fi)
 	ret = crt_req_send(rpc, closedir_cb, &reply);
 	if (ret) {
 		IOF_LOG_ERROR("Could not send closedir rpc, ret = %lu", ret);
-		return -EIO;
+		rc = EIO;
+		goto out;
 	}
 
 	{
@@ -396,13 +723,21 @@ static int iof_closedir(const char *dir, struct fuse_file_info *fi)
 		/*TODO: check is PSR is alive before exiting fuse*/
 		IOF_LOG_ERROR("Closedir: exiting fuse loop");
 		fuse_session_exit(fuse_get_session(context->fuse));
-		return -EINTR;
+		rc = EINTR;
+		goto out;
 	}
+
+out:
+	/* If there has been an error on the local handle, or readdir() is not
+	 * exhausted then ensure that all resources are freed correctly
+	 */
+	if (dir_handle->rpc)
+		crt_req_decref(dir_handle->rpc);
 
 	if (dir_handle->name)
 		free(dir_handle->name);
 	free(dir_handle);
-	return 0;
+	return -rc;
 }
 
 static struct fuse_operations ops = {
@@ -549,6 +884,12 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	ret = crt_rpc_register(OPENDIR_OP, &OPENDIR_FMT);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(READDIR_OP, &READDIR_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register readdir RPC, ret = %d", ret);
 		return ret;
 	}
 

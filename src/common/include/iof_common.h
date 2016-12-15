@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #define IOF_NOT_SUPP		7 /*Not supported*/
 #define	IOF_ERR_INTERNAL	8
 #define IOF_ERR_PTHREAD		9
+#define IOF_GAH_INVALID        10
 
 #define IOF_NAME_LEN_MAX 256
 #define IOF_PREFIX_MAX 80
@@ -63,7 +64,8 @@
 #define QUERY_PSR_OP	(0x201)
 #define SHUTDOWN_OP	(0x202)
 #define OPENDIR_OP	(0x203)
-#define CLOSEDIR_OP	(0x204)
+#define READDIR_OP	(0x204)
+#define CLOSEDIR_OP	(0x205)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -92,6 +94,26 @@ struct iof_getattr_out {
 struct iof_opendir_out {
 	crt_iov_t gah;
 	int rc;
+	int err;
+};
+
+struct iof_readdir_in {
+	crt_iov_t gah;
+	uint64_t my_fs_id;
+	int offsef;
+};
+
+/* Each READDIR rpc contains an array of these */
+struct iof_readdir_reply {
+	char d_name[256];
+	struct stat stat;
+	int read_rc;
+	int stat_rc;
+	int last;
+};
+
+struct iof_readdir_out {
+	crt_iov_t replies;
 	int err;
 };
 
@@ -126,6 +148,17 @@ struct crt_msg_field *psr_query_in[] = {
 	&CMF_UINT64
 };
 
+struct crt_msg_field *readdir_in[] = {
+	&CMF_IOVEC,
+	&CMF_UINT64,
+	&CMF_INT
+};
+
+struct crt_msg_field *readdir_out[] = {
+	&CMF_IOVEC,
+	&CMF_INT
+};
+
 struct crt_msg_field *closedir_in[] = {
 	&CMF_IOVEC,
 	&CMF_UINT64
@@ -145,6 +178,10 @@ struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
 struct crt_req_format OPENDIR_FMT = DEFINE_CRT_REQ_FMT("opendir",
 							string_in,
 							iov_pair);
+
+struct crt_req_format READDIR_FMT = DEFINE_CRT_REQ_FMT("readdir",
+						       readdir_in,
+						       readdir_out);
 
 struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
 							closedir_in,

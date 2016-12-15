@@ -55,7 +55,6 @@ import stat
 import shutil
 import tempfile
 import logging
-import unittest
 import iofcommontestsuite
 
 class Testlocal(iofcommontestsuite.CommonTestSuite):
@@ -169,7 +168,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         else:
             self.fail("Not a directory or a link")
 
-    @unittest.skip("Readdir not working yet")
     def test_ionss_self_listdir(self):
         """Perform a simple listdir operation"""
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,14 @@ static struct ios_gah_store *gs;
 static int num_fs;
 static int shutdown;
 
+#define IONSS_READDIR_ENTRIES_PER_RPC (9)
+
+struct ionss_dir_handle {
+	int      fs_id;
+	char	*h_name;
+	DIR	*h_dir;
+};
+
 int shutdown_handler(crt_rpc_t *rpc_req)
 {
 	int		ret;
@@ -65,6 +73,10 @@ int shutdown_handler(crt_rpc_t *rpc_req)
 	return ret;
 }
 
+/*
+ * Assemble local path.  Take the local projection directory and
+ * concatename onto it a remote path.
+ */
 int iof_get_path(int id, const char *old_path, char *new_path)
 {
 	char *mnt;
@@ -80,6 +92,33 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 
 	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s", mnt,
 			old_path);
+	if (ret > IOF_MAX_PATH_LEN)
+		return IOF_ERR_OVERFLOW;
+	IOF_LOG_DEBUG("New Path: %s", new_path);
+
+	return IOF_SUCCESS;
+}
+
+/*
+ * Assemble local path from two parts.  Take the local projection directory and
+ * concatename onto it a remote directory and remote filename.
+ */
+
+int iof_get_path2(int id, const char *old_dir, char *old_file, char *new_path)
+{
+	char *mnt;
+	int ret;
+
+	/*lookup mnt by ID in projection data structure*/
+	if (id >= num_fs) {
+		IOF_LOG_ERROR("Filesystem ID invalid");
+		return IOF_BAD_DATA;
+	}
+
+	mnt = fs_list[id].mnt;
+
+	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s/%s", mnt,
+		       old_dir, old_file);
 	if (ret > IOF_MAX_PATH_LEN)
 		return IOF_ERR_OVERFLOW;
 	IOF_LOG_DEBUG("New Path: %s", new_path);
@@ -169,11 +208,15 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 		dir_h = opendir(new_path);
 		if (dir_h) {
 			char *s;
+			struct ionss_dir_handle *h;
 
-			/*
-			 * TODO, Set the root here.
-			 */
-			ios_gah_allocate(gs, &gah, 0, 0, dir_h);
+			h = malloc(sizeof(struct ionss_dir_handle));
+
+			h->h_dir = dir_h;
+			h->h_name = strdup(in->path);
+			h->fs_id = in->my_fs_id;
+
+			ios_gah_allocate(gs, &gah, 0, 0, h);
 			s = ios_gah_to_str(&gah);
 			IOF_LOG_INFO("Allocated %s", s);
 			IOF_LOG_DEBUG("Dirp is %p", dir_h);
@@ -195,11 +238,114 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	return 0;
 }
 
+/*
+ * Read dirent from a directory and reply to the origin.
+ *
+ * TODO:
+ * Handle offset properly.  Currently offset is passed as part of the RPC
+ * but not dealt with at all.
+ * Use readdir_r().  This code is not thread safe.
+ * Parse GAH better.  If a invalid GAH is passed then it's handled but we
+ * really should pass this back to the client properly so it doesn't retry.
+ *
+ */
+int iof_readdir_handler(crt_rpc_t *rpc)
+{
+	struct iof_readdir_in *in;
+	struct iof_readdir_out *out;
+	struct ionss_dir_handle *handle = NULL;
+	struct dirent *dir_entry;
+	char new_path[IOF_MAX_PATH_LEN];
+	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {};
+	int reply_idx = 0;
+	uint64_t ret;
+
+	char *gah_d;
+	int rc;
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		return 0;
+	}
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		return 0;
+	}
+
+	gah_d = ios_gah_to_str(in->gah.iov_buf);
+	IOF_LOG_INFO("Reading from %s", gah_d);
+	free(gah_d);
+
+	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load handle from gah %p %d",
+			      in->gah.iov_buf, rc);
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Reading %p", handle->h_dir);
+	reply_idx = 0;
+	do {
+		errno = 0;
+		dir_entry = readdir(handle->h_dir);
+
+		if (!dir_entry) {
+			if (errno == 0) {
+				/* End of directory */
+				replies[reply_idx].read_rc = 0;
+				replies[reply_idx].last = 1;
+			} else {
+				/* An error occoured */
+				replies[reply_idx].read_rc = errno;
+			}
+			reply_idx++;
+			goto out;
+		}
+
+		if (strncmp(".", dir_entry->d_name, 2) == 0)
+			continue;
+
+		if (strncmp("..", dir_entry->d_name, 3) == 0)
+			continue;
+
+		/* TODO: Check this */
+		strncpy(replies[reply_idx].d_name, dir_entry->d_name, NAME_MAX);
+
+		iof_get_path2(handle->fs_id, handle->h_name,
+			      replies[reply_idx].d_name, new_path);
+
+		errno = 0;
+		ret = lstat(new_path, &replies[reply_idx].stat);
+		if (ret != 0) {
+			ret = errno;
+			replies[reply_idx].stat_rc = errno;
+		}
+		reply_idx++;
+	} while (reply_idx < (IONSS_READDIR_ENTRIES_PER_RPC));
+
+out:
+
+	IOF_LOG_INFO("Sending %d replies", reply_idx);
+
+	if (reply_idx)
+		crt_iov_set(&out->replies, &replies[0],
+			    sizeof(struct iof_readdir_reply) * reply_idx);
+
+	ret = crt_reply_send(rpc);
+	if (ret)
+		IOF_LOG_ERROR(" response not sent, ret = %lu", ret);
+	return 0;
+}
+
 int iof_closedir_handler(crt_rpc_t *rpc)
 {
 	struct iof_closedir_in *in = NULL;
 	uint64_t ret;
-	DIR *dir_p = NULL;
+	struct ionss_dir_handle *handle = NULL;
 	char *d;
 	int rc;
 
@@ -213,16 +359,19 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 	IOF_LOG_INFO("Deallocating %s", d);
 	free(d);
 
-	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&dir_p);
+	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
 	if (rc != IOS_SUCCESS)
 		IOF_LOG_DEBUG("Failed to load DIR* from gah %p %d",
 			      in->gah.iov_buf, rc);
 
-	if (dir_p) {
-		IOF_LOG_DEBUG("Closing %p", dir_p);
-		rc = closedir(dir_p);
+	if (handle) {
+		IOF_LOG_DEBUG("Closing %p", handle->h_dir);
+		rc = closedir(handle->h_dir);
 		if (rc != 0)
-			IOF_LOG_DEBUG("Failed to close directory %p", dir_p);
+			IOF_LOG_DEBUG("Failed to close directory %p",
+				      handle->h_dir);
+		free(handle->h_name);
+		free(handle);
 	}
 
 	ios_gah_deallocate(gs, in->gah.iov_buf);
@@ -285,6 +434,13 @@ int ionss_register(void)
 				   iof_opendir_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(READDIR_OP, &READDIR_FMT,
+				   iof_readdir_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register readdir RPC, ret = %d", ret);
 		return ret;
 	}
 
