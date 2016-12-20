@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -227,7 +227,8 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 	ent->internal = data;
 
 	gah->fid = ent->fid;
-	gah->revision = ent->revision++;
+	gah->revision = ++ent->revision;
+	gah->reserved = 0;
 	/** setup the gah */
 	gah->version = IOS_GAH_VERSION;
 	gah->root = self_rank;
@@ -242,8 +243,25 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 		struct ios_gah *gah)
 {
-	if (gah == NULL)
+	int ret;
+
+	if (!gah_store)
 		return IOS_ERR_INVALID_PARAM;
+	if (!gah)
+		return IOS_ERR_INVALID_PARAM;
+	ret = ios_gah_check_crc(gah);
+	if (ret != IOS_SUCCESS)
+		return ret;
+	ret = ios_gah_check_version(gah);
+	if (ret != IOS_SUCCESS)
+		return ret;
+	if (gah->fid >= gah_store->capacity || gah->fid < 0)
+		return IOS_ERR_OUT_OF_RANGE;
+	if (!(gah_store->ptr_array[gah->fid]->in_use))
+		return IOS_ERR_EXPIRED;
+	if (gah_store->ptr_array[gah->fid]->revision != gah->revision)
+		return IOS_ERR_EXPIRED;
+
 	gah_store->ptr_array[gah->fid]->in_use = 0;
 
 	/** append the reclaimed entry to the list of availble entires */
@@ -260,12 +278,12 @@ enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
 {
 	enum ios_return ret = IOS_SUCCESS;
 
-	info = NULL;
-	if (gah_store == NULL)
+	if (!info)
 		return IOS_ERR_INVALID_PARAM;
-	if (gah == NULL)
+	*info = NULL;
+	if (!gah_store)
 		return IOS_ERR_INVALID_PARAM;
-	if (info == NULL)
+	if (!gah)
 		return IOS_ERR_INVALID_PARAM;
 	ret = ios_gah_check_crc(gah);
 	if (ret != IOS_SUCCESS)

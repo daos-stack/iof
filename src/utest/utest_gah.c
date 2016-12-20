@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,7 +87,6 @@ static void test_ios_gah_allocate(void)
 	struct ios_gah_store *ios_gah_store;
 	int ii;
 	int num_handles = 1024*20;
-	void *data = NULL;
 
 	CU_ASSERT(sizeof(struct ios_gah)*8 == 128);
 	ios_gah_store = ios_gah_init();
@@ -97,18 +96,26 @@ static void test_ios_gah_allocate(void)
 	CU_ASSERT_FATAL(ios_gah != NULL);
 
 	for (ii = 0; ii < num_handles; ii++) {
-		data = malloc(512);
+		void *data = malloc(512);
+		void *info = NULL;
+
 		CU_ASSERT_FATAL(data != NULL);
 		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &info) == IOS_SUCCESS);
+		CU_ASSERT(info == data);
 	}
 	CU_ASSERT(rc == IOS_SUCCESS);
-	rc = ios_gah_allocate(NULL, ios_gah, 0, 0, data);
+	rc = ios_gah_allocate(NULL, ios_gah, 0, 0, NULL);
 	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
-	rc = ios_gah_allocate(ios_gah_store, NULL, 0, 0, data);
+	rc = ios_gah_allocate(ios_gah_store, NULL, 0, 0, NULL);
 	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
 
 	for (ii = 0; ii < num_handles; ii++) {
-		free(ios_gah_store->ptr_array[(ios_gah + ii)->fid]->internal);
+		void *data = NULL;
+
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data) == IOS_SUCCESS);
+		CU_ASSERT(data != NULL);
+		free(data);
 		CU_ASSERT_FATAL(ios_gah_deallocate(ios_gah_store, ios_gah + ii)
 				== IOS_SUCCESS);
 	}
@@ -126,7 +133,6 @@ static void test_ios_gah_misc(void)
 	struct ios_gah_store *ios_gah_store;
 	int ii;
 	int num_handles = 1024*20;
-	void *data = NULL;
 	void *internal = NULL;
 
 	CU_ASSERT(sizeof(struct ios_gah)*8 == 128);
@@ -137,7 +143,7 @@ static void test_ios_gah_misc(void)
 	CU_ASSERT_FATAL(ios_gah != NULL);
 
 	for (ii = 0; ii < num_handles; ii++) {
-		data = malloc(512);
+		void *data = malloc(512);
 		CU_ASSERT_FATAL(data != NULL);
 		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
 	}
@@ -188,7 +194,11 @@ static void test_ios_gah_misc(void)
 			IOS_SUCCESS);
 
 	for (ii = 0; ii < num_handles; ii++) {
-		free(ios_gah_store->ptr_array[(ios_gah + ii)->fid]->internal);
+		void *data = NULL;
+
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data) == IOS_SUCCESS);
+		CU_ASSERT(data != NULL);
+		free(data);
 		CU_ASSERT_FATAL(ios_gah_deallocate(ios_gah_store, ios_gah + ii)
 				== IOS_SUCCESS);
 	}
