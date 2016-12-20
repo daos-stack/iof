@@ -113,7 +113,8 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 		int rc;
 
 		out->err = 0;
-		rc = stat(new_path, &stbuf);
+		errno = 0;
+		rc = lstat(new_path, &stbuf);
 		if (rc == 0) {
 			out->rc = 0;
 			crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
