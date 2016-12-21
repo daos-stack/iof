@@ -1,4 +1,5 @@
-# Copyright (C) 2016 Intel Corporation
+#!/usr/bin/env python3
+# Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,23 +35,41 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""install test scripts"""
+"""
+iof simple test: Simple test to stat the mount points.
 
-TESTSCRIPTS = ["iof_test_ionss.py", "testiof.py", \
-    "iofcommontestsuite.py", "cleanup_iof.py", \
-    "IofRunner.py", "setup_iof.py", "iof_simple_test.py", "iof_test_local.py"]
+Usage:
 
-def scons():
-    """Run scons"""
+Executes from the install/Linux/TESTING directory.
+The results are placed in the testLogs/testRun_<date-time-stamp>/
+multi_test_nss/iof_simple_test/iof_simple_test_<node> directory.
+"""
 
-    Import('env')
+import os
+import logging
+import unittest
+from stat import S_ISDIR
 
-    for script in TESTSCRIPTS:
-        env.Install("$PREFIX/TESTING/scripts", script)
-    # move the testing config files (.yml) to the TESTING scrpits directory
-    env.Install("$PREFIX/TESTING/scripts", Glob("*.yml"))
-    env.Install("$PREFIX/TESTING", "test_iof_clean.sh")
+class TestIof(unittest.TestCase):
+    """IOF filesystem tests in private access mode"""
 
-if __name__ == 'SCons.Script':
-    scons()
+    startdir = None
+    ctrl_dir = None
+    logger = logging.getLogger("TestRunnerLogger")
 
+    def iof_fs_test(self):
+        """Test private access mount points"""
+        self.logger.info("starting to stat the mountpoints")
+        entry = os.path.join(self.ctrl_dir, "iof", "PA")
+        self.assertTrue(os.path.isdir(entry), \
+            "Mount point %s not found" % entry)
+        for mntfile in os.listdir(entry):
+            myfile = os.path.join(entry, mntfile)
+            fd = open(myfile, "r")
+            mnt_path = fd.readline().strip()
+            self.logger.info("Mount path is %s", mnt_path)
+            stat_obj = os.stat(mnt_path)
+
+            self.logger.info(stat_obj)
+            self.assertTrue(S_ISDIR(stat_obj.st_mode), "File type is \
+                not a directory")

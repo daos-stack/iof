@@ -1,0 +1,39 @@
+description: "multi test module"
+
+module:
+    name: "multi_test_nss"
+    setKeyFromHost: ["IOF_TEST_ION", "IOF_TEST_CN"]
+    setKeyFromInfo:
+        - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
+        - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
+        - [IOF_TEST_BIN, PREFIX, "/bin"]
+    hostConfig:
+        type: buildList
+        numServers: 2
+        numClients: 3
+
+directives:
+    testMode: "unittest"
+    renameTestRun: "no"
+    printTestLogPath: "no"
+    copyHostList: "no"
+    usePython: "python3.4"
+
+use_daemon:
+    name: "IofRunner"
+
+execStrategy:
+    - name: "setup_iof"
+      type: setup
+      nodeType: "IOF_TEST_CN"
+      setConfigKeys:
+        loadFromInfo: 'setKeyForSetup'
+    - name: "iof_simple_test"
+      nodeType: "IOF_TEST_CN"
+      setConfigKeys:
+        loadFromInfo: 'setKeyForSetup'
+    - name: "cleanup_iof"
+      type: cleanup
+      nodeType: "IOF_TEST_CN"
+      setConfigKeys:
+        loadFromInfo: 'setKeyForSetup'

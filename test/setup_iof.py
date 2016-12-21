@@ -1,4 +1,5 @@
-# Copyright (C) 2016 Intel Corporation
+#!/usr/bin/env python3
+# Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,23 +35,49 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""install test scripts"""
+"""
+setup_iof is invoked by the multi instance test runner and runs prior
+to the iof_simple_test.
+The setup_iof waits 10s for the ctrl_fs to start and validates the existence
+of the same.
 
-TESTSCRIPTS = ["iof_test_ionss.py", "testiof.py", \
-    "iofcommontestsuite.py", "cleanup_iof.py", \
-    "IofRunner.py", "setup_iof.py", "iof_simple_test.py", "iof_test_local.py"]
+Usage:
 
-def scons():
-    """Run scons"""
+Executes from the install/Linux/TESTING directory.
+The results are placed in the testLogs/testRun_<date-time-stamp>/
+multi_test_nss/setup_iof/setup_iof_<node> directory.
+"""
 
-    Import('env')
+import unittest
+import os
+import time
+import logging
+from stat import S_ISREG
 
-    for script in TESTSCRIPTS:
-        env.Install("$PREFIX/TESTING/scripts", script)
-    # move the testing config files (.yml) to the TESTING scrpits directory
-    env.Install("$PREFIX/TESTING/scripts", Glob("*.yml"))
-    env.Install("$PREFIX/TESTING", "test_iof_clean.sh")
+class TestSetUpIof(unittest.TestCase):
+    """Set up and start ctrl fs"""
 
-if __name__ == 'SCons.Script':
-    scons()
+    logger = logging.getLogger("TestRunnerLogger")
+    start_dir = None
+    ctrl_dir = None
 
+    def test_iof_started(self):
+        """Wait for ctrl fs to start"""
+        start_dir = os.environ["CNSS_PREFIX"]
+        ctrl_dir = os.path.join(start_dir, ".ctrl")
+        self.assertTrue(os.path.isdir(start_dir), \
+            "prefix is not a directory %s" % start_dir)
+        filename = os.path.join(ctrl_dir, 'shutdown')
+        i = 10
+        while i > 0:
+            i = i - 1
+            time.sleep(1)
+            if os.path.exists(filename) is True:
+                stat_obj = os.stat(filename)
+                self.assertTrue(S_ISREG(stat_obj.st_mode), "File type is \
+                    not a regular file")
+                self.logger.info(stat_obj)
+
+        # Log the error message. Fail the test with the same error message
+        self.logger.info("Unable to detect file: %s", filename)
+        self.fail("Unable to detect file: %s" % filename)
