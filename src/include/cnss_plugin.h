@@ -133,8 +133,11 @@ struct cnss_plugin {
 			      */
 	char *name;    /** Short string used to prefix log information */
 	void *handle;  /** Handle passed back to all callback functions */
-	int (*start)(void *, char *dest_name, struct cnss_plugin_cb *,
-		     size_t); /* Called once at startup, should return 0 */
+	int (*start)(void *, struct cnss_plugin_cb *,
+		     size_t); /* Called once at startup, should return 0.
+			       * If a non-zero code is returned then the plugin
+			       * is disabled and no more callbacks are made.
+			       */
 	int (*post_start)(void *);
 	void (*client_attached)(void *, int); /* Notify plugin of a new
 					       * local process
@@ -167,7 +170,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f001
+#define CNSS_PLUGIN_VERSION 0x10f002
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

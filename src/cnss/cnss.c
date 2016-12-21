@@ -135,6 +135,28 @@ struct fs_info {
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
 
+/*
+ * Call a function in each registered and active plugin, providing additional
+ * parameters.  If the function returns non-zero then disable the plugin
+ */
+#define CALL_PLUGIN_FN_START(LIST, FN, ...)				\
+	do {								\
+		struct plugin_entry *_li;				\
+		int _rc;						\
+		IOF_LOG_INFO("Calling plugin %s", #FN);			\
+		LIST_FOREACH(_li, LIST, list) {				\
+			CHECK_PLUGIN_FUNCTION(_li, FN);			\
+			_rc = _li->plugin->FN(_li->plugin->handle,	\
+					      __VA_ARGS__);		\
+			if (_rc != 0) {					\
+				IOF_LOG_INFO("Disabling plugin %s %d",	\
+					     _li->plugin->name, _rc);	\
+				_li->active = 0;			\
+			}						\
+		}							\
+		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
+	} while (0)
+
 /* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
 static int add_plugin(struct cnss_plugin_list *plugin_list,
 		      cnss_plugin_init_t fn, void *dl_handle)
@@ -378,7 +400,6 @@ int cnss_client_detach(int client_id, void *arg)
 int main(void)
 {
 	char *cnss = "CNSS";
-	char *ionss = "IONSS";
 	char *plugin_file = NULL;
 	const char *prefix;
 	char *version = iof_get_version();
@@ -468,16 +489,20 @@ int main(void)
 	LIST_INIT(&cnss_info->fs_head);
 	cnss_plugin_cb.handle = cnss_info;
 	/*initialize CaRT*/
-	ret = crt_init(cnss, ionss, 0);
+	ret = crt_init(cnss, 0);
 	if (ret) {
 		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
 		return CNSS_ERR_CART;
 	}
 
-
-	CALL_PLUGIN_FN_PARAM(&plugin_list, start, ionss, &cnss_plugin_cb,
+	CALL_PLUGIN_FN_START(&plugin_list, start, &cnss_plugin_cb,
 			     sizeof(cnss_plugin_cb));
 
+	/* TODO:
+	 *
+	 * Check that there is actually one or more plugins active, or there i
+	 * nothing for the CNSS to do so it could shut down.
+	 */
 
 	CALL_PLUGIN_FN(&plugin_list, post_start);
 

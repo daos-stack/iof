@@ -288,25 +288,35 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 }
 
 
-int iof_reg(void *foo, char *dest_name, struct cnss_plugin_cb *cb,
-		size_t cb_size)
+int iof_reg(void *foo, struct cnss_plugin_cb *cb,
+	    size_t cb_size)
 {
 	struct iof_handle *handle = (struct iof_handle *)foo;
 	struct iof_state *iof_state;
+	crt_group_t *ionss_group;
 	char *prefix;
 	int ret;
 	DIR *prefix_dir;
+
+	/* First check for the IONSS process set, and if it does not exist then
+	 * return cleanly to allow the rest of the CNSS code to run
+	 */
+	ret = crt_group_attach("IONSS", &ionss_group);
+	if (ret) {
+		IOF_LOG_INFO("crt_group_attach failed with ret = %d", ret);
+		return ret;
+	}
 
 	if (!handle->state) {
 		handle->state = calloc(1, sizeof(struct iof_state));
 		if (!handle->state)
 			return IOF_ERR_NOMEM;
 	}
-	IOF_LOG_DEBUG("Plugin start invoked");
+
 	/*initialize iof state*/
 	iof_state = handle->state;
 	/*do a group lookup*/
-	iof_state->dest_group = crt_group_lookup(dest_name);
+	iof_state->dest_group = ionss_group;
 
 	/*initialize destination endpoint*/
 	iof_state->dest_ep.ep_grp = 0; /*primary group*/
@@ -476,6 +486,11 @@ void iof_finish(void *handle)
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
 	IOF_LOG_INFO("Called iof_finish with %p", handle);
+
+	ret = crt_group_detach(iof_state->dest_group);
+	if (ret)
+		IOF_LOG_ERROR("crt_group_detach failed with ret = %d", ret);
+
 	free(iof_state->cnss_prefix);
 	free(iof_state);
 	free(iof_handle);

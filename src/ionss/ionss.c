@@ -242,7 +242,7 @@ int main(int argc, char **argv)
 
 
 	/*initialize CaRT*/
-	ret = crt_init(NULL, ionss_grp, CRT_FLAG_BIT_SERVER);
+	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);
 	if (ret) {
 		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
 		return ret;
