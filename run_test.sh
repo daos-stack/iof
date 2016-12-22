@@ -51,6 +51,7 @@ if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
   cd ${TESTDIR}
   python3.4 test_runner scripts/iof_test_ionss.yml
+  python3.4 test_runner scripts/iof_test_local.yml
   cd -
 fi
 
@@ -65,4 +66,12 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   RESULTS="valgrind_results"
   if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
   cp -R ${TESTDIR}${TESTLOGS}*/${TESTECHODIR}/*/valgrind*.xml ${RESULTS}/.
+
+  cd ${TESTDIR}
+  python3.4 test_runner scripts/iof_test_local.yml
+  TESTECHODIR="iof_test_local_loop0/iof_test_local_1"
+  cd -
+  if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
+  cp -R ${TESTDIR}${TESTLOGS}*/${TESTECHODIR}/*/valgrind*.xml ${RESULTS}/.
+
 fi

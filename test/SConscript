@@ -36,7 +36,7 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """install test scripts"""
 
-TESTSCRIPTS = ["iof_test_ionss.py", "testiof.py", \
+TESTSCRIPTS = ["iof_test_ionss.py", "testiof.py", "iof_test_local.py", \
     "iofcommontestsuite.py", "signal_shutdown.sh"]
 
 def scons():

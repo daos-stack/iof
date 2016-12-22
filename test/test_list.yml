@@ -3,3 +3,4 @@
 
 test_list:
   - "scripts/iof_test_ionss.yml"
+  - "scripts/iof_test_local.yml"

@@ -87,6 +87,26 @@ def commonSetUpModule():
     cts.common_manage_ionss_dir()
     print("Testnss: module setup end\n\n")
 
+def valgrind_suffix():
+    """Return the commands required to launch valgrind"""
+    use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
+    log_path = os.path.join(os.getenv("IOF_TESTLOG", "nss"), 'valgrind')
+    os.makedirs(log_path, exist_ok=True)
+    if use_valgrind == 'memcheck':
+        suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
+                                    "etc", "memcheck-cart.supp")
+        return ['valgrind', '--xml=yes',
+                '--xml-file=%s' %
+                os.path.join(log_path, 'valgrind.%q{PMIX_ID}.xml'),
+                '--leak-check=yes', '--gen-suppressions=all',
+                '--suppressions=%s' % suppressfile,
+                '--show-reachable=yes']
+    elif use_valgrind == "callgrind":
+        return ['valgrind', '--tool=callgrind',
+                '-callgrind-out-file=%s' %
+                os.path.join(log_path, '/callgrind.%q{PMIX_ID}.out')]
+    return []
+
 class CommonTestSuite(unittest.TestCase):
     """Attributes common to the IOF tests"""
     fs_list = []
@@ -196,22 +216,10 @@ class CommonTestSuite(unittest.TestCase):
 
     def common_add_prefix_logdir(self, testcase_name):
         """add the log directory to the prefix"""
-        prefix = ""
         ompi_bin = os.getenv('IOF_OMPI_BIN', "")
         log_path = os.getenv("IOF_TESTLOG", "nss") + \
           self.common_logdir_name(testcase_name)
         os.makedirs(log_path, exist_ok=True)
-        use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
-        if use_valgrind == 'memcheck':
-            suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."), \
-                           "etc", "memcheck-cart.supp")
-            prefix = "valgrind --xml=yes" + \
-                " --xml-file=" + log_path + "/valgrind.%q{PMIX_ID}.xml" + \
-                " --leak-check=yes --gen-suppressions=all" + \
-                " --suppressions=" + suppressfile + " --show-reachable=yes"
-        elif use_valgrind == "callgrind":
-            prefix = "valgrind --tool=callgrind --callgrind-out-file=" + \
-                     log_path + "/callgrind.%q{PMIX_ID}.out"
 
         if os.getenv('TR_USE_URI', ""):
             dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URI')
@@ -224,6 +232,7 @@ class CommonTestSuite(unittest.TestCase):
         cmdstr = "%sorterun%s--output-filename %s%s" % \
                  (ompi_bin, dvmfile, log_path, allow_root)
 
+        prefix = ' '.join(valgrind_suffix())
         return (cmdstr, prefix)
 
     @staticmethod
