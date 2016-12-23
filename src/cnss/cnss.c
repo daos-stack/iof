@@ -77,7 +77,9 @@ struct cnss_info {
 struct fs_info {
 	char *mnt;
 	struct fuse *fuse;
+#if !IOF_USE_FUSE3
 	struct fuse_chan *ch;
+#endif
 	pthread_t thread;
 	struct fs_handle *fs_handle;
 
@@ -208,6 +210,15 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 	return CNSS_SUCCESS;
 }
 
+static void iof_fuse_umount(struct fs_info *info)
+{
+#if IOF_USE_FUSE3
+	fuse_unmount(info->fuse);
+#else
+	fuse_unmount(info->mnt, info->ch);
+#endif
+}
+
 /*Creates a fuse filesystem for any plugin that needs one*/
 static void *register_fuse(void *handle, struct fuse_operations *ops,
 			const char *mnt, void *private_data)
@@ -243,20 +254,42 @@ static void *register_fuse(void *handle, struct fuse_operations *ops,
 		goto cleanup;
 	}
 
+#if !IOF_USE_FUSE3
 	info->ch = fuse_mount(info->mnt, &args);
 	if (!info->ch) {
 		IOF_LOG_ERROR("Could not successfully mount %s", info->mnt);
 		goto cleanup;
 	}
+#endif
+
 	info->fs_handle = private_data;
+#if IOF_USE_FUSE3
+	info->fuse = fuse_new(&args, ops,
+			sizeof(struct fuse_operations), private_data);
+#else
 	info->fuse = fuse_new(info->ch, &args, ops,
 			sizeof(struct fuse_operations), private_data);
+#endif
+
 	if (!info->fuse) {
 		IOF_LOG_ERROR("Could not initialize fuse");
 		fuse_opt_free_args(&args);
-		fuse_unmount(info->mnt, info->ch);
+		iof_fuse_umount(info);
 		goto cleanup;
 	}
+
+#if IOF_USE_FUSE3
+	{
+		int rc;
+
+		rc = fuse_mount(info->fuse, info->mnt);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not successfully mount %s",
+				      info->mnt);
+			goto cleanup;
+		}
+	}
+#endif
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
 
@@ -304,7 +337,7 @@ static void *loop_fn(void *args)
 	if (ret != 0)
 		IOF_LOG_DEBUG("Fuse loop exited with return code: %d", ret);
 
-	fuse_unmount(info->mnt, info->ch);
+	iof_fuse_umount(info);
 	fuse_destroy(info->fuse);
 	return NULL;
 }
@@ -321,7 +354,7 @@ int launch_fs(struct cnss_info *cnss_info)
 		if (ret) {
 			IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
 					info->mnt);
-			fuse_unmount(info->mnt, info->ch);
+			iof_fuse_umount(info);
 			fuse_destroy(info->fuse);
 			return CNSS_ERR_PTHREAD;
 		}

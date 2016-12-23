@@ -231,6 +231,19 @@ static int ioc_getattr(const char *path, struct stat *stbuf)
 	return reply.err == 0 ? -reply.rc : -EIO;
 }
 
+#if IOF_USE_FUSE3
+static int ioc_getattr3(const char *path, struct stat *stbuf,
+			struct fuse_file_info *fi)
+{
+	if (fi)
+		return -EIO;
+
+	if (!path)
+		return -EIO;
+	return ioc_getattr(path, stbuf);
+}
+#endif
+
 /*
  * Temporary way of shutting down. This fuse callback is currently not going to
  * IONSS
@@ -746,14 +759,19 @@ out:
 }
 
 static struct fuse_operations ops = {
+#if IOF_USE_FUSE3
+	.getattr = ioc_getattr3,
+#else
 	.flag_nopath = 1,
 	.getattr = ioc_getattr,
+#endif
 	.opendir = ioc_opendir,
 	.readdir = ioc_readdir,
 	.releasedir = ioc_closedir,
 	.setxattr = ioc_setxattr,
 	.open = ioc_open,
 	.release = iof_release,
+
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)

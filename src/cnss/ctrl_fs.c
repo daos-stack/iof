@@ -852,6 +852,14 @@ static int ctrl_getattr(const char *fname, struct stat *stat)
 	return 0;
 }
 
+#ifdef IOF_USE_FUSE3
+static int ctrl_getattr3(const char *fname, struct stat *stat,
+			 struct fuse_file_info *fi)
+{
+	return ctrl_getattr(fname, stat);
+}
+#endif
+
 static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 {
 	struct ctrl_node *node;
@@ -928,6 +936,14 @@ static int ctrl_truncate(const char *fname, off_t size)
 
 	return 0;
 }
+
+#if IOF_USE_FUSE3
+static int ctrl_truncate3(const char *fname, off_t size,
+			  struct fuse_file_info *fi)
+{
+	return ctrl_truncate(fname, size);
+}
+#endif
 
 static int ctrl_read(const char *fname,
 		     char *buf,
@@ -1132,16 +1148,30 @@ static int ctrl_utimens(const char *fname, const struct timespec tv[2])
 	return 0;
 }
 
+#if IOF_USE_FUSE3
+static int ctrl_utimens3(const char *fname, const struct timespec tv[2],
+			 struct fuse_file_info *fi)
+{
+	return ctrl_utimens(fname, tv);
+}
+#endif
+
 static struct fuse_operations fuse_ops = {
+#if IOF_USE_FUSE3
+	.getattr = ctrl_getattr3,
+	.truncate = ctrl_truncate3,
+	.utimens = ctrl_utimens3,
+#else
 	.getattr = ctrl_getattr,
+	.truncate = ctrl_truncate,
+	.utimens = ctrl_utimens,
+#endif
 	.open = ctrl_open,
 	.read = ctrl_read,
-	.truncate = ctrl_truncate,
 	.write = ctrl_write,
 	.release = ctrl_release,
 	.mknod = ctrl_mknod,
 	.readdir = ctrl_readdir,
-	.utimens = ctrl_utimens,
 };
 
 
