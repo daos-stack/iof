@@ -87,4 +87,6 @@ int ioc_release(const char *, struct fuse_file_info *);
 
 int ioc_create(const char *, mode_t, struct fuse_file_info *);
 
+int ioc_getattr(const char *path, struct stat *stbuf);
+
 #endif

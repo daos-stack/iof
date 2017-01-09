@@ -51,18 +51,9 @@
 #endif
 
 #include "iof_common.h"
-#include "cnss_plugin.h"
 #include "iof.h"
 #include "log.h"
-#include "ctrl_fs.h"
 #include "ios_gah.h"
-
-struct getattr_cb_r {
-	int complete;
-	int err;
-	int rc;
-	struct stat *stat;
-};
 
 /* Data which is stored against an open directory handle */
 struct dir_handle {
@@ -155,80 +146,6 @@ int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
 		return EINTR;
 	}
 	return 0;
-}
-
-static int getattr_cb(const struct crt_cb_info *cb_info)
-{
-	struct getattr_cb_r *reply = NULL;
-	crt_rpc_t *getattr_rpc;
-	struct iof_getattr_out *out = NULL;
-
-	getattr_rpc = cb_info->cci_rpc;
-	reply = (struct getattr_cb_r *) cb_info->cci_arg;
-
-	out = crt_reply_get(getattr_rpc);
-	if (out == NULL) {
-		IOF_LOG_ERROR("Could not get getattr output");
-		reply->complete = 1;
-		return IOF_ERR_CART;
-	}
-	if (out->err == 0 && out->rc == 0)
-		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
-	reply->err = out->err;
-	reply->rc = out->rc;
-	reply->complete = 1;
-	return IOF_SUCCESS;
-}
-
-static int ioc_getattr(const char *path, struct stat *stbuf)
-{
-	struct fuse_context *context;
-	uint64_t ret;
-	struct iof_string_in *in = NULL;
-	struct getattr_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
-	crt_rpc_t *getattr_rpc = NULL;
-	int rc;
-
-	/*retrieve handle*/
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (iof_state == NULL) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
-	IOF_LOG_DEBUG("Path: %s", path);
-
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, GETATTR_OP,
-			&getattr_rpc);
-	if (ret || getattr_rpc == NULL) {
-		IOF_LOG_ERROR("Could not create getattr request, ret = %lu",
-				ret);
-		return -EIO;
-	}
-
-	in = crt_req_get(getattr_rpc);
-	in->path = (crt_string_t) path;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
-
-	reply.complete = 0;
-	reply.stat = stbuf;
-
-	ret = crt_req_send(getattr_rpc, getattr_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send getattr rpc, ret = %lu", ret);
-		return -EIO;
-	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
-	if (rc)
-		return -rc;
-
-	IOF_LOG_DEBUG("path %s rc %d",
-		      path, reply.err == 0 ? -reply.rc : -EIO);
-
-	return reply.err == 0 ? -reply.rc : -EIO;
 }
 
 #if IOF_USE_FUSE3
