@@ -116,9 +116,9 @@ static int string_to_bool(const char *str, int *value)
 	return 0;
 }
 
-/*on-demand progress*/
+/* on-demand progress */
 static int iof_progress(crt_context_t crt_ctx, int num_retries,
-		unsigned int wait_len_ms, int *complete_flag)
+			unsigned int wait_len_ms, int *complete_flag)
 {
 	int		retry;
 	int		rc;
@@ -134,6 +134,27 @@ static int iof_progress(crt_context_t crt_ctx, int num_retries,
 		sched_yield();
 	}
 	return -ETIMEDOUT;
+}
+
+/* Progress, from within FUSE callbacks during normal I/O
+ *
+ * This will use a default set of values to iof_progress, and do the correct
+ * thing on timeout, potentially shutting dowth the filesystem if there is
+ * a problem.
+ */
+int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
+		    int *complete_flag)
+{
+	int rc;
+
+	rc = iof_progress(crt_ctx, 50, 6000, complete_flag);
+	if (rc) {
+		/*TODO: check is PSR is alive before exiting fuse*/
+		IOF_LOG_ERROR("exiting fuse loop");
+		fuse_session_exit(fuse_get_session(context->fuse));
+		return EINTR;
+	}
+	return 0;
 }
 
 static int getattr_cb(const struct crt_cb_info *cb_info)
@@ -159,7 +180,7 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 	return IOF_SUCCESS;
 }
 
-static int iof_getattr(const char *path, struct stat *stbuf)
+static int ioc_getattr(const char *path, struct stat *stbuf)
 {
 	struct fuse_context *context;
 	uint64_t ret;
@@ -168,6 +189,7 @@ static int iof_getattr(const char *path, struct stat *stbuf)
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *getattr_rpc = NULL;
+	int rc;
 
 	/*retrieve handle*/
 	context = fuse_get_context();
@@ -199,13 +221,9 @@ static int iof_getattr(const char *path, struct stat *stbuf)
 		IOF_LOG_ERROR("Could not send getattr rpc, ret = %lu", ret);
 		return -EIO;
 	}
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
-	if (ret) {
-		/*TODO: check is PSR is alive before exiting fuse*/
-		IOF_LOG_ERROR("Getattr: exiting fuse loop");
-		fuse_session_exit(fuse_get_session(context->fuse));
-		return -EINTR;
-	}
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc)
+		return -rc;
 
 	IOF_LOG_DEBUG("path %s rc %d",
 		      path, reply.err == 0 ? -reply.rc : -EIO);
@@ -219,10 +237,10 @@ static int iof_getattr(const char *path, struct stat *stbuf)
  */
 #ifdef __APPLE__
 
-static int iof_setxattr(const char *path,  const char *name, const char *value,
+static int ioc_setxattr(const char *path,  const char *name, const char *value,
 			size_t size, int options, uint32_t position)
 #else
-static int iof_setxattr(const char *path, const char *name, const char *value,
+static int ioc_setxattr(const char *path, const char *name, const char *value,
 			size_t size, int flags)
 #endif
 {
@@ -288,7 +306,7 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 	return 0;
 }
 
-static int iof_opendir(const char *dir, struct fuse_file_info *fi)
+static int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct dir_handle *dir_handle;
@@ -298,6 +316,7 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
+	int rc;
 
 	dir_handle = calloc(1, sizeof(struct dir_handle));
 	if (!dir_handle)
@@ -307,7 +326,6 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 		free(dir_handle);
 		return -EIO;
 	}
-
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
@@ -345,14 +363,12 @@ static int iof_opendir(const char *dir, struct fuse_file_info *fi)
 		free(dir_handle);
 		return -EIO;
 	}
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
-	if (ret) {
-		/*TODO: check is PSR is alive before exiting fuse*/
-		IOF_LOG_ERROR("Opendir: exiting fuse loop");
-		fuse_session_exit(fuse_get_session(context->fuse));
+
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc) {
 		free(dir_handle->name);
 		free(dir_handle);
-		return -EINTR;
+		return -rc;
 	}
 
 	if (reply.err == 0 && reply.rc == 0) {
@@ -430,6 +446,7 @@ static int readdir_get_data(struct fuse_context *context,
 	crt_rpc_t *rpc = NULL;
 
 	int ret;
+	int rc;
 
 	if (!iof_state) {
 		IOF_LOG_ERROR("Could not retrieve iof state");
@@ -455,14 +472,9 @@ static int readdir_get_data(struct fuse_context *context,
 		return EIO;
 	}
 
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000,
-			   &reply.complete);
-	if (ret) {
-		/*TODO: check is PSR is alive before exiting fuse*/
-		IOF_LOG_ERROR("Readedir: exiting fuse loop");
-		fuse_session_exit(fuse_get_session(context->fuse));
-		return EINTR;
-	}
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc)
+		return rc;
 
 	if (reply.err != 0)
 		return reply.err;
@@ -551,7 +563,7 @@ static int readdir_next_reply(struct fuse_context *context,
 }
 
 static int
-iof_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
+ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	    off_t offset, struct fuse_file_info *fi
 #ifdef IOF_USE_FUSE3
 	    , enum fuse_readdir_flags flags
@@ -657,7 +669,7 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 	return 0;
 }
 
-static int iof_closedir(const char *dir, struct fuse_file_info *fi)
+static int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	uint64_t ret;
@@ -718,14 +730,7 @@ static int iof_closedir(const char *dir, struct fuse_file_info *fi)
 		free(d);
 	}
 
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
-	if (ret) {
-		/*TODO: check is PSR is alive before exiting fuse*/
-		IOF_LOG_ERROR("Closedir: exiting fuse loop");
-		fuse_session_exit(fuse_get_session(context->fuse));
-		rc = EINTR;
-		goto out;
-	}
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 
 out:
 	/* If there has been an error on the local handle, or readdir() is not
@@ -742,11 +747,12 @@ out:
 
 static struct fuse_operations ops = {
 	.flag_nopath = 1,
-	.getattr = iof_getattr,
-	.opendir = iof_opendir,
-	.readdir = iof_readdir,
-	.releasedir = iof_closedir,
-	.setxattr = iof_setxattr,
+	.getattr = ioc_getattr,
+	.opendir = ioc_opendir,
+	.readdir = ioc_readdir,
+	.releasedir = ioc_closedir,
+	.setxattr = ioc_setxattr,
+	.open = ioc_open,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)
@@ -896,6 +902,12 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	ret = crt_rpc_register(CLOSEDIR_OP, &CLOSEDIR_FMT);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register closedir RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(OPEN_OP, &OPEN_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register open RPC, ret = %d", ret);
 		return ret;
 	}
 

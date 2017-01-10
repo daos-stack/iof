@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +35,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef __IOF_GAH_H__
+#define __IOF_GAH_H__
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -194,3 +197,5 @@ enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank);
  *					handle.
  */
 char *ios_gah_to_str(struct ios_gah *gah);
+
+#endif

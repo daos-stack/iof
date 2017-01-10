@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016 Intel Corporation
+# Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,7 @@ import stat
 import shutil
 import tempfile
 import logging
+import unittest
 import iofcommontestsuite
 
 class Testlocal(iofcommontestsuite.CommonTestSuite):
@@ -178,3 +179,57 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         self.logger.info(dirs)
 
         os.rmdir(os.path.join(self.export_dir, 'test_dir'))
+
+    @unittest.skip("Test not complete")
+    def test_file_open(self):
+        """Open a file for reading
+
+        This is supposed to fail, as the file doesn't exist.
+        """
+
+        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        fd = open(filename, 'r')
+        fd.close()
+
+    @unittest.skip("Feature not working yet")
+    def test_file_open_write(self):
+        """Create a new file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+
+    def test_file_open_existing(self):
+        """Open a existing file for reading"""
+
+        tfile = os.path.join(self.export_dir, 'a_file')
+
+        fd = open(tfile, 'w')
+        fd.write("Hello")
+        fd.close()
+
+        filename = os.path.join(self.import_dir, 'exp', 'a_file')
+
+        fd = open(filename, 'r')
+        fd.close()
+
+    @unittest.skip("Feature not working yet")
+    def test_file_read(self):
+        """Read file a file"""
+
+        tfile = os.path.join(self.export_dir, 'a_file')
+
+        fd = open(tfile, 'w')
+        fd.write("Hello")
+        fd.close()
+
+        filename = os.path.join(self.import_dir, 'exp', 'a_file')
+
+        fd = open(filename, 'r')
+        data = fd.read()
+        fd.close()
+
+        if data != 'Hello':
+            self.fail('File contents wrong %s %s' % ('Hello', data))

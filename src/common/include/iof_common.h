@@ -66,6 +66,7 @@
 #define OPENDIR_OP	(0x203)
 #define READDIR_OP	(0x204)
 #define CLOSEDIR_OP	(0x205)
+#define OPEN_OP		(0x206)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -117,6 +118,12 @@ struct iof_readdir_out {
 	int err;
 };
 
+struct iof_open_out {
+	crt_iov_t gah;
+	int rc;
+	int err;
+};
+
 struct iof_closedir_in {
 	crt_iov_t gah;
 	uint64_t my_fs_id;
@@ -126,65 +133,16 @@ struct psr_in {
 	char *str;
 };
 
-/*input/output format for RPC's*/
+extern struct crt_req_format READDIR_FMT;
 
-struct crt_msg_field *string_in[] = {
-	&CMF_STRING,
-	&CMF_UINT64
-};
+extern struct crt_req_format QUERY_RPC_FMT;
 
-/* A Generic RPC type which contains a iovec and two status fields */
-struct crt_msg_field *iov_pair[] = {
-	&CMF_IOVEC,
-	&CMF_INT,
-	&CMF_INT
-};
+extern struct crt_req_format GETATTR_FMT;
 
-struct crt_msg_field *psr_query[] = {
-	&CMF_IOVEC
-};
+extern struct crt_req_format OPENDIR_FMT;
 
-struct crt_msg_field *psr_query_in[] = {
-	&CMF_UINT64
-};
+extern struct crt_req_format CLOSEDIR_FMT;
 
-struct crt_msg_field *readdir_in[] = {
-	&CMF_IOVEC,
-	&CMF_UINT64,
-	&CMF_INT
-};
-
-struct crt_msg_field *readdir_out[] = {
-	&CMF_IOVEC,
-	&CMF_INT
-};
-
-struct crt_msg_field *closedir_in[] = {
-	&CMF_IOVEC,
-	&CMF_UINT64
-};
-
-/*query RPC format*/
-struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
-							psr_query_in,
-							psr_query);
-
-/*getattr*/
-
-struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
-							string_in,
-							iov_pair);
-
-struct crt_req_format OPENDIR_FMT = DEFINE_CRT_REQ_FMT("opendir",
-							string_in,
-							iov_pair);
-
-struct crt_req_format READDIR_FMT = DEFINE_CRT_REQ_FMT("readdir",
-						       readdir_in,
-						       readdir_out);
-
-struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
-							closedir_in,
-							NULL);
+extern struct crt_req_format OPEN_FMT;
 
 #endif

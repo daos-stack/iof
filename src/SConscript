@@ -1,4 +1,4 @@
-# Copyright (C) 2016 Intel Corporation
+# Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,8 +38,9 @@
 import os
 
 HEADERS = ['cnss_plugin.h']
-COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c']
+COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_rpc.c']
 CNSS_SRC = ['cnss.c', 'iof_main.c', 'ctrl_common.c', 'ctrl_fs.c']
+RPC_SRC = ['open']
 
 def scons():
     """Scons function"""
@@ -67,6 +68,7 @@ def scons():
     # Set the define in SConscript so that it's in place for the prereqs.require
     # check which will verify fuse3/fuse.h can be loaded.
     cenv.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+    cenv.Append(CPPPATH=['cnss'])
 
     if env.get('PLATFORM') != 'darwin':
         cenv.Append(LIBS='dl')
@@ -84,6 +86,8 @@ def scons():
     cnss_obj = []
     for src in CNSS_SRC:
         cnss_obj += cenv.Object(os.path.join('cnss', src))
+    for src in RPC_SRC:
+        cnss_obj += cenv.Object(os.path.join('cnss', 'iof', 'iof_%s.c' % src))
     progs = cenv.Program('cnss/cnss', common + cnss_obj)
 
     # Build the IONSS application
@@ -91,7 +95,6 @@ def scons():
     progs += ienv.Program(['ionss/ionss.c', common])
 
     Default(progs)
-
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 

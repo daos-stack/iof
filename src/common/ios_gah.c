@@ -337,9 +337,9 @@ char *ios_gah_to_str(struct ios_gah *gah)
 	buf = (char *) malloc(1024);
 	if (buf == NULL)
 		return NULL;
-	snprintf(buf, 1024, "revision: %" PRIu64 "\n" "root: %" PRIu8 "\n"
-		      "base: %" PRIu8 "\n" "version: %" PRIu8 "\n"
-		      "fd: %" PRIu32 "\n" "crc: %" PRIu8 "\n" "CRC match? %s\n",
+	snprintf(buf, 1024, "revision: %" PRIu64 " root: %" PRIu8
+		      " base: %" PRIu8 " version: %" PRIu8
+		      " fd: %" PRIu32 " crc: %" PRIu8 " CRC %s",
 		      (uint64_t) gah->revision, gah->root, gah->base,
 		      gah->version, gah->fid, gah->crc,
 		      ios_gah_check_crc(gah) ?  "mismatch" : "match");
