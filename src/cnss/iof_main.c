@@ -753,6 +753,7 @@ static struct fuse_operations ops = {
 	.releasedir = ioc_closedir,
 	.setxattr = ioc_setxattr,
 	.open = ioc_open,
+	.release = iof_release,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)
@@ -908,6 +909,12 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	ret = crt_rpc_register(OPEN_OP, &OPEN_FMT);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register open RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(CLOSE_OP, &CLOSE_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
 		return ret;
 	}
 

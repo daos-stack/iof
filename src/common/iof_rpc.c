@@ -99,3 +99,7 @@ struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
 struct crt_req_format OPEN_FMT = DEFINE_CRT_REQ_FMT("open",
 						string_in,
 						iov_pair);
+
+struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
+						closedir_in,
+						NULL);

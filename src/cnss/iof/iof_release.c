@@ -35,52 +35,99 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef __IOF_H__
-#define __IOF_H__
 
-#include "cnss_plugin.h"
+#ifdef IOF_USE_FUSE3
+#include <fuse3/fuse.h>
+#include <fuse3/fuse_lowlevel.h>
+#else
+#include <fuse/fuse.h>
+#include <fuse/fuse_lowlevel.h>
+#endif
+
+#include "iof_common.h"
+#include "iof.h"
+#include "log.h"
 #include "ios_gah.h"
 
-int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
-
-/*For IOF Plugin*/
-struct iof_state {
-	/*destination group*/
-	crt_group_t *dest_group;
-	/*destination endpoint*/
-	crt_endpoint_t dest_ep;
-	/*cart context*/
-	crt_context_t crt_ctx;
-	/*iof progress thread tid*/
-	pthread_t tid;
-	/*CNSS Prefix*/
-	char *cnss_prefix;
-
+struct release_cb_r {
+	int complete;
+	int err;
 };
 
-/*handle passed to all CNSS callbacks*/
-struct iof_handle {
-	struct iof_state *state;
-	struct cnss_plugin_cb *cb;
-};
+static int release_cb(const struct crt_cb_info *cb_info)
+{
+	struct release_cb_r *reply = (struct release_cb_r *)cb_info->cci_arg;
 
-/*for each projection*/
-struct fs_handle {
-	struct iof_state *iof_state;
-	int my_fs_id;
-};
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  Return EIO on any error
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
 
-struct iof_file_handle {
-	char *name;
-	struct ios_gah gah;
-	int handle_valid;
-	int gah_valid;
-};
+	reply->complete = 1;
+	return 0;
+}
 
-int ioc_cb_progress(crt_context_t, struct fuse_context *, int *);
+int iof_release(const char *file, struct fuse_file_info *fi)
+{
+	struct fuse_context *context;
+	struct iof_closedir_in *in = NULL;
+	struct release_cb_r reply = {0};
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state = NULL;
+	crt_rpc_t *rpc = NULL;
+	int rc;
 
-int ioc_open(const char *, struct fuse_file_info *);
+	struct iof_file_handle *fh = (struct iof_file_handle *)fi->fh;
 
-int iof_release(const char *, struct fuse_file_info *);
+	IOF_LOG_INFO("path %s %s handle %p", file, fh->name, fh);
 
-#endif
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
+
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    CLOSE_OP, &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
+	}
+
+	in = crt_req_get(rpc);
+	crt_iov_set(&in->gah, &fh->gah, sizeof(struct ios_gah));
+
+	rc = crt_req_send(rpc, release_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		return -EIO;
+	}
+
+	{
+		char *d = ios_gah_to_str(&fh->gah);
+
+		IOF_LOG_INFO("Dah %s", d);
+		free(d);
+	}
+
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc) {
+		if (fh->name)
+			free(fh->name);
+		return -rc;
+	}
+
+	if (fh->name)
+		free(fh->name);
+	free(fh);
+	return -reply.err;
+}
+

@@ -67,6 +67,7 @@
 #define READDIR_OP	(0x204)
 #define CLOSEDIR_OP	(0x205)
 #define OPEN_OP		(0x206)
+#define CLOSE_OP	(0x207)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -144,5 +145,7 @@ extern struct crt_req_format OPENDIR_FMT;
 extern struct crt_req_format CLOSEDIR_FMT;
 
 extern struct crt_req_format OPEN_FMT;
+
+extern struct crt_req_format CLOSE_FMT;
 
 #endif

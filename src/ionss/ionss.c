@@ -470,6 +470,52 @@ out_no_log:
 	return 0;
 }
 
+int iof_close_handler(crt_rpc_t *rpc)
+{
+	struct iof_closedir_in *in;
+	struct ionss_file_handle *local_handle = NULL;
+	int rc;
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(in->gah.iov_buf);
+
+		IOF_LOG_INFO("Deallocating %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&local_handle);
+	if (rc != IOS_SUCCESS || !local_handle) {
+		IOF_LOG_INFO("Failed to load handle from gah %p %d",
+			     in->gah.iov_buf, rc);
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Closing handle %p fd %d", local_handle,
+		      local_handle->fd);
+
+	rc = close(local_handle->fd);
+	if (rc != 0)
+		IOF_LOG_ERROR("Failed to close file %d", local_handle->fd);
+
+	free(local_handle);
+
+	rc = ios_gah_deallocate(gs, in->gah.iov_buf);
+	if (rc)
+		IOF_LOG_ERROR("Failed to deallocate GAH");
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -543,6 +589,13 @@ int ionss_register(void)
 				   iof_open_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register open RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(CLOSE_OP, &CLOSE_FMT,
+				   iof_close_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
 		return ret;
 	}
 
