@@ -192,14 +192,25 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         fd = open(filename, 'r')
         fd.close()
 
-    @unittest.skip("Feature not working yet")
-    def test_file_open_write(self):
+    def test_file_open_new(self):
         """Create a new file"""
 
         filename = os.path.join(self.import_dir, 'exp', 'test_file')
 
         fd = open(filename, 'w')
         fd.close()
+
+        a = os.stat(filename)
+        b = os.stat(os.path.join(self.export_dir, 'test_file'))
+
+        print(a)
+        print(b)
+
+        # Currently the FUSE plugin does not correctly report inodes
+        # so currently there are differences
+
+        if a != b:
+            self.logger.info("File stat data is different")
 
     def test_file_open_existing(self):
         """Open a existing file for reading"""

@@ -68,6 +68,7 @@
 #define CLOSEDIR_OP	(0x205)
 #define OPEN_OP		(0x206)
 #define CLOSE_OP	(0x207)
+#define CREATE_OP	(0x208)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -85,6 +86,12 @@ struct iof_psr_query {
 struct iof_string_in {
 	crt_string_t path;
 	uint64_t my_fs_id;
+};
+
+struct iof_create_in {
+	crt_string_t path;
+	uint64_t my_fs_id;
+	mode_t mode;
 };
 
 struct iof_getattr_out {
@@ -147,5 +154,7 @@ extern struct crt_req_format CLOSEDIR_FMT;
 extern struct crt_req_format OPEN_FMT;
 
 extern struct crt_req_format CLOSE_FMT;
+
+extern struct crt_req_format CREATE_FMT;
 
 #endif

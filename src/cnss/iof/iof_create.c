@@ -49,42 +49,71 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct release_cb_r {
+struct create_cb_r {
+	struct iof_file_handle *fh;
 	int complete;
 	int err;
+	int rc;
 };
 
-static int release_cb(const struct crt_cb_info *cb_info)
+static int create_cb(const struct crt_cb_info *cb_info)
 {
-	struct release_cb_r *reply = (struct release_cb_r *)cb_info->cci_arg;
+	struct create_cb_r *reply;
+	struct iof_open_out *out;
+	crt_rpc_t *rpc = cb_info->cci_rpc;
+
+	reply = (struct create_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
-		 * Error handling.  Return EIO on any error
+		 * Error handling.  On timeout return EAGAIN, all other errors
+		 * return EIO.
+		 *
+		 * TODO: Handle target eviction here
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		reply->err = EIO;
+		if (cb_info->cci_rc == -CER_TIMEDOUT)
+			reply->err = EAGAIN;
+		else
+			reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
 
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not get output");
+		reply->complete = 1;
+		return 0;
+	}
+	if (out->err == 0 && out->rc == 0)
+		memcpy(&reply->fh->gah, out->gah.iov_buf,
+		       sizeof(struct ios_gah));
+	reply->err = out->err;
+	reply->rc = out->rc;
 	reply->complete = 1;
 	return 0;
 }
 
-int ioc_release(const char *file, struct fuse_file_info *fi)
+int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	struct iof_closedir_in *in = NULL;
-	struct release_cb_r reply = {0};
+	struct iof_file_handle *handle;
+	uint64_t ret;
+	struct iof_create_in *in = NULL;
+	struct create_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	handle = ioc_fh_new(file);
+	if (!handle)
+		return -ENOMEM;
 
-	IOF_LOG_INFO("path %s %s handle %p", file, handle->name, handle);
+	fi->fh = (uint64_t)handle;
+
+	IOF_LOG_INFO("file %s handle %p", file, handle);
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
@@ -94,37 +123,48 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    CLOSE_OP, &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, CREATE_OP,
+			     &rpc);
+	if (ret || !rpc) {
+		IOF_LOG_ERROR("Could not create request, ret = %lu",
+			      ret);
 		return -EIO;
 	}
 
 	in = crt_req_get(rpc);
-	crt_iov_set(&in->gah, &handle->gah, sizeof(struct ios_gah));
+	in->path = (crt_string_t)file;
+	in->mode = mode;
+	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
 
-	rc = crt_req_send(rpc, release_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+	reply.fh = handle;
+	reply.complete = 0;
+
+	ret = crt_req_send(rpc, create_cb, &reply);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send rpc, ret = %lu", ret);
 		return -EIO;
 	}
-
-	{
-		char *d = ios_gah_to_str(&handle->gah);
-
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
-	}
-
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc) {
 		free(handle);
 		return -rc;
 	}
 
-	free(handle);
-	return -reply.err;
+	if (reply.err == 0 && reply.rc == 0) {
+		char *d = ios_gah_to_str(&handle->gah);
+
+		IOF_LOG_INFO("Dah %s", d);
+		free(d);
+	}
+
+	rc = reply.err == 0 ? -reply.rc : -EIO;
+
+	if (rc != 0)
+		free(handle);
+
+	IOF_LOG_DEBUG("path %s rc %d",
+		      file, rc);
+
+	return rc;
 }
 

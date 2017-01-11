@@ -54,11 +54,27 @@ struct open_cb_r {
 	int rc;
 };
 
+struct iof_file_handle *ioc_fh_new(const char *name)
+{
+	struct iof_file_handle *handle;
+	size_t name_len = strlen(name) + 1;
+
+	handle = calloc(1, name_len + sizeof(*handle));
+	if (!handle)
+		return NULL;
+	strncpy(handle->name, name, name_len);
+	handle->name[name_len - 1] = '\0';
+
+	return handle;
+}
+
 static int open_cb(const struct crt_cb_info *cb_info)
 {
 	struct open_cb_r *reply = NULL;
 	struct iof_open_out *out = NULL;
 	crt_rpc_t *rpc = cb_info->cci_rpc;
+
+	reply = (struct open_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -69,14 +85,12 @@ static int open_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		if (cb_info->cci_rc == -CER_TIMEDOUT)
-			reply->rc = EAGAIN;
+			reply->err = EAGAIN;
 		else
-			reply->rc = EIO;
+			reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
-
-	reply = (struct open_cb_r *)cb_info->cci_arg;
 
 	out = crt_reply_get(rpc);
 	if (!out) {
@@ -97,7 +111,7 @@ static int open_cb(const struct crt_cb_info *cb_info)
 int ioc_open(const char *file, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	struct iof_file_handle *fh;
+	struct iof_file_handle *handle;
 	uint64_t ret;
 	struct iof_string_in *in = NULL;
 	struct open_cb_r reply = {0};
@@ -106,18 +120,13 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	fh = calloc(1, sizeof(*fh));
-	if (!fh)
-		return -EIO;
-	fh->name = strdup(file);
-	if (!fh->name) {
-		free(fh);
-		return -EIO;
-	}
+	handle = ioc_fh_new(file);
+	if (!handle)
+		return -ENOMEM;
 
-	fi->fh = (uint64_t)fh;
+	fi->fh = (uint64_t)handle;
 
-	IOF_LOG_INFO("file %s handle %p", file, fh);
+	IOF_LOG_INFO("file %s handle %p", file, handle);
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
@@ -139,7 +148,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	in->path = (crt_string_t)file;
 	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
 
-	reply.fh = fh;
+	reply.fh = handle;
 	reply.complete = 0;
 
 	ret = crt_req_send(rpc, open_cb, &reply);
@@ -149,13 +158,12 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc) {
-		free(fh->name);
-		free(fh);
+		free(handle);
 		return -rc;
 	}
 
 	if (reply.err == 0 && reply.rc == 0) {
-		char *d = ios_gah_to_str(&fh->gah);
+		char *d = ios_gah_to_str(&handle->gah);
 
 		IOF_LOG_INFO("Dah %s", d);
 		free(d);
@@ -163,13 +171,11 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
-	if (rc != 0) {
-		free(fh->name);
-		free(fh);
-	}
-
 	IOF_LOG_DEBUG("path %s rc %d",
-		      file, rc);
+		handle->name, rc);
+
+	if (rc != 0)
+		free(handle);
 
 	return rc;
 }

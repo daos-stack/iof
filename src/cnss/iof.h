@@ -71,16 +71,20 @@ struct fs_handle {
 };
 
 struct iof_file_handle {
-	char *name;
 	struct ios_gah gah;
 	int handle_valid;
 	int gah_valid;
+	char name[];
 };
 
 int ioc_cb_progress(crt_context_t, struct fuse_context *, int *);
 
 int ioc_open(const char *, struct fuse_file_info *);
 
-int iof_release(const char *, struct fuse_file_info *);
+struct iof_file_handle *ioc_fh_new(const char *);
+
+int ioc_release(const char *, struct fuse_file_info *);
+
+int ioc_create(const char *, mode_t, struct fuse_file_info *);
 
 #endif

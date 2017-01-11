@@ -45,6 +45,12 @@ struct crt_msg_field *string_in[] = {
 	&CMF_UINT64
 };
 
+struct crt_msg_field *create_in[] = {
+	&CMF_STRING,
+	&CMF_UINT64,
+	&CMF_INT,
+};
+
 struct crt_msg_field *iov_pair[] = {
 	&CMF_IOVEC,
 	&CMF_INT,
@@ -103,3 +109,7 @@ struct crt_req_format OPEN_FMT = DEFINE_CRT_REQ_FMT("open",
 struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
 						closedir_in,
 						NULL);
+
+struct crt_req_format CREATE_FMT = DEFINE_CRT_REQ_FMT("create",
+						create_in,
+						iov_pair);

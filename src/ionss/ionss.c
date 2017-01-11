@@ -395,7 +395,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in;
 	struct iof_open_out *out;
-	struct ionss_file_handle *local_handle = NULL;
+	struct ionss_file_handle *local_handle;
 	struct ios_gah gah = {0};
 	int fd;
 	int rc;
@@ -411,7 +411,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	if (!in) {
 		IOF_LOG_ERROR("Could not retrieve input args");
 		out->err = IOF_ERR_CART;
-		goto out;
+		goto out_no_log;
 	}
 
 	IOF_LOG_DEBUG("path %s", in->path);
@@ -464,6 +464,89 @@ out:
 		     in->path, out->err, out->rc, local_handle);
 
 out_no_log:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+	return 0;
+}
+
+int iof_create_handler(crt_rpc_t *rpc)
+{
+	struct iof_create_in *in;
+	struct iof_open_out *out;
+	struct ionss_file_handle *local_handle;
+	struct ios_gah gah = {0};
+	int fd;
+	int rc;
+	char new_path[IOF_MAX_PATH_LEN];
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out_no_log;
+		return 0;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out_no_log;
+	}
+
+	IOF_LOG_DEBUG("path %s", in->path);
+
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	fd = creat(new_path, in->mode);
+	if (fd == -1) {
+		out->rc = errno;
+		goto out;
+	}
+
+	local_handle = malloc(sizeof(*local_handle));
+	if (!local_handle) {
+		IOF_LOG_ERROR("Could not allocate handle");
+		out->err = IOF_ERR_NOMEM;
+		close(fd);
+		goto out;
+	}
+
+	local_handle->fd = fd;
+	local_handle->fs_id = in->my_fs_id;
+
+	rc = ios_gah_allocate(gs, &gah, 0, 0, local_handle);
+	if (rc != IOS_SUCCESS) {
+		close(fd);
+		free(local_handle);
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	{
+		char *s = ios_gah_to_str(&gah);
+
+		IOF_LOG_INFO("Allocated %s", s);
+		free(s);
+	}
+
+	crt_iov_set(&out->gah, &gah, sizeof(gah));
+
+	IOF_LOG_INFO("Size is %zi", sizeof(mode_t));
+
+out:
+	IOF_LOG_INFO("path %s result err %d rc %d",
+		     in->path, out->err, out->rc);
+
+out_no_log:
+
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
@@ -594,6 +677,13 @@ int ionss_register(void)
 
 	ret = crt_rpc_srv_register(CLOSE_OP, &CLOSE_FMT,
 				   iof_close_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(CREATE_OP, &CREATE_FMT,
+				   iof_create_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
 		return ret;
