@@ -448,7 +448,7 @@ int main(void)
 	 */
 	plugin_file = getenv("CNSS_PLUGIN_FILE");
 	if (plugin_file) {
-		void *dl_handle = dlopen(plugin_file, 0);
+		void *dl_handle = dlopen(plugin_file, RTLD_LAZY);
 		cnss_plugin_init_t fn = NULL;
 
 #pragma GCC diagnostic push
@@ -475,8 +475,10 @@ int main(void)
 	 * process set across the CNSS nodes then create one
 	 */
 	LIST_FOREACH(list_iter, &plugin_list, list) {
-		if (list_iter->active && list_iter->plugin->require_service)
-			service_process_set = 1;
+		if (list_iter->active && list_iter->plugin->require_service) {
+			service_process_set = CRT_FLAG_BIT_SERVER;
+			break;
+		}
 	}
 
 	IOF_LOG_INFO("Forming %s process set",
@@ -489,7 +491,7 @@ int main(void)
 	LIST_INIT(&cnss_info->fs_head);
 	cnss_plugin_cb.handle = cnss_info;
 	/*initialize CaRT*/
-	ret = crt_init(cnss, 0);
+	ret = crt_init(cnss, service_process_set);
 	if (ret) {
 		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
 		return CNSS_ERR_CART;

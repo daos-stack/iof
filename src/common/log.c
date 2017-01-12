@@ -40,14 +40,10 @@
 int iof_log_handle;
 void iof_log_init(const char *shortname, const char *longname)
 {
-	char *masks = NULL;
-
-	masks = getenv("IOF_LOG_MASK");
 
 	crt_log_init();
 	iof_log_handle = crt_log_allocfacility(shortname, longname);
-	if (masks != NULL)
-		crt_log_setmasks(masks, -1);
+	crt_log_sync_mask();
 }
 
 void iof_log_close(void)

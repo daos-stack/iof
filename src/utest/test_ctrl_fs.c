@@ -230,7 +230,7 @@ int main(int argc, char **argv)
 	strcpy(end, "/iof.log");
 
 	setenv("CRT_LOG_FILE", buf, 1);
-	setenv("IOF_LOG_MASK", "INFO,ctrl=DEBUG", 1);
+	setenv("CRT_LOG_MASK", "INFO,ctrl=DEBUG", 1);
 	iof_log_init("ctrl", "ctrl_fs_test");
 
 	strcpy(end, "/.ctrl");

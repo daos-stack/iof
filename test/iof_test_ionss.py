@@ -91,7 +91,7 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
         (cnss, ionss) = self.common_add_server_client()
         fs = ' '.join(self.fs_list)
         test_path = os.getenv('IOF_TEST_BIN', "")
-        pass_env = " -x IOF_LOG_MASK -x CNSS_PREFIX"
+        pass_env = " -x CRT_LOG_MASK -x CNSS_PREFIX"
         local_server = "%s%s %s %s/ionss %s" % \
                        (pass_env, ionss, prefix, test_path, fs)
         local_client = "%s%s %s %s/cnss :" % \
