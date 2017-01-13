@@ -60,6 +60,7 @@ extern "C" {
 
 
 struct fuse_operations;
+struct fuse_args;
 
 /* Optional callback invoked when a read is done on a ctrl fs variable */
 typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
@@ -87,6 +88,7 @@ struct cnss_plugin_cb {
 
 	/* Launch FUSE mount.  Returns 0 on success */
 	int (*register_fuse_fs)(void *handle, struct fuse_operations*,
+				struct fuse_args*,
 				const char *, void *);
 
 	/* Registers a variable, exported as a control file system file
@@ -170,7 +172,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f003
+#define CNSS_PLUGIN_VERSION 0x10f004
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

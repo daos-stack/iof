@@ -220,17 +220,37 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd = open(filename, 'w')
         fd.close()
 
+    def test_use_ino(self):
+        """Test that stat returns correct information"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+
         a = os.stat(filename)
         b = os.stat(os.path.join(self.export_dir, 'test_file'))
 
-        print(a)
-        print(b)
-
-        # Currently the FUSE plugin does not correctly report inodes
-        # so currently there are differences
-
+        os.unlink(filename)
         if a != b:
             self.logger.info("File stat data is different")
+
+        diffs = []
+
+        for key in dir(a):
+            if not key.startswith('st_'):
+                continue
+            av = getattr(a, key)
+            bv = getattr(b, key)
+            self.logger.info("Key %s import %s export %s", key, av, bv)
+            if key == 'st_dev':
+                continue
+            if av != bv:
+                self.logger.error("Keys are differnet")
+                diffs.append(key)
+
+        if len(diffs):
+            self.fail("Stat attributes are different %s" % diffs)
 
     def test_file_truncate(self):
         """Write to a file"""
@@ -493,7 +513,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if result != 'target':
             self.fail("Link target is wrong '%s'" % result)
 
-
     def test_set_time(self):
         """Set the time of a file"""
 
@@ -503,3 +522,39 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd.close()
 
         os.utime(filename)
+
+    @unittest.skip("Fails on FUSE2")
+    def test_file_read_rename(self):
+        """Read from a file which has been renamed on the backend"""
+
+        # Create a file on the export location.
+        tfile = os.path.join(self.export_dir, 'a_file')
+
+        fd = open(tfile, 'w')
+        fd.write("Hello")
+        fd.close()
+
+        # Open it through the projection
+        filename = os.path.join(self.import_dir, 'exp', 'a_file')
+        fd = open(filename, 'r')
+
+        # Rename it on the backend, so any FUSE cache is out of sync
+        os.rename(tfile, os.path.join(self.export_dir, 'b_file'))
+
+        # Now read and check the data.
+        data = fd.read()
+        fd.close()
+
+        if data != 'Hello':
+            self.fail('File contents wrong %s %s' % ('Hello', data))
+
+    def test_file_read_empty(self):
+        """Read from a empty file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'empty_file')
+        fd = open(filename, 'w')
+        fd.close()
+
+        fd = open(filename, 'r')
+        fd.read()
+        fd.close()

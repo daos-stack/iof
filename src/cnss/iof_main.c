@@ -195,27 +195,152 @@ static int ioc_setxattr(const char *path, const char *name, const char *value,
 	return -ENOTSUP;
 }
 
+#define SHOW_FLAG(FLAGS, FLAG) do {					\
+		if (FLAGS & FLAG)					\
+			IOF_LOG_INFO("Flag " #FLAG " enabled");		\
+		else							\
+			IOF_LOG_INFO("Flag " #FLAG " disable");		\
+		FLAGS &= ~FLAG;						\
+	} while (0)
 
+static void ioc_show_flags(unsigned in)
+{
+	IOF_LOG_INFO("Flags are 0x%x", in);
+	SHOW_FLAG(in, FUSE_CAP_ASYNC_READ);
+	SHOW_FLAG(in, FUSE_CAP_POSIX_LOCKS);
+	SHOW_FLAG(in, FUSE_CAP_ATOMIC_O_TRUNC);
+	SHOW_FLAG(in, FUSE_CAP_EXPORT_SUPPORT);
+	SHOW_FLAG(in, FUSE_CAP_DONT_MASK);
+	SHOW_FLAG(in, FUSE_CAP_SPLICE_WRITE);
+	SHOW_FLAG(in, FUSE_CAP_SPLICE_MOVE);
+	SHOW_FLAG(in, FUSE_CAP_SPLICE_READ);
+	SHOW_FLAG(in, FUSE_CAP_FLOCK_LOCKS);
+	SHOW_FLAG(in, FUSE_CAP_IOCTL_DIR);
+#if IOF_USE_FUSE3
+	SHOW_FLAG(in, FUSE_CAP_AUTO_INVAL_DATA);
+	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS);
+	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS_AUTO);
+	SHOW_FLAG(in, FUSE_CAP_ASYNC_DIO);
+	SHOW_FLAG(in, FUSE_CAP_WRITEBACK_CACHE);
+	SHOW_FLAG(in, FUSE_CAP_NO_OPEN_SUPPORT);
+	SHOW_FLAG(in, FUSE_CAP_PARALLEL_DIROPS);
+	SHOW_FLAG(in, FUSE_CAP_POSIX_ACL);
+	SHOW_FLAG(in, FUSE_CAP_HANDLE_KILLPRIV);
+#endif
+#ifdef FUSE_CAP_BIG_WRITES
+	SHOW_FLAG(in, FUSE_CAP_BIG_WRITES);
+#endif
 
+	if (in)
+		IOF_LOG_ERROR("Unknown flags 0x%x", in);
+}
 
+/* Called on filesystem init.  It has the ability to both observe configuration
+ * options, but also to modify them.  As we do not use the FUSE command line
+ * parsing this is where we apply tunables.
+ *
+ * The return value is used to set private_data, however as we want
+ * private_data to be set by the CNSS register routine we simply read it and
+ * return the value here.
+ */
+static void *ioc_init(struct fuse_conn_info *conn)
+{
+	struct fs_handle *fs_handle;
+	struct fuse_context *context;
+
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+
+	IOF_LOG_INFO("Fuse configuration for projection %d",
+		     fs_handle->fs_id);
+
+	IOF_LOG_INFO("Proto %d %d", conn->proto_major, conn->proto_minor);
+#if IOF_USE_FUSE3
+
+	/* This value has to be set here to the same value passed to
+	 * register_fuse().  Fuse always sets this value to zero so
+	 * set it before reporting the value.
+	 */
+	conn->max_read = (1024 * 1024);
+	IOF_LOG_INFO("max read 0x%x", conn->max_read);
+
+#endif
+	IOF_LOG_INFO("max write 0x%x", conn->max_write);
+	IOF_LOG_INFO("readahead 0x%x", conn->max_readahead);
+
+	IOF_LOG_INFO("Capability supported 0x%x ", conn->capable);
+
+	ioc_show_flags(conn->capable);
+
+#ifdef FUSE_CAP_BIG_WRITES
+	conn->want |= FUSE_CAP_BIG_WRITES;
+#endif
+
+	IOF_LOG_INFO("Capability requested 0x%x", conn->want);
+
+	ioc_show_flags(conn->want);
+
+	return fs_handle;
+}
+
+#if IOF_USE_FUSE3
+static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
+{
+	void *handle = ioc_init(conn);
+	/* Disable caching entirely */
+	cfg->entry_timeout = 0;
+	cfg->negative_timeout = 0;
+	cfg->attr_timeout = 0;
+
+	/* Use FUSE provided inode numbers to match the backing filesystem */
+	cfg->use_ino = 1;
+
+	/* Do not resolve the PATH for every operation, but let IOF access
+	 * the information via the fh pointer instead
+	 */
+	cfg->nullpath_ok = 1;
+
+	cfg->direct_io = 1;
+
+	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
+		     cfg->entry_timeout,
+		     cfg->negative_timeout,
+		     cfg->attr_timeout);
+
+	IOF_LOG_INFO("max_background %d", conn->max_background);
+	IOF_LOG_INFO("congestion_threshold %d", conn->congestion_threshold);
+
+	IOF_LOG_INFO("use_ino %d", cfg->use_ino);
+
+	IOF_LOG_INFO("nullpath_ok %d", cfg->nullpath_ok);
+
+	IOF_LOG_INFO("direct_io %d", cfg->direct_io);
+
+	return handle;
+}
+#endif
 
 static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
+	.init = ioc_init_full,
 	.getattr = ioc_getattr,
 	.chmod = ioc_chmod,
 	.truncate = ioc_truncate,
 	.rename = ioc_rename3,
 	.utimens = ioc_utimens,
 #else
+	.init = ioc_init,
 	.getattr = ioc_getattr_name,
 	.chmod = ioc_chmod_name,
 	.truncate = ioc_truncate_name,
 	.rename = ioc_rename,
 	.utimens = ioc_utimens_name,
 #ifndef __APPLE__
+	.flag_nullpath_ok = 1,
 	.flag_nopath = 1,
 #endif
 #endif
+
 	.opendir = ioc_opendir,
 	.readdir = ioc_readdir,
 	.releasedir = ioc_closedir,
@@ -412,7 +537,17 @@ int iof_post_start(void *arg)
 	strncpy(base_mount, iof_state->cnss_prefix, IOF_NAME_LEN_MAX);
 	for (i = 0; i < fs_num; i++) {
 		struct fs_handle *fs_handle;
+		static char const *opts[] = {"", "-omax_read=1048576",
+#if !IOF_USE_FUSE3
+					     "-o", "use_ino",
+#endif
+					     "-ofsname=IOF",
+					     "-osubtype=pam"};
+		struct fuse_args args = {0};
 		char *base_name;
+
+		args.argc = sizeof(opts) / sizeof(*opts);
+		args.argv = (char **)opts;
 
 		if (tmp[i].mode == 0) {
 			fs_handle = calloc(1, sizeof(struct fs_handle));
@@ -441,7 +576,9 @@ int iof_post_start(void *arg)
 
 		fs_handle->fs_id = tmp[i].id;
 		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
-		ret = cb->register_fuse_fs(cb->handle, &ops, mount, fs_handle);
+
+		ret = cb->register_fuse_fs(cb->handle, &ops, &args, mount,
+					   fs_handle);
 		if (ret) {
 			IOF_LOG_ERROR("Unable to register FUSE fs");
 			return 1;

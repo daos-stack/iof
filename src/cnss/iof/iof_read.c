@@ -305,7 +305,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
 	} else {
 		len = reply.out->len;
-		IOF_LOG_INFO("Recieved %zi via bulk", len);
+		IOF_LOG_INFO("Received %zi via bulk", len);
 	}
 
 	rc = crt_req_decref(reply.rpc);

@@ -1166,10 +1166,31 @@ static int ctrl_utimens3(const char *fname, const struct timespec tv[2],
 {
 	return ctrl_utimens(fname, tv);
 }
+
+static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
+{
+	struct fuse_context *context = fuse_get_context();
+	void *handle = (void *)context->private_data;
+
+	IOF_LOG_INFO("Fuse configuration for ctrl fs");
+
+	cfg->entry_timeout = 0;
+	cfg->negative_timeout = 0;
+	cfg->attr_timeout = 0;
+	cfg->remember = -1;
+
+	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
+		     cfg->entry_timeout,
+		     cfg->negative_timeout,
+		     cfg->attr_timeout);
+
+	return handle;
+}
 #endif
 
 static struct fuse_operations fuse_ops = {
 #if IOF_USE_FUSE3
+	.init = ctrl_init,
 	.getattr = ctrl_getattr3,
 	.truncate = ctrl_truncate3,
 	.utimens = ctrl_utimens3,
@@ -1189,10 +1210,10 @@ static struct fuse_operations fuse_ops = {
 
 int ctrl_fs_start(const char *prefix)
 {
-	struct fuse_args args;
+	static char *name = "";
+	struct fuse_args args = {.argv = &name, .argc = 1};
 	struct stat stat_info;
 	int rc;
-	char *dash_d = "-d";
 
 	pthread_once(&once_init, init_root_node);
 
@@ -1226,10 +1247,6 @@ int ctrl_fs_start(const char *prefix)
 		ctrl_fs.startup_rc = -ENOMEM;
 		return -ENOMEM;
 	}
-
-	args.argc = 1;
-	args.argv = &dash_d;
-	args.allocated = 0;
 
 #ifdef IOF_USE_FUSE3
 	ctrl_fs.fuse = fuse_new(&args, &fuse_ops, sizeof(fuse_ops),

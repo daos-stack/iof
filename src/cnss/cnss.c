@@ -206,8 +206,11 @@ static const char *get_config_option(const char *var)
 	return getenv((const char *)var);
 }
 
-static int register_fuse(void *arg, struct fuse_operations *ops,
-			 const char *mnt, void *private_data);
+static int register_fuse(void *arg,
+			 struct fuse_operations *ops,
+			 struct fuse_args *args,
+			 const char *mnt,
+			 void *private_data);
 
 /* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
 static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
@@ -292,14 +295,14 @@ static void iof_fuse_umount(struct fs_info *info)
  * a filesystem.
  * Returns 0 on success, or non-zero on error.
  */
-static int register_fuse(void *arg, struct fuse_operations *ops,
-			 const char *mnt, void *private_data)
+static int register_fuse(void *arg,
+			 struct fuse_operations *ops,
+			 struct fuse_args *args,
+			 const char *mnt,
+			 void *private_data)
 {
 	struct plugin_entry *plugin = (struct plugin_entry *)arg;
 	struct fs_info *info;
-
-	struct fuse_args args = {0};
-	char *dash_d = "-d";
 
 	if (!mnt) {
 		IOF_LOG_ERROR("Invalid Mount point");
@@ -310,10 +313,6 @@ static int register_fuse(void *arg, struct fuse_operations *ops,
 		IOF_LOG_ERROR("Could not create directory %s for import", mnt);
 		return 1;
 	}
-
-	args.argc = 1;
-	args.argv = &dash_d;
-	args.allocated = 0;
 
 	info = calloc(1, sizeof(struct fs_info));
 	if (!info) {
@@ -333,7 +332,7 @@ static int register_fuse(void *arg, struct fuse_operations *ops,
 	}
 
 #if !IOF_USE_FUSE3
-	info->ch = fuse_mount(info->mnt, &args);
+	info->ch = fuse_mount(info->mnt, args);
 	if (!info->ch) {
 		IOF_LOG_ERROR("Could not successfully mount %s", info->mnt);
 		goto cleanup;
@@ -342,16 +341,16 @@ static int register_fuse(void *arg, struct fuse_operations *ops,
 
 	info->fs_handle = private_data;
 #if IOF_USE_FUSE3
-	info->fuse = fuse_new(&args, ops,
+	info->fuse = fuse_new(args, ops,
 			sizeof(struct fuse_operations), private_data);
 #else
-	info->fuse = fuse_new(info->ch, &args, ops,
+	info->fuse = fuse_new(info->ch, args, ops,
 			sizeof(struct fuse_operations), private_data);
 #endif
 
 	if (!info->fuse) {
 		IOF_LOG_ERROR("Could not initialize fuse");
-		fuse_opt_free_args(&args);
+		fuse_opt_free_args(args);
 		iof_fuse_umount(info);
 		goto cleanup;
 	}
@@ -371,7 +370,7 @@ static int register_fuse(void *arg, struct fuse_operations *ops,
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
 
-	fuse_opt_free_args(&args);
+	fuse_opt_free_args(args);
 
 	LIST_INSERT_HEAD(&plugin->fuse_list, info, entries);
 
@@ -440,7 +439,7 @@ static void *loop_fn(void *args)
 	ret = fuse_loop(info->fuse);
 
 	if (ret != 0)
-		IOF_LOG_DEBUG("Fuse loop exited with return code: %d", ret);
+		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
 	pthread_mutex_lock(&info->lock);
 	iof_fuse_umount(info);
