@@ -100,6 +100,12 @@ struct iof_ftruncate_in {
 	uint64_t len;
 };
 
+struct iof_rename_in {
+	crt_string_t src;
+	crt_string_t dst;
+	uint64_t my_fs_id;
+};
+
 struct iof_create_in {
 	crt_string_t path;
 	uint64_t my_fs_id;
@@ -220,6 +226,7 @@ struct my_types {
 	MY_TYPE(truncate);
 	MY_TYPE(ftruncate);
 	MY_TYPE(rmdir);
+	MY_TYPE(rename);
 };
 
 struct proto {

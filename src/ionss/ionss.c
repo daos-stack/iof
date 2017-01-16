@@ -719,6 +719,59 @@ out:
 	return 0;
 }
 
+int iof_rename_handler(crt_rpc_t *rpc)
+{
+	struct iof_rename_in *in = NULL;
+	struct iof_status_out *out = NULL;
+	char new_src[IOF_MAX_PATH_LEN];
+	char new_dst[IOF_MAX_PATH_LEN];
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->src, &new_src[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->dst, &new_dst[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	rc = rename(new_src, new_dst);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
+		      in->src, in->dst, out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 int iof_mkdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in;
@@ -1219,6 +1272,7 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, truncate, iof_truncate_handler);
 	PROTO_SET_FUNCTION(proto, ftruncate, iof_ftruncate_handler);
 	PROTO_SET_FUNCTION(proto, rmdir, iof_rmdir_handler);
+	PROTO_SET_FUNCTION(proto, rename, iof_rename_handler);
 	iof_proto_commit(proto);
 
 	return ret;

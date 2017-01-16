@@ -357,3 +357,15 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         print(os.listdir(ndir))
 
         os.rmdir(ndir)
+
+    def test_file_rename(self):
+        """Write to a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'c_file')
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+        new_file = os.path.join(self.import_dir, 'exp', 'd_file')
+        os.rename(filename, new_file)

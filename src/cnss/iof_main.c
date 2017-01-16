@@ -196,9 +196,11 @@ static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
 	.getattr = ioc_getattr,
 	.truncate = ioc_truncate,
+	.rename = ioc_rename3,
 #else
 	.getattr = ioc_getattr_name,
 	.truncate = ioc_truncate_name,
+	.rename = ioc_rename,
 #ifndef __APPLE__
 	.flag_nopath = 1,
 #endif

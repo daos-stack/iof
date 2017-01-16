@@ -49,6 +49,7 @@ RPC_SRC = ['closedir',
            'read',
            'readdir',
            'release',
+           'rename',
            'rmdir',
            'truncate',
            'write']
