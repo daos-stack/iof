@@ -212,6 +212,7 @@ static struct fuse_operations ops = {
 	.create = ioc_create,
 	.read = ioc_read,
 	.mkdir = ioc_mkdir,
+	.rmdir = ioc_rmdir,
 	.write = ioc_write,
 };
 

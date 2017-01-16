@@ -346,3 +346,14 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd.truncate()
         fd.truncate(100)
         fd.close()
+
+    def test_rmdir(self):
+        """Remove a directory"""
+
+        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
+
+        os.mkdir(ndir)
+
+        print(os.listdir(ndir))
+
+        os.rmdir(ndir)

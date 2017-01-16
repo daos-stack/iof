@@ -219,6 +219,7 @@ struct my_types {
 	MY_TYPE(write_bulk);
 	MY_TYPE(truncate);
 	MY_TYPE(ftruncate);
+	MY_TYPE(rmdir);
 };
 
 struct proto {

@@ -110,9 +110,6 @@ class CnssChecks(unittest.TestCase):
     def test_mkdir(self):
         """Create a directory and check it exists
 
-        Note that this does not currently remove the directory as code for that
-        has not landed yet.
-
         This test is also a bit of a nonsense as it makes a directory, however
         it relies on mkdtemp() is get_unique() in order to launch, so if there
         is a problem it'll be the setup which will fail, not the test.
@@ -131,3 +128,5 @@ class CnssChecks(unittest.TestCase):
             self.fail("Newly created directory does not exist")
 
         print(os.listdir(ndir))
+
+        os.rmdir(ndir)

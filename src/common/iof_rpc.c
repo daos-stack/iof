@@ -179,6 +179,7 @@ static struct proto proto = {
 		RPC_TYPE(write_bulk, write_bulk, write_out),
 		RPC_TYPE(truncate, truncate_in, status_out),
 		RPC_TYPE(ftruncate, ftruncate_in, status_out),
+		RPC_TYPE(rmdir, string_in, status_out),
 	},
 };
 

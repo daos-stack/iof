@@ -49,6 +49,7 @@ RPC_SRC = ['closedir',
            'read',
            'readdir',
            'release',
+           'rmdir',
            'truncate',
            'write']
 IOFIL_SRC = ['int_posix.c', 'int_stdio.c']
