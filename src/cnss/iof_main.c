@@ -304,21 +304,9 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 		return ret;
 	}
 
-	ret = crt_rpc_register(GETATTR_OP, &GETATTR_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("getattr registration failed with ret: %d", ret);
-		return ret;
-	}
-
 	ret = crt_rpc_register(SHUTDOWN_OP, NULL);
 	if (ret) {
 		IOF_LOG_ERROR("shutdown registration failed with ret: %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(OPENDIR_OP, &OPENDIR_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
 		return ret;
 	}
 
@@ -363,6 +351,9 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
 		return ret;
 	}
+
+	iof_state->proto = iof_register();
+	iof_proto_commit(iof_state->proto);
 
 	handle->cb = cb;
 

@@ -87,7 +87,7 @@ int ioc_getattr(const char *path, struct stat *stbuf)
 	struct getattr_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
-	crt_rpc_t *getattr_rpc = NULL;
+	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	/*retrieve handle*/
@@ -100,21 +100,21 @@ int ioc_getattr(const char *path, struct stat *stbuf)
 	}
 	IOF_LOG_DEBUG("Path: %s", path);
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, GETATTR_OP,
-			    &getattr_rpc);
-	if (rc || !getattr_rpc) {
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    FS_TO_OP(fs_handle, getattr), &rpc);
+	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -EIO;
 	}
 
-	in = crt_req_get(getattr_rpc);
+	in = crt_req_get(rpc);
 	in->path = (crt_string_t)path;
 	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
 
 	reply.complete = 0;
 	reply.stat = stbuf;
 
-	rc = crt_req_send(getattr_rpc, getattr_cb, &reply);
+	rc = crt_req_send(rpc, getattr_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;

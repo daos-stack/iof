@@ -61,10 +61,8 @@
 
 /* IOF Registration op codes for RPC's*/
 
-#define GETATTR_OP	(0x200)
 #define QUERY_PSR_OP	(0x201)
 #define SHUTDOWN_OP	(0x202)
-#define OPENDIR_OP	(0x203)
 #define READDIR_OP	(0x204)
 #define CLOSEDIR_OP	(0x205)
 #define OPEN_OP		(0x206)
@@ -161,10 +159,6 @@ extern struct crt_req_format READDIR_FMT;
 
 extern struct crt_req_format QUERY_RPC_FMT;
 
-extern struct crt_req_format GETATTR_FMT;
-
-extern struct crt_req_format OPENDIR_FMT;
-
 extern struct crt_req_format CLOSEDIR_FMT;
 
 extern struct crt_req_format OPEN_FMT;
@@ -176,5 +170,27 @@ extern struct crt_req_format CREATE_FMT;
 extern struct crt_req_format READ_FMT;
 
 extern struct crt_req_format MKDIR_FMT;
+
+struct rpc_data {
+	struct crt_req_format fmt;
+	void *fn;
+	int op_id;
+};
+
+#define MY_TYPE(TYPE) struct rpc_data TYPE
+struct my_types {
+	MY_TYPE(getattr);
+	MY_TYPE(opendir);
+};
+
+struct proto {
+	char name[16];
+	int id_base;
+	struct my_types mt;
+};
+
+struct proto *iof_register();
+
+int iof_proto_commit(struct proto *);
 
 #endif

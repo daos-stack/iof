@@ -73,6 +73,8 @@ struct ionss_file_handle {
 	int	fd;
 };
 
+struct proto *proto;
+
 int shutdown_handler(crt_rpc_t *rpc)
 {
 	int rc;
@@ -741,23 +743,9 @@ int ionss_register(void)
 		return ret;
 	}
 
-	ret = crt_rpc_srv_register(GETATTR_OP, &GETATTR_FMT,
-			iof_getattr_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register getattr RPC, ret = %d", ret);
-		return ret;
-	}
-
 	ret = crt_rpc_srv_register(SHUTDOWN_OP, NULL, shutdown_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register shutdown RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(OPENDIR_OP, &OPENDIR_FMT,
-				   iof_opendir_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register opendir RPC, ret = %d", ret);
 		return ret;
 	}
 
@@ -809,6 +797,13 @@ int ionss_register(void)
 		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
 		return ret;
 	}
+
+#define PROTO_SET_FUNCTION(PROTO, NAME, FN) (PROTO)->mt.NAME.fn = FN
+
+	proto = iof_register();
+	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
+	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
+	iof_proto_commit(proto);
 
 	return ret;
 }

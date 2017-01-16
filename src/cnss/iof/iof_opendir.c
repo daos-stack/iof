@@ -124,8 +124,8 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPENDIR_OP,
-			    &rpc);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    FS_TO_OP(fs_handle, opendir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		free(dir_handle);

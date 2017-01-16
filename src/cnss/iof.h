@@ -55,6 +55,7 @@ struct iof_state {
 	pthread_t tid;
 	/*CNSS Prefix*/
 	char *cnss_prefix;
+	struct proto *proto;
 
 };
 
@@ -63,6 +64,8 @@ struct fs_handle {
 	struct iof_state *iof_state;
 	int my_fs_id;
 };
+
+#define FS_TO_OP(HANDLE, FN) ((HANDLE)->iof_state->proto->mt.FN.op_id)
 
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
