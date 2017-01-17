@@ -63,11 +63,12 @@ class TestIof(common_methods.CnssChecks):
     def test_iof_fs(self):
         """Test private access mount points"""
         self.logger.info("starting to stat the mountpoints")
-        entry = os.path.join(self.ctrl_dir, "iof", "PA")
+        entry = os.path.join(self.ctrl_dir, "iof", "projections")
+
         self.assertTrue(os.path.isdir(entry), \
             "Mount point %s not found" % entry)
-        for mntfile in os.listdir(entry):
-            myfile = os.path.join(entry, mntfile)
+        for projection in os.listdir(entry):
+            myfile = os.path.join(entry, projection, 'mount_point')
             fd = open(myfile, "r")
             mnt_path = fd.readline().strip()
             self.logger.info("Mount path is %s", mnt_path)

@@ -51,21 +51,15 @@ class TestIof():
     def iof_fs_test(self):
         """Test private access mount points"""
         print("starting to stat the mountpoints")
-        entry = os.path.join(self.ctrl_dir, "iof", "PA")
-        if os.path.isdir(entry):
-            for mntfile in os.listdir(entry):
-                myfile = os.path.join(entry, mntfile)
-                fd = open(myfile, "r")
-                mnt_path = fd.readline().strip()
-                print("Mount path is %s" % mnt_path)
-                stat_obj = os.stat(mnt_path)
-
-                print(stat_obj)
-            return True
-
-        else:
-            print("Mount points not found")
-            return False
+        entry = os.path.join(self.ctrl_dir, "iof", "projections")
+        for projection in os.listdir(entry):
+            myfile = os.path.join(entry, projection, 'mount_point')
+            fd = open(myfile, "r")
+            mnt_path = fd.readline().strip()
+            print("Mount path is %s" % mnt_path)
+            stat_obj = os.stat(mnt_path)
+            print(stat_obj)
+        return True
 
     def iofstarted(self):
         """Wait for ctrl fs to start"""

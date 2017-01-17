@@ -154,6 +154,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def tearDown(self):
         """tear down the test"""
 
+        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof', 'projections', '0', 'stats')
+        if not os.path.exists(stats_dir):
+            self.fail("Stats dir missig")
+
+        self.logger.info("Dumping statistics for filesystem 0")
+        for stat_file in os.listdir(stats_dir):
+            f = open(os.path.join(stats_dir, stat_file), 'r')
+            data = f.read()
+            f.close()
+            self.logger.info("%s:%s" % (stat_file, data.rstrip("\n")))
+
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
             f = open(self.shutdown_file, 'w')

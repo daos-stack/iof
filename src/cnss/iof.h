@@ -43,7 +43,12 @@
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
-/* For IOF Plugin */
+struct iof_stats {
+	int opendir;
+	int getattr;
+};
+
+/*For IOF Plugin*/
 struct iof_state {
 	struct cnss_plugin_cb *cb;
 	size_t cb_size;
@@ -56,6 +61,7 @@ struct iof_state {
 	struct proto	*proto;
 	/* CNSS Prefix */
 	char		*cnss_prefix;
+	struct ctrl_dir	*projections_dir;
 };
 
 /* For each projection */
@@ -67,6 +73,11 @@ struct fs_handle {
 	crt_context_t		crt_ctx;
 	struct proto		*proto;
 	int			fs_id;
+	struct ctrl_dir		*fs_dir;
+	struct ctrl_dir		*stats_dir;
+	struct iof_stats	*stats;
+	char			*mount_point;
+	char			*base_dir;
 };
 
 #define FS_TO_OP(HANDLE, FN) ((HANDLE)->proto->mt.FN.op_id)

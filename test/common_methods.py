@@ -77,9 +77,9 @@ class CnssChecks(unittest.TestCase):
         """
 
         imports = []
-        entry = os.path.join(self.ctrl_dir, "iof", "PA")
-        for mntfile in os.listdir(entry):
-            myfile = os.path.join(entry, mntfile)
+        entry = os.path.join(self.ctrl_dir, "iof", "projections")
+        for projection in os.listdir(entry):
+            myfile = os.path.join(entry, projection, 'mount_point')
             fd = open(myfile, "r")
             mnt_path = fd.readline().strip()
             fd.close()

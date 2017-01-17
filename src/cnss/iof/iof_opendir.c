@@ -115,8 +115,11 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
+	fs_handle->stats->opendir++;
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, opendir), &rpc);
+
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		free(dir_handle);

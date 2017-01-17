@@ -503,6 +503,14 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	return ret;
 }
 
+static int iof_int_read(char *buf, size_t buflen, void *arg)
+{
+	int *value = (int *)arg;
+
+	snprintf(buf, buflen, "%d", *value);
+	return 0;
+}
+
 int iof_post_start(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
@@ -510,11 +518,7 @@ int iof_post_start(void *arg)
 	int ret;
 	int i;
 	int fs_num;
-	char mount[IOF_NAME_LEN_MAX];
-	char ctrl_name[IOF_NAME_LEN_MAX];
-	char base_mount[IOF_NAME_LEN_MAX];
 	struct cnss_plugin_cb *cb;
-	struct ctrl_dir *PA_dir;
 
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
@@ -528,7 +532,8 @@ int iof_post_start(void *arg)
 		return IOF_ERR_PROJECTION;
 	}
 
-	ret = cb->create_ctrl_subdir(cb->plugin_dir, "PA", &PA_dir);
+	ret = cb->create_ctrl_subdir(cb->plugin_dir, "projections",
+				     &iof_state->projections_dir);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Failed to create control dir for PA mode "
 			      "(rc = %d)\n", ret);
@@ -541,7 +546,6 @@ int iof_post_start(void *arg)
 
 	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
 
-	strncpy(base_mount, iof_state->cnss_prefix, IOF_NAME_LEN_MAX);
 	for (i = 0; i < fs_num; i++) {
 		struct fs_handle *fs_handle;
 		static char const *opts[] = {"", "-omax_read=1048576",
@@ -566,31 +570,57 @@ int iof_post_start(void *arg)
 		} else
 			return IOF_NOT_SUPP;
 
-
-		snprintf(ctrl_name, IOF_NAME_LEN_MAX, "mount%d", i);
-		IOF_LOG_DEBUG("Ctrl name is: %s", ctrl_name);
-
 		base_name = basename(tmp[i].mnt);
 
-		IOF_LOG_DEBUG("Projected Mount %s", base_name);
-		snprintf(mount, IOF_NAME_LEN_MAX, "%s/%s",
-			 base_mount, base_name);
-		IOF_LOG_INFO("Mountpoint for this projection: %s", mount);
+		asprintf(&fs_handle->mount_point, "%s/%s",
+			 iof_state->cnss_prefix, base_name);
 
-		/*Register the mount point with the control filesystem*/
-		cb->register_ctrl_constant(PA_dir, ctrl_name, mount);
+		IOF_LOG_DEBUG("Projected Mount %s", base_name);
+
+		IOF_LOG_INFO("Mountpoint for this projection: %s",
+			     fs_handle->mount_point);
 
 		fs_handle->fs_id = tmp[i].id;
+
+		fs_handle->stats = calloc(1, sizeof(*fs_handle->stats));
+		if (!fs_handle->stats)
+			return 1;
+
+		asprintf(&fs_handle->base_dir, "%d", fs_handle->fs_id);
+
+		cb->create_ctrl_subdir(iof_state->projections_dir,
+				       fs_handle->base_dir,
+				       &fs_handle->fs_dir);
+
+		/*Register the mount point with the control filesystem*/
+		cb->register_ctrl_constant(fs_handle->fs_dir, "mount_point",
+					   fs_handle->mount_point);
+
+		cb->register_ctrl_constant(fs_handle->fs_dir, "mode",
+					   "private");
+
+		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
+				       &fs_handle->stats_dir);
+
+		cb->register_ctrl_variable(fs_handle->stats_dir, "opendir",
+					   iof_int_read, NULL, NULL,
+					   &fs_handle->stats->opendir);
+
+		cb->register_ctrl_variable(fs_handle->stats_dir, "getattr",
+					   iof_int_read, NULL, NULL,
+					   &fs_handle->stats->getattr);
+
 		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
 
-		ret = cb->register_fuse_fs(cb->handle, &ops, &args, mount,
-					   fs_handle);
+		ret = cb->register_fuse_fs(cb->handle, &ops, &args,
+					   fs_handle->mount_point, fs_handle);
 		if (ret) {
 			IOF_LOG_ERROR("Unable to register FUSE fs");
 			free(fs_handle);
 			return 1;
 		}
-		IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
+		IOF_LOG_DEBUG("Fuse mount installed at: %s",
+			      fs_handle->mount_point);
 		fs_handle->proto = iof_state->proto;
 		fs_handle->dest_ep = iof_state->psr_ep;
 		fs_handle->crt_ctx = iof_state->crt_ctx;
@@ -607,6 +637,9 @@ void iof_deregister_fuse(void *arg)
 {
 	struct fs_handle *fs_handle = (struct fs_handle *)arg;
 
+	free(fs_handle->base_dir);
+	free(fs_handle->mount_point);
+	free(fs_handle->stats);
 	free(fs_handle);
 }
 
