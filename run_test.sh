@@ -60,18 +60,13 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   export TR_USE_VALGRIND="memcheck"
   cd ${TESTDIR}
   python3.4 test_runner scripts/iof_test_ionss.yml
-  TESTLOGS="/testLogs/testRun"
-  TESTECHODIR="iof_test_ionss_loop0/iof_test_ionss_1"
   cd -
   RESULTS="valgrind_results"
   if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
-  cp -R ${TESTDIR}${TESTLOGS}*/${TESTECHODIR}/*/valgrind*.xml ${RESULTS}/.
 
   cd ${TESTDIR}
   python3.4 test_runner scripts/iof_test_local.yml
-  TESTECHODIR="iof_test_local_loop0/iof_test_local_1"
   cd -
-  if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
-  cp -R ${TESTDIR}${TESTLOGS}*/${TESTECHODIR}/*/valgrind*.xml ${RESULTS}/.
+  find ${TESTDIR} -name valgrind*.xml | xargs cp -t ${RESULTS}
 
 fi
