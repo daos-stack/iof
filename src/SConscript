@@ -49,47 +49,112 @@ RPC_SRC = ['closedir',
            'read',
            'readdir',
            'release']
+IOFIL_SRC = ['int_posix.c', 'int_stdio.c']
+
+def build_common(env, is_shared):
+    """Build the common objects as shared or static"""
+    common = []
+
+    for src in COMMON_SRC:
+        src_file = os.path.join('common', src)
+        if is_shared:
+            common += env.SharedObject(src_file, SHOBJPREFIX='s_')
+        else:
+            common += env.Object(src_file)
+
+    return common
+
+def build_libioil_shared(env, version):
+    """build the shared interception library"""
+    to_build = env.get('libioil')
+    if to_build == 'none' or to_build == 'static':
+        return []
+
+    ilenv = env.Clone()
+    ilenv.AppendUnique(CFLAGS=['-fPIC'])
+    ilenv.AppendUnique(CPPDEFINES=['IOIL_PRELOAD'])
+    penv = ilenv.Clone()
+    penv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+
+    il_obj = []
+    for src in IOFIL_SRC:
+        il_obj += ilenv.SharedObject(os.path.join('il', src),
+                                     SHOBJPREFIX='s_')
+    common = build_common(penv, True)
+
+    # Now build the interception library
+    il_lib = ilenv.SharedLibrary('il/libioil', il_obj + common,
+                                 SHLIBVERSION=version)
+    env.InstallVersionedLib(os.path.join("$PREFIX", 'lib'), il_lib,
+                            SHLIBVERSION=version)
+    return il_lib
+
+def build_libioil_static(env, common):
+    """build the static interception library"""
+    to_build = env.get('libioil')
+    if to_build == 'none' or to_build == 'shared':
+        return []
+
+    ilenv = env.Clone()
+    il_obj = []
+    for src in IOFIL_SRC:
+        il_obj += ilenv.Object(os.path.join('il', src))
+
+    # Now build the interception library
+    il_lib = ilenv.Library('il/libioil', il_obj + common)
+    env.Install('$PREFIX/lib', il_lib)
+    env.Install('$PREFIX/share/ld-opts', 'il/ioil-ld-opts')
+
+    return il_lib
 
 def scons():
     """Scons function"""
 
-    Import('env prereqs')
+    Import('env prereqs IOF_VERSION')
 
     # Set options which are used throughout the src.
     tenv = env.Clone()
-    tenv.Append(CFLAGS=['-pthread'])
-    tenv.Append(CPPDEFINES=['_FILE_OFFSET_BITS=64', '_GNU_SOURCE'])
-    tenv.Append(CPPPATH=['common/include'])
-    tenv.Append(CPPPATH=['include'])
-    tenv.Append(LIBS='pthread')
+    tenv.AppendUnique(CFLAGS=['-pthread'])
+    tenv.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
+    tenv.AppendUnique(CPPPATH=['common/include'])
+    tenv.AppendUnique(CPPPATH=['include'])
+    tenv.AppendUnique(LIBS='pthread')
 
     prereqs.require(tenv, 'cart')
 
+    il_lib = build_libioil_shared(tenv, IOF_VERSION)
+
+    static_env = tenv.Clone()
+
+    # Set this after cloning environment used for interception library.
+    # Otherwise, can't define open and open64 entry points
+    tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+
     # Build a static library of the common parts.
-    common = []
-    for src in COMMON_SRC:
-        common += tenv.Object(os.path.join('common', src))
+    common = build_common(tenv, False)
+
+    il_lib += build_libioil_static(static_env, common)
 
     # Now build the CNSS application
     cenv = tenv.Clone()
 
     # Set the define in SConscript so that it's in place for the prereqs.require
     # check which will verify fuse3/fuse.h can be loaded.
-    cenv.Append(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
-    cenv.Append(CPPPATH=['cnss'])
+    cenv.AppendUnique(CPPFLAGS=['-DFUSE_USE_VERSION=30'])
+    cenv.AppendUnique(CPPPATH=['cnss'])
 
     if env.get('PLATFORM') != 'darwin':
-        cenv.Append(LIBS='dl')
+        cenv.AppendUnique(LIBS='dl')
 
     if cenv.get('fuse3'):
         prereqs.require(cenv, 'fuse')
-        cenv.Append(CPPDEFINES=['IOF_USE_FUSE3=1'])
+        cenv.AppendUnique(CPPDEFINES=['IOF_USE_FUSE3=1'])
     else:
         if env.get('PLATFORM') == 'darwin':
-            cenv.Append(CPPPATH=['/usr/local/include/osxfuse'],
-                        LIBS=['osxfuse'])
+            cenv.AppendUnique(CPPPATH=['/usr/local/include/osxfuse'],
+                              LIBS=['osxfuse'])
         else:
-            cenv.Append(LIBS=['fuse'])
+            cenv.AppendUnique(LIBS=['fuse'])
 
     cnss_obj = []
     for src in CNSS_SRC:
@@ -102,7 +167,7 @@ def scons():
     ienv = tenv.Clone()
     progs += ienv.Program(['ionss/ionss.c', common])
 
-    Default(progs)
+    Default(progs + il_lib)
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 

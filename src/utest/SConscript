@@ -38,9 +38,10 @@
 
 CUNIT_SRC = ['utest_gah.c', 'test_ctrl_fs.c']
 VALGRIND_EXCLUSIONS = ['test_ctrl_fs.c']
-OBJS = {'utest_gah.c':['../common/ios_gah.o'],
-        'test_ctrl_fs.c':['../cnss/ctrl_fs.o', '../cnss/ctrl_common.o',
-                          '../common/log.o']
+OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
+        'test_ctrl_fs.c':['../cnss/ctrl_fs$OBJSUFFIX',
+                          '../cnss/ctrl_common$OBJSUFFIX',
+                          '../common/log$OBJSUFFIX']
        }
 DEPS = {'test_ctrl_fs.c':['cart']}
 CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include']}

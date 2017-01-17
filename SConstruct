@@ -44,6 +44,8 @@ except ImportError:
     raise ImportError \
           ("\'prereq_tools\' module not found; run \'git submodule update\'")
 
+IOF_VERSION = "0.0.1"
+
 def save_build_info(env, prereqs, platform):
     """Save the build information"""
 
@@ -63,7 +65,6 @@ def save_build_info(env, prereqs, platform):
 
 def scons():
     """Scons function"""
-
     platform = os.uname()[0]
     opts_file = os.path.join(Dir('#').abspath, 'iof-%s.conf' % platform)
     env = DefaultEnvironment()
@@ -85,7 +86,7 @@ def scons():
                                  "components.py"),
                     prebuild=["ompi", "cart"])
 
-    Export('env prereqs')
+    Export('env prereqs IOF_VERSION')
 
     env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
                        '-std=gnu99', '-Wno-missing-braces'])
@@ -93,6 +94,13 @@ def scons():
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',
                           False))
+    #DCO-6641: EnumVariable isn't defined in the mock SCons for pylint
+    #pylint: disable=undefined-variable
+    opts.Add(EnumVariable('libioil',
+                          'Build the interception library', 'shared',
+                          allowed_values=('none', 'shared', 'static', 'all'),
+                          ignorecase=2))
+    #pylint: enable=undefined-variable
 
     opts.Update(env)
     config = Configure(env)

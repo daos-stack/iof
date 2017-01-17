@@ -1,0 +1,8 @@
+--wrap=open
+--wrap=open64
+--wrap=creat
+--wrap=creat64
+--wrap=close
+--wrap=fopen
+--wrap=fopen64
+--wrap=fclose
