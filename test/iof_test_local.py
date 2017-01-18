@@ -38,9 +38,9 @@
 """
 local iof cnss / ionss test
 
-In addition it's possible to launch this test by running:
+It's possible to launch this test by running:
 
-pythom3.4 -m unittest -c iof_test_local
+python3.4 -m unittest -c iof_test_local
 
 Or to launch a specific test by running:
 
@@ -64,16 +64,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
     proc = None
     import_dir = None
     export_dir = None
+    shutdown_file = None
     e_dir = None
 
     def is_running(self):
         """Check if the cnss is running"""
-        shutdown_file = os.path.join(self.import_dir, '.ctrl', 'shutdown')
-        self.logger.info("Checking for %s", shutdown_file)
-        return os.path.exists(shutdown_file)
+        return os.path.exists(self.shutdown_file)
 
     def setUp(self):
         """set up the test"""
+
+        self.logger.info("Starting for %s", self.id())
 
         if self.logger.getEffectiveLevel() == logging.WARNING:
             self.logger.setLevel(logging.INFO)
@@ -81,6 +82,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
             self.logger.addHandler(__ch)
 
         self.import_dir = tempfile.mkdtemp()
+        self.shutdown_file = os.path.join(self.import_dir, '.ctrl', 'shutdown')
         self.e_dir = tempfile.mkdtemp()
 
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
@@ -93,25 +95,32 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
 
-        log_path = os.getenv("IOF_TESTLOG", "local")
+        log_path = os.getenv("IOF_TESTLOG", 'output/%s' % self.id())
+
+        log_mask = os.getenv("CRT_LOG_MASK", "INFO")
 
         valgrind = iofcommontestsuite.valgrind_suffix()
 
         cmd = [orterun,
                '--output-filename', log_path,
                '-n', '1',
+               '-x', 'CRT_LOG_MASK=%s' % log_mask,
                '-x', 'CNSS_PREFIX=%s' % self.import_dir]
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
-                    '-n', '1'])
+                    '-n', '1',
+                    '-x', 'CRT_LOG_MASK=%s' % log_mask])
         cmd.extend(valgrind)
-        cmd.extend(['ionss',
-                    '%s/' % self.export_dir, '/usr/'])
+        cmd.extend(['ionss', self.export_dir, '/usr'])
 
         self.proc = self.common_launch_process('', ' '.join(cmd))
+
+        elapsed_time = 0
         while not self.is_running():
-            self.logger.info("Sleeping")
+            elapsed_time += 1
+            if elapsed_time > 30:
+                self.fail("Could not detect startup in 30 seconds")
             time.sleep(1)
 
         self.logger.info("Running")
@@ -121,8 +130,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
-            filename = os.path.join(self.import_dir, '.ctrl', 'shutdown')
-            f = open(filename, 'w')
+            f = open(self.shutdown_file, 'w')
             f.write('1')
             try:
                 f.close()

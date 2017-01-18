@@ -73,7 +73,7 @@ class TestIof():
             print("prefix is not a directory %s" % self.start_dir)
             return False
         filename = os.path.join(self.ctrl_dir, 'shutdown')
-        i = 10
+        i = 30
         while i > 0:
             i = i - 1
             time.sleep(1)
