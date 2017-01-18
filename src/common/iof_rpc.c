@@ -68,12 +68,8 @@ struct crt_msg_field *readdir_out[] = {
 	&CMF_INT,
 };
 
-struct crt_msg_field *psr_query[] = {
+struct crt_msg_field *psr_out[] = {
 	&CMF_IOVEC
-};
-
-struct crt_msg_field *psr_query_in[] = {
-	&CMF_UINT64
 };
 
 struct crt_msg_field *closedir_in[] = {
@@ -83,8 +79,8 @@ struct crt_msg_field *closedir_in[] = {
 
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
-							psr_query_in,
-							psr_query);
+							 NULL,
+							 psr_out);
 
 struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
 							string_in,

@@ -721,7 +721,6 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 {
 	int ret;
 	struct query_cb_r reply = {0};
-	struct psr_in *in = NULL;
 
 	reply.complete = 0;
 	reply.query = query;
@@ -733,9 +732,6 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 				ret);
 		return ret;
 	}
-
-	in = crt_req_get(*query_rpc);
-	in->str = "sign on rpc";
 
 	ret = crt_req_send(*query_rpc, query_callback, &reply);
 	if (ret) {

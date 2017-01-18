@@ -137,10 +137,6 @@ struct iof_closedir_in {
 	uint64_t my_fs_id;
 };
 
-struct psr_in {
-	char *str;
-};
-
 extern struct crt_req_format READDIR_FMT;
 
 extern struct crt_req_format QUERY_RPC_FMT;
