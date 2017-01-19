@@ -43,7 +43,7 @@
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
-/*For IOF Plugin*/
+/* For IOF Plugin */
 struct iof_state {
 	/*destination group*/
 	crt_group_t *dest_group;
@@ -58,18 +58,35 @@ struct iof_state {
 
 };
 
-/*handle passed to all CNSS callbacks*/
-struct iof_handle {
-	struct iof_state *state;
-	struct cnss_plugin_cb *cb;
-};
-
-/*for each projection*/
+/* For each projection */
 struct fs_handle {
 	struct iof_state *iof_state;
 	int my_fs_id;
 };
 
+/* Everything above here relates to how the ION plugin communicates with the
+ * CNSS, everything below here relates to internals to the plugin.  At some
+ * point we should split this header file up into two.
+ */
+
+/* Data which is stored against an open directory handle */
+struct dir_handle {
+	/* The name of the directory */
+	char *name;
+	/* The handle for accessing the directory on the IONSS */
+	struct ios_gah gah;
+	/* Any RPC reference held across readdir() calls */
+	crt_rpc_t *rpc;
+	/* Pointer to any retreived data from readdir() RPCs */
+	struct iof_readdir_reply *replies;
+	int reply_count;
+	/* Set to 1 initially, but 0 if there is a unrecoverable error */
+	int handle_valid;
+	/* Set to 0 if the server rejects the GAH at any point */
+	int gah_valid;
+};
+
+/* Data which is stored against an open file handle */
 struct iof_file_handle {
 	struct ios_gah gah;
 	int handle_valid;
@@ -79,6 +96,10 @@ struct iof_file_handle {
 
 int ioc_cb_progress(crt_context_t, struct fuse_context *, int *);
 
+int ioc_opendir(const char *, struct fuse_file_info *);
+
+int ioc_closedir(const char *, struct fuse_file_info *);
+
 int ioc_open(const char *, struct fuse_file_info *);
 
 struct iof_file_handle *ioc_fh_new(const char *);
@@ -87,6 +108,15 @@ int ioc_release(const char *, struct fuse_file_info *);
 
 int ioc_create(const char *, mode_t, struct fuse_file_info *);
 
-int ioc_getattr(const char *path, struct stat *stbuf);
+int ioc_getattr(const char *, struct stat *stbuf);
+
+#if IOF_USE_FUSE3
+int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
+		struct fuse_file_info *, enum fuse_readdir_flags);
+#else
+int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
+		struct fuse_file_info *);
+
+#endif
 
 #endif
