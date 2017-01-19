@@ -71,8 +71,6 @@ struct fs_handle {
 
 /* Data which is stored against an open directory handle */
 struct dir_handle {
-	/* The name of the directory */
-	char *name;
 	/* The handle for accessing the directory on the IONSS */
 	struct ios_gah gah;
 	/* Any RPC reference held across readdir() calls */
@@ -84,6 +82,8 @@ struct dir_handle {
 	int handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
 	int gah_valid;
+	/* The name of the directory */
+	char name[];
 };
 
 /* Data which is stored against an open file handle */

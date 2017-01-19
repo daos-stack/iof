@@ -63,7 +63,6 @@ struct iof_file_handle *ioc_fh_new(const char *name)
 	if (!handle)
 		return NULL;
 	strncpy(handle->name, name, name_len);
-	handle->name[name_len - 1] = '\0';
 
 	return handle;
 }

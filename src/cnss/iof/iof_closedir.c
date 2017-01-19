@@ -133,8 +133,6 @@ out:
 	if (dir_handle->rpc)
 		crt_req_decref(dir_handle->rpc);
 
-	if (dir_handle->name)
-		free(dir_handle->name);
 	free(dir_handle);
 	return -rc;
 }

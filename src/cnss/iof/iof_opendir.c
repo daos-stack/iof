@@ -106,17 +106,14 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	struct opendir_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
+	size_t dir_len = strlen(dir) + 1;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	dir_handle = calloc(1, sizeof(struct dir_handle));
+	dir_handle = calloc(1, dir_len + sizeof(*dir_handle));
 	if (!dir_handle)
-		return -EIO;
-	dir_handle->name = strdup(dir);
-	if (!dir_handle->name) {
-		free(dir_handle);
-		return -EIO;
-	}
+		return -ENOMEM;
+	strncpy(dir_handle->name, dir, dir_len);
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
@@ -125,7 +122,6 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	iof_state = fs_handle->iof_state;
 	if (!iof_state) {
 		IOF_LOG_ERROR("Could not retrieve iof state");
-		free(dir_handle->name);
 		free(dir_handle);
 		return -EIO;
 	}
@@ -135,7 +131,6 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	if (ret || !rpc) {
 		IOF_LOG_ERROR("Could not create opendir request, ret = %lu",
 			      ret);
-		free(dir_handle->name);
 		free(dir_handle);
 		return -EIO;
 	}
@@ -150,14 +145,12 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	ret = crt_req_send(rpc, opendir_cb, &reply);
 	if (ret) {
 		IOF_LOG_ERROR("Could not send opendir rpc, ret = %lu", ret);
-		free(dir_handle->name);
 		free(dir_handle);
 		return -EIO;
 	}
 
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc) {
-		free(dir_handle->name);
 		free(dir_handle);
 		return -rc;
 	}
@@ -170,7 +163,6 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		IOF_LOG_INFO("Dah %s", d);
 		free(d);
 	} else {
-		free(dir_handle->name);
 		free(dir_handle);
 	}
 
