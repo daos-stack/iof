@@ -144,9 +144,9 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 {
 	struct iof_string_in *in = NULL;
 	struct iof_getattr_out *out = NULL;
-	uint64_t ret;
 	char new_path[IOF_MAX_PATH_LEN];
 	struct stat stbuf = {0};
+	int rc;
 
 	in = crt_req_get(getattr_rpc);
 	if (in == NULL) {
@@ -161,11 +161,11 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 	}
 
 	IOF_LOG_DEBUG("Checking path %s", in->path);
-	ret = (uint64_t)iof_get_path(in->my_fs_id, in->path, &new_path[0]);
-	if (ret) {
-		IOF_LOG_ERROR("could not construct filesystem path, ret = %lu",
-				ret);
-		out->err = ret;
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
+			      rc);
+		out->err = rc;
 	} else {
 		int rc;
 
@@ -183,9 +183,9 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
-	ret = crt_reply_send(getattr_rpc);
-	if (ret)
-		IOF_LOG_ERROR("response not sent, ret = %lu", ret);
+	rc = crt_reply_send(getattr_rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 	return 0;
 }
 
@@ -193,8 +193,8 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = NULL;
 	struct iof_opendir_out *out = NULL;
-	uint64_t ret;
 	char new_path[IOF_MAX_PATH_LEN];
+	int rc;
 
 	in = crt_req_get(rpc);
 	if (!in) {
@@ -209,11 +209,11 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	}
 
 	IOF_LOG_DEBUG("Checking path %s", in->path);
-	ret = (uint64_t)iof_get_path(in->my_fs_id, in->path, &new_path[0]);
-	if (ret) {
-		IOF_LOG_ERROR("could not construct filesystem path, ret = %lu",
-			      ret);
-		out->err = ret;
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
+			      rc);
+		out->err = rc;
 	} else {
 		DIR *dir_h;
 		struct ios_gah gah;
@@ -246,9 +246,9 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
-	ret = crt_reply_send(rpc);
-	if (ret)
-		IOF_LOG_ERROR("response not sent, ret = %lu", ret);
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 	return 0;
 }
 
@@ -272,8 +272,6 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	char new_path[IOF_MAX_PATH_LEN];
 	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {};
 	int reply_idx = 0;
-	uint64_t ret;
-
 	char *gah_d;
 	int rc;
 
@@ -333,11 +331,10 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 			      replies[reply_idx].d_name, new_path);
 
 		errno = 0;
-		ret = lstat(new_path, &replies[reply_idx].stat);
-		if (ret != 0) {
-			ret = errno;
+		rc = lstat(new_path, &replies[reply_idx].stat);
+		if (rc != 0)
 			replies[reply_idx].stat_rc = errno;
-		}
+
 		reply_idx++;
 	} while (reply_idx < (IONSS_READDIR_ENTRIES_PER_RPC));
 
@@ -349,16 +346,15 @@ out:
 		crt_iov_set(&out->replies, &replies[0],
 			    sizeof(struct iof_readdir_reply) * reply_idx);
 
-	ret = crt_reply_send(rpc);
-	if (ret)
-		IOF_LOG_ERROR(" response not sent, ret = %lu", ret);
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR(" response not sent, rc = %u", rc);
 	return 0;
 }
 
 int iof_closedir_handler(crt_rpc_t *rpc)
 {
 	struct iof_closedir_in *in = NULL;
-	uint64_t ret;
 	struct ionss_dir_handle *handle = NULL;
 	char *d;
 	int rc;
@@ -390,9 +386,9 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 
 	ios_gah_deallocate(gs, in->gah.iov_buf);
 
-	ret = crt_reply_send(rpc);
-	if (ret)
-		IOF_LOG_ERROR("response not sent, ret = %lu", ret);
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 	return 0;
 }
 

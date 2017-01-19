@@ -38,10 +38,8 @@
 
 #ifdef IOF_USE_FUSE3
 #include <fuse3/fuse.h>
-#include <fuse3/fuse_lowlevel.h>
 #else
 #include <fuse/fuse.h>
-#include <fuse/fuse_lowlevel.h>
 #endif
 
 #include "iof_common.h"
@@ -99,7 +97,6 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct iof_file_handle *handle;
-	uint64_t ret;
 	struct iof_create_in *in = NULL;
 	struct create_cb_r reply = {0};
 	struct fs_handle *fs_handle;
@@ -123,11 +120,11 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, CREATE_OP,
-			     &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %lu",
-			      ret);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, CREATE_OP,
+			    &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
 		return -EIO;
 	}
 
@@ -139,9 +136,9 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	reply.fh = handle;
 	reply.complete = 0;
 
-	ret = crt_req_send(rpc, create_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %lu", ret);
+	rc = crt_req_send(rpc, create_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);

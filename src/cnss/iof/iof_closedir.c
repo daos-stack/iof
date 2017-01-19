@@ -66,13 +66,12 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	uint64_t ret;
 	struct iof_closedir_in *in = NULL;
 	struct closedir_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
-	int rc = 0;
+	int rc;
 
 	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
 
@@ -98,11 +97,11 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		goto out;
 	}
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			     CLOSEDIR_OP, &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create closedir request, ret = %lu",
-			      ret);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    CLOSEDIR_OP, &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
 		rc = EIO;
 		goto out;
 	}
@@ -110,9 +109,9 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	in = crt_req_get(rpc);
 	crt_iov_set(&in->gah, &dir_handle->gah, sizeof(struct ios_gah));
 
-	ret = crt_req_send(rpc, closedir_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send closedir rpc, ret = %lu", ret);
+	rc = crt_req_send(rpc, closedir_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		rc = EIO;
 		goto out;
 	}

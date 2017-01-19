@@ -38,10 +38,8 @@
 
 #ifdef IOF_USE_FUSE3
 #include <fuse3/fuse.h>
-#include <fuse3/fuse_lowlevel.h>
 #else
 #include <fuse/fuse.h>
-#include <fuse/fuse_lowlevel.h>
 #endif
 
 #include "iof_common.h"

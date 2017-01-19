@@ -93,7 +93,7 @@ static int open_cb(const struct crt_cb_info *cb_info)
 
 	out = crt_reply_get(rpc);
 	if (!out) {
-		IOF_LOG_ERROR("Could not get open output");
+		IOF_LOG_ERROR("Could not get output");
 		reply->err = IOF_ERR_CART;
 		reply->complete = 1;
 		return 0;
@@ -111,11 +111,10 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct iof_file_handle *handle;
-	uint64_t ret;
-	struct iof_string_in *in = NULL;
+	struct iof_string_in *in;
 	struct open_cb_r reply = {0};
 	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
+	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -133,11 +132,10 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPEN_OP,
-			     &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %lu",
-			      ret);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPEN_OP,
+			    &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -EIO;
 	}
 
@@ -148,9 +146,9 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	reply.fh = handle;
 	reply.complete = 0;
 
-	ret = crt_req_send(rpc, open_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %lu", ret);
+	rc = crt_req_send(rpc, open_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send open rpc, ret = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);

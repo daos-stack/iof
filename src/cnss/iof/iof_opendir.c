@@ -80,7 +80,7 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 
 	out = crt_reply_get(rpc);
 	if (!out) {
-		IOF_LOG_ERROR("Could not get opendir output");
+		IOF_LOG_ERROR("Could not get output");
 		reply->rc = EIO;
 		reply->complete = 1;
 		return 0;
@@ -101,7 +101,6 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct dir_handle *dir_handle;
-	uint64_t ret;
 	struct iof_string_in *in = NULL;
 	struct opendir_cb_r reply = {0};
 	struct fs_handle *fs_handle;
@@ -126,11 +125,10 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPENDIR_OP,
-			     &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create opendir request, ret = %lu",
-			      ret);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, OPENDIR_OP,
+			    &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		free(dir_handle);
 		return -EIO;
 	}
@@ -142,9 +140,9 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	reply.dh = dir_handle;
 	reply.complete = 0;
 
-	ret = crt_req_send(rpc, opendir_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send opendir rpc, ret = %lu", ret);
+	rc = crt_req_send(rpc, opendir_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		free(dir_handle);
 		return -EIO;
 	}

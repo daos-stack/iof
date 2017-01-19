@@ -68,7 +68,7 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 
 	out = crt_reply_get(getattr_rpc);
 	if (!out) {
-		IOF_LOG_ERROR("Could not get getattr output");
+		IOF_LOG_ERROR("Could not get output");
 		reply->complete = 1;
 		return IOF_ERR_CART;
 	}
@@ -83,7 +83,6 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 int ioc_getattr(const char *path, struct stat *stbuf)
 {
 	struct fuse_context *context;
-	uint64_t ret;
 	struct iof_string_in *in = NULL;
 	struct getattr_cb_r reply = {0};
 	struct fs_handle *fs_handle;
@@ -101,11 +100,10 @@ int ioc_getattr(const char *path, struct stat *stbuf)
 	}
 	IOF_LOG_DEBUG("Path: %s", path);
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, GETATTR_OP,
-			     &getattr_rpc);
-	if (ret || !getattr_rpc) {
-		IOF_LOG_ERROR("Could not create getattr request, ret = %lu",
-			      ret);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, GETATTR_OP,
+			    &getattr_rpc);
+	if (rc || !getattr_rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -EIO;
 	}
 
@@ -116,9 +114,9 @@ int ioc_getattr(const char *path, struct stat *stbuf)
 	reply.complete = 0;
 	reply.stat = stbuf;
 
-	ret = crt_req_send(getattr_rpc, getattr_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send getattr rpc, ret = %lu", ret);
+	rc = crt_req_send(getattr_rpc, getattr_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
