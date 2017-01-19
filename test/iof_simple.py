@@ -42,7 +42,7 @@ Usage:
 
 Executes from the install/Linux/TESTING directory.
 The results are placed in the testLogs/testRun_<date-time-stamp>/
-multi_test_nss/iof_simple_test/iof_simple_test_<node> directory.
+multi_test_nss/iof_simple/iof_simple_<node> directory.
 """
 
 import os

@@ -12,7 +12,7 @@ module:
     setKeyFromInfo:
         - [IOF_CART_PREFIX, CART_PREFIX, ""]
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
-        - [IOF_TEST_BIN, PREFIX, "/bin"]
+        - [IOF_TEST_BIN, PREFIX, "/bin/"]
     srcDir: ["src/cnss", "src/ionss"]
 
 directives:

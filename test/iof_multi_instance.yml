@@ -26,7 +26,7 @@ execStrategy:
       type: setup
       nodeType: "IOF_TEST_CN"
       setConfigKeys:
-    - name: "iof_simple_test"
+    - name: "iof_simple"
       nodeType: "IOF_TEST_CN"
       setConfigKeys:
     - name: "cleanup_iof"

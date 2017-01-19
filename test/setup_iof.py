@@ -37,7 +37,7 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 setup_iof is invoked by the multi instance test runner and runs prior
-to the iof_simple_test.
+to the iof_simple.
 The setup_iof waits 10s for the ctrl_fs to start and validates the existence
 of the same.
 

@@ -57,6 +57,7 @@ set TR_USE_VALGRIND in iof_test_ionss.yml to callgrind
 
 """
 
+#pylint: disable=too-many-locals
 import os
 import iofcommontestsuite
 
@@ -64,24 +65,24 @@ def setUpModule():
     """ set up test environment """
     iofcommontestsuite.commonSetUpModule()
 
-class Testnss(iofcommontestsuite.CommonTestSuite):
+class Checknss(iofcommontestsuite.CommonTestSuite):
     """Simple test"""
 
     proc = None
     def setUp(self):
         """set up the test"""
-        self.logger.info("Testnss: setUp begin")
-        self.logger.info("Testnss: setUp end\n")
+        self.logger.info("Checknss: setUp begin")
+        self.logger.info("Checknss: setUp end\n")
 
     def tearDown(self):
         """tear down the test"""
-        self.logger.info("Testnss: tearDown begin")
+        self.logger.info("Checknss: tearDown begin")
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
             if procrtn != 0:
                 self.fail("Stopping job returned %d" % procrtn)
 
-        self.logger.info("Testnss: tearDown end\n\n")
+        self.logger.info("Checknss: tearDown end\n\n")
         self.commonTearDownModule()
 
     def test_ionss_simple_test(self):
@@ -90,11 +91,12 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
         (cmd, prefix) = self.common_add_prefix_logdir()
         (cnss, ionss) = self.common_add_server_client()
         fs = ' '.join(self.fs_list)
-        test_path = os.getenv('IOF_TEST_BIN', "")
-        pass_env = " -x CRT_LOG_MASK -x CNSS_PREFIX"
-        local_server = "%s%s %s %s/ionss %s" % \
+        log_mask = os.getenv('CRT_LOG_MASK', 'INFO')
+        test_path = os.getenv('IOF_TEST_BIN', '')
+        pass_env = ' -x CRT_LOG_MASK=%s -x CNSS_PREFIX' % log_mask
+        local_server = "%s%s %s %sionss %s" % \
                        (pass_env, ionss, prefix, test_path, fs)
-        local_client = "%s%s %s %s/cnss :" % \
+        local_client = "%s%s %s %scnss :" % \
                        (pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_client + local_server
         self.proc = self.common_launch_process(testmsg, cmdstr)
@@ -102,13 +104,13 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
             self.fail("Unable to launch (c|io)nss")
         allnode_cmd = self.common_get_all_cn_cmd()
         cnss_prefix = os.environ["CNSS_PREFIX"]
-        cmdstr = "%s python3 %s/testiof.py %s" % \
+        cmdstr = "%s python3 %s/checkiof.py %s" % \
                  (allnode_cmd, os.path.dirname(os.path.abspath(__file__)), \
                   cnss_prefix)
-        rc = self.common_launch_test(testmsg, cmdstr)
+        rc = self.common_launch_cmd(testmsg, cmdstr)
         self.logger.info("Proc is %d", rc)
         if rc != 0:
-            self.fail("testiof.py returned %d" % rc)
+            self.fail("checkiof.py returned %d" % rc)
         rc = self.common_stop_process(self.proc)
         if rc != 0:
             self.fail("Stopping job returned %d" % rc)

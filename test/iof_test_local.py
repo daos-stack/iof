@@ -191,7 +191,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         for mount in ['.ctrl', 'usr', 'exp']:
             mp = os.path.join(self.import_dir, mount)
             try:
-                self.common_launch_test("", "fusermount -q -u %s" % mp)
+                self.common_launch_cmd("", "fusermount -q -u %s" % mp)
             except FileNotFoundError:
                 pass
             os.rmdir(mp)
@@ -272,7 +272,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         a = os.stat(filename)
         b = os.stat(os.path.join(self.export_dir, 'test_file'))
 
-        os.unlink(filename)
+        self.logger.info(a)
+        self.logger.info(b)
+
+        # Currently the FUSE plugin does not correctly report inodes
+        # so currently there are differences
+
         if a != b:
             self.logger.info("File stat data is different")
 

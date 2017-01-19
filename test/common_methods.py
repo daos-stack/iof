@@ -38,7 +38,7 @@
 """
 Test methods for creating I/O to a filesystem.
 
-These methods are inhereted by both iof_test_local and iof_simple_test so the
+These methods are inhereted by both iof_test_local and iof_simple so the
 are invoked on both simple and multi-node launch
 
 """

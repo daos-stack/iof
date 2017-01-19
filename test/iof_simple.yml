@@ -5,7 +5,7 @@ defaultENV:
     MCL_LOG_LEVEL: "4"
 
 module:
-    name: "iof_simple_test"
+    name: "iof_simple"
     subLogKey: "IOF_TESTLOG"
     setKeyFromInfo:
         - [IOF_PREFIX, PREFIX, ""]

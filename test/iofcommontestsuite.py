@@ -83,7 +83,7 @@ def commonSetUpModule():
     allnode_cmd = cts.common_get_all_cn_cmd()
     testmsg = "create %s on all CNs" % tempdir
     cmdstr = "%smkdir -p %s " % (allnode_cmd, tempdir)
-    cts.common_launch_test(testmsg, cmdstr)
+    cts.common_launch_cmd(testmsg, cmdstr)
     cts.common_manage_ionss_dir()
     print("Testnss: module setup end\n\n")
 
@@ -126,6 +126,8 @@ class CommonTestSuite(unittest.TestCase):
     """Attributes common to the IOF tests"""
     fs_list = []
     logger = logging.getLogger("TestRunnerLogger")
+    if logger.getEffectiveLevel() == 30:
+        logger.setLevel(logging.INFO)
     __ion_dir = None
 
     @staticmethod
@@ -151,7 +153,7 @@ class CommonTestSuite(unittest.TestCase):
         allnode_cmd = self.common_get_all_ion_cmd()
         testmsg = "create base ION dirs %s" % ion_dir
         cmdstr = "%smkdir -p %s " % (allnode_cmd, ion_dir)
-        self.common_launch_test(testmsg, cmdstr)
+        self.common_launch_cmd(testmsg, cmdstr)
         i = 2
         while i > 0:
             fs = "FS_%s" % i
@@ -159,10 +161,10 @@ class CommonTestSuite(unittest.TestCase):
             self.fs_list.append(abs_path)
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "%smkdir -p %s" % (allnode_cmd, abs_path)
-            self.common_launch_test(testmsg, cmdstr)
+            self.common_launch_cmd(testmsg, cmdstr)
             i = i - 1
 
-    def common_launch_test(self, msg, cmdstr):
+    def common_launch_cmd(self, msg, cmdstr):
         """Launch a test and wait for it to complete"""
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
           msg, cmdstr)
@@ -344,10 +346,9 @@ class CommonTestSuite(unittest.TestCase):
         allnode_cmd = self.common_get_all_cn_cmd()
         testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
         cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
-        self.common_launch_test(testmsg, cmdstr)
-        allnode_cmd = self.common_get_all_ion_cmd()
+        self.common_launch_cmd(testmsg, cmdstr)
         if self.__ion_dir is not None:
             testmsg = "remove %s on all IONs" % self.__ion_dir
             cmdstr = "%srm -rf %s " % (allnode_cmd, self.__ion_dir)
-            self.common_launch_test(testmsg, cmdstr)
+            self.common_launch_cmd(testmsg, cmdstr)
         print("Testnss: module tearDown end\n\n")

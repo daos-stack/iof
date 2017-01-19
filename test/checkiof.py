@@ -41,7 +41,7 @@ import os
 import sys
 import time
 
-class TestIof():
+class CheckIof():
     """IOF filesystem tests in private access mode"""
 
     def __init__(self, cnss_prefix):
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     prefix = sys.argv[1]
     print("CNSS Prefix: %s " % prefix)
-    mytest = TestIof(prefix)
+    mytest = CheckIof(prefix)
     assert mytest.iofstarted()
     assert mytest.iof_fs_test()
     assert mytest.iofshutdown()
