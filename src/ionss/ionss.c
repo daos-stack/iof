@@ -55,7 +55,7 @@ static struct ios_gah_store *gs;
 static int num_fs;
 static int shutdown;
 
-#define IONSS_READDIR_ENTRIES_PER_RPC (9)
+#define IONSS_READDIR_ENTRIES_PER_RPC (2)
 
 struct ionss_dir_handle {
 	int      fs_id;

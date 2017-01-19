@@ -220,6 +220,35 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         if a != b:
             self.logger.info("File stat data is different")
 
+    def test_many_files(self):
+        """Create lots of files, and then perform readdir"""
+
+        test_dir = os.path.join(self.import_dir, 'exp', 'many')
+
+        os.mkdir(os.path.join(self.export_dir, 'many'))
+
+
+        files = []
+        for x in range(0, 100):
+            this_file = 'file %d' % x
+            filename = os.path.join(test_dir, this_file)
+            fd = open(filename, 'w')
+            fd.close()
+            files.append(this_file)
+
+        export_list = os.listdir(os.path.join(self.export_dir, 'many'))
+        self.logger.info(sorted(files))
+        self.logger.info(sorted(export_list))
+
+        import_list = os.listdir(test_dir)
+        self.logger.info(sorted(export_list))
+
+        if sorted(files) != sorted(export_list):
+            self.fail("Export directory contents are wrong")
+
+        if sorted(files) != sorted(import_list):
+            self.fail("Import Directory contents are wrong")
+
     def test_file_open_existing(self):
         """Open a existing file for reading"""
 
