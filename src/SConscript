@@ -48,7 +48,8 @@ RPC_SRC = ['closedir',
            'opendir',
            'read',
            'readdir',
-           'release']
+           'release',
+           'write']
 IOFIL_SRC = ['int_posix.c', 'int_stdio.c']
 
 def build_common(env, is_shared):

@@ -136,4 +136,7 @@ int ioc_read(const char *, char *, size_t, off_t, struct fuse_file_info *);
 
 int ioc_mkdir(const char *, mode_t);
 
+int ioc_write(const char *, const char *, size_t, off_t,
+	      struct fuse_file_info *);
+
 #endif

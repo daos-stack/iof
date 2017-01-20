@@ -763,6 +763,56 @@ out:
 	return 0;
 }
 
+int iof_write_handler(crt_rpc_t *rpc)
+{
+	struct iof_write_in *in;
+	struct iof_write_out *out;
+	struct ionss_file_handle *handle = NULL;
+	size_t bytes_written;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Writing to %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+	}
+
+	bytes_written = pwrite(handle->fd, in->data.iov_buf, in->data.iov_len,
+			       in->base);
+	if (bytes_written == -1)
+		out->rc = errno;
+	else
+		out->len = bytes_written;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -859,6 +909,7 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
 	PROTO_SET_FUNCTION(proto, getattr_gah, iof_getattr_gah_handler);
 	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
+	PROTO_SET_FUNCTION(proto, write, iof_write_handler);
 	iof_proto_commit(proto);
 
 	return ret;

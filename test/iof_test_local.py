@@ -286,3 +286,30 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
+
+    def test_mkdir(self):
+        """Create a directory"""
+
+        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
+
+        os.mkdir(ndir)
+
+        print(os.listdir(ndir))
+
+    def test_file_write(self):
+        """Write to a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'b_file')
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+        tfile = os.path.join(self.export_dir, 'b_file')
+
+        fd = open(tfile, 'r')
+        data = fd.read()
+        fd.close()
+
+        if data != 'World':
+            self.fail('File contents wrong %s %s' % ('Hello', data))

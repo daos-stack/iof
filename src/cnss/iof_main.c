@@ -174,6 +174,7 @@ static struct fuse_operations ops = {
 	.create = ioc_create,
 	.read = ioc_read,
 	.mkdir = ioc_mkdir,
+	.write = ioc_write,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)
