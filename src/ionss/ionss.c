@@ -664,6 +664,48 @@ out:
 	return 0;
 }
 
+int iof_mkdir_handler(crt_rpc_t *rpc)
+{
+	struct iof_create_in *in;
+	struct iof_status_out *out;
+	char new_path[IOF_MAX_PATH_LEN];
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = mkdir(new_path, in->mode);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -758,6 +800,13 @@ int ionss_register(void)
 				   iof_read_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_srv_register(MKDIR_OP, &MKDIR_FMT,
+				   iof_mkdir_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
 		return ret;
 	}
 

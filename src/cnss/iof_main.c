@@ -185,6 +185,7 @@ static struct fuse_operations ops = {
 	.release = ioc_release,
 	.create = ioc_create,
 	.read = ioc_read,
+	.mkdir = ioc_mkdir,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)
@@ -354,6 +355,12 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	ret = crt_rpc_register(READ_OP, &READ_FMT);
 	if (ret) {
 		IOF_LOG_ERROR("Can not register read RPC, ret = %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(MKDIR_OP, &MKDIR_FMT);
+	if (ret) {
+		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
 		return ret;
 	}
 

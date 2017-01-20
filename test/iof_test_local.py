@@ -280,3 +280,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
 
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
+
+    def test_mkdir(self):
+        """Create a directory"""
+
+        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
+
+        os.mkdir(ndir)
+
+        print(os.listdir(ndir))

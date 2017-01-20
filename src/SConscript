@@ -43,6 +43,7 @@ CNSS_SRC = ['cnss.c', 'iof_main.c', 'ctrl_common.c', 'ctrl_fs.c']
 RPC_SRC = ['closedir',
            'create',
            'getattr',
+           'mkdir',
            'open',
            'opendir',
            'read',

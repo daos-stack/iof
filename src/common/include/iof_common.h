@@ -70,6 +70,7 @@
 #define CLOSE_OP	(0x207)
 #define CREATE_OP	(0x208)
 #define READ_OP		(0x209)
+#define MKDIR_OP	(0x20B)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -150,6 +151,11 @@ struct iof_data_out {
 	int err;
 };
 
+struct iof_status_out {
+	int rc;
+	int err;
+};
+
 extern struct crt_req_format READDIR_FMT;
 
 extern struct crt_req_format QUERY_RPC_FMT;
@@ -167,5 +173,7 @@ extern struct crt_req_format CLOSE_FMT;
 extern struct crt_req_format CREATE_FMT;
 
 extern struct crt_req_format READ_FMT;
+
+extern struct crt_req_format MKDIR_FMT;
 
 #endif

@@ -36,95 +36,100 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#ifdef IOF_USE_FUSE3
+#include <fuse3/fuse.h>
+#else
+#include <fuse/fuse.h>
+#endif
+
 #include "iof_common.h"
+#include "iof.h"
+#include "log.h"
 
-/*input/output format for RPC's*/
-
-struct crt_msg_field *string_in[] = {
-	&CMF_STRING,
-	&CMF_UINT64
+struct mkdir_cb_r {
+	int complete;
+	int err;
+	int rc;
 };
 
-struct crt_msg_field *create_in[] = {
-	&CMF_STRING,
-	&CMF_UINT64,
-	&CMF_INT,
-};
+static int mkdir_cb(const struct crt_cb_info *cb_info)
+{
+	struct mkdir_cb_r *reply = NULL;
+	struct iof_status_out *out = NULL;
+	crt_rpc_t *rpc = cb_info->cci_rpc;
 
-struct crt_msg_field *iov_pair[] = {
-	&CMF_IOVEC,
-	&CMF_INT,
-	&CMF_INT
-};
+	reply = (struct mkdir_cb_r *)cb_info->cci_arg;
 
-struct crt_msg_field *readdir_in[] = {
-	&CMF_IOVEC,
-	&CMF_UINT64,
-	&CMF_INT,
-};
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  Return EIO on any error
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
 
-struct crt_msg_field *readdir_out[] = {
-	&CMF_IOVEC,
-	&CMF_INT,
-};
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not get output");
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
 
-struct crt_msg_field *psr_out[] = {
-	&CMF_IOVEC
-};
+	reply->err = out->err;
+	reply->rc = out->rc;
+	reply->complete = 1;
+	return 0;
+}
 
-struct crt_msg_field *closedir_in[] = {
-	&CMF_IOVEC,
-	&CMF_UINT64
-};
+int ioc_mkdir(const char *file, mode_t mode)
+{
+	struct fuse_context *context;
+	struct iof_create_in *in;
+	struct mkdir_cb_r reply = {0};
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state;
+	crt_rpc_t *rpc = NULL;
+	int rc;
 
-struct crt_msg_field *read_in[] = {
-	&CMF_IOVEC,
-	&CMF_UINT64,
-	&CMF_UINT64,
-};
+	IOF_LOG_INFO("file %s mode %lx", file, (uint64_t)mode);
 
-struct crt_msg_field *status_out[] = {
-	&CMF_INT,
-	&CMF_INT,
-};
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
 
-/*query RPC format*/
-struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
-							 NULL,
-							 psr_out);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, MKDIR_OP,
+			    &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
+	}
 
-struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
-							string_in,
-							iov_pair);
+	in = crt_req_get(rpc);
+	in->path = (crt_string_t)file;
+	in->mode = mode;
+	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
 
-struct crt_req_format OPENDIR_FMT = DEFINE_CRT_REQ_FMT("opendir",
-						       string_in,
-						       iov_pair);
+	rc = crt_req_send(rpc, mkdir_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		return -EIO;
+	}
 
-struct crt_req_format READDIR_FMT = DEFINE_CRT_REQ_FMT("readdir",
-						       readdir_in,
-						       readdir_out);
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc)
+		return -rc;
 
-struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
-							closedir_in,
-							NULL);
+	IOF_LOG_DEBUG("path %s rc %d",
+		      file, reply.err == 0 ? -reply.rc : -EIO);
 
-struct crt_req_format OPEN_FMT = DEFINE_CRT_REQ_FMT("open",
-						string_in,
-						iov_pair);
+	return reply.err == 0 ? -reply.rc : -EIO;
+}
 
-struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
-						closedir_in,
-						NULL);
-
-struct crt_req_format CREATE_FMT = DEFINE_CRT_REQ_FMT("create",
-						create_in,
-						iov_pair);
-
-struct crt_req_format READ_FMT = DEFINE_CRT_REQ_FMT("read",
-						    read_in,
-						    iov_pair);
-
-struct crt_req_format MKDIR_FMT = DEFINE_CRT_REQ_FMT("mkdir",
-						     create_in,
-						     status_out);
