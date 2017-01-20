@@ -48,6 +48,16 @@ static int write_foo(const char *value, void *arg)
 	return 0;
 }
 
+static int check_destroy_foo(void *arg)
+{
+	int *foo = (int *)arg;
+
+	*foo = -1;
+
+	return 0;
+}
+
+
 static int check_file_read(const char *prefix, const char *fname,
 			   const char *expected, const char *source,
 			   int line)
@@ -240,22 +250,27 @@ int main(int argc, char **argv)
 	register_cnss_controls(3, NULL);
 
 	ctrl_register_variable("/class/bar/foo", read_foo,
-			       write_foo, NULL, &foo);
+			       write_foo, check_destroy_foo, &foo);
 	ctrl_register_constant("/large", large_constant);
 	ctrl_register_constant("/class/bar/hello", "Hello World");
 
 	num_failures = run_tests(buf);
-	if (num_failures != 0)
-		printf("%d ctrl_fs tests failed\n", num_failures);
-	else
-		printf("All ctrl_fs tests passed\n");
-
 	if (!interactive) { /* Invoke shutdown */
 		strcpy(end, "/.ctrl/shutdown");
 		utime(buf, NULL);
 	}
 
 	ctrl_fs_wait();
+
+	if (foo != -1) {
+		num_failures++;
+		printf("Destroy callback never invoked\n");
+	}
+	if (num_failures != 0)
+		printf("%d ctrl_fs tests failed\n", num_failures);
+	else
+		printf("All ctrl_fs tests passed\n");
+
 
 	iof_log_close();
 

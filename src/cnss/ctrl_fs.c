@@ -245,44 +245,15 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 
 static int free_node(struct ctrl_node *node);
 
-static int cleanup_node(struct ctrl_node *node)
+static int free_child_nodes(struct ctrl_node *node)
 {
 	struct ctrl_node *item;
-	void *cb_arg;
-	ctrl_fs_destroy_cb_t destroy_cb = NULL;
-	int rc;
 	int bad_rc;
-
-
-	rc = pthread_rwlock_destroy(&node->lock);
-
-	if (rc != 0) {
-		IOF_LOG_ERROR("Could not destroy rwlock in ctrl node");
-		return rc;
-	}
+	int rc = 0;
 
 	while (!TAILQ_EMPTY(&node->queue)) {
 		item = TAILQ_FIRST(&node->queue);
 		TAILQ_REMOVE(&node->queue, item, entry);
-		if (node->ctrl_type == CTRL_VARIABLE) {
-			cb_arg = GET_DATA(node, var, cb_arg);
-			destroy_cb = GET_DATA(node, var, destroy_cb);
-		} else if (node->ctrl_type == CTRL_EVENT) {
-			cb_arg = GET_DATA(node, evnt, cb_arg);
-			destroy_cb = GET_DATA(node, evnt, destroy_cb);
-		} else if (node->ctrl_type == CTRL_COUNTER) {
-			cb_arg = GET_DATA(node, cnt, cb_arg);
-			destroy_cb = GET_DATA(node, cnt, destroy_cb);
-		}
-		if (destroy_cb != NULL) {
-			bad_rc = destroy_cb(cb_arg);
-			if (bad_rc != 0) {
-				IOF_LOG_ERROR("Error destroying ctrl node %s",
-					      node->name);
-				/* Save the value but don't exit the loop */
-				rc = bad_rc;
-			}
-		}
 		bad_rc = free_node(item);
 
 		if (bad_rc != 0) {
@@ -292,6 +263,43 @@ static int cleanup_node(struct ctrl_node *node)
 			rc = bad_rc;
 		}
 	}
+
+	return rc;
+}
+
+static int cleanup_node(struct ctrl_node *node)
+{
+	void *cb_arg;
+	ctrl_fs_destroy_cb_t destroy_cb = NULL;
+	int rc = 0;
+
+	rc = pthread_rwlock_destroy(&node->lock);
+
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not destroy rwlock in ctrl node");
+		return rc;
+	}
+
+	if (node->ctrl_type == CTRL_DIR)
+		return free_child_nodes(node);
+
+	if (node->ctrl_type == CTRL_VARIABLE) {
+		cb_arg = GET_DATA(node, var, cb_arg);
+		destroy_cb = GET_DATA(node, var, destroy_cb);
+	} else if (node->ctrl_type == CTRL_EVENT) {
+		cb_arg = GET_DATA(node, evnt, cb_arg);
+		destroy_cb = GET_DATA(node, evnt, destroy_cb);
+	} else if (node->ctrl_type == CTRL_COUNTER) {
+		cb_arg = GET_DATA(node, cnt, cb_arg);
+		destroy_cb = GET_DATA(node, cnt, destroy_cb);
+	}
+
+	if (destroy_cb == NULL)
+		return 0;
+
+	rc = destroy_cb(cb_arg);
+	if (rc != 0)
+		IOF_LOG_ERROR("Error destroying ctrl node %s", node->name);
 
 	return rc;
 }
