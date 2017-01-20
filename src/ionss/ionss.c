@@ -604,7 +604,7 @@ int iof_read_handler(crt_rpc_t *rpc)
 	struct iof_read_in *in;
 	struct iof_data_out *out;
 	struct ionss_file_handle *handle = NULL;
-	void *data;
+	void *data = NULL;
 	size_t bytes_read;
 	int rc;
 
