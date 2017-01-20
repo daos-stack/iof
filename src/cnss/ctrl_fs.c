@@ -996,6 +996,9 @@ static int ctrl_read(const char *fname,
 	} else if (node->ctrl_type == CTRL_COUNTER) {
 		sprintf(mybuf, "%d", (int)finfo->fh);
 		payload = mybuf;
+	} else {
+		IOF_LOG_WARNING("Read not supported for ctrl node %s", fname);
+		return -EINVAL;
 	}
 
 	len = snprintf(buf, size, "%s\n", payload);
