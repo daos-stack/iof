@@ -230,7 +230,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
 
         files = []
         for x in range(0, 100):
-            this_file = 'file %d' % x
+            this_file = 'file_%d' % x
             filename = os.path.join(test_dir, this_file)
             fd = open(filename, 'w')
             fd.close()
