@@ -315,7 +315,11 @@ static int deregister_fuse(struct fs_info *info)
 	char *val = "1";
 
 	fuse_session_exit(fuse_get_session(info->fuse));
+#ifdef __APPLE__
+	setxattr(info->mnt, "user.exit", val, strlen(val), 0, 0);
+#else
 	setxattr(info->mnt, "user.exit", val, strlen(val), 0);
+#endif
 	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
 	pthread_join(info->thread, 0);
 	LIST_REMOVE(info, entries);

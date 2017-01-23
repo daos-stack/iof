@@ -48,7 +48,6 @@
 #include <sys/queue.h>
 #ifdef __APPLE__
 # include <sys/syslimits.h>
-#define PATH_MAX MAXPATHLEN
 #else /* !__APPLE__ */
 # include <linux/limits.h>
 #endif /* __APPLE__ */

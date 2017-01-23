@@ -172,7 +172,9 @@ static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
 	.getattr = ioc_getattr3,
 #else
+#ifndef __APPLE__
 	.flag_nopath = 1,
+#endif
 	.getattr = ioc_getattr,
 #endif
 	.opendir = ioc_opendir,

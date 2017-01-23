@@ -43,6 +43,11 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#ifdef __APPLE__
+#include <sys/syslimits.h>
+#endif
+
 #include <fcntl.h>
 
 #include "version.h"
