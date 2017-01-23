@@ -92,7 +92,7 @@ struct fs_info {
 /*
  * Helper macro only, do not use other then in CALL_PLUGIN_*
  *
- * Unfortunatly because of this macros use of continue it does not work
+ * Unfortunately because of this macros use of continue it does not work
  * correctly if contained in a do - while loop.
  */
 #define CHECK_PLUGIN_FUNCTION(ITER, FN)					\

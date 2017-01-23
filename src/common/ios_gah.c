@@ -264,7 +264,7 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 
 	gah_store->ptr_array[gah->fid]->in_use = 0;
 
-	/** append the reclaimed entry to the list of availble entires */
+	/** append the reclaimed entry to the list of available entires */
 	STAILQ_INSERT_HEAD(&gah_store->free_list,
 			   gah_store->ptr_array[gah->fid], list);
 

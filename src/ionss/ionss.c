@@ -73,18 +73,18 @@ struct ionss_file_handle {
 	int	fd;
 };
 
-int shutdown_handler(crt_rpc_t *rpc_req)
+int shutdown_handler(crt_rpc_t *rpc)
 {
-	int		ret;
+	int rc;
 
-	IOF_LOG_DEBUG("Shutdown request recieved\n");
-	ret = crt_reply_send(rpc_req);
-	if (ret)
-		IOF_LOG_ERROR("could not send shutdown reply");
+	IOF_LOG_DEBUG("Shutdown request received");
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
 	shutdown = 1;
 
-	return ret;
+	return 0;
 }
 
 /*

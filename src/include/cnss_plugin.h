@@ -166,7 +166,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  *
  * Additionally, offsets of members within cnss_plugin are checked at runtime so
  * it is safe to expand the API by appending new members, whilst maintaining
- * binary compatability, however if any members are moved to different offsets
+ * binary compatibility, however if any members are moved to different offsets
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
