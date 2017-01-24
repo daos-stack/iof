@@ -96,6 +96,14 @@ struct iof_file_handle {
 	char name[];
 };
 
+struct status_cb_r {
+	int complete;
+	int err;
+	int rc;
+};
+
+int ioc_status_cb(const struct crt_cb_info *);
+
 int ioc_cb_progress(crt_context_t, struct fuse_context *, int *);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
@@ -124,12 +132,16 @@ int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *, enum fuse_readdir_flags);
 
 int ioc_getattr(const char *, struct stat *, struct fuse_file_info *);
+
+int ioc_truncate(const char *, off_t, struct fuse_file_info *);
+
 #else
 int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *);
 
 int ioc_getattr_name(const char *, struct stat *);
 
+int ioc_truncate_name(const char *, off_t);
 #endif
 
 int ioc_read(const char *, char *, size_t, off_t, struct fuse_file_info *);

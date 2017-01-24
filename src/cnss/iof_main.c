@@ -121,6 +121,42 @@ int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
 }
 
 /*
+ * A common callback that is used by several of the I/O RPCs that only return
+ * status, with no data or metadata, for example rmdir and truncate
+ */
+int ioc_status_cb(const struct crt_cb_info *cb_info)
+{
+	struct status_cb_r *reply = NULL;
+	struct iof_status_out *out = NULL;
+	crt_rpc_t *rpc = cb_info->cci_rpc;
+
+	reply = (struct status_cb_r *)cb_info->cci_arg;
+
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  Return EIO on any error
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not get output");
+		reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
+
+	reply->err = out->err;
+	reply->rc = out->rc;
+	reply->complete = 1;
+	return 0;
+}
+
+/*
  * Temporary way of shutting down. This fuse callback is currently not going to
  * IONSS
  */
@@ -159,11 +195,13 @@ static int ioc_setxattr(const char *path, const char *name, const char *value,
 static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
 	.getattr = ioc_getattr,
+	.truncate = ioc_truncate,
 #else
+	.getattr = ioc_getattr_name,
+	.truncate = ioc_truncate_name,
 #ifndef __APPLE__
 	.flag_nopath = 1,
 #endif
-	.getattr = ioc_getattr_name,
 #endif
 	.opendir = ioc_opendir,
 	.readdir = ioc_readdir,

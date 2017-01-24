@@ -45,18 +45,19 @@
 #include "iof_common.h"
 #include "iof.h"
 #include "log.h"
+#include "ios_gah.h"
 
-int ioc_mkdir(const char *file, mode_t mode)
+int ioc_truncate_name(const char *file, off_t len)
 {
 	struct fuse_context *context;
-	struct iof_create_in *in;
+	struct iof_truncate_in *in;
 	struct status_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("file %s mode %lx", file, (uint64_t)mode);
+	IOF_LOG_INFO("Truncate %s %zi", file, len);
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;
@@ -66,25 +67,26 @@ int ioc_mkdir(const char *file, mode_t mode)
 		return -EIO;
 	}
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, MKDIR_OP,
-			    &rpc);
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    FS_TO_OP(fs_handle, truncate), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, ret = %u",
 			      rc);
 		return -EIO;
 	}
 
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
-	in->mode = mode;
+	in->len = len;
 	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+
+	reply.complete = 0;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
 		return -EIO;
 	}
-
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc)
 		return -rc;
@@ -95,3 +97,75 @@ int ioc_mkdir(const char *file, mode_t mode)
 	return reply.err == 0 ? -reply.rc : -EIO;
 }
 
+#ifdef IOF_USE_FUSE3
+/*
+ * Send a RPC to call ftruncate.
+ *
+ * Currently there is no way for the server to reply with IOF_GAH_INVALID so an
+ * an opportunity to invalidate a local GAH could be missed here.
+ */
+int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
+{
+	struct fuse_context *context;
+	struct iof_ftruncate_in *in;
+	struct status_cb_r reply = {0};
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	IOF_LOG_INFO("Truncate %p %zi", fi, len);
+
+	if (!handle->gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
+
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
+
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    FS_TO_OP(fs_handle, ftruncate), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, ret = %u",
+			      rc);
+		return -EIO;
+	}
+
+	in = crt_req_get(rpc);
+	in->gah = handle->gah;
+	in->len = len;
+
+	reply.complete = 0;
+
+	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
+		return -EIO;
+	}
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc)
+		return -rc;
+
+	IOF_LOG_DEBUG("fi %p rc %d",
+		      fi, reply.err == 0 ? -reply.rc : -EIO);
+
+	return reply.err == 0 ? -reply.rc : -EIO;
+}
+
+int ioc_truncate(const char *file, off_t len, struct fuse_file_info *fi)
+{
+	if (fi)
+		return ioc_ftruncate(len, fi);
+	else
+		return ioc_truncate_name(file, len);
+}
+#endif

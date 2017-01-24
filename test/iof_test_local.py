@@ -226,6 +226,20 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if a != b:
             self.logger.info("File stat data is different")
 
+    def test_file_truncate(self):
+        """Write to a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'b_file')
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+
     def test_many_files(self):
         """Create lots of files, and then perform readdir"""
 
@@ -322,3 +336,13 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         filename = os.path.join(self.import_dir, 'exp', 'ls')
         shutil.copyfile('/bin/ls', filename)
+
+    def test_file_ftruncate(self):
+        """Truncate a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 't_file')
+
+        fd = open(filename, 'w')
+        fd.truncate()
+        fd.truncate(100)
+        fd.close()

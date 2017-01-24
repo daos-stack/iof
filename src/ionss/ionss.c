@@ -597,8 +597,6 @@ int iof_create_handler(crt_rpc_t *rpc)
 
 	out->gah = gah;
 
-	IOF_LOG_INFO("Size is %zi", sizeof(mode_t));
-
 out:
 	IOF_LOG_INFO("path %s result err %d rc %d",
 		     in->path, out->err, out->rc);
@@ -751,6 +749,97 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = mkdir(new_path, in->mode);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_truncate_handler(crt_rpc_t *rpc)
+{
+	struct iof_truncate_in *in = NULL;
+	struct iof_status_out *out = NULL;
+	char new_path[IOF_MAX_PATH_LEN];
+
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = truncate(new_path, in->len);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_ftruncate_handler(crt_rpc_t *rpc)
+{
+	struct iof_ftruncate_in *in;
+	struct iof_status_out *out;
+	struct ionss_file_handle *handle = NULL;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Writing to %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+	}
+
+	errno = 0;
+	rc = ftruncate(handle->fd, in->len);
 
 	if (rc)
 		out->rc = errno;
@@ -1085,6 +1174,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
 	PROTO_SET_FUNCTION(proto, write_direct, iof_write_direct_handler);
 	PROTO_SET_FUNCTION(proto, write_bulk, iof_write_bulk_handler);
+	PROTO_SET_FUNCTION(proto, truncate, iof_truncate_handler);
+	PROTO_SET_FUNCTION(proto, ftruncate, iof_ftruncate_handler);
 	iof_proto_commit(proto);
 
 	return ret;

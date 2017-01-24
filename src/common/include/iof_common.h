@@ -89,6 +89,17 @@ struct iof_string_in {
 	uint64_t my_fs_id;
 };
 
+struct iof_truncate_in {
+	crt_string_t path;
+	uint64_t my_fs_id;
+	uint64_t len;
+};
+
+struct iof_ftruncate_in {
+	struct ios_gah gah;
+	uint64_t len;
+};
+
 struct iof_create_in {
 	crt_string_t path;
 	uint64_t my_fs_id;
@@ -206,6 +217,8 @@ struct my_types {
 	MY_TYPE(opendir);
 	MY_TYPE(write_direct);
 	MY_TYPE(write_bulk);
+	MY_TYPE(truncate);
+	MY_TYPE(ftruncate);
 };
 
 struct proto {

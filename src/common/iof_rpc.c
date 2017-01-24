@@ -95,6 +95,17 @@ struct crt_msg_field *read_in[] = {
 	&CMF_UINT64,
 };
 
+struct crt_msg_field *truncate_in[] = {
+	&CMF_STRING,
+	&CMF_UINT64,
+	&CMF_UINT64,
+};
+
+struct crt_msg_field *ftruncate_in[] = {
+	&CMF_GAH,
+	&CMF_UINT64
+};
+
 struct crt_msg_field *status_out[] = {
 	&CMF_INT,
 	&CMF_INT,
@@ -166,6 +177,8 @@ static struct proto proto = {
 		RPC_TYPE(opendir, string_in, gah_pair),
 		RPC_TYPE(write_direct, write_direct, write_out),
 		RPC_TYPE(write_bulk, write_bulk, write_out),
+		RPC_TYPE(truncate, truncate_in, status_out),
+		RPC_TYPE(ftruncate, ftruncate_in, status_out),
 	},
 };
 
