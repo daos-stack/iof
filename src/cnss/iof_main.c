@@ -122,7 +122,9 @@ int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
 
 /*
  * A common callback that is used by several of the I/O RPCs that only return
- * status, with no data or metadata, for example rmdir and truncate
+ * status, with no data or metadata, for example rmdir and truncate.
+ *
+ * out->err will always be a errno that can be passed back to FUSE.
  */
 int ioc_status_cb(const struct crt_cb_info *cb_info)
 {
@@ -150,7 +152,10 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	reply->err = out->err;
+	if (out->err) {
+		IOF_LOG_DEBUG("reply indicates error %d", out->err);
+		reply->err = EIO;
+	}
 	reply->rc = out->rc;
 	reply->complete = 1;
 	return 0;
@@ -216,6 +221,7 @@ static struct fuse_operations ops = {
 	.mkdir = ioc_mkdir,
 	.rmdir = ioc_rmdir,
 	.write = ioc_write,
+	.unlink = ioc_unlink,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)

@@ -70,7 +70,7 @@ int ioc_truncate_name(const char *file, off_t len)
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
 			    FS_TO_OP(fs_handle, truncate), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
 		return -EIO;
 	}
@@ -84,17 +84,16 @@ int ioc_truncate_name(const char *file, off_t len)
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc)
 		return -rc;
 
-	IOF_LOG_DEBUG("path %s rc %d",
-		      file, reply.err == 0 ? -reply.rc : -EIO);
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
 
-	return reply.err == 0 ? -reply.rc : -EIO;
+	return IOC_STATUS_TO_RC(reply);
 }
 
 #ifdef IOF_USE_FUSE3
@@ -135,7 +134,7 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
 		return -EIO;
 	}
@@ -148,17 +147,16 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
 	if (rc)
 		return -rc;
 
-	IOF_LOG_DEBUG("fi %p rc %d",
-		      fi, reply.err == 0 ? -reply.rc : -EIO);
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(reply));
 
-	return reply.err == 0 ? -reply.rc : -EIO;
+	return IOC_STATUS_TO_RC(reply);
 }
 
 int ioc_truncate(const char *file, off_t len, struct fuse_file_info *fi)

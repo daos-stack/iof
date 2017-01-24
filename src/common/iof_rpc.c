@@ -201,6 +201,7 @@ static struct proto proto = {
 		RPC_TYPE(rmdir, string_in, status_out),
 		RPC_TYPE(rename, rename_in, status_out),
 		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
+		RPC_TYPE(unlink, string_in, status_out),
 	},
 };
 

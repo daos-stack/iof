@@ -241,6 +241,7 @@ struct my_types {
 	MY_TYPE(rmdir);
 	MY_TYPE(rename);
 	MY_TYPE(read_bulk);
+	MY_TYPE(unlink);
 };
 
 struct proto {

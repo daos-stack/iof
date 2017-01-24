@@ -97,10 +97,19 @@ struct iof_file_handle {
 };
 
 struct status_cb_r {
-	int complete;
-	int err;
-	int rc;
+	int complete; /** Flag to check for operation complete */
+	int err;      /** errno of any internal error */
+	int rc;       /** errno reported by remote POSIX operation */
 };
+
+/* Extract a errno from status_cb_r suitable for returning to FUSE.
+ * If err is non-zero then use that, otherwise use rc.  Return negative numbers
+ * because IOF uses positive errnos everywhere but FUSE expects negative values.
+ *
+ * This macro could also with with other *cb_r structs which use the same
+ * conventions for err/rc
+ */
+#define IOC_STATUS_TO_RC(STATUS) (STATUS.err == 0 ? -STATUS.rc : -STATUS.err)
 
 int ioc_status_cb(const struct crt_cb_info *);
 
@@ -155,5 +164,7 @@ int ioc_write(const char *, const char *, size_t, off_t,
 	      struct fuse_file_info *);
 
 int ioc_rmdir(const char *);
+
+int ioc_unlink(const char *);
 
 #endif

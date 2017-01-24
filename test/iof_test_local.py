@@ -383,3 +383,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         dst_file = os.path.join(self.export_dir, 'ls.2')
 
         shutil.copyfile(filename, dst_file)
+
+    def test_file_unlink(self):
+        """Create and remove a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+        os.unlink(filename)

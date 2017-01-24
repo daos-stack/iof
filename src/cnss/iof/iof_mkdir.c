@@ -89,9 +89,8 @@ int ioc_mkdir(const char *file, mode_t mode)
 	if (rc)
 		return -rc;
 
-	IOF_LOG_DEBUG("path %s rc %d",
-		      file, reply.err == 0 ? -reply.rc : -EIO);
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
 
-	return reply.err == 0 ? -reply.rc : -EIO;
+	return IOC_STATUS_TO_RC(reply);
 }
 
