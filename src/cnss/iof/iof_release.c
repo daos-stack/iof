@@ -112,7 +112,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	}
 
 	in = crt_req_get(rpc);
-	crt_iov_set(&in->gah, &handle->gah, sizeof(struct ios_gah));
+	in->gah = handle->gah;
 
 	rc = crt_req_send(rpc, release_cb, &reply);
 	if (rc) {

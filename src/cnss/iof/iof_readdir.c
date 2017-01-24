@@ -127,7 +127,7 @@ static int readdir_get_data(struct fuse_context *context,
 	}
 
 	in = crt_req_get(rpc);
-	crt_iov_set(&in->gah, &dir_handle->gah, sizeof(struct ios_gah));
+	in->gah = dir_handle->gah;
 	in->offsef = offset;
 	in->my_fs_id = fs_handle->my_fs_id;
 

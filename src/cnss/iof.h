@@ -101,6 +101,15 @@ int ioc_closedir(const char *, struct fuse_file_info *);
 
 int ioc_open(const char *, struct fuse_file_info *);
 
+struct open_cb_r {
+	struct iof_file_handle *fh;
+	int complete;
+	int err;
+	int rc;
+};
+
+int ioc_open_cb(const struct crt_cb_info *);
+
 struct iof_file_handle *ioc_fh_new(const char *);
 
 int ioc_release(const char *, struct fuse_file_info *);

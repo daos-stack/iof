@@ -107,7 +107,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	}
 
 	in = crt_req_get(rpc);
-	crt_iov_set(&in->gah, &dir_handle->gah, sizeof(struct ios_gah));
+	in->gah = dir_handle->gah;
 
 	rc = crt_req_send(rpc, closedir_cb, &reply);
 	if (rc) {

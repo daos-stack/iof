@@ -237,7 +237,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 			free(s);
 
 			out->rc = 0;
-			crt_iov_set(&out->gah, &gah, sizeof(gah));
+			out->gah = gah;
 		} else {
 			out->rc = errno;
 		}
@@ -287,15 +287,15 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		return 0;
 	}
 
-	gah_d = ios_gah_to_str(in->gah.iov_buf);
+	gah_d = ios_gah_to_str(&in->gah);
 	IOF_LOG_INFO("Reading from %s", gah_d);
 	free(gah_d);
 
-	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
 		out->err = IOF_GAH_INVALID;
 		IOF_LOG_DEBUG("Failed to load handle from gah %p %d",
-			      in->gah.iov_buf, rc);
+			      &in->gah, rc);
 		goto out;
 	}
 
@@ -365,14 +365,14 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 		return 0;
 	}
 
-	d = ios_gah_to_str(in->gah.iov_buf);
+	d = ios_gah_to_str(&in->gah);
 	IOF_LOG_INFO("Deallocating %s", d);
 	free(d);
 
-	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS)
 		IOF_LOG_DEBUG("Failed to load DIR* from gah %p %d",
-			      in->gah.iov_buf, rc);
+			      &in->gah, rc);
 
 	if (handle) {
 		IOF_LOG_DEBUG("Closing %p", handle->h_dir);
@@ -384,7 +384,7 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 		free(handle);
 	}
 
-	ios_gah_deallocate(gs, in->gah.iov_buf);
+	ios_gah_deallocate(gs, &in->gah);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -458,7 +458,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 		free(s);
 	}
 
-	crt_iov_set(&out->gah, &gah, sizeof(gah));
+	out->gah = gah;
 
 out:
 	IOF_LOG_INFO("path %s result err %d rc %d handle %p",
@@ -538,7 +538,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 		free(s);
 	}
 
-	crt_iov_set(&out->gah, &gah, sizeof(gah));
+	out->gah = gah;
 
 	IOF_LOG_INFO("Size is %zi", sizeof(mode_t));
 
@@ -567,16 +567,16 @@ int iof_close_handler(crt_rpc_t *rpc)
 	}
 
 	{
-		char *d = ios_gah_to_str(in->gah.iov_buf);
+		char *d = ios_gah_to_str(&in->gah);
 
 		IOF_LOG_INFO("Deallocating %s", d);
 		free(d);
 	}
 
-	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&local_handle);
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
 	if (rc != IOS_SUCCESS || !local_handle) {
 		IOF_LOG_INFO("Failed to load handle from gah %p %d",
-			     in->gah.iov_buf, rc);
+			     &in->gah, rc);
 		goto out;
 	}
 
@@ -589,7 +589,7 @@ int iof_close_handler(crt_rpc_t *rpc)
 
 	free(local_handle);
 
-	rc = ios_gah_deallocate(gs, in->gah.iov_buf);
+	rc = ios_gah_deallocate(gs, &in->gah);
 	if (rc)
 		IOF_LOG_ERROR("Failed to deallocate GAH");
 
@@ -623,17 +623,17 @@ int iof_read_handler(crt_rpc_t *rpc)
 	}
 
 	{
-		char *d = ios_gah_to_str(in->gah.iov_buf);
+		char *d = ios_gah_to_str(&in->gah);
 
 		IOF_LOG_INFO("Reading from %s", d);
 		free(d);
 	}
 
-	rc = ios_gah_get_info(gs, in->gah.iov_buf, (void **)&handle);
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
 		out->err = IOF_GAH_INVALID;
 		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      in->gah.iov_buf, rc);
+			      &in->gah, rc);
 		goto out;
 	}
 

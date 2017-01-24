@@ -40,7 +40,8 @@
 #include <sys/stat.h>
 #include <crt_api.h>
 #include <crt_util/common.h>
-#include <string.h>
+
+#include <ios_gah.h>
 
 #define IOF_SUCCESS		0
 #define IOF_ERR_MOUNT		1
@@ -103,13 +104,13 @@ struct iof_getattr_out {
 };
 
 struct iof_opendir_out {
-	crt_iov_t gah;
+	struct ios_gah gah;
 	int rc;
 	int err;
 };
 
 struct iof_readdir_in {
-	crt_iov_t gah;
+	struct ios_gah gah;
 	uint64_t my_fs_id;
 	int offsef;
 };
@@ -129,18 +130,18 @@ struct iof_readdir_out {
 };
 
 struct iof_open_out {
-	crt_iov_t gah;
+	struct ios_gah gah;
 	int rc;
 	int err;
 };
 
 struct iof_closedir_in {
-	crt_iov_t gah;
+	struct ios_gah gah;
 	uint64_t my_fs_id;
 };
 
 struct iof_read_in {
-	crt_iov_t gah;
+	struct ios_gah gah;
 	uint64_t base;
 	uint64_t len;
 };

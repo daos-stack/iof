@@ -40,6 +40,12 @@
 
 /*input/output format for RPC's*/
 
+/*
+ * Re-use the CMF_UUID type when using a GAH as they are both 128 bit types
+ * but define CMF_GAH here so it's clearer in the code what is happening.
+ */
+#define CMF_GAH CMF_UUID
+
 struct crt_msg_field *string_in[] = {
 	&CMF_STRING,
 	&CMF_UINT64
@@ -57,8 +63,14 @@ struct crt_msg_field *iov_pair[] = {
 	&CMF_INT
 };
 
+struct crt_msg_field *gah_pair[] = {
+	&CMF_GAH,
+	&CMF_INT,
+	&CMF_INT
+};
+
 struct crt_msg_field *readdir_in[] = {
-	&CMF_IOVEC,
+	&CMF_GAH,
 	&CMF_UINT64,
 	&CMF_INT,
 };
@@ -73,12 +85,12 @@ struct crt_msg_field *psr_out[] = {
 };
 
 struct crt_msg_field *closedir_in[] = {
-	&CMF_IOVEC,
+	&CMF_GAH,
 	&CMF_UINT64
 };
 
 struct crt_msg_field *read_in[] = {
-	&CMF_IOVEC,
+	&CMF_GAH,
 	&CMF_UINT64,
 	&CMF_UINT64,
 };
@@ -99,7 +111,7 @@ struct crt_req_format GETATTR_FMT = DEFINE_CRT_REQ_FMT("getattr",
 
 struct crt_req_format OPENDIR_FMT = DEFINE_CRT_REQ_FMT("opendir",
 						       string_in,
-						       iov_pair);
+						       gah_pair);
 
 struct crt_req_format READDIR_FMT = DEFINE_CRT_REQ_FMT("readdir",
 						       readdir_in,
@@ -111,7 +123,7 @@ struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
 
 struct crt_req_format OPEN_FMT = DEFINE_CRT_REQ_FMT("open",
 						string_in,
-						iov_pair);
+						gah_pair);
 
 struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
 						closedir_in,
@@ -119,7 +131,7 @@ struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
 
 struct crt_req_format CREATE_FMT = DEFINE_CRT_REQ_FMT("create",
 						create_in,
-						iov_pair);
+						gah_pair);
 
 struct crt_req_format READ_FMT = DEFINE_CRT_REQ_FMT("read",
 						    read_in,

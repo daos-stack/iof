@@ -47,58 +47,12 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct create_cb_r {
-	struct iof_file_handle *fh;
-	int complete;
-	int err;
-	int rc;
-};
-
-static int create_cb(const struct crt_cb_info *cb_info)
-{
-	struct create_cb_r *reply;
-	struct iof_open_out *out;
-	crt_rpc_t *rpc = cb_info->cci_rpc;
-
-	reply = (struct create_cb_r *)cb_info->cci_arg;
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		if (cb_info->cci_rc == -CER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		reply->complete = 1;
-		return 0;
-	}
-
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get output");
-		reply->complete = 1;
-		return 0;
-	}
-	if (out->err == 0 && out->rc == 0)
-		memcpy(&reply->fh->gah, out->gah.iov_buf,
-		       sizeof(struct ios_gah));
-	reply->err = out->err;
-	reply->rc = out->rc;
-	reply->complete = 1;
-	return 0;
-}
-
 int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct iof_file_handle *handle;
 	struct iof_create_in *in = NULL;
-	struct create_cb_r reply = {0};
+	struct open_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
@@ -136,7 +90,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	reply.fh = handle;
 	reply.complete = 0;
 
-	rc = crt_req_send(rpc, create_cb, &reply);
+	rc = crt_req_send(rpc, ioc_open_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;

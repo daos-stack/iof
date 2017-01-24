@@ -47,13 +47,6 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct open_cb_r {
-	struct iof_file_handle *fh;
-	int complete;
-	int err;
-	int rc;
-};
-
 struct iof_file_handle *ioc_fh_new(const char *name)
 {
 	struct iof_file_handle *handle;
@@ -67,7 +60,7 @@ struct iof_file_handle *ioc_fh_new(const char *name)
 	return handle;
 }
 
-static int open_cb(const struct crt_cb_info *cb_info)
+int ioc_open_cb(const struct crt_cb_info *cb_info)
 {
 	struct open_cb_r *reply = NULL;
 	struct iof_open_out *out = NULL;
@@ -99,8 +92,7 @@ static int open_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 	if (out->err == 0 && out->rc == 0)
-		memcpy(&reply->fh->gah, out->gah.iov_buf,
-		       sizeof(struct ios_gah));
+		reply->fh->gah = out->gah;
 	reply->err = out->err;
 	reply->rc = out->rc;
 	reply->complete = 1;
@@ -146,7 +138,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	reply.fh = handle;
 	reply.complete = 0;
 
-	rc = crt_req_send(rpc, open_cb, &reply);
+	rc = crt_req_send(rpc, ioc_open_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, ret = %u", rc);
 		return -EIO;

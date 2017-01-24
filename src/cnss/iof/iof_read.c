@@ -159,7 +159,7 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 	}
 
 	in = crt_req_get(rpc);
-	crt_iov_set(&in->gah, &handle->gah, sizeof(struct ios_gah));
+	in->gah = handle->gah;
 	in->base = position;
 	in->len = len;
 

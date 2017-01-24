@@ -86,8 +86,7 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 	if (out->err == 0 && out->rc == 0) {
-		memcpy(&reply->dh->gah, out->gah.iov_buf,
-		       sizeof(struct ios_gah));
+		reply->dh->gah = out->gah;
 		reply->dh->gah_valid = 1;
 		reply->dh->handle_valid = 1;
 	}
