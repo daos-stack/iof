@@ -101,6 +101,19 @@ struct crt_msg_field *read_in[] = {
 	&CMF_UINT64,
 };
 
+struct crt_msg_field *read_bulk_in[] = {
+	&CMF_GAH,
+	&CMF_BULK,
+	&CMF_UINT64,
+};
+
+struct crt_msg_field *read_bulk_out[] = {
+	&CMF_IOVEC,
+	&CMF_UINT64,
+	&CMF_INT,
+	&CMF_INT
+};
+
 struct crt_msg_field *truncate_in[] = {
 	&CMF_STRING,
 	&CMF_UINT64,
@@ -187,6 +200,7 @@ static struct proto proto = {
 		RPC_TYPE(ftruncate, ftruncate_in, status_out),
 		RPC_TYPE(rmdir, string_in, status_out),
 		RPC_TYPE(rename, rename_in, status_out),
+		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
 	},
 };
 

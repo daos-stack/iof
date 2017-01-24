@@ -719,6 +719,182 @@ out:
 	return 0;
 }
 
+int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
+{
+	struct iof_read_bulk_in *in;
+	struct iof_read_bulk_out *out;
+	crt_iov_t iov = {0};
+	crt_sg_list_t sgl = {0};
+	int rc;
+
+	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	if (cb_info->bci_rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	free(iov.iov_buf);
+	out->len = iov.iov_buf_len;
+
+	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
+	if (rc)
+		out->err = IOF_ERR_CART;
+
+out:
+	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
+
+	return 0;
+}
+
+/*
+ * The target of a bulk_read RPC from a client, replies using bulk data.
+ *
+ * Checks the read size
+ * Allocates memory
+ * Does the read
+ * Creates a bulk handle
+ * Submits the bulk handle
+ */
+int iof_read_bulk_handler(crt_rpc_t *rpc)
+{
+	struct iof_read_bulk_in *in;
+	struct iof_read_bulk_out *out;
+	struct ionss_file_handle *handle = NULL;
+	void *data = NULL;
+	size_t bytes_read;
+	struct crt_bulk_desc bulk_desc = {0};
+	crt_bulk_t local_bulk_hdl = {0};
+	crt_sg_list_t sgl = {0};
+	crt_iov_t iov = {0};
+	crt_size_t len;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Reading from %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Reading from %d", handle->fd);
+
+	rc = crt_bulk_get_len(in->bulk, &len);
+	if (rc || len == 0) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	data = malloc(len);
+	if (!data) {
+		out->err = IOF_ERR_NOMEM;
+		goto out;
+	}
+
+	errno = 0;
+	bytes_read = pread(handle->fd, data, len, in->base);
+	if (bytes_read == -1) {
+		out->rc = errno;
+	} else {
+		rc = crt_req_addref(rpc);
+		if (rc) {
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		iov.iov_len = bytes_read;
+		iov.iov_buf = data;
+		iov.iov_buf_len = bytes_read;
+		sgl.sg_iovs = &iov;
+		sgl.sg_nr.num = 1;
+
+		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
+				     &local_bulk_hdl);
+		if (rc) {
+			free(iov.iov_buf);
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		bulk_desc.bd_rpc = rpc;
+		bulk_desc.bd_bulk_op = CRT_BULK_PUT;
+		bulk_desc.bd_remote_hdl = in->bulk;
+		bulk_desc.bd_local_hdl = local_bulk_hdl;
+		bulk_desc.bd_len = bytes_read;
+
+		rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, NULL,
+				       NULL);
+		if (rc) {
+			free(iov.iov_buf);
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		/* Do not call crt_reply_send() in this case as it'll be done in
+		 * the bulk handler.
+		 */
+
+		return 0;
+	}
+
+out:
+	rc = crt_reply_send(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (data)
+		free(data);
+
+	return 0;
+}
+
 int iof_rename_handler(crt_rpc_t *rpc)
 {
 	struct iof_rename_in *in = NULL;
@@ -1273,6 +1449,7 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, ftruncate, iof_ftruncate_handler);
 	PROTO_SET_FUNCTION(proto, rmdir, iof_rmdir_handler);
 	PROTO_SET_FUNCTION(proto, rename, iof_rename_handler);
+	PROTO_SET_FUNCTION(proto, read_bulk, iof_read_bulk_handler);
 	iof_proto_commit(proto);
 
 	return ret;

@@ -161,6 +161,19 @@ struct iof_read_in {
 	uint64_t len;
 };
 
+struct iof_read_bulk_in {
+	struct ios_gah gah;
+	crt_bulk_t bulk;
+	uint64_t base;
+};
+
+struct iof_read_bulk_out {
+	crt_iov_t data;
+	uint64_t len;
+	int rc;
+	int err;
+};
+
 struct iof_data_out {
 	crt_iov_t data;
 	int rc;
@@ -227,6 +240,7 @@ struct my_types {
 	MY_TYPE(ftruncate);
 	MY_TYPE(rmdir);
 	MY_TYPE(rename);
+	MY_TYPE(read_bulk);
 };
 
 struct proto {

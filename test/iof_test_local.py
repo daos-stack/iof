@@ -369,3 +369,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         new_file = os.path.join(self.import_dir, 'exp', 'd_file')
         os.rename(filename, new_file)
+
+    def test_file_copy_from(self):
+        """Copy a file into a projecton
+
+        Basic copy, using large I/O.  No permissions or metadata are used.
+        """
+
+        src_file = os.path.join(self.export_dir, 'ls')
+        shutil.copyfile('/bin/ls', src_file)
+
+        filename = os.path.join(self.import_dir, 'exp', 'ls')
+        dst_file = os.path.join(self.export_dir, 'ls.2')
+
+        shutil.copyfile(filename, dst_file)
