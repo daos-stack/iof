@@ -165,6 +165,12 @@ struct iof_write_in {
 	uint64_t base;
 };
 
+struct iof_write_bulk {
+	struct ios_gah gah;
+	crt_bulk_t bulk;
+	uint64_t base;
+};
+
 struct iof_write_out {
 	int rc;
 	int err;
@@ -198,7 +204,8 @@ struct my_types {
 	MY_TYPE(getattr);
 	MY_TYPE(getattr_gah);
 	MY_TYPE(opendir);
-	MY_TYPE(write);
+	MY_TYPE(write_direct);
+	MY_TYPE(write_bulk);
 };
 
 struct proto {

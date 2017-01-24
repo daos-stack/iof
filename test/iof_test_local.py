@@ -313,3 +313,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         if data != 'World':
             self.fail('File contents wrong %s %s' % ('Hello', data))
+
+    def test_file_copy(self):
+        """Copy a file into a projecton
+
+        Basic copy, using large I/O.  No permissions or metadata are used.
+        """
+
+        filename = os.path.join(self.import_dir, 'exp', 'ls')
+        shutil.copyfile('/bin/ls', filename)

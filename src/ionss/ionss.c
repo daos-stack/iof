@@ -763,7 +763,7 @@ out:
 	return 0;
 }
 
-int iof_write_handler(crt_rpc_t *rpc)
+int iof_write_direct_handler(crt_rpc_t *rpc)
 {
 	struct iof_write_in *in;
 	struct iof_write_out *out;
@@ -807,6 +807,180 @@ int iof_write_handler(crt_rpc_t *rpc)
 
 out:
 	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
+{
+	struct iof_write_bulk *in;
+	struct iof_write_out *out;
+	size_t bytes_written;
+	struct ionss_file_handle *handle = NULL;
+	crt_iov_t iov = {0};
+	crt_sg_list_t sgl = {0};
+
+	int rc;
+
+	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	if (cb_info->bci_rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+		goto out;
+	}
+
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	errno = 0;
+	bytes_written = pwrite(handle->fd, iov.iov_buf, iov.iov_len, in->base);
+	if (bytes_written == -1)
+		out->rc = errno;
+	else
+		out->len = bytes_written;
+
+	free(iov.iov_buf);
+	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
+	if (rc)
+		out->err = IOF_ERR_CART;
+
+out:
+	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("Unable to drop reference, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_write_bulk_handler(crt_rpc_t *rpc)
+{
+	struct iof_write_bulk *in;
+	struct iof_write_out *out;
+	struct ionss_file_handle *handle = NULL;
+	struct crt_bulk_desc bulk_desc = {0};
+	crt_bulk_t local_bulk_hdl = {0};
+	crt_sg_list_t sgl = {0};
+	crt_iov_t iov = {0};
+	crt_size_t len;
+
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Writing to %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+		goto out;
+	}
+
+	rc = crt_req_addref(rpc);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = crt_bulk_get_len(in->bulk, &len);
+	if (rc || len == 0) {
+		out->err = IOF_ERR_CART;
+		goto out_decref;
+	}
+
+	iov.iov_buf = malloc(len);
+	if (!iov.iov_buf) {
+		out->err = IOF_ERR_NOMEM;
+		goto out_decref;
+	}
+	iov.iov_len = len;
+	iov.iov_buf_len = len;
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RW, &local_bulk_hdl);
+	if (rc) {
+		free(iov.iov_buf);
+		out->err = IOF_ERR_CART;
+		goto out_decref;
+	}
+
+	bulk_desc.bd_rpc = rpc;
+	bulk_desc.bd_bulk_op = CRT_BULK_GET;
+	bulk_desc.bd_remote_hdl = in->bulk;
+	bulk_desc.bd_local_hdl = local_bulk_hdl;
+	bulk_desc.bd_len = len;
+
+	rc = crt_bulk_transfer(&bulk_desc, iof_write_bulk, NULL, NULL);
+	if (rc) {
+		free(iov.iov_buf);
+		out->err = IOF_ERR_CART;
+		goto out_decref;
+	}
+
+	/* Do not call crt_reply_send() in this case as it'll be done in
+	 * the bulk handler.
+	 */
+	return 0;
+
+out_decref:
+	rc = crt_req_decref(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("Unable to drop reference, ret = %u", rc);
+out:
+	rc = crt_reply_send(rpc);
+
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
@@ -909,7 +1083,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
 	PROTO_SET_FUNCTION(proto, getattr_gah, iof_getattr_gah_handler);
 	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
-	PROTO_SET_FUNCTION(proto, write, iof_write_handler);
+	PROTO_SET_FUNCTION(proto, write_direct, iof_write_direct_handler);
+	PROTO_SET_FUNCTION(proto, write_bulk, iof_write_bulk_handler);
 	iof_proto_commit(proto);
 
 	return ret;

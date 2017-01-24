@@ -104,9 +104,15 @@ struct crt_msg_field *gah_in[] = {
 	&CMF_GAH,
 };
 
-struct crt_msg_field *write_in[] = {
+struct crt_msg_field *write_direct[] = {
 	&CMF_GAH,
 	&CMF_IOVEC,
+	&CMF_UINT64,
+};
+
+struct crt_msg_field *write_bulk[] = {
+	&CMF_GAH,
+	&CMF_BULK,
 	&CMF_UINT64,
 };
 
@@ -158,7 +164,8 @@ static struct proto proto = {
 		RPC_TYPE(getattr, string_in, iov_pair),
 		RPC_TYPE(getattr_gah, gah_in, iov_pair),
 		RPC_TYPE(opendir, string_in, gah_pair),
-		RPC_TYPE(write, write_in, write_out),
+		RPC_TYPE(write_direct, write_direct, write_out),
+		RPC_TYPE(write_bulk, write_bulk, write_out),
 	},
 };
 
@@ -188,4 +195,3 @@ int iof_proto_commit(struct proto *proto)
 
 	return 0;
 }
-

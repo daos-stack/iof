@@ -55,6 +55,8 @@ struct write_cb_r {
 	int rc;
 };
 
+#define BULK_THRESHOLD 64
+
 static int write_cb(const struct crt_cb_info *cb_info)
 {
 	struct write_cb_r *reply;
@@ -92,10 +94,13 @@ static int write_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
+		reply->err = EIO;
 		if (out->err == IOF_GAH_INVALID)
 			reply->handle->gah_valid = 0;
 
-		reply->err = EIO;
+		if (out->err == IOF_ERR_NOMEM)
+			reply->err = EAGAIN;
+
 		reply->complete = 1;
 		return 0;
 	}
@@ -106,38 +111,22 @@ static int write_cb(const struct crt_cb_info *cb_info)
 	return 0;
 }
 
-int ioc_write(const char *file, const char *buff, size_t len, off_t position,
-	      struct fuse_file_info *fi)
+int ioc_write_direct(const char *buff, size_t len, off_t position,
+		     struct fs_handle *fs_handle,
+		     struct fuse_context *context,
+		     struct iof_file_handle *handle)
 {
-	struct fuse_context *context;
+	struct iof_state *iof_state = fs_handle->iof_state;
 	struct iof_write_in *in = NULL;
 	struct write_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
+
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-
-	IOF_LOG_INFO("path %s %s handle %p", file, handle->name, handle);
-
-	if (!handle->gah_valid) {
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
-		 */
-		return -EIO;
-	}
-
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
+	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    FS_TO_OP(fs_handle, write), &rpc);
+			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -170,3 +159,104 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	return reply.len;
 }
 
+int ioc_write_bulk(const char *buff, size_t len, off_t position,
+		   struct fs_handle *fs_handle,
+		   struct fuse_context *context,
+		   struct iof_file_handle *handle)
+{
+	struct iof_state *iof_state = fs_handle->iof_state;
+	struct iof_write_bulk *in;
+	crt_bulk_t bulk;
+
+	struct write_cb_r reply = {0};
+
+	crt_sg_list_t sgl = {0};
+	crt_iov_t iov = {0};
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+			    FS_TO_OP(fs_handle, write_bulk), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
+	}
+
+	in = crt_req_get(rpc);
+
+	in->gah = handle->gah;
+
+	iov.iov_len = len;
+	iov.iov_buf_len = len;
+	iov.iov_buf = (void *)buff;
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_create(iof_state->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
+	if (rc) {
+		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
+		return -EIO;
+	}
+
+	in->base = position;
+
+	bulk = in->bulk;
+
+	reply.handle = handle;
+
+	rc = crt_req_send(rpc, write_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		return -EIO;
+	}
+
+	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	if (rc)
+		return -rc;
+
+	rc = crt_bulk_free(bulk);
+	if (rc)
+		return -EIO;
+
+	if (reply.err != 0)
+		return -reply.err;
+
+	if (reply.rc != 0)
+		return -reply.rc;
+
+	return reply.len;
+}
+
+int ioc_write(const char *file, const char *buff, size_t len, off_t position,
+	      struct fuse_file_info *fi)
+{
+	struct fs_handle *fs_handle;
+	struct iof_state *iof_state;
+	struct fuse_context *context;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+
+	IOF_LOG_INFO("path %s handle %p len %zi", handle->name, handle, len);
+
+	context = fuse_get_context();
+	fs_handle = (struct fs_handle *)context->private_data;
+	iof_state = fs_handle->iof_state;
+	if (!iof_state) {
+		IOF_LOG_ERROR("Could not retrieve iof state");
+		return -EIO;
+	}
+
+	if (!handle->gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
+
+	if (len >= BULK_THRESHOLD)
+		return ioc_write_bulk(buff, len, position, fs_handle, context,
+				      handle);
+	else
+		return ioc_write_direct(buff, len, position, fs_handle, context,
+					handle);
+}
