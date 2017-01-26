@@ -63,6 +63,7 @@ struct iof_handle {
 
 struct query_cb_r {
 	int complete;
+	int err;
 	struct iof_psr_query **query;
 };
 
@@ -192,23 +193,44 @@ static int query_callback(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply;
 	int ret;
+	struct iof_psr_query *query;
 	crt_rpc_t *query_rpc;
 
 	query_rpc = cb_info->cci_rpc;
 	reply = (struct query_cb_r *) cb_info->cci_arg;
 
-	*reply->query = crt_reply_get(query_rpc);
-	if (*reply->query == NULL) {
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  On timeout return EAGAIN, all other errors
+		 * return EIO.
+		 *
+		 * TODO: Handle target eviction here
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = cb_info->cci_rc;
+		reply->complete = 1;
+		return 0;
+	}
+
+	query = crt_reply_get(query_rpc);
+	if (!query) {
 		IOF_LOG_ERROR("Could not get query reply");
-		return IOF_ERR_CART;
+		reply->complete = 1;
+		return 0;
 	}
 
 	ret = crt_req_addref(query_rpc);
-	if (ret)
+	if (ret) {
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 				ret);
+		reply->complete = 1;
+		return 0;
+	}
+
+	*reply->query = query;
+
 	reply->complete = 1;
-	return ret;
+	return 0;
 }
 
 /*Send RPC to PSR to get information about projected filesystems*/
@@ -240,6 +262,9 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
 	if (ret)
 		IOF_LOG_ERROR("Could not complete PSR query");
+
+	if (reply.err)
+		return reply.err;
 
 	return ret;
 }

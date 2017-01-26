@@ -123,6 +123,27 @@ struct fs_info {
 	} while (0)
 
 /*
+ * Call a function in each registered and active plugin.  If the plugin
+ * return non-zero disable the plugin.
+ */
+#define CALL_PLUGIN_FN_CHECK(LIST, FN)					\
+	do {								\
+		struct plugin_entry *_li;				\
+		IOF_LOG_INFO("Calling plugin %s", #FN);			\
+		LIST_FOREACH(_li, LIST, list) {				\
+			int _rc;					\
+			CHECK_PLUGIN_FUNCTION(_li, FN);			\
+			_rc = _li->plugin->FN(_li->plugin->handle);	\
+			if (_rc != 0) {					\
+				IOF_LOG_INFO("Disabling plugin %s %d",	\
+					_li->plugin->name, _rc);	\
+				_li->active = 0;			\
+			}						\
+		}							\
+		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
+	} while (0)
+
+/*
  * Call a function in each registered and active plugin, providing additional
  * parameters.
  */
@@ -443,6 +464,7 @@ int main(void)
 	struct plugin_entry *list_iter;
 	struct cnss_plugin_list plugin_list;
 	struct cnss_info *cnss_info;
+	int active_plugins = 0;
 
 	int ret;
 	int service_process_set = 0;
@@ -534,16 +556,33 @@ int main(void)
 		return CNSS_ERR_CART;
 	}
 
+	/* Call start for each plugin which should perform none-local
+	 * operations only.  Plugins can choose to disable themselves
+	 * at this point.
+	 */
 	CALL_PLUGIN_FN_START(&plugin_list, start, &cnss_plugin_cb,
 			     sizeof(cnss_plugin_cb));
 
-	/* TODO:
-	 *
-	 * Check that there is actually one or more plugins active, or there i
-	 * nothing for the CNSS to do so it could shut down.
+	/* Call post_start for each plugin, which could communicate over
+	 * the network.  Plugins can choose to disable themselves
+	 * at this point.
 	 */
+	CALL_PLUGIN_FN_CHECK(&plugin_list, post_start);
 
-	CALL_PLUGIN_FN(&plugin_list, post_start);
+	/* Walk the plugins and check for active ones */
+	LIST_FOREACH(list_iter, &plugin_list, list) {
+		if (list_iter->active) {
+			active_plugins = 1;
+			break;
+		}
+	}
+
+	/* TODO: How to handle this case? */
+	if (!active_plugins) {
+		IOF_LOG_ERROR("No active plugins");
+		ctrl_fs_stop();
+		return 1;
+	}
 
 	launch_fs(cnss_info);
 	register_cnss_controls(1, &plugin_list);
