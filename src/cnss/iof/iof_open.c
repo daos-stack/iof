@@ -87,7 +87,7 @@ int ioc_open_cb(const struct crt_cb_info *cb_info)
 	out = crt_reply_get(rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not get output");
-		reply->err = IOF_ERR_CART;
+		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
@@ -133,6 +133,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
+
 	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
 
 	reply.fh = handle;
@@ -140,7 +141,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	rc = crt_req_send(rpc, ioc_open_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, ret = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);

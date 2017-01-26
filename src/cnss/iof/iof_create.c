@@ -51,18 +51,16 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
 	struct iof_file_handle *handle;
-	struct iof_create_in *in = NULL;
+	struct iof_create_in *in;
 	struct open_cb_r reply = {0};
 	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
+	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	handle = ioc_fh_new(file);
 	if (!handle)
 		return -ENOMEM;
-
-	fi->fh = (uint64_t)handle;
 
 	IOF_LOG_INFO("file %s handle %p", file, handle);
 
@@ -77,8 +75,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, CREATE_OP,
 			    &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -EIO;
 	}
 
@@ -110,13 +107,15 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
-	IOF_LOG_DEBUG("path %s rc %d",
-		      handle->name, rc);
+	IOF_LOG_DEBUG("path %s handle %p rc %d",
+		      handle->name, rc == 0 ? handle : NULL, rc);
 
-	if (rc != 0)
+	if (rc == 0) {
+		fi->fh = (uint64_t)handle;
+		handle->gah_valid = 1;
+	} else {
 		free(handle);
-
-	handle->gah_valid = 1;
+	}
 
 	return rc;
 }
