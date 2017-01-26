@@ -155,6 +155,10 @@ struct iof_status_out {
 	int err;
 };
 
+struct iof_gah_in {
+	struct ios_gah gah;
+};
+
 extern struct crt_req_format READDIR_FMT;
 
 extern struct crt_req_format QUERY_RPC_FMT;
@@ -180,6 +184,7 @@ struct rpc_data {
 #define MY_TYPE(TYPE) struct rpc_data TYPE
 struct my_types {
 	MY_TYPE(getattr);
+	MY_TYPE(getattr_gah);
 	MY_TYPE(opendir);
 };
 

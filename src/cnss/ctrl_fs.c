@@ -829,7 +829,7 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 		if (filler(buf, item->name, &item->stat_info, 0
 #ifdef IOF_USE_FUSE3
-			   , flags
+			   , 0
 #endif
 			   ))
 			break;

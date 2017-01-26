@@ -142,24 +142,25 @@ int iof_get_path2(int id, const char *old_dir, char *old_file, char *new_path)
 	return IOF_SUCCESS;
 }
 
-int iof_getattr_handler(crt_rpc_t *getattr_rpc)
+int iof_getattr_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = NULL;
-	struct iof_getattr_out *out = NULL;
+	struct iof_string_in *in;
+	struct iof_getattr_out *out;
 	char new_path[IOF_MAX_PATH_LEN];
 	struct stat stbuf = {0};
 	int rc;
 
-	in = crt_req_get(getattr_rpc);
-	if (in == NULL) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		return 0;
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
 	}
 
-	out = crt_reply_get(getattr_rpc);
-	if (out == NULL) {
-		IOF_LOG_ERROR("Could not retrieve output args");
-		return 0;
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
 	}
 
 	IOF_LOG_DEBUG("Checking path %s", in->path);
@@ -168,26 +169,80 @@ int iof_getattr_handler(crt_rpc_t *getattr_rpc)
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
 			      rc);
 		out->err = rc;
-	} else {
-		int rc;
-
-		out->err = 0;
-		errno = 0;
-		rc = lstat(new_path, &stbuf);
-		if (rc == 0) {
-			out->rc = 0;
-			crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
-		} else {
-			out->rc = errno;
-		}
+		goto out;
 	}
+
+	errno = 0;
+	rc = lstat(new_path, &stbuf);
+	if (rc)
+		out->rc = errno;
+	else
+		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+
+out:
 
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
-	rc = crt_reply_send(getattr_rpc);
+	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	return 0;
+}
+
+int iof_getattr_gah_handler(crt_rpc_t *rpc)
+{
+	struct ionss_file_handle *handle = NULL;
+	struct iof_gah_in *in;
+	struct iof_getattr_out *out;
+	struct stat stbuf = {0};
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Reading from %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+		goto out;
+	}
+
+	errno = 0;
+	rc = fstat(handle->fd, &stbuf);
+	if (rc)
+		out->rc = errno;
+	else
+		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+
+out:
+	IOF_LOG_DEBUG("result err %d rc %d",
+		      out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
 	return 0;
 }
 
@@ -802,6 +857,7 @@ int ionss_register(void)
 
 	proto = iof_register();
 	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
+	PROTO_SET_FUNCTION(proto, getattr_gah, iof_getattr_gah_handler);
 	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
 	iof_proto_commit(proto);
 

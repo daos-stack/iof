@@ -120,19 +120,6 @@ int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
 	return 0;
 }
 
-#if IOF_USE_FUSE3
-static int ioc_getattr3(const char *path, struct stat *stbuf,
-			struct fuse_file_info *fi)
-{
-	if (fi)
-		return -EIO;
-
-	if (!path)
-		return -EIO;
-	return ioc_getattr(path, stbuf);
-}
-#endif
-
 /*
  * Temporary way of shutting down. This fuse callback is currently not going to
  * IONSS
@@ -171,12 +158,12 @@ static int ioc_setxattr(const char *path, const char *name, const char *value,
 
 static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
-	.getattr = ioc_getattr3,
+	.getattr = ioc_getattr,
 #else
 #ifndef __APPLE__
 	.flag_nopath = 1,
 #endif
-	.getattr = ioc_getattr,
+	.getattr = ioc_getattr_name,
 #endif
 	.opendir = ioc_opendir,
 	.readdir = ioc_readdir,

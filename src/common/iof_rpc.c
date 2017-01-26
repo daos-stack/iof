@@ -100,6 +100,10 @@ struct crt_msg_field *status_out[] = {
 	&CMF_INT,
 };
 
+struct crt_msg_field *gah_in[] = {
+	&CMF_GAH,
+};
+
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
@@ -140,6 +144,7 @@ static struct proto proto = {
 	.id_base = 0x10F00,
 	.mt = {
 		RPC_TYPE(getattr, string_in, iov_pair),
+		RPC_TYPE(getattr_gah, gah_in, iov_pair),
 		RPC_TYPE(opendir, string_in, gah_pair),
 	},
 };
