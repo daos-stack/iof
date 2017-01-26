@@ -95,7 +95,11 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
 
-        log_path = os.getenv("IOF_TESTLOG", 'output/%s' % self.id())
+        log_path = os.getenv("IOF_TESTLOG", 'output/%s' %
+                             self.id().split('.')[0])
+
+        # Append the test case to the log directory to get unique names.
+        log_path = os.path.join(log_path, self.id().split('.')[2])
 
         log_mask = os.getenv("CRT_LOG_MASK", "INFO")
 

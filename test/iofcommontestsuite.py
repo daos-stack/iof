@@ -255,19 +255,13 @@ class CommonTestSuite(unittest.TestCase):
         """teardown module for test"""
 
         print("Testnss: module tearDown begin")
-        testmsg = "terminate any cnss processes"
-        cmdstr = "pkill cnss"
-        testmsg = "terminate any ionss processes"
-        cmdstr = "pkill ionss"
-        cts = CommonTestSuite()
-        cts.common_launch_test(testmsg, cmdstr)
-        allnode_cmd = cts.common_get_all_cn_cmd()
+        allnode_cmd = self.common_get_all_cn_cmd()
         testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
         cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
-        cts.common_launch_test(testmsg, cmdstr)
-        allnode_cmd = cts.common_get_all_ion_cmd()
+        self.common_launch_test(testmsg, cmdstr)
+        allnode_cmd = self.common_get_all_ion_cmd()
         if self.__ion_dir is not None:
             testmsg = "remove %s on all IONs" % self.__ion_dir
             cmdstr = "%srm -rf %s " % (allnode_cmd, self.__ion_dir)
-            cts.common_launch_test(testmsg, cmdstr)
+            self.common_launch_test(testmsg, cmdstr)
         print("Testnss: module tearDown end\n\n")
