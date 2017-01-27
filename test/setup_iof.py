@@ -64,6 +64,7 @@ class TestSetUpIof(unittest.TestCase):
     def test_iof_started(self):
         """Wait for ctrl fs to start"""
         start_dir = os.environ["CNSS_PREFIX"]
+        self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
         ctrl_dir = os.path.join(start_dir, ".ctrl")
         self.assertTrue(os.path.isdir(start_dir), \
             "prefix is not a directory %s" % start_dir)
@@ -73,11 +74,14 @@ class TestSetUpIof(unittest.TestCase):
             i = i - 1
             time.sleep(1)
             if os.path.exists(filename) is True:
+                self.logger.info("Found shutdown file: %s", filename)
                 stat_obj = os.stat(filename)
                 self.assertTrue(S_ISREG(stat_obj.st_mode), "File type is \
                     not a regular file")
                 self.logger.info(stat_obj)
+                return 0
 
+        self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
         # Log the error message. Fail the test with the same error message
         self.logger.info("Unable to detect file: %s", filename)
         self.fail("Unable to detect file: %s" % filename)

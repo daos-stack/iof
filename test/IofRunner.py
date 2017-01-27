@@ -57,7 +57,7 @@ class IofRunner():
         procrtn = None
         testmsg = "Create the CNSS dir on all CNs"
         tempdir = tempfile.mkdtemp()
-        self.test_info.set_test_info('setKeyForSetup', 'CNSS_PREFIX', tempdir)
+        self.test_info.set_passToConfig('CNSS_PREFIX', tempdir)
         os.environ['CNSS_PREFIX'] = tempdir
         cmdstr = "mkdir -p %s " % tempdir
         procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
@@ -72,7 +72,7 @@ class IofRunner():
         procrtn = None
         testmsg = "create dirs for IONSS backend"
         ion_dir = tempfile.mkdtemp()
-        self.test_info.set_test_info('setKeyForSetup', 'ION_TEMPDIR', ion_dir)
+        self.test_info.set_passToConfig('ION_TEMPDIR', ion_dir)
         os.environ['ION_TEMPDIR'] = ion_dir
         cmdstr = "mkdir -p %s " % ion_dir
         procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
@@ -97,7 +97,6 @@ class IofRunner():
     def add_prefix_logdir(self):
         """Add the log directory to the prefix"""
         ompi_bin = self.test_info.get_defaultENV('IOF_OMPI_BIN')
-        ompi_prefix = self.test_info.get_defaultENV('IOF_OMPI_PREFIX')
         log_path = os.path.join(self.dir_path, "ionss")
         os.makedirs(log_path, exist_ok=True)
         if self.test_info.get_defaultENV('TR_USE_URI'):
@@ -105,26 +104,20 @@ class IofRunner():
                       self.test_info.get_defaultENV('TR_USE_URI')
         else:
             dvmfile = " "
-        if ompi_prefix:
-            use_prefix = " --prefix %s" % ompi_prefix
-        else:
-            use_prefix = ""
         if getpass.getuser() == "root":
             allow_root = " --allow-run-as-root"
         else:
             allow_root = ""
-        cmdstr = "%sorterun%s--output-filename %s%s%s" % \
-                 (ompi_bin, dvmfile, log_path, allow_root, use_prefix)
+        cmdstr = "%sorterun%s--output-filename %s%s" % \
+                 (ompi_bin, dvmfile, log_path, allow_root)
 
         return cmdstr
 
     def add_server(self):
         """Create the server prefix"""
         ion = self.test_info.get_defaultENV('IOF_TEST_ION')
-        ions = ion.split(',')
-        num_ions = len(ions)
         if ion:
-            local_ion = " -H %s -np %d " % (ion, num_ions)
+            local_ion = " -H %s -N 1 " % (ion)
         else:
             local_ion = " -np 1"
 
@@ -133,29 +126,34 @@ class IofRunner():
     def add_client(self):
         """Create the client prefix"""
         cn = self.test_info.get_defaultENV('IOF_TEST_CN')
-        cns = cn.split(',')
-        num_cns = len(cns)
         if cn:
-            local_cn = " -H %s -np %d " % (cn, num_cns)
+            local_cn = " -H %s -N 1 " % (cn)
         else:
             local_cn = " -np 1 "
 
         return local_cn
 
+    def setup_env(self):
+        """setup environment variablies"""
+        cci_path = self.test_info.get_defaultENV('CCI_CONFIG')
+        os.environ['CCI_CONFIG'] = cci_path
+        cart_log_mask = self.test_info.get_defaultENV('CRT_LOG_MASK',
+                                                      "DEBUG,MEM=ERR")
+        os.environ['CRT_LOG_MASK'] = cart_log_mask
+
     def launch_process(self):
         """Launch the CNSS and IONSS processes"""
         self.logger.info("Testnss: Launch the CNSS and IONSS processes")
-        pass_env = " -x CNSS_PREFIX -x IOF_LOG_MASK"
+        pass_env = " -x CCI_CONFIG -x CNSS_PREFIX -x CRT_LOG_MASK"
+        self.setup_env()
         self.proc = None
         self.create_cnss_dir()
         self.manage_ionss_dir()
         cmd = self.add_prefix_logdir()
         ionss = self.add_server()
         cnss = self.add_client()
-        fs = ' '.join(self.fs_list)
         test_path = self.test_info.get_defaultENV('IOF_TEST_BIN')
-        iof_log_mask = self.test_info.get_defaultENV('IOF_LOG_MASK', "INFO")
-        os.environ['IOF_LOG_MASK'] = iof_log_mask
+        fs = ' '.join(self.fs_list)
         ion_env = " -x ION_TEMPDIR"
         local_server = "%s%s%s %s/ionss %s" % \
                         (pass_env, ion_env, ionss, test_path, fs)
@@ -179,7 +177,7 @@ class IofRunner():
         Wait for processes to terminate and terminate them after
         the wait period."""
         self.logger.info("Testionss: - stopping processes :%s", self.proc.pid)
-        self.remove_cnss_ionss_dir()
+        #self.remove_cnss_ionss_dir()
         self.stop_cnss_ionss_processes("ionss", "IOF_TEST_ION")
         self.proc.poll()
         procrtn = self.proc.returncode
@@ -195,6 +193,7 @@ class IofRunner():
                 self.logger.error("Killing processes: %s", self.proc.pid)
                 self.proc.kill()
 
+        self.remove_cnss_ionss_dir()
         self.logger.info("Testionss: - return code: %s\n", procrtn)
         return procrtn
 
@@ -218,10 +217,8 @@ class IofRunner():
         """ Call fusermount to unmount the stale mounts.
         Remove the temporary files created during setup."""
         procrtn = None
-        cnss_dir = self.test_info.get_test_info('setKeyForSetup',
-                                                'CNSS_PREFIX')
-        ionss_dir = self.test_info.get_test_info('setKeyForSetup',
-                                                 'ION_TEMPDIR')
+        cnss_dir = self.test_info.get_passToConfig('CNSS_PREFIX')
+        ionss_dir = self.test_info.get_passToConfig('ION_TEMPDIR')
         cnss_mp = os.path.join(cnss_dir, ".ctrl")
         testmsg = "Unmount CNSS dirs"
         cmdstr = "fusermount -u %s" % cnss_mp
