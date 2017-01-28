@@ -56,9 +56,10 @@ import shutil
 import tempfile
 import logging
 import unittest
+import common_methods
 import iofcommontestsuite
 
-class Testlocal(iofcommontestsuite.CommonTestSuite):
+class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     """Local test"""
 
     proc = None
@@ -82,7 +83,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
             self.logger.addHandler(__ch)
 
         self.import_dir = tempfile.mkdtemp()
-        self.shutdown_file = os.path.join(self.import_dir, '.ctrl', 'shutdown')
+        self.ctrl_dir = os.path.join(self.import_dir, '.ctrl')
+        self.shutdown_file = os.path.join(self.ctrl_dir, 'shutdown')
         self.e_dir = tempfile.mkdtemp()
 
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
@@ -284,12 +286,3 @@ class Testlocal(iofcommontestsuite.CommonTestSuite):
 
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
-
-    def test_mkdir(self):
-        """Create a directory"""
-
-        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
-
-        os.mkdir(ndir)
-
-        print(os.listdir(ndir))

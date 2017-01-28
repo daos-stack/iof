@@ -437,10 +437,12 @@ int iof_post_start(void *foo)
 
 		fs_handle->my_fs_id = tmp[i].id;
 		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
-		if (cb->register_fuse_fs(cb->handle, &ops, mount, fs_handle)
-								!= NULL)
-			IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
-
+		ret = cb->register_fuse_fs(cb->handle, &ops, mount, fs_handle);
+		if (ret) {
+			IOF_LOG_ERROR("Unable to register FUSE fs");
+			return 1;
+		}
+		IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
 	}
 
 	ret = crt_req_decref(query_rpc);

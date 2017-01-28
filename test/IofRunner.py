@@ -83,10 +83,10 @@ class IofRunner():
                 procrtn)
         for i in (2, 1):
             fs = "FS_%s" % i
-            self.fs_list.append(fs)
             abs_path = os.path.join(ion_dir, fs)
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "mkdir -p %s" % abs_path
+            self.fs_list.append(abs_path)
             procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
                                                     'IOF_TEST_ION', testmsg)
             if procrtn:

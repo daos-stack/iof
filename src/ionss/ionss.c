@@ -892,6 +892,7 @@ int main(int argc, char **argv)
 	int i;
 	int ret = IOF_SUCCESS;
 	pthread_t progress_tid;
+	int err;
 
 	char *version = iof_get_version();
 
@@ -910,18 +911,60 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	for (i = 0; i < num_fs; i++) {
-		char *full_path = realpath(argv[i+1], NULL);
+	IOF_LOG_INFO("Projecting %d exports", num_fs);
 
-		if (!full_path)
+	/*
+	 * Check each export location.
+	 *
+	 * Exports must be directories.
+	 * Exports are identified by the absolute path, without allowing for
+	 * symbolic links.
+	 * The maximum path length of exports is checked.
+	 */
+	err = 0;
+	for (i = 0; i < num_fs; i++) {
+		struct stat buf = {0};
+		char *full_path = realpath(argv[i + 1], NULL);
+		int rc;
+
+		if (!full_path) {
+			IOF_LOG_ERROR("Export path does not exist: %s",
+				      argv[i + 1]);
+			err = 1;
 			continue;
+		}
+
+		rc = stat(full_path, &buf);
+		if (rc) {
+			IOF_LOG_ERROR("Could not stat export path %s %d",
+				      full_path, errno);
+			err = 1;
+			continue;
+		}
+
+		if (!S_ISDIR(buf.st_mode)) {
+			IOF_LOG_ERROR("Export path is not a directory %s",
+				      full_path);
+			err = 1;
+			continue;
+		}
+
+		if (strnlen(full_path, IOF_MAX_PATH_LEN - 1) ==
+			(IOF_MAX_PATH_LEN - 1)) {
+			IOF_LOG_ERROR("Export path is too deep %s",
+				      full_path);
+			err = 1;
+			continue;
+		}
+
 		IOF_LOG_INFO("Projecting %s", full_path);
 		fs_list[i].mode = 0;
 		fs_list[i].id = i;
 		strncpy(fs_list[i].mnt, full_path, IOF_NAME_LEN_MAX);
 		free(full_path);
 	}
-
+	if (err)
+		return 1;
 
 	/*initialize CaRT*/
 	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);

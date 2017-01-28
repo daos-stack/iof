@@ -240,9 +240,15 @@ static void iof_fuse_umount(struct fs_info *info)
 #endif
 }
 
-/*Creates a fuse filesystem for any plugin that needs one*/
-static void *register_fuse(void *handle, struct fuse_operations *ops,
-			const char *mnt, void *private_data)
+/*
+ * Creates a fuse filesystem for any plugin that needs one.
+ *
+ * Should be called from the post_start plugin callback and creates
+ * a filesystem.
+ * Returns 0 on success, or non-zero on error.
+ */
+static int register_fuse(void *handle, struct fuse_operations *ops,
+			 const char *mnt, void *private_data)
 {
 	struct fs_info *info = NULL;
 	struct cnss_info *cnss_info = (struct cnss_info *)handle;
@@ -251,7 +257,7 @@ static void *register_fuse(void *handle, struct fuse_operations *ops,
 
 	if (!mnt) {
 		IOF_LOG_ERROR("Invalid Mount point");
-		return NULL;
+		return 1;
 	}
 
 	args.argc = 1;
@@ -318,7 +324,7 @@ static void *register_fuse(void *handle, struct fuse_operations *ops,
 
 	LIST_INSERT_HEAD(&cnss_info->fs_head, info, entries);
 
-	return info;
+	return 0;
 cleanup:
 	if (info->mnt)
 		free(info->mnt);
@@ -327,8 +333,7 @@ cleanup:
 	if (info)
 		free(info);
 
-	return NULL;
-
+	return 1;
 }
 
 static int deregister_fuse(struct fs_info *info)

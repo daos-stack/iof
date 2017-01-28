@@ -46,18 +46,21 @@ multi_test_nss/iof_simple_test/iof_simple_test_<node> directory.
 """
 
 import os
+import common_methods
 import logging
-import unittest
 from stat import S_ISDIR
 
-class TestIof(unittest.TestCase):
+class TestIof(common_methods.CnssChecks):
     """IOF filesystem tests in private access mode"""
 
-    startdir = None
-    ctrl_dir = None
     logger = logging.getLogger("TestRunnerLogger")
 
-    def iof_fs_test(self):
+    def setUp(self):
+        """Set up the test"""
+        startdir = os.environ["CNSS_PREFIX"]
+        self.ctrl_dir = os.path.join(startdir, ".ctrl")
+
+    def test_iof_fs(self):
         """Test private access mount points"""
         self.logger.info("starting to stat the mountpoints")
         entry = os.path.join(self.ctrl_dir, "iof", "PA")
