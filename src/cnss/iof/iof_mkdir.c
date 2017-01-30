@@ -56,7 +56,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("file %s mode %lx", file, (uint64_t)mode);
+	IOF_LOG_INFO("dir %s mode %x", file, (uint32_t)mode);
 
 	context = fuse_get_context();
 	fs_handle = (struct fs_handle *)context->private_data;

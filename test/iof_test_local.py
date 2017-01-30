@@ -82,10 +82,10 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             __ch = logging.StreamHandler(sys.stdout)
             self.logger.addHandler(__ch)
 
-        self.import_dir = tempfile.mkdtemp()
+        self.import_dir = tempfile.mkdtemp(prefix='tmp_iof_test_import_')
         self.ctrl_dir = os.path.join(self.import_dir, '.ctrl')
         self.shutdown_file = os.path.join(self.ctrl_dir, 'shutdown')
-        self.e_dir = tempfile.mkdtemp()
+        self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_')
 
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
 

@@ -327,7 +327,7 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	struct ionss_dir_handle *handle = NULL;
 	struct dirent *dir_entry;
 	char new_path[IOF_MAX_PATH_LEN];
-	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {};
+	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {0};
 	int reply_idx = 0;
 	char *gah_d;
 	int rc;
