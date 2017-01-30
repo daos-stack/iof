@@ -90,11 +90,6 @@ struct crt_msg_field *psr_out[] = {
 	&CMF_IOVEC
 };
 
-struct crt_msg_field *closedir_in[] = {
-	&CMF_GAH,
-	&CMF_UINT64
-};
-
 struct crt_msg_field *read_in[] = {
 	&CMF_GAH,
 	&CMF_UINT64,
@@ -157,43 +152,17 @@ struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
 							 psr_out);
 
-struct crt_req_format READDIR_FMT = DEFINE_CRT_REQ_FMT("readdir",
-						       readdir_in,
-						       readdir_out);
-
-struct crt_req_format CLOSEDIR_FMT = DEFINE_CRT_REQ_FMT("closedir",
-							closedir_in,
-							NULL);
-
-struct crt_req_format OPEN_FMT = DEFINE_CRT_REQ_FMT("open",
-						string_in,
-						gah_pair);
-
-struct crt_req_format CLOSE_FMT = DEFINE_CRT_REQ_FMT("close",
-						closedir_in,
-						NULL);
-
-struct crt_req_format CREATE_FMT = DEFINE_CRT_REQ_FMT("create",
-						create_in,
-						gah_pair);
-
-struct crt_req_format READ_FMT = DEFINE_CRT_REQ_FMT("read",
-						    read_in,
-						    iov_pair);
-
-struct crt_req_format MKDIR_FMT = DEFINE_CRT_REQ_FMT("mkdir",
-						     create_in,
-						     status_out);
-
 #define RPC_TYPE(NAME, in, out) .NAME = { .fmt = \
 					  DEFINE_CRT_REQ_FMT(#NAME, in, out) }
 static struct proto proto = {
 	.name = "IOF",
 	.id_base = 0x10F00,
 	.mt = {
+		RPC_TYPE(opendir, string_in, gah_pair),
+		RPC_TYPE(readdir, readdir_in, readdir_out),
+		RPC_TYPE(closedir, gah_in, NULL),
 		RPC_TYPE(getattr, string_in, iov_pair),
 		RPC_TYPE(getattr_gah, gah_in, iov_pair),
-		RPC_TYPE(opendir, string_in, gah_pair),
 		RPC_TYPE(write_direct, write_direct, write_out),
 		RPC_TYPE(write_bulk, write_bulk, write_out),
 		RPC_TYPE(truncate, truncate_in, status_out),
@@ -202,6 +171,11 @@ static struct proto proto = {
 		RPC_TYPE(rename, rename_in, status_out),
 		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
 		RPC_TYPE(unlink, string_in, status_out),
+		RPC_TYPE(open, string_in, gah_pair),
+		RPC_TYPE(read, read_in, iov_pair),
+		RPC_TYPE(create, create_in, gah_pair),
+		RPC_TYPE(close, gah_in, NULL),
+		RPC_TYPE(mkdir, create_in, status_out),
 	},
 };
 

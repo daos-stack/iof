@@ -205,7 +205,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	int rc;
 
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    READ_OP, &rpc);
+			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

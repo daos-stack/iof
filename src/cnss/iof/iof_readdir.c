@@ -119,7 +119,7 @@ static int readdir_get_data(struct fuse_context *context,
 	}
 
 	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			     READDIR_OP, &rpc);
+			     FS_TO_OP(fs_handle, readdir), &rpc);
 	if (ret || !rpc) {
 		IOF_LOG_ERROR("Could not create request, ret = %d",
 			      ret);

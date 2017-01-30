@@ -66,10 +66,10 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	struct iof_closedir_in *in = NULL;
+	struct iof_gah_in *in;
 	struct closedir_cb_r reply = {0};
 	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
+	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -98,7 +98,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	}
 
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    CLOSEDIR_OP, &rpc);
+			    FS_TO_OP(fs_handle, closedir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

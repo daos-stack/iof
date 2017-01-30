@@ -411,7 +411,7 @@ out:
 
 int iof_closedir_handler(crt_rpc_t *rpc)
 {
-	struct iof_closedir_in *in = NULL;
+	struct iof_gah_in *in = NULL;
 	struct ionss_dir_handle *handle = NULL;
 	char *d;
 	int rc;
@@ -611,7 +611,7 @@ out_no_log:
 
 int iof_close_handler(crt_rpc_t *rpc)
 {
-	struct iof_closedir_in *in;
+	struct iof_gah_in *in;
 	struct ionss_file_handle *local_handle = NULL;
 	int rc;
 
@@ -1428,61 +1428,14 @@ int ionss_register(void)
 		return ret;
 	}
 
-	ret = crt_rpc_srv_register(READDIR_OP, &READDIR_FMT,
-				   iof_readdir_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register readdir RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(CLOSEDIR_OP, &CLOSEDIR_FMT,
-				   iof_closedir_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register closedir RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(OPEN_OP, &OPEN_FMT,
-				   iof_open_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register open RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(CLOSE_OP, &CLOSE_FMT,
-				   iof_close_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(CREATE_OP, &CREATE_FMT,
-				   iof_create_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(READ_OP, &READ_FMT,
-				   iof_read_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(MKDIR_OP, &MKDIR_FMT,
-				   iof_mkdir_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
-		return ret;
-	}
-
 #define PROTO_SET_FUNCTION(PROTO, NAME, FN) (PROTO)->mt.NAME.fn = FN
 
 	proto = iof_register();
+	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
+	PROTO_SET_FUNCTION(proto, readdir, iof_readdir_handler);
+	PROTO_SET_FUNCTION(proto, closedir, iof_closedir_handler);
 	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
 	PROTO_SET_FUNCTION(proto, getattr_gah, iof_getattr_gah_handler);
-	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
 	PROTO_SET_FUNCTION(proto, write_direct, iof_write_direct_handler);
 	PROTO_SET_FUNCTION(proto, write_bulk, iof_write_bulk_handler);
 	PROTO_SET_FUNCTION(proto, truncate, iof_truncate_handler);
@@ -1491,6 +1444,11 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, rename, iof_rename_handler);
 	PROTO_SET_FUNCTION(proto, read_bulk, iof_read_bulk_handler);
 	PROTO_SET_FUNCTION(proto, unlink, iof_unlink_handler);
+	PROTO_SET_FUNCTION(proto, open, iof_open_handler);
+	PROTO_SET_FUNCTION(proto, create, iof_create_handler);
+	PROTO_SET_FUNCTION(proto, read, iof_read_handler);
+	PROTO_SET_FUNCTION(proto, close, iof_close_handler);
+	PROTO_SET_FUNCTION(proto, mkdir, iof_mkdir_handler);
 	iof_proto_commit(proto);
 
 	return ret;

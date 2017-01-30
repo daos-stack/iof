@@ -63,13 +63,6 @@
 
 #define QUERY_PSR_OP	(0x201)
 #define SHUTDOWN_OP	(0x202)
-#define READDIR_OP	(0x204)
-#define CLOSEDIR_OP	(0x205)
-#define OPEN_OP		(0x206)
-#define CLOSE_OP	(0x207)
-#define CREATE_OP	(0x208)
-#define READ_OP		(0x209)
-#define MKDIR_OP	(0x20B)
 
 struct iof_fs_info {
 	/*Associated mount point*/
@@ -150,11 +143,6 @@ struct iof_open_out {
 	int err;
 };
 
-struct iof_closedir_in {
-	struct ios_gah gah;
-	uint64_t my_fs_id;
-};
-
 struct iof_read_in {
 	struct ios_gah gah;
 	uint64_t base;
@@ -207,33 +195,21 @@ struct iof_write_out {
 	int len;
 };
 
-extern struct crt_req_format READDIR_FMT;
-
 extern struct crt_req_format QUERY_RPC_FMT;
-
-extern struct crt_req_format CLOSEDIR_FMT;
-
-extern struct crt_req_format OPEN_FMT;
-
-extern struct crt_req_format CLOSE_FMT;
-
-extern struct crt_req_format CREATE_FMT;
-
-extern struct crt_req_format READ_FMT;
-
-extern struct crt_req_format MKDIR_FMT;
 
 struct rpc_data {
 	struct crt_req_format fmt;
-	void *fn;
+	crt_rpc_cb_t fn;
 	int op_id;
 };
 
 #define MY_TYPE(TYPE) struct rpc_data TYPE
 struct my_types {
+	MY_TYPE(opendir);
+	MY_TYPE(readdir);
+	MY_TYPE(closedir);
 	MY_TYPE(getattr);
 	MY_TYPE(getattr_gah);
-	MY_TYPE(opendir);
 	MY_TYPE(write_direct);
 	MY_TYPE(write_bulk);
 	MY_TYPE(truncate);
@@ -242,6 +218,11 @@ struct my_types {
 	MY_TYPE(rename);
 	MY_TYPE(read_bulk);
 	MY_TYPE(unlink);
+	MY_TYPE(open);
+	MY_TYPE(read);
+	MY_TYPE(create);
+	MY_TYPE(close);
+	MY_TYPE(mkdir);
 };
 
 struct proto {

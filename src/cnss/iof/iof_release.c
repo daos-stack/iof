@@ -73,7 +73,7 @@ static int release_cb(const struct crt_cb_info *cb_info)
 int ioc_release(const char *file, struct fuse_file_info *fi)
 {
 	struct fuse_context *context;
-	struct iof_closedir_in *in = NULL;
+	struct iof_gah_in *in = NULL;
 	struct release_cb_r reply = {0};
 	struct fs_handle *fs_handle;
 	struct iof_state *iof_state = NULL;
@@ -104,7 +104,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	}
 
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    CLOSE_OP, &rpc);
+			    FS_TO_OP(fs_handle, close), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

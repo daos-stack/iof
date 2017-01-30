@@ -370,48 +370,6 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 		return ret;
 	}
 
-	ret = crt_rpc_register(READDIR_OP, &READDIR_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register readdir RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(CLOSEDIR_OP, &CLOSEDIR_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register closedir RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(OPEN_OP, &OPEN_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register open RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(CLOSE_OP, &CLOSE_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register close RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(CREATE_OP, &CREATE_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register create RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(READ_OP, &READ_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register read RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(MKDIR_OP, &MKDIR_FMT);
-	if (ret) {
-		IOF_LOG_ERROR("Can not register mkdir RPC, ret = %d", ret);
-		return ret;
-	}
-
 	iof_state->proto = iof_register();
 	iof_proto_commit(iof_state->proto);
 
