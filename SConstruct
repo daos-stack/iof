@@ -67,6 +67,11 @@ def scons():
     """Scons function"""
     platform = os.uname()[0]
     opts_file = os.path.join(Dir('#').abspath, 'iof-%s.conf' % platform)
+
+    commits_file = os.path.join(Dir('#').abspath, 'build.config')
+    if not os.path.exists(commits_file):
+        commits_file = None
+
     env = DefaultEnvironment()
     arch_dir = 'build/%s' % platform
     VariantDir(arch_dir, '.', duplicate=0)
@@ -76,10 +81,8 @@ def scons():
         os.rename('iof.conf', opts_file)
 
     opts = Variables(opts_file)
-    prereqs = PreReqComponent(env, opts, arch=platform)
-
-    if os.path.exists("SConscript.local"):
-        SConscript('SConscript.local', 'env')
+    prereqs = PreReqComponent(env, opts,
+                              config_file=commits_file, arch=platform)
 
     prereqs.preload(os.path.join(Dir('#').abspath,
                                  "scons_local",
