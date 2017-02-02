@@ -857,7 +857,6 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
 				     &local_bulk_hdl);
 		if (rc) {
-			free(iov.iov_buf);
 			out->err = IOF_ERR_CART;
 			goto out;
 		}
@@ -871,7 +870,6 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 		rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, NULL,
 				       NULL);
 		if (rc) {
-			free(iov.iov_buf);
 			out->err = IOF_ERR_CART;
 			goto out;
 		}
