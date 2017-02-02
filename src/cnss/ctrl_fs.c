@@ -135,7 +135,9 @@ struct data_node {
 struct ctrl_fs_data {
 	char *prefix;
 	struct fuse *fuse;
+#if !IOF_USE_FUSE3
 	struct fuse_chan *ch;
+#endif
 	int next_inode;
 	int startup_rc;
 	pthread_t thread;
@@ -735,18 +737,18 @@ static void *ctrl_thread_func(void *arg)
 
 	rc = fuse_loop(ctrl_fs.fuse); /* Blocking */
 
-	IOF_LOG_INFO("Exited ctrl fs loop");
+	IOF_LOG_INFO("Exited ctrl fs loop %d", rc);
 
-	if (rc != 0)
+	if (rc)
 		IOF_LOG_ERROR("Fuse loop exited with %d", rc);
-	if (ctrl_fs.ch != NULL)
+
 #ifdef IOF_USE_FUSE3
-		fuse_unmount(ctrl_fs.fuse);
+	fuse_unmount(ctrl_fs.fuse);
 #else
+	if (ctrl_fs.ch)
 		fuse_unmount(ctrl_fs.prefix, ctrl_fs.ch);
 #endif
-	if (ctrl_fs.fuse != NULL)
-		fuse_destroy(ctrl_fs.fuse);
+	fuse_destroy(ctrl_fs.fuse);
 
 	return NULL;
 }
