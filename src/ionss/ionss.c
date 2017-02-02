@@ -63,9 +63,10 @@ static int shutdown;
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)
 
 struct ionss_dir_handle {
-	int      fs_id;
+	int	fs_id;
 	char	*h_name;
 	DIR	*h_dir;
+	int	fd;
 };
 
 struct ionss_file_handle {
@@ -108,33 +109,6 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 
 	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s", mnt,
 			old_path);
-	if (ret > IOF_MAX_PATH_LEN)
-		return IOF_ERR_OVERFLOW;
-	IOF_LOG_DEBUG("New Path: %s", new_path);
-
-	return IOF_SUCCESS;
-}
-
-/*
- * Assemble local path from two parts.  Take the local projection directory and
- * concatename onto it a remote directory and remote filename.
- */
-
-int iof_get_path2(int id, const char *old_dir, char *old_file, char *new_path)
-{
-	char *mnt;
-	int ret;
-
-	/*lookup mnt by ID in projection data structure*/
-	if (id >= num_fs) {
-		IOF_LOG_ERROR("Filesystem ID invalid");
-		return IOF_BAD_DATA;
-	}
-
-	mnt = fs_list[id].mnt;
-
-	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s/%s", mnt,
-		       old_dir, old_file);
 	if (ret > IOF_MAX_PATH_LEN)
 		return IOF_ERR_OVERFLOW;
 	IOF_LOG_DEBUG("New Path: %s", new_path);
@@ -284,6 +258,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 			h = malloc(sizeof(struct ionss_dir_handle));
 
 			h->h_dir = dir_h;
+			h->fd = dirfd(h->h_dir);
 			h->h_name = strdup(in->path);
 			h->fs_id = in->my_fs_id;
 
@@ -326,7 +301,6 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	struct iof_readdir_out *out;
 	struct ionss_dir_handle *handle = NULL;
 	struct dirent *dir_entry;
-	char new_path[IOF_MAX_PATH_LEN];
 	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {0};
 	int reply_idx = 0;
 	char *gah_d;
@@ -384,11 +358,11 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		/* TODO: Check this */
 		strncpy(replies[reply_idx].d_name, dir_entry->d_name, NAME_MAX);
 
-		iof_get_path2(handle->fs_id, handle->h_name,
-			      replies[reply_idx].d_name, new_path);
-
 		errno = 0;
-		rc = lstat(new_path, &replies[reply_idx].stat);
+		rc = fstatat(handle->fd,
+			     replies[reply_idx].d_name,
+			     &replies[reply_idx].stat,
+			     AT_SYMLINK_NOFOLLOW);
 		if (rc != 0)
 			replies[reply_idx].stat_rc = errno;
 
