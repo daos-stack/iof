@@ -51,6 +51,12 @@ struct crt_msg_field *string_in[] = {
 	&CMF_UINT64
 };
 
+struct crt_msg_field *string_out[] = {
+	&CMF_STRING,
+	&CMF_INT,
+	&CMF_INT,
+};
+
 struct crt_msg_field *rename_in[] = {
 	&CMF_STRING,
 	&CMF_STRING,
@@ -176,6 +182,7 @@ static struct proto proto = {
 		RPC_TYPE(create, create_in, gah_pair),
 		RPC_TYPE(close, gah_in, NULL),
 		RPC_TYPE(mkdir, create_in, status_out),
+		RPC_TYPE(readlink, string_in, string_out),
 	},
 };
 

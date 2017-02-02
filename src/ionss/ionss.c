@@ -988,6 +988,51 @@ out:
 	return 0;
 }
 
+int iof_readlink_handler(crt_rpc_t *rpc)
+{
+	struct iof_string_in *in;
+	struct iof_string_out *out;
+	char new_path[IOF_MAX_PATH_LEN];
+	char reply[IOF_MAX_PATH_LEN] = {0};
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = readlink(new_path, reply, IOF_MAX_PATH_LEN);
+
+	if (rc < 0)
+		out->rc = errno;
+	else
+		out->path = (crt_string_t)reply;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 int iof_truncate_handler(crt_rpc_t *rpc)
 {
 	struct iof_truncate_in *in = NULL;
@@ -1449,6 +1494,7 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, read, iof_read_handler);
 	PROTO_SET_FUNCTION(proto, close, iof_close_handler);
 	PROTO_SET_FUNCTION(proto, mkdir, iof_mkdir_handler);
+	PROTO_SET_FUNCTION(proto, readlink, iof_readlink_handler);
 	iof_proto_commit(proto);
 
 	return ret;

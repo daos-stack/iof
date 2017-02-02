@@ -82,6 +82,12 @@ struct iof_string_in {
 	uint64_t my_fs_id;
 };
 
+struct iof_string_out {
+	crt_string_t path;
+	int rc;
+	int err;
+};
+
 struct iof_truncate_in {
 	crt_string_t path;
 	uint64_t my_fs_id;
@@ -223,6 +229,7 @@ struct my_types {
 	MY_TYPE(create);
 	MY_TYPE(close);
 	MY_TYPE(mkdir);
+	MY_TYPE(readlink);
 };
 
 struct proto {

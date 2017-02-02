@@ -167,4 +167,6 @@ int ioc_rmdir(const char *);
 
 int ioc_unlink(const char *);
 
+int ioc_readlink(const char *, char *, size_t);
+
 #endif

@@ -392,3 +392,18 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd = open(filename, 'w')
         fd.close()
         os.unlink(filename)
+
+    def test_read_symlink(self):
+        """Read a symlink"""
+
+        os.symlink('target', os.path.join(self.export_dir, 'source'))
+
+        self.logger.info(os.listdir(os.path.join(self.import_dir, 'exp')))
+
+        self.logger.info(os.lstat(os.path.join(self.import_dir,
+                                               'exp',
+                                               'source')))
+
+        result = os.readlink(os.path.join(self.import_dir, 'exp', 'source'))
+        if result != 'target':
+            self.fail("Link target is wrong '%s'" % result)

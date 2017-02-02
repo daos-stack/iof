@@ -222,6 +222,7 @@ static struct fuse_operations ops = {
 	.rmdir = ioc_rmdir,
 	.write = ioc_write,
 	.unlink = ioc_unlink,
+	.readlink = ioc_readlink,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)
