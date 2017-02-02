@@ -48,6 +48,8 @@ python3.4 -m unittest -c iof_test_local.Testlocal.test_ionss_link
 
 """
 
+#pylint: disable=too-many-public-methods
+
 import os
 import sys
 import time
@@ -405,5 +407,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                                                'source')))
 
         result = os.readlink(os.path.join(self.import_dir, 'exp', 'source'))
+        if result != 'target':
+            self.fail("Link target is wrong '%s'" % result)
+
+    def test_make_symlink(self):
+        """Make a symlink"""
+
+        os.symlink('target', os.path.join(self.import_dir, 'exp', 'source'))
+
+        self.logger.info(os.listdir(os.path.join(self.import_dir, 'exp')))
+
+        self.logger.info(os.lstat(os.path.join(self.export_dir, 'source')))
+        result = os.readlink(os.path.join(self.export_dir, 'source'))
         if result != 'target':
             self.fail("Link target is wrong '%s'" % result)

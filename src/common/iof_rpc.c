@@ -57,7 +57,7 @@ struct crt_msg_field *string_out[] = {
 	&CMF_INT,
 };
 
-struct crt_msg_field *rename_in[] = {
+struct crt_msg_field *two_string_in[] = {
 	&CMF_STRING,
 	&CMF_STRING,
 	&CMF_UINT64,
@@ -174,7 +174,7 @@ static struct proto proto = {
 		RPC_TYPE(truncate, truncate_in, status_out),
 		RPC_TYPE(ftruncate, ftruncate_in, status_out),
 		RPC_TYPE(rmdir, string_in, status_out),
-		RPC_TYPE(rename, rename_in, status_out),
+		RPC_TYPE(rename, two_string_in, status_out),
 		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
 		RPC_TYPE(unlink, string_in, status_out),
 		RPC_TYPE(open, string_in, gah_pair),
@@ -183,6 +183,7 @@ static struct proto proto = {
 		RPC_TYPE(close, gah_in, NULL),
 		RPC_TYPE(mkdir, create_in, status_out),
 		RPC_TYPE(readlink, string_in, string_out),
+		RPC_TYPE(symlink, two_string_in, status_out),
 	},
 };
 

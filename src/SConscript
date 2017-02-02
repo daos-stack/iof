@@ -52,6 +52,7 @@ RPC_SRC = ['closedir',
            'release',
            'rename',
            'rmdir',
+           'symlink',
            'truncate',
            'unlink',
            'write']

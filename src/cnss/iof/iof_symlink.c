@@ -46,13 +46,13 @@
 #include "iof.h"
 #include "log.h"
 
-int ioc_rename(const char *src, const char *dst)
+int ioc_symlink(const char *dst, const char *src)
 {
 	struct fuse_context *context;
 	struct iof_two_string_in *in;
 	struct status_cb_r reply = {0};
 	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
+	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -67,9 +67,9 @@ int ioc_rename(const char *src, const char *dst)
 	}
 
 	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			    FS_TO_OP(fs_handle, rename), &rpc);
+			    FS_TO_OP(fs_handle, symlink), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, ret = %u",
 			      rc);
 		return -EIO;
 	}
@@ -83,7 +83,7 @@ int ioc_rename(const char *src, const char *dst)
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
 		return -EIO;
 	}
 	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
@@ -91,18 +91,9 @@ int ioc_rename(const char *src, const char *dst)
 	if (rc)
 		return -rc;
 
-	IOF_LOG_DEBUG("path rc %d", IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("rc %d",
+		      reply.err == 0 ? -reply.rc : -EIO);
 
-	return IOC_STATUS_TO_RC(reply);
+	return reply.err == 0 ? -reply.rc : -reply.err;
 }
 
-#if IOF_USE_FUSE3
-int ioc_rename3(const char *src, const char *dst, unsigned int flags)
-{
-	if (flags) {
-		IOF_LOG_INFO("Unsupported rename flags %x", flags);
-		return -ENOTSUP;
-	}
-	return ioc_rename(src, dst);
-}
-#endif

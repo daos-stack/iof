@@ -869,7 +869,7 @@ out:
 
 int iof_rename_handler(crt_rpc_t *rpc)
 {
-	struct iof_rename_in *in = NULL;
+	struct iof_two_string_in *in = NULL;
 	struct iof_status_out *out = NULL;
 	char new_src[IOF_MAX_PATH_LEN];
 	char new_dst[IOF_MAX_PATH_LEN];
@@ -905,6 +905,56 @@ int iof_rename_handler(crt_rpc_t *rpc)
 	}
 
 	rc = rename(new_src, new_dst);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
+		      in->src, in->dst, out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_symlink_handler(crt_rpc_t *rpc)
+{
+	struct iof_two_string_in *in;
+	struct iof_status_out *out;
+	char new_src[IOF_MAX_PATH_LEN];
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->dst || !in->src) {
+		IOF_LOG_ERROR("Missing inputs");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->src, &new_src[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	rc = symlink(in->dst, new_src);
 
 	if (rc)
 		out->rc = errno;
@@ -1469,6 +1519,7 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, close, iof_close_handler);
 	PROTO_SET_FUNCTION(proto, mkdir, iof_mkdir_handler);
 	PROTO_SET_FUNCTION(proto, readlink, iof_readlink_handler);
+	PROTO_SET_FUNCTION(proto, symlink, iof_symlink_handler);
 	iof_proto_commit(proto);
 
 	return ret;
