@@ -81,9 +81,10 @@ struct fs_info {
 	struct fuse_chan *ch;
 #endif
 	pthread_t thread;
+	pthread_mutex_t lock;
 	struct fs_handle *fs_handle;
-
 	LIST_ENTRY(fs_info) entries;
+	int running:1;
 };
 
 
@@ -250,13 +251,18 @@ static void iof_fuse_umount(struct fs_info *info)
 static int register_fuse(void *handle, struct fuse_operations *ops,
 			 const char *mnt, void *private_data)
 {
-	struct fs_info *info = NULL;
+	struct fs_info *info;
 	struct cnss_info *cnss_info = (struct cnss_info *)handle;
 	struct fuse_args args = {0};
 	char *dash_d = "-d";
 
 	if (!mnt) {
 		IOF_LOG_ERROR("Invalid Mount point");
+		return 1;
+	}
+
+	if ((mkdir(mnt, 0755) && errno != EEXIST)) {
+		IOF_LOG_ERROR("Could not create directory %s for import", mnt);
 		return 1;
 	}
 
@@ -267,18 +273,18 @@ static int register_fuse(void *handle, struct fuse_operations *ops,
 	info = calloc(1, sizeof(struct fs_info));
 	if (!info) {
 		IOF_LOG_ERROR("Could not allocate fuse info");
-		goto cleanup;
+		return 1;
 	}
 
 	info->mnt = strdup(mnt);
 	if (!info->mnt) {
 		IOF_LOG_ERROR("Could not allocate mnt");
-		goto cleanup;
+		goto cleanup_no_mutex;
 	}
-	if ((mkdir(info->mnt, 0755) && errno != EEXIST)) {
-		IOF_LOG_ERROR("Could not create directory %s for mounting",
-				info->mnt);
-		goto cleanup;
+
+	if (pthread_mutex_init(&info->lock, NULL)) {
+		IOF_LOG_ERROR("Count not create mutex");
+		goto cleanup_no_mutex;
 	}
 
 #if !IOF_USE_FUSE3
@@ -326,6 +332,8 @@ static int register_fuse(void *handle, struct fuse_operations *ops,
 
 	return 0;
 cleanup:
+	pthread_mutex_destroy(&info->lock);
+cleanup_no_mutex:
 	if (info->mnt)
 		free(info->mnt);
 	if (private_data)
@@ -338,18 +346,36 @@ cleanup:
 
 static int deregister_fuse(struct fs_info *info)
 {
-	char *val = "1";
+	pthread_mutex_lock(&info->lock);
 
-	fuse_session_exit(fuse_get_session(info->fuse));
+	if (info->running) {
+		char *val = "1";
+
+		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
+
+		/*
+		 * If the FUSE thread is in the filesystem servicing requests
+		 * then set the exit flag and send it a dummy operation to wake
+		 * it up.  Drop the mutext before calling setxattr() as that
+		 * will cause I/O activity and loop_fn() to deadlock with this
+		 * function.
+		 */
+		fuse_session_exit(fuse_get_session(info->fuse));
+		pthread_mutex_unlock(&info->lock);
 #ifdef __APPLE__
-	setxattr(info->mnt, "user.exit", val, strlen(val), 0, 0);
+		setxattr(info->mnt, "user.exit", val, strlen(val), 0, 0);
 #else
-	setxattr(info->mnt, "user.exit", val, strlen(val), 0);
+		setxattr(info->mnt, "user.exit", val, strlen(val), 0);
 #endif
+	} else {
+		pthread_mutex_unlock(&info->lock);
+	}
+
 	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
 	pthread_join(info->thread, 0);
 	LIST_REMOVE(info, entries);
 
+	pthread_mutex_destroy(&info->lock);
 	free(info->mnt);
 	free(info->fs_handle);
 	free(info);
@@ -361,14 +387,22 @@ static void *loop_fn(void *args)
 	int ret;
 	struct fs_info *info = (struct fs_info *)args;
 
+	pthread_mutex_lock(&info->lock);
+	info->running = 1;
+	pthread_mutex_unlock(&info->lock);
+
 	/*Blocking*/
 	ret = fuse_loop(info->fuse);
 
 	if (ret != 0)
 		IOF_LOG_DEBUG("Fuse loop exited with return code: %d", ret);
 
+	pthread_mutex_lock(&info->lock);
 	iof_fuse_umount(info);
 	fuse_destroy(info->fuse);
+	info->fuse = NULL;
+	info->running = 0;
+	pthread_mutex_unlock(&info->lock);
 	return NULL;
 }
 
