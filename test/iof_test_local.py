@@ -330,6 +330,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if data != 'World':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
+    def test_file_sync(self):
+        """Sync a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'b_file')
+
+        fd = os.open(filename, os.O_RDWR|os.O_CREAT)
+        os.write(fd, bytes("Hello world", 'UTF-8'))
+        os.fsync(fd)
+        os.ftruncate(fd, 100)
+        os.close(fd)
+
     def test_file_copy(self):
         """Copy a file into a projecton
 

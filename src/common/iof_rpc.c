@@ -184,6 +184,8 @@ static struct proto proto = {
 		RPC_TYPE(mkdir, create_in, status_out),
 		RPC_TYPE(readlink, string_in, string_out),
 		RPC_TYPE(symlink, two_string_in, status_out),
+		RPC_TYPE(fsync, gah_in, status_out),
+		RPC_TYPE(fdatasync, gah_in, status_out),
 	},
 };
 

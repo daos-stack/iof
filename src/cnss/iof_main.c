@@ -211,6 +211,7 @@ static struct fuse_operations ops = {
 	.open = ioc_open,
 	.release = ioc_release,
 	.create = ioc_create,
+	.fsync = ioc_fsync,
 	.read = ioc_read,
 	.symlink = ioc_symlink,
 	.mkdir = ioc_mkdir,

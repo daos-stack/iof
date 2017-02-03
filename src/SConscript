@@ -42,6 +42,7 @@ COMMON_SRC = ['version.c', 'ios_gah.c', 'log.c', 'iof_rpc.c']
 CNSS_SRC = ['cnss.c', 'iof_main.c', 'ctrl_common.c', 'ctrl_fs.c']
 RPC_SRC = ['closedir',
            'create',
+           'fsync',
            'getattr',
            'mkdir',
            'open',

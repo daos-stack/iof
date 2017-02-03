@@ -206,7 +206,7 @@ extern struct crt_req_format QUERY_RPC_FMT;
 struct rpc_data {
 	struct crt_req_format fmt;
 	crt_rpc_cb_t fn;
-	int op_id;
+	crt_opcode_t op_id;
 };
 
 #define MY_TYPE(TYPE) struct rpc_data TYPE
@@ -231,11 +231,13 @@ struct my_types {
 	MY_TYPE(mkdir);
 	MY_TYPE(readlink);
 	MY_TYPE(symlink);
+	MY_TYPE(fsync);
+	MY_TYPE(fdatasync);
 };
 
 struct proto {
 	char name[16];
-	int id_base;
+	crt_opcode_t id_base;
 	struct my_types mt;
 };
 

@@ -629,6 +629,106 @@ out:
 	return 0;
 }
 
+int iof_fsync_handler(crt_rpc_t *rpc)
+{
+	struct iof_gah_in *in;
+	struct iof_status_out *out;
+	struct ionss_file_handle *local_handle = NULL;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Calling fsync %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
+	if (rc != IOS_SUCCESS || !local_handle) {
+		IOF_LOG_INFO("Failed to load handle from gah %p %d",
+			     &in->gah, rc);
+		goto out;
+	}
+
+	errno = 0;
+	rc = fsync(local_handle->fd);
+	if (rc)
+		out->rc = errno;
+
+out:
+	IOF_LOG_DEBUG("result err %d rc %d",
+		      out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+	return 0;
+}
+
+int iof_fdatasync_handler(crt_rpc_t *rpc)
+{
+	struct iof_gah_in *in;
+	struct iof_status_out *out;
+	struct ionss_file_handle *local_handle = NULL;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Calling fdatasync %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
+	if (rc != IOS_SUCCESS || !local_handle) {
+		IOF_LOG_INFO("Failed to load handle from gah %p %d",
+			     &in->gah, rc);
+		goto out;
+	}
+
+	errno = 0;
+	rc = fdatasync(local_handle->fd);
+	if (rc)
+		out->rc = errno;
+
+out:
+	IOF_LOG_DEBUG("result err %d rc %d",
+		      out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+	return 0;
+}
+
 int iof_read_handler(crt_rpc_t *rpc)
 {
 	struct iof_read_in *in;
@@ -1520,6 +1620,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, mkdir, iof_mkdir_handler);
 	PROTO_SET_FUNCTION(proto, readlink, iof_readlink_handler);
 	PROTO_SET_FUNCTION(proto, symlink, iof_symlink_handler);
+	PROTO_SET_FUNCTION(proto, fsync, iof_fsync_handler);
+	PROTO_SET_FUNCTION(proto, fdatasync, iof_fdatasync_handler);
 	iof_proto_commit(proto);
 
 	return ret;
