@@ -57,8 +57,6 @@
 #define IOF_ERR_CTRL_FS        11
 
 #define IOF_NAME_LEN_MAX 256
-#define IOF_PREFIX_MAX 80
-#define IOF_MAX_PATH_LEN 4096
 
 /* IOF Registration op codes for RPC's*/
 

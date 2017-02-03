@@ -55,12 +55,20 @@
 #include "iof_common.h"
 #include "ios_gah.h"
 
+#define IOF_MAX_PATH_LEN 4096
+
 static struct iof_fs_info *fs_list;
 static struct ios_gah_store *gs;
+static struct ionss_projection *projections;
 static int num_fs;
 static int shutdown;
 
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)
+
+struct ionss_projection {
+	DIR	*dir;
+	int	dir_fd;
+};
 
 struct ionss_dir_handle {
 	int	fs_id;
@@ -88,6 +96,21 @@ int shutdown_handler(crt_rpc_t *rpc)
 	shutdown = 1;
 
 	return 0;
+}
+
+#define ID_TO_FD(ID) (projections[(ID)].dir_fd)
+
+/* Convert an absolute path into a real one, returning a pointer
+ * to a string.
+ *
+ * This converts "/" into "." and for all other paths removes the leading /
+ */
+const char *iof_get_rel_path(const char *path)
+{
+	path++;
+	if (path[0] == '\0')
+		return ".";
+	return (char *)path;
 }
 
 /*
@@ -120,7 +143,6 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in;
 	struct iof_getattr_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
 	struct stat stbuf = {0};
 	int rc;
 
@@ -143,17 +165,16 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("Checking path %s", in->path);
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
-			      rc);
-		out->err = rc;
+	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
+
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = lstat(new_path, &stbuf);
+	rc = fstatat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), &stbuf,
+		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
 	else
@@ -224,61 +245,76 @@ out:
 
 int iof_opendir_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = NULL;
-	struct iof_opendir_out *out = NULL;
-	char new_path[IOF_MAX_PATH_LEN];
+	struct iof_string_in *in;
+	struct iof_opendir_out *out;
+	struct ionss_dir_handle *local_handle;
 	int rc;
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		return 0;
-	}
+	int fd;
 
 	out = crt_reply_get(rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not retrieve output args");
-		return 0;
+		goto out_no_log;
 	}
 
-	IOF_LOG_DEBUG("Checking path %s", in->path);
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
-			      rc);
-		out->err = rc;
-	} else {
-		DIR *dir_h;
-		struct ios_gah gah;
-
-		out->err = 0;
-		dir_h = opendir(new_path);
-		if (dir_h) {
-			struct ionss_dir_handle *h;
-
-			h = malloc(sizeof(struct ionss_dir_handle));
-
-			h->h_dir = dir_h;
-			h->fd = dirfd(h->h_dir);
-			h->h_name = strdup(in->path);
-			h->fs_id = in->fs_id;
-
-			ios_gah_allocate(gs, &gah, 0, 0, h);
-
-			IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, h,
-				     GAH_PRINT_FULL_VAL(gah));
-			IOF_LOG_DEBUG("Dirp is %p", dir_h);
-
-			out->rc = 0;
-			out->gah = gah;
-		} else {
-			out->rc = errno;
-		}
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out_no_log;
 	}
 
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Opening path %s", in->path);
+
+	errno = 0;
+	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
+		    O_DIRECTORY | O_RDONLY);
+
+	if (fd == -1) {
+		out->rc = errno;
+		goto out;
+	}
+
+	local_handle = malloc(sizeof(*local_handle));
+	if (!local_handle) {
+		IOF_LOG_ERROR("Could not allocate handle");
+		out->err = IOF_ERR_NOMEM;
+		close(fd);
+		goto out;
+	}
+
+	local_handle->fd = fd;
+	local_handle->h_dir = fdopendir(local_handle->fd);
+	local_handle->h_name = strdup(in->path);
+	local_handle->fs_id = in->fs_id;
+
+	rc = ios_gah_allocate(gs, &out->gah, 0, 0, local_handle);
+	if (rc != IOS_SUCCESS) {
+		closedir(local_handle->h_dir);
+		free(local_handle);
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
+		     GAH_PRINT_FULL_VAL(out->gah));
+
+out:
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
+out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
@@ -475,7 +511,6 @@ int iof_open_handler(crt_rpc_t *rpc)
 	struct ios_gah gah = {0};
 	int fd;
 	int rc;
-	char new_path[IOF_MAX_PATH_LEN];
 
 	out = crt_reply_get(rpc);
 	if (!out) {
@@ -496,18 +531,16 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("path %s flags 0%o", in->path, in->flags);
-
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
+	IOF_LOG_DEBUG("path %s flags 0%o",
+		      in->path, in->flags);
+
 	errno = 0;
-	fd = open(new_path, in->flags);
+	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->flags);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -561,7 +594,6 @@ int iof_create_handler(crt_rpc_t *rpc)
 	struct ios_gah gah = {0};
 	int fd;
 	int rc;
-	char new_path[IOF_MAX_PATH_LEN];
 
 	out = crt_reply_get(rpc);
 	if (!out) {
@@ -582,19 +614,17 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
-		      in->path, in->flags, in->mode);
-
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
+	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
+		      in->path, in->flags, in->mode);
+
 	errno = 0;
-	fd = open(new_path, in->flags, in->mode);
+	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->flags,
+		    in->mode);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -1004,10 +1034,8 @@ out:
 
 int iof_rename_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in *in = NULL;
-	struct iof_status_out *out = NULL;
-	char new_src[IOF_MAX_PATH_LEN];
-	char new_dst[IOF_MAX_PATH_LEN];
+	struct iof_two_string_in *in;
+	struct iof_status_out *out;
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1023,23 +1051,19 @@ int iof_rename_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->src, &new_src[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
-			      rc);
-		out->err = rc;
+	if (!in->dst || !in->src) {
+		IOF_LOG_ERROR("Missing inputs");
+		out->err = IOF_ERR_CART;
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->dst, &new_dst[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
-	rc = rename(new_src, new_dst);
+	rc = renameat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->src),
+		      ID_TO_FD(in->fs_id), iof_get_rel_path(in->dst));
 
 	if (rc)
 		out->rc = errno;
@@ -1059,7 +1083,6 @@ int iof_symlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in *in;
 	struct iof_status_out *out;
-	char new_src[IOF_MAX_PATH_LEN];
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1081,15 +1104,8 @@ int iof_symlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->src, &new_src[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
-			      rc);
-		out->err = rc;
-		goto out;
-	}
-
-	rc = symlink(in->dst, new_src);
+	rc = symlinkat(in->dst, ID_TO_FD(in->fs_id),
+		       iof_get_rel_path(in->src));
 
 	if (rc)
 		out->rc = errno;
@@ -1110,7 +1126,6 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in;
 	struct iof_status_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1126,22 +1141,20 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
+	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
+
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (!in->path) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = mkdir(new_path, in->mode);
+	rc = mkdirat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->mode);
 
 	if (rc)
 		out->rc = errno;
@@ -1154,11 +1167,15 @@ out:
 	return 0;
 }
 
+/* This function needs additional checks to handle longer links.
+ *
+ * There is a upper limit on the lenth FUSE has provided in the CNSS but this
+ * function should ensure that it's not introducing further restricions.
+ */
 int iof_readlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in;
 	struct iof_string_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
 	char reply[IOF_MAX_PATH_LEN] = {0};
 	int rc;
 
@@ -1181,16 +1198,14 @@ int iof_readlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = readlink(new_path, reply, IOF_MAX_PATH_LEN);
+	rc = readlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
+			reply, IOF_MAX_PATH_LEN);
 
 	if (rc < 0)
 		out->rc = errno;
@@ -1301,8 +1316,6 @@ int iof_chmod_handler(crt_rpc_t *rpc)
 {
 	struct iof_chmod_in *in;
 	struct iof_status_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
-
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1324,16 +1337,20 @@ int iof_chmod_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
+	IOF_LOG_INFO("Setting mode for %s to 0%o", in->path, in->mode);
+
+	/* The documentation for fchmodat() references AT_SYMLINK_NOFOLLOW
+	 * however then says it is not supported.  This seems to match chmod
+	 * itself however could be a bug
+	 */
 	errno = 0;
-	rc = chmod(new_path, in->mode);
+	rc = fchmodat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->mode,
+		      0);
 
 	if (rc)
 		out->rc = errno;
@@ -1395,7 +1412,6 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = NULL;
 	struct iof_status_out *out = NULL;
-	char new_path[IOF_MAX_PATH_LEN];
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1417,16 +1433,16 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
+
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = rmdir(new_path);
+	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
+		      AT_REMOVEDIR);
 
 	if (rc)
 		out->rc = errno;
@@ -1443,7 +1459,6 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in;
 	struct iof_status_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1459,22 +1474,20 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
+	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
+
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (!in->path) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = unlink(new_path);
+	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), 0);
 
 	if (rc)
 		out->rc = errno;
@@ -1705,8 +1718,6 @@ int iof_utimens_handler(crt_rpc_t *rpc)
 {
 	struct iof_time_in *in;
 	struct iof_status_out *out;
-	char new_path[IOF_MAX_PATH_LEN];
-
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -1734,16 +1745,16 @@ int iof_utimens_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
+	if (in->fs_id >= num_fs) {
+		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
+	IOF_LOG_INFO("Setting times for %s", in->path);
+
 	errno = 0;
-	rc = utimensat(0, new_path, in->time.iov_buf, AT_SYMLINK_NOFOLLOW);
+	rc = utimensat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
+		       in->time.iov_buf, AT_SYMLINK_NOFOLLOW);
 
 	if (rc)
 		out->rc = errno;
@@ -1925,8 +1936,15 @@ int main(int argc, char **argv)
 	}
 	num_fs = argc - 1;
 	/*hardcoding the number and path for projected filesystems*/
-	fs_list = calloc(num_fs, sizeof(struct iof_fs_info));
+	fs_list = calloc(num_fs, sizeof(*fs_list));
 	if (!fs_list) {
+		IOF_LOG_ERROR("Filesystem list not allocated");
+		ret = IOF_ERR_NOMEM;
+		goto cleanup;
+	}
+
+	projections = calloc(num_fs, sizeof(*projections));
+	if (!projections) {
 		IOF_LOG_ERROR("Filesystem list not allocated");
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
@@ -1944,6 +1962,7 @@ int main(int argc, char **argv)
 	 */
 	err = 0;
 	for (i = 0; i < num_fs; i++) {
+		struct ionss_projection *projection = &projections[i];
 		struct stat buf = {0};
 		char *full_path = realpath(argv[i + 1], NULL);
 		int rc;
@@ -1969,6 +1988,15 @@ int main(int argc, char **argv)
 			err = 1;
 			continue;
 		}
+
+		projection->dir = opendir(full_path);
+		if (!projection->dir) {
+			IOF_LOG_ERROR("Could not open export directory %s",
+				      full_path);
+			err = 1;
+			continue;
+		}
+		projection->dir_fd = dirfd(projection->dir);
 
 		if (strnlen(full_path, IOF_MAX_PATH_LEN - 1) ==
 			(IOF_MAX_PATH_LEN - 1)) {
@@ -2022,6 +2050,16 @@ int main(int argc, char **argv)
 cleanup:
 	if (fs_list)
 		free(fs_list);
+
+	for (i = 0; i < num_fs; i++) {
+		struct ionss_projection *projection = &projections[i];
+
+		if (projection->dir)
+			closedir(projection->dir);
+	}
+
+	if (projections)
+		free(projections);
 
 	iof_log_close();
 
