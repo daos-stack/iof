@@ -49,25 +49,15 @@
 
 int ioc_truncate_name(const char *file, off_t len)
 {
-	struct fuse_context *context;
+	struct fs_handle *fs_handle = ioc_get_handle();
 	struct iof_truncate_in *in;
 	struct status_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	IOF_LOG_INFO("Truncate %s %zi", file, len);
 
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
-
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, truncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -78,7 +68,7 @@ int ioc_truncate_name(const char *file, off_t len)
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
 	in->len = len;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+	in->fs_id = fs_handle->fs_id;
 
 	reply.complete = 0;
 
@@ -87,7 +77,7 @@ int ioc_truncate_name(const char *file, off_t len)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -105,12 +95,10 @@ int ioc_truncate_name(const char *file, off_t len)
  */
 int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct fs_handle *fs_handle = handle->fs_handle;
 	struct iof_ftruncate_in *in;
 	struct status_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -123,15 +111,7 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
-
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -150,7 +130,7 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 

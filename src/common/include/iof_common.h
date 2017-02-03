@@ -79,7 +79,7 @@ struct iof_psr_query {
 
 struct iof_string_in {
 	crt_string_t path;
-	uint64_t my_fs_id;
+	uint32_t fs_id;
 };
 
 struct iof_string_out {
@@ -90,8 +90,8 @@ struct iof_string_out {
 
 struct iof_truncate_in {
 	crt_string_t path;
-	uint64_t my_fs_id;
 	uint64_t len;
+	uint32_t fs_id;
 };
 
 struct iof_ftruncate_in {
@@ -102,12 +102,12 @@ struct iof_ftruncate_in {
 struct iof_two_string_in {
 	crt_string_t src;
 	crt_string_t dst;
-	uint64_t my_fs_id;
+	uint32_t fs_id;
 };
 
 struct iof_create_in {
 	crt_string_t path;
-	uint64_t my_fs_id;
+	uint32_t fs_id;
 	mode_t mode;
 };
 
@@ -125,7 +125,7 @@ struct iof_opendir_out {
 
 struct iof_readdir_in {
 	struct ios_gah gah;
-	uint64_t my_fs_id;
+	uint32_t fs_id;
 	int offsef;
 };
 
@@ -203,7 +203,7 @@ struct iof_write_out {
 
 struct iof_chmod_in {
 	crt_string_t path;
-	uint64_t my_fs_id;
+	uint32_t fs_id;
 	int mode;
 };
 

@@ -48,7 +48,7 @@
 
 struct crt_msg_field *string_in[] = {
 	&CMF_STRING,
-	&CMF_UINT64
+	&CMF_INT,
 };
 
 struct crt_msg_field *string_out[] = {
@@ -60,12 +60,12 @@ struct crt_msg_field *string_out[] = {
 struct crt_msg_field *two_string_in[] = {
 	&CMF_STRING,
 	&CMF_STRING,
-	&CMF_UINT64,
+	&CMF_INT,
 };
 
 struct crt_msg_field *create_in[] = {
 	&CMF_STRING,
-	&CMF_UINT64,
+	&CMF_INT,
 	&CMF_INT,
 };
 
@@ -83,7 +83,7 @@ struct crt_msg_field *gah_pair[] = {
 
 struct crt_msg_field *readdir_in[] = {
 	&CMF_GAH,
-	&CMF_UINT64,
+	&CMF_INT,
 	&CMF_INT,
 };
 
@@ -118,7 +118,7 @@ struct crt_msg_field *read_bulk_out[] = {
 struct crt_msg_field *truncate_in[] = {
 	&CMF_STRING,
 	&CMF_UINT64,
-	&CMF_UINT64,
+	&CMF_INT,
 };
 
 struct crt_msg_field *ftruncate_in[] = {
@@ -155,7 +155,7 @@ struct crt_msg_field *write_out[] = {
 
 struct crt_msg_field *chmod_in[] = {
 	&CMF_STRING,
-	&CMF_UINT64,
+	&CMF_INT,
 	&CMF_INT,
 };
 

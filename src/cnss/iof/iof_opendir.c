@@ -48,7 +48,7 @@
 #include "ios_gah.h"
 
 struct opendir_cb_r {
-	struct dir_handle *dh;
+	struct iof_dir_handle *dh;
 	int complete;
 	int err;
 	int rc;
@@ -98,12 +98,10 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 
 int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
-	struct dir_handle *dir_handle;
-	struct iof_string_in *in = NULL;
+	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_dir_handle *dir_handle;
+	struct iof_string_in *in;
 	struct opendir_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
 	size_t dir_len = strlen(dir) + 1;
 	crt_rpc_t *rpc = NULL;
 	int rc;
@@ -113,18 +111,11 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -ENOMEM;
 	strncpy(dir_handle->name, dir, dir_len);
 
+	dir_handle->fs_handle = fs_handle;
+
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		free(dir_handle);
-		return -EIO;
-	}
-
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, opendir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -134,10 +125,9 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)dir;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+	in->fs_id = fs_handle->fs_id;
 
 	reply.dh = dir_handle;
-	reply.complete = 0;
 
 	rc = crt_req_send(rpc, opendir_cb, &reply);
 	if (rc) {
@@ -146,7 +136,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc) {
 		free(dir_handle);
 		return -rc;

@@ -48,25 +48,15 @@
 
 int ioc_rmdir(const char *file)
 {
-	struct fuse_context *context;
+	struct fs_handle *fs_handle = ioc_get_handle();
 	struct iof_string_in *in;
 	struct status_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	IOF_LOG_INFO("file %s", file);
 
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
-
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, rmdir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -76,7 +66,7 @@ int ioc_rmdir(const char *file)
 
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -84,7 +74,7 @@ int ioc_rmdir(const char *file)
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 

@@ -112,12 +112,10 @@ static int write_cb(const struct crt_cb_info *cb_info)
 }
 
 int ioc_write_direct(const char *buff, size_t len, off_t position,
-		     struct fs_handle *fs_handle,
-		     struct fuse_context *context,
 		     struct iof_file_handle *handle)
 {
-	struct iof_state *iof_state = fs_handle->iof_state;
-	struct iof_write_in *in = NULL;
+	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_write_in *in;
 	struct write_cb_r reply = {0};
 
 	crt_rpc_t *rpc = NULL;
@@ -125,7 +123,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -146,7 +144,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -160,14 +158,11 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 }
 
 int ioc_write_bulk(const char *buff, size_t len, off_t position,
-		   struct fs_handle *fs_handle,
-		   struct fuse_context *context,
 		   struct iof_file_handle *handle)
 {
-	struct iof_state *iof_state = fs_handle->iof_state;
+	struct fs_handle *fs_handle = handle->fs_handle;
 	struct iof_write_bulk *in;
 	crt_bulk_t bulk;
-
 	struct write_cb_r reply = {0};
 
 	crt_sg_list_t sgl = {0};
@@ -175,7 +170,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -193,7 +188,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(iof_state->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
+	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		return -EIO;
@@ -211,7 +206,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -231,20 +226,9 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	      struct fuse_file_info *fi)
 {
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
-	struct fuse_context *context;
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 
 	IOF_LOG_INFO("path %s handle %p len %zi", handle->name, handle, len);
-
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
@@ -254,9 +238,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	}
 
 	if (len >= BULK_THRESHOLD)
-		return ioc_write_bulk(buff, len, position, fs_handle, context,
-				      handle);
+		return ioc_write_bulk(buff, len, position, handle);
 	else
-		return ioc_write_direct(buff, len, position, fs_handle, context,
-					handle);
+		return ioc_write_direct(buff, len, position, handle);
 }

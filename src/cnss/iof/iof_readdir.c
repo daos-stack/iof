@@ -100,25 +100,17 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
  * replies, count and rpc which a reference is held on.
  *
  */
-static int readdir_get_data(struct fuse_context *context,
-			    struct dir_handle *dir_handle,
-			    off_t offset)
+static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 {
-	struct fs_handle *fs_handle = (struct fs_handle *)context->private_data;
-	struct iof_state *iof_state = fs_handle->iof_state;
-	struct iof_readdir_in *in = NULL;
+	struct fs_handle *fs_handle = dir_handle->fs_handle;
+	struct iof_readdir_in *in;
 	struct readdir_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 
 	int ret;
 	int rc;
 
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return EIO;
-	}
-
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	ret = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			     FS_TO_OP(fs_handle, readdir), &rpc);
 	if (ret || !rpc) {
 		IOF_LOG_ERROR("Could not create request, ret = %d",
@@ -129,7 +121,7 @@ static int readdir_get_data(struct fuse_context *context,
 	in = crt_req_get(rpc);
 	in->gah = dir_handle->gah;
 	in->offsef = offset;
-	in->my_fs_id = fs_handle->my_fs_id;
+	in->fs_id = fs_handle->fs_id;
 
 	ret = crt_req_send(rpc, readdir_cb, &reply);
 	if (ret) {
@@ -137,7 +129,7 @@ static int readdir_get_data(struct fuse_context *context,
 		return EIO;
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return rc;
 
@@ -170,7 +162,7 @@ static int readdir_get_data(struct fuse_context *context,
 }
 
 /* Mark a previously fetched handle complete */
-static void readdir_next_reply_consume(struct dir_handle *dir_handle)
+static void readdir_next_reply_consume(struct iof_dir_handle *dir_handle)
 {
 	if (dir_handle->reply_count == 0 && dir_handle->rpc) {
 		crt_req_decref(dir_handle->rpc);
@@ -188,8 +180,7 @@ static void readdir_next_reply_consume(struct dir_handle *dir_handle)
  * There is no caching on the server, and when the server responds to a RPC it
  * can include zero or more replies.
  */
-static int readdir_next_reply(struct fuse_context *context,
-			      struct dir_handle *dir_handle,
+static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 			      off_t offset,
 			      struct iof_readdir_reply **reply)
 {
@@ -204,7 +195,7 @@ static int readdir_next_reply(struct fuse_context *context,
 			crt_req_decref(dir_handle->rpc);
 			dir_handle->rpc = NULL;
 		}
-		rc = readdir_get_data(context, dir_handle, offset);
+		rc = readdir_get_data(dir_handle, offset);
 		if (rc != 0) {
 			dir_handle->handle_valid = 0;
 			return rc;
@@ -234,10 +225,9 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 #endif
 	)
 {
-	struct fuse_context *context;
-	int ret;
+	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
 
-	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
+	int ret;
 
 	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
 
@@ -246,8 +236,6 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	 */
 	if (!dir_handle->handle_valid)
 		return -EIO;
-
-	context = fuse_get_context();
 
 	{
 		char *d = ios_gah_to_str(&dir_handle->gah);
@@ -259,7 +247,7 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	do {
 		struct iof_readdir_reply *dir_reply;
 
-		ret = readdir_next_reply(context, dir_handle, offset,
+		ret = readdir_next_reply(dir_handle, offset,
 					 &dir_reply);
 
 		IOF_LOG_DEBUG("err %d buf %p", ret, dir_reply);

@@ -65,15 +65,12 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 
 int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
+	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
+	struct fs_handle *fs_handle = dir_handle->fs_handle;
 	struct iof_gah_in *in;
 	struct closedir_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
-
-	struct dir_handle *dir_handle = (struct dir_handle *)fi->fh;
 
 	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
 
@@ -88,16 +85,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		goto out;
 	}
 
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		rc = EIO;
-		goto out;
-	}
-
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, closedir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -123,7 +111,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		free(d);
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 
 out:
 	/* If there has been an error on the local handle, or readdir() is not

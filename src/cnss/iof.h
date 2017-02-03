@@ -47,27 +47,30 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 struct iof_state {
 	struct cnss_plugin_cb *cb;
 	size_t cb_size;
-	/*destination group*/
-	crt_group_t *dest_group;
-	/*destination endpoint*/
-	crt_endpoint_t dest_ep;
-	/*cart context*/
-	crt_context_t crt_ctx;
-	/*iof progress thread tid*/
-	pthread_t tid;
-	/*CNSS Prefix*/
-	char *cnss_prefix;
-	struct proto *proto;
+
+	/* destination group */
+	crt_group_t	*dest_group;
+	crt_endpoint_t	psr_ep;
+	/* cart context */
+	crt_context_t	crt_ctx;
+	struct proto	*proto;
+	/* CNSS Prefix */
+	char		*cnss_prefix;
 
 };
 
 /* For each projection */
 struct fs_handle {
-	struct iof_state *iof_state;
-	int my_fs_id;
+	struct iof_state	*iof_state;
+	/* destination endpoint */
+	crt_endpoint_t		dest_ep;
+	/* cart context */
+	crt_context_t		crt_ctx;
+	struct proto		*proto;
+	int			fs_id;
 };
 
-#define FS_TO_OP(HANDLE, FN) ((HANDLE)->iof_state->proto->mt.FN.op_id)
+#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proto->mt.FN.op_id)
 
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
@@ -75,28 +78,32 @@ struct fs_handle {
  */
 
 /* Data which is stored against an open directory handle */
-struct dir_handle {
+struct iof_dir_handle {
+	struct fs_handle	*fs_handle;
 	/* The handle for accessing the directory on the IONSS */
-	struct ios_gah gah;
+	struct ios_gah		gah;
 	/* Any RPC reference held across readdir() calls */
-	crt_rpc_t *rpc;
+	crt_rpc_t		*rpc;
 	/* Pointer to any retreived data from readdir() RPCs */
 	struct iof_readdir_reply *replies;
-	int reply_count;
+	int			reply_count;
 	/* Set to 1 initially, but 0 if there is a unrecoverable error */
-	int handle_valid;
+	int			handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
-	int gah_valid;
+	int			gah_valid;
 	/* The name of the directory */
-	char name[];
+	char			name[];
 };
 
 /* Data which is stored against an open file handle */
 struct iof_file_handle {
-	struct ios_gah gah;
-	int gah_valid;
-	char name[];
+	struct fs_handle	*fs_handle;
+	struct ios_gah		gah;
+	int			gah_valid;
+	char			name[];
 };
+
+struct fs_handle *ioc_get_handle(void);
 
 struct status_cb_r {
 	int complete; /** Flag to check for operation complete */
@@ -115,7 +122,7 @@ struct status_cb_r {
 
 int ioc_status_cb(const struct crt_cb_info *);
 
-int ioc_cb_progress(crt_context_t, struct fuse_context *, int *);
+int ioc_cb_progress(struct fs_handle *, int *);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
 

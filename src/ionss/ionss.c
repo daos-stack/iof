@@ -144,7 +144,7 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 	}
 
 	IOF_LOG_DEBUG("Checking path %s", in->path);
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
 			      rc);
@@ -246,7 +246,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	}
 
 	IOF_LOG_DEBUG("Checking path %s", in->path);
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
 			      rc);
@@ -266,7 +266,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 			h->h_dir = dir_h;
 			h->fd = dirfd(h->h_dir);
 			h->h_name = strdup(in->path);
-			h->fs_id = in->my_fs_id;
+			h->fs_id = in->fs_id;
 
 			ios_gah_allocate(gs, &gah, 0, 0, h);
 			s = ios_gah_to_str(&gah);
@@ -460,7 +460,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %s", in->path);
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -484,7 +484,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	}
 
 	local_handle->fd = fd;
-	local_handle->fs_id = in->my_fs_id;
+	local_handle->fs_id = in->fs_id;
 
 	rc = ios_gah_allocate(gs, &gah, 0, 0, local_handle);
 	if (rc != IOS_SUCCESS) {
@@ -546,7 +546,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %s", in->path);
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -570,7 +570,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 	}
 
 	local_handle->fd = fd;
-	local_handle->fs_id = in->my_fs_id;
+	local_handle->fs_id = in->fs_id;
 
 	rc = ios_gah_allocate(gs, &gah, 0, 0, local_handle);
 	if (rc != IOS_SUCCESS) {
@@ -1007,7 +1007,7 @@ int iof_rename_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->src, &new_src[0]);
+	rc = iof_get_path(in->fs_id, in->src, &new_src[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
 			      rc);
@@ -1015,7 +1015,7 @@ int iof_rename_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->dst, &new_dst[0]);
+	rc = iof_get_path(in->fs_id, in->dst, &new_dst[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, ret = %u",
 			      rc);
@@ -1065,7 +1065,7 @@ int iof_symlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->src, &new_src[0]);
+	rc = iof_get_path(in->fs_id, in->src, &new_src[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %u",
 			      rc);
@@ -1115,7 +1115,7 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -1164,7 +1164,7 @@ int iof_readlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -1215,7 +1215,7 @@ int iof_truncate_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -1312,7 +1312,7 @@ int iof_chmod_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -1410,7 +1410,7 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);
@@ -1458,7 +1458,7 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
 			      rc);

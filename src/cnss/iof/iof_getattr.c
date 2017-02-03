@@ -77,25 +77,15 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 
 int ioc_getattr_name(const char *path, struct stat *stbuf)
 {
-	struct fuse_context *context;
+	struct fs_handle *fs_handle = ioc_get_handle();
 	struct iof_string_in *in;
 	struct getattr_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	/*retrieve handle*/
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
 	IOF_LOG_DEBUG("Path: %s", path);
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, getattr), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -104,7 +94,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)path;
-	in->my_fs_id = (uint64_t)fs_handle->my_fs_id;
+	in->fs_id = fs_handle->fs_id;
 
 	reply.complete = 0;
 	reply.stat = stbuf;
@@ -114,7 +104,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -127,24 +117,12 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 #if IOF_USE_FUSE3
 static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct fs_handle *fs_handle = handle->fs_handle;
 	struct iof_gah_in *in;
 	struct getattr_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	int rc;
-
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-
-	/*retrieve handle*/
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
 
 	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
@@ -155,7 +133,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, getattr_gah), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -173,7 +151,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 

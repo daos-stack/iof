@@ -47,25 +47,13 @@
 
 int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct fs_handle *fs_handle = handle->fs_handle;
 	struct iof_gah_in *in;
 	struct status_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state;
 	crt_rpc_t *rpc = NULL;
 	crt_opcode_t opcode;
 	int rc;
-
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-
-	/*retrieve handle*/
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
 
 	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
 
@@ -81,7 +69,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	else
 		opcode = FS_TO_OP(fs_handle, fsync);
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep, opcode,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep, opcode,
 			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -96,7 +84,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc)
 		return -rc;
 

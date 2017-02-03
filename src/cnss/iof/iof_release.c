@@ -72,25 +72,14 @@ static int release_cb(const struct crt_cb_info *cb_info)
 
 int ioc_release(const char *file, struct fuse_file_info *fi)
 {
-	struct fuse_context *context;
-	struct iof_gah_in *in = NULL;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_gah_in *in;
 	struct release_cb_r reply = {0};
-	struct fs_handle *fs_handle;
-	struct iof_state *iof_state = NULL;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-
 	IOF_LOG_INFO("path %s %s handle %p", file, handle->name, handle);
-
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-	iof_state = fs_handle->iof_state;
-	if (!iof_state) {
-		IOF_LOG_ERROR("Could not retrieve iof state");
-		return -EIO;
-	}
 
 	if (!handle->gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",
@@ -103,7 +92,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, close), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -127,7 +116,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		free(d);
 	}
 
-	rc = ioc_cb_progress(iof_state->crt_ctx, context, &reply.complete);
+	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc) {
 		free(handle);
 		return -rc;

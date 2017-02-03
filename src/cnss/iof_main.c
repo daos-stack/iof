@@ -73,6 +73,13 @@ static int string_to_bool(const char *str, int *value)
 	return 0;
 }
 
+struct fs_handle *ioc_get_handle(void)
+{
+	struct fuse_context *context = fuse_get_context();
+
+	return (struct fs_handle *)context->private_data;
+}
+
 /* on-demand progress */
 static int iof_progress(crt_context_t crt_ctx, int num_retries,
 			unsigned int wait_len_ms, int *complete_flag)
@@ -99,16 +106,17 @@ static int iof_progress(crt_context_t crt_ctx, int num_retries,
  * thing on timeout, potentially shutting dowth the filesystem if there is
  * a problem.
  */
-int ioc_cb_progress(crt_context_t crt_ctx, struct fuse_context *context,
-		    int *complete_flag)
+int ioc_cb_progress(struct fs_handle *fs_handle, int *complete_flag)
 {
 	int rc;
 
-	rc = iof_progress(crt_ctx, 50, 6000, complete_flag);
+	rc = iof_progress(fs_handle->crt_ctx, 50, 6000, complete_flag);
 	if (rc) {
-		/*TODO: check is PSR is alive before exiting fuse*/
-		IOF_LOG_ERROR("exiting fuse loop");
-		fuse_session_exit(fuse_get_session(context->fuse));
+		/* TODO: check is PSR is alive before exiting fuse */
+		IOF_LOG_ERROR("exiting fuse loop rc %d", rc);
+#if 0
+		fuse_session_exit(fuse_get_session(fs_handle->fuse));
+#endif
 		return EINTR;
 	}
 	return 0;
@@ -278,8 +286,8 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	reply.complete = 0;
 	reply.query = query;
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-				QUERY_PSR_OP, query_rpc);
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->psr_ep,
+			     QUERY_PSR_OP, query_rpc);
 	if (ret || (*query_rpc == NULL)) {
 		IOF_LOG_ERROR("failed to create query rpc request, ret = %d",
 				ret);
@@ -326,10 +334,10 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb,
 	iof_state->dest_group = ionss_group;
 
 	/*initialize destination endpoint*/
-	iof_state->dest_ep.ep_grp = 0; /*primary group*/
+	iof_state->psr_ep.ep_grp = 0; /*primary group*/
 	/*TODO: Use exported PSR from cart*/
-	iof_state->dest_ep.ep_rank = 0;
-	iof_state->dest_ep.ep_tag = 0;
+	iof_state->psr_ep.ep_rank = 0;
+	iof_state->psr_ep.ep_tag = 0;
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret)
@@ -429,7 +437,7 @@ int iof_post_start(void *arg)
 		/*Register the mount point with the control filesystem*/
 		cb->register_ctrl_constant(ctrl_path, mount);
 
-		fs_handle->my_fs_id = tmp[i].id;
+		fs_handle->fs_id = tmp[i].id;
 		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
 		ret = cb->register_fuse_fs(cb->handle, &ops, mount, fs_handle);
 		if (ret) {
@@ -437,6 +445,9 @@ int iof_post_start(void *arg)
 			return 1;
 		}
 		IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
+		fs_handle->proto = iof_state->proto;
+		fs_handle->dest_ep = iof_state->psr_ep;
+		fs_handle->crt_ctx = iof_state->crt_ctx;
 	}
 
 	ret = crt_req_decref(query_rpc);
@@ -467,18 +478,18 @@ void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	int ret;
-	crt_rpc_t *shut_rpc;
+	crt_rpc_t *rpc = NULL;
 	int complete;
 
 	/*send a detach RPC to IONSS*/
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
-			SHUTDOWN_OP, &shut_rpc);
-	if (ret)
+	ret = crt_req_create(iof_state->crt_ctx, iof_state->psr_ep,
+			     SHUTDOWN_OP, &rpc);
+	if (ret || !rpc)
 		IOF_LOG_ERROR("Could not create shutdown request ret = %d",
 				ret);
 
 	complete = 0;
-	ret = crt_req_send(shut_rpc, shutdown_cb, &complete);
+	ret = crt_req_send(rpc, shutdown_cb, &complete);
 	if (ret)
 		IOF_LOG_ERROR("shutdown RPC not sent");
 
