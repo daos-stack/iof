@@ -103,7 +103,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 {
 	struct fs_handle *fs_handle = ioc_get_handle();
 	struct iof_file_handle *handle;
-	struct iof_string_in *in;
+	struct iof_open_in *in;
 	struct open_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
@@ -127,9 +127,9 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	in->path = (crt_string_t)file;
 
 	in->fs_id = fs_handle->fs_id;
+	in->flags = fi->flags;
 
 	reply.fh = handle;
-	reply.complete = 0;
 
 	rc = crt_req_send(rpc, ioc_open_cb, &reply);
 	if (rc) {

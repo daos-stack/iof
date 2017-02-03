@@ -822,18 +822,20 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int ctrl_getattr(const char *fname, struct stat *stat)
 {
-	struct ctrl_node *node;
+	struct ctrl_node *node = NULL;
 	int rc;
 
 	IOF_LOG_INFO("ctrl_fs getattr called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
-	if (rc != 0 || node == NULL)
+	if (rc != 0 || !node) {
+		IOF_LOG_INFO("Failed for %s %d", fname, rc);
 		return -ENOENT;
+	}
 
-	IOF_LOG_INFO("Returning getattr for '%s' mode = %x", node->name,
-		     node->stat_info.st_mode >> 2);
+	IOF_LOG_INFO("Returning getattr for '%s' mode = 0%o", node->name,
+		     node->stat_info.st_mode & ~(S_IFMT));
 	memcpy(stat, &node->stat_info, sizeof(struct stat));
 
 	return 0;

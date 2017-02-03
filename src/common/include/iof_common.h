@@ -109,7 +109,14 @@ struct iof_two_string_in {
 struct iof_create_in {
 	crt_string_t path;
 	uint32_t fs_id;
-	mode_t mode;
+	uint32_t mode;
+	uint32_t flags;
+};
+
+struct iof_open_in {
+	crt_string_t path;
+	uint32_t fs_id;
+	uint32_t flags;
 };
 
 struct iof_getattr_out {

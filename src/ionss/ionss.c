@@ -430,9 +430,58 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 	return 0;
 }
 
+#define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
+		if ((FLAGS) & (MODE))				\
+			IOF_LOG_DEBUG("%p " #MODE, HANDLE);	\
+		FLAGS &= ~MODE;					\
+	} while (0)
+
+/* Dump the file open mode to the logile
+ *
+ * On a 64 bit system O_LARGEFILE is assumed so always set but defined to zero
+ * so set LARGEFILE here for debugging
+ */
+#define LARGEFILE 0100000
+#define LOG_FLAGS(HANDLE, INPUT) do {					\
+		int _flag = (INPUT);					\
+		LOG_MODE((HANDLE), _flag, O_APPEND);			\
+		LOG_MODE((HANDLE), _flag, O_RDONLY);			\
+		LOG_MODE((HANDLE), _flag, O_WRONLY);			\
+		LOG_MODE((HANDLE), _flag, O_RDWR);			\
+		LOG_MODE((HANDLE), _flag, O_ASYNC);			\
+		LOG_MODE((HANDLE), _flag, O_CLOEXEC);			\
+		LOG_MODE((HANDLE), _flag, O_CREAT);			\
+		LOG_MODE((HANDLE), _flag, O_DIRECT);			\
+		LOG_MODE((HANDLE), _flag, O_DIRECTORY);			\
+		LOG_MODE((HANDLE), _flag, O_DSYNC);			\
+		LOG_MODE((HANDLE), _flag, O_EXCL);			\
+		LOG_MODE((HANDLE), _flag, O_LARGEFILE);			\
+		LOG_MODE((HANDLE), _flag, LARGEFILE);			\
+		LOG_MODE((HANDLE), _flag, O_NOATIME);			\
+		LOG_MODE((HANDLE), _flag, O_NOCTTY);			\
+		LOG_MODE((HANDLE), _flag, O_NONBLOCK);			\
+		LOG_MODE((HANDLE), _flag, O_PATH);			\
+		LOG_MODE((HANDLE), _flag, O_SYNC);			\
+		LOG_MODE((HANDLE), _flag, O_TRUNC);			\
+		if (_flag)						\
+			IOF_LOG_ERROR("%p Flags 0%o", (HANDLE), _flag);	\
+		} while (0)
+
+/* Dump the file mode to the logfile
+ */
+#define LOG_MODES(HANDLE, INPUT) do {					\
+		int _flag = (INPUT) & S_IFMT;				\
+		LOG_MODE((HANDLE), _flag, S_IFREG);			\
+		LOG_MODE((HANDLE), _flag, S_ISUID);			\
+		LOG_MODE((HANDLE), _flag, S_ISGID);			\
+		LOG_MODE((HANDLE), _flag, S_ISVTX);			\
+		if (_flag)						\
+			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
+	} while (0)
+
 int iof_open_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
+	struct iof_open_in *in;
 	struct iof_open_out *out;
 	struct ionss_file_handle *local_handle = NULL;
 	struct ios_gah gah = {0};
@@ -459,7 +508,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("path %s", in->path);
+	IOF_LOG_DEBUG("path %s flags 0%o", in->path, in->flags);
 
 	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
@@ -470,7 +519,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	}
 
 	errno = 0;
-	fd = open(new_path, O_RDWR);
+	fd = open(new_path, in->flags);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -498,17 +547,22 @@ int iof_open_handler(crt_rpc_t *rpc)
 	{
 		char *s = ios_gah_to_str(&gah);
 
-		IOF_LOG_INFO("Allocated %s", s);
+		IOF_LOG_INFO("Allocated %s fd %d", s, fd);
 		free(s);
 	}
 
 	out->gah = gah;
 
 out:
-	IOF_LOG_INFO("path %s result err %d rc %d handle %p",
-		     in->path, out->err, out->rc, local_handle);
+	IOF_LOG_DEBUG("path %s flags 0%o ", in->path, in->flags);
+
+	LOG_FLAGS(local_handle, in->flags);
+
+	IOF_LOG_INFO("path %s result err %d rc %d",
+		     in->path, out->err, out->rc);
 
 out_no_log:
+
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
@@ -529,7 +583,6 @@ int iof_create_handler(crt_rpc_t *rpc)
 	if (!out) {
 		IOF_LOG_ERROR("Could not retrieve output args");
 		goto out_no_log;
-		return 0;
 	}
 
 	in = crt_req_get(rpc);
@@ -545,7 +598,8 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("path %s", in->path);
+	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
+		      in->path, in->flags, in->mode);
 
 	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
@@ -556,7 +610,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 	}
 
 	errno = 0;
-	fd = creat(new_path, in->mode);
+	fd = open(new_path, in->flags, in->mode);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -584,13 +638,19 @@ int iof_create_handler(crt_rpc_t *rpc)
 	{
 		char *s = ios_gah_to_str(&gah);
 
-		IOF_LOG_INFO("Allocated %s", s);
+		IOF_LOG_INFO("Allocated %s fd %d", s, fd);
 		free(s);
 	}
 
 	out->gah = gah;
 
 out:
+	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o 0%o", in->path, in->flags,
+		      in->mode & S_IFREG, in->mode & ~S_IFREG);
+
+	LOG_FLAGS(local_handle, in->flags);
+	LOG_MODES(local_handle, in->mode);
+
 	IOF_LOG_INFO("path %s result err %d rc %d",
 		     in->path, out->err, out->rc);
 

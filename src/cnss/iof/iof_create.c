@@ -53,7 +53,6 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	struct iof_file_handle *handle;
 	struct iof_create_in *in;
 	struct open_cb_r reply = {0};
-
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -76,6 +75,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	in->path = (crt_string_t)file;
 	in->mode = mode;
 	in->fs_id = fs_handle->fs_id;
+	in->flags = fi->flags;
 
 	reply.fh = handle;
 

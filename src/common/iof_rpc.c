@@ -67,6 +67,13 @@ struct crt_msg_field *create_in[] = {
 	&CMF_STRING,
 	&CMF_INT,
 	&CMF_INT,
+	&CMF_INT,
+};
+
+struct crt_msg_field *open_in[] = {
+	&CMF_STRING,
+	&CMF_INT,
+	&CMF_INT,
 };
 
 struct crt_msg_field *iov_pair[] = {
@@ -199,7 +206,7 @@ static struct proto proto = {
 		RPC_TYPE(rename, two_string_in, status_out),
 		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
 		RPC_TYPE(unlink, string_in, status_out),
-		RPC_TYPE(open, string_in, gah_pair),
+		RPC_TYPE(open, open_in, gah_pair),
 		RPC_TYPE(read, read_in, iov_pair),
 		RPC_TYPE(create, create_in, gah_pair),
 		RPC_TYPE(close, gah_in, NULL),

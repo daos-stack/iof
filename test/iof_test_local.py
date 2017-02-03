@@ -327,6 +327,16 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
+
+    def test_file_read_zero(self):
+        """Read 0 bytes from a file"""
+
+        tfile = os.path.join(self.import_dir, 'exp', 'empty_file')
+
+        fd = os.open(tfile, os.O_RDWR|os.O_CREAT)
+        os.read(fd, 10)
+        os.close(fd)
+
     def test_mkdir(self):
         """Create a directory"""
 
