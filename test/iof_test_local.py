@@ -103,7 +103,11 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                              self.id().split('.')[0])
 
         # Append the test case to the log directory to get unique names.
-        log_path = os.path.join(log_path, self.id().split('.')[2])
+        # Do this in a way that matches the dump_error_messages() logic
+        # in the test runner so that on failure only failing methods are
+        # shown.
+
+        log_path = os.path.join(log_path, self.logdir_name())
 
         log_mask = os.getenv("CRT_LOG_MASK", "INFO")
 

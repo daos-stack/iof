@@ -207,18 +207,23 @@ class CommonTestSuite(unittest.TestCase):
         self.logger.info("Test: return code: %s\n", procrtn)
         return procrtn
 
-    @staticmethod
-    def common_logdir_name(fullname):
+    def logdir_name(self):
         """create the log directory name"""
-        names = fullname.split('.')
-        items = names[-1].split('_', maxsplit=2)
-        return "/" + items[2]
 
-    def common_add_prefix_logdir(self, testcase_name):
+        # Append the test case to the log directory to get unique names.
+        # Do this in a way that matches the dump_error_messages() logic
+        # in the test runner so that on failure only failing methods are
+        # shown.
+
+        #    return self.id()[5:]
+        parts = self.id().split('.')
+        return os.path.join(parts[1], parts[2][5:])
+
+    def common_add_prefix_logdir(self):
         """add the log directory to the prefix"""
         ompi_bin = os.getenv('IOF_OMPI_BIN', "")
-        log_path = os.getenv("IOF_TESTLOG", "nss") + \
-          self.common_logdir_name(testcase_name)
+        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"),
+                                self.logdir_name())
         os.makedirs(log_path, exist_ok=True)
 
         if os.getenv('TR_USE_URI', ""):

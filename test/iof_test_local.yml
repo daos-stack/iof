@@ -17,7 +17,6 @@ module:
 
 directives:
     loop: "no"
-    printTestLogPath: "dump"
 
 execStrategy:
     - id: 1

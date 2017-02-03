@@ -87,7 +87,7 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
     def test_ionss_simple_test(self):
         """Simple test"""
         testmsg = self.shortDescription()
-        (cmd, prefix) = self.common_add_prefix_logdir(self.id())
+        (cmd, prefix) = self.common_add_prefix_logdir()
         (cnss, ionss) = self.common_add_server_client()
         fs = ' '.join(self.fs_list)
         test_path = os.getenv('IOF_TEST_BIN', "")

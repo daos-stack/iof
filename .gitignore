@@ -2,16 +2,13 @@
 .build_vars-*.sh
 .build_vars-*.json
 .build_vars-*.py
-.sconf_temp
-config.log
 config-*.log
 /objects/
 /build/
 /test/output/
-/_build.external/
 /_build.external-*/
 .sconsign-*.dblite
-/.scons-temp-*/
+/.sconf-temp-*/
 *.tar.gz
 /install/
 iof-*.conf
