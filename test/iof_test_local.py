@@ -159,7 +159,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         # Remove the mount directories
         for mount in ['.ctrl', 'usr', 'exp']:
             mp = os.path.join(self.import_dir, mount)
-            self.common_launch_test("", "fusermount -u %s" % mp)
+            self.common_launch_test("", "fusermount -q -u %s" % mp)
             os.rmdir(mp)
 
         # Finally, remove any temporary files created.
@@ -215,7 +215,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def test_file_open_new(self):
         """Create a new file"""
 
-        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+        filename = os.path.join(self.import_dir, 'exp', 'test_file2')
 
         fd = open(filename, 'w')
         fd.close()
@@ -255,7 +255,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def test_file_truncate(self):
         """Write to a file"""
 
-        filename = os.path.join(self.import_dir, 'exp', 'b_file')
+        filename = os.path.join(self.import_dir, 'exp', 'c_file')
 
         fd = open(filename, 'w')
         fd.write('World')
@@ -395,13 +395,13 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def test_file_write(self):
         """Write to a file"""
 
-        filename = os.path.join(self.import_dir, 'exp', 'b_file')
+        filename = os.path.join(self.import_dir, 'exp', 'write_file')
 
         fd = open(filename, 'w')
         fd.write('World')
         fd.close()
 
-        tfile = os.path.join(self.export_dir, 'b_file')
+        tfile = os.path.join(self.export_dir, 'write_file')
 
         fd = open(tfile, 'r')
         data = fd.read()
@@ -443,7 +443,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def test_rmdir(self):
         """Remove a directory"""
 
-        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
+        ndir = os.path.join(self.import_dir, 'exp', 'my_dir')
 
         os.mkdir(ndir)
 
@@ -480,7 +480,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def test_file_unlink(self):
         """Create and remove a file"""
 
-        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+        filename = os.path.join(self.import_dir, 'exp', 'unlink_file')
 
         fd = open(filename, 'w')
         fd.close()
@@ -558,3 +558,56 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd = open(filename, 'r')
         fd.read()
         fd.close()
+
+    def go(self):
+        """A wrapper method to invoke all methods as subTests"""
+
+        # This method invokes all other test_* methods as subtests which has
+        # the effect that they're all run on the same projection.  This is both
+        # much faster but also means that it's more difficult to isolate the
+        # tests.
+
+        # After each test remove any left-over files from the export directory
+        # to avoid using IOF for this.  Use the export rather than the import
+        # point here so that problems in IOF are not reported against the test,
+        # for example if there is a problem with unlink we do not want the
+        # write tests to fail.
+        # It also means that tests can interact with each other, for example
+        # any kernel caching of entries or negative entries can cause issues
+        # with tests not seeing the files they expect.  To avoid that use
+        # unique files for each test.  What we should do is either setup a new
+        # subdirectory under import/export for each test, or disable cacheing
+        # in the kernel.
+        subtest_count = 0
+        for possible in dir(self):
+            if not possible.startswith('test_'):
+                continue
+            if possible == 'test_fast':
+                continue
+
+            subtest_count += 1
+            obj = getattr(self, possible)
+            print('Running test %s' % possible)
+            with self.subTest(possible[5:]):
+                obj()
+                idir = os.path.join(self.export_dir)
+                files = os.listdir(idir)
+                for e in files:
+                    ep = os.path.join(idir, e)
+                    print("Cleaning up %s" % ep)
+                    if os.path.isfile(ep) or os.path.islink(ep):
+                        os.unlink(ep)
+                    elif os.path.isdir(ep):
+                        shutil.rmtree(ep)
+                files = os.listdir(idir)
+                if len(files):
+                    self.fail('Test left some files %s' % files)
+
+        print("Ran %d subtests" % (subtest_count))
+
+if __name__ == '__main__':
+
+    #Invoke testing if this command is run directly
+
+    # Only run test_fast in this case to provide quick feedback.
+    unittest.main(defaultTest='Testlocal.go')
