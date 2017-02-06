@@ -52,11 +52,6 @@ struct getattr_cb_r {
 	struct stat *stat;
 };
 
-struct query_cb_r {
-	int complete;
-	struct iof_psr_query **query;
-};
-
 static int getattr_cb(const struct crt_cb_info *cb_info)
 {
 	struct getattr_cb_r *reply = NULL;
