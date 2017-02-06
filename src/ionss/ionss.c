@@ -915,45 +915,46 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	bytes_read = pread(handle->fd, data, len, in->base);
 	if (bytes_read == -1) {
 		out->rc = errno;
-	} else {
-		rc = crt_req_addref(rpc);
-		if (rc) {
-			out->err = IOF_ERR_CART;
-			goto out;
-		}
-
-		iov.iov_len = bytes_read;
-		iov.iov_buf = data;
-		iov.iov_buf_len = bytes_read;
-		sgl.sg_iovs = &iov;
-		sgl.sg_nr.num = 1;
-
-		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
-				     &local_bulk_hdl);
-		if (rc) {
-			out->err = IOF_ERR_CART;
-			goto out;
-		}
-
-		bulk_desc.bd_rpc = rpc;
-		bulk_desc.bd_bulk_op = CRT_BULK_PUT;
-		bulk_desc.bd_remote_hdl = in->bulk;
-		bulk_desc.bd_local_hdl = local_bulk_hdl;
-		bulk_desc.bd_len = bytes_read;
-
-		rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, NULL,
-				       NULL);
-		if (rc) {
-			out->err = IOF_ERR_CART;
-			goto out;
-		}
-
-		/* Do not call crt_reply_send() in this case as it'll be done in
-		 * the bulk handler.
-		 */
-
-		return 0;
+		goto out;
+	} else if (!bytes_read) {
+		goto out;
 	}
+
+	rc = crt_req_addref(rpc);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	iov.iov_len = bytes_read;
+	iov.iov_buf = data;
+	iov.iov_buf_len = bytes_read;
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO, &local_bulk_hdl);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	bulk_desc.bd_rpc = rpc;
+	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
+	bulk_desc.bd_remote_hdl = in->bulk;
+	bulk_desc.bd_local_hdl = local_bulk_hdl;
+	bulk_desc.bd_len = bytes_read;
+
+	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, NULL, NULL);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	/* Do not call crt_reply_send() in this case as it'll be done in
+	 * the bulk handler.
+	 */
+
+	return 0;
 
 out:
 	rc = crt_reply_send(rpc);
