@@ -137,6 +137,12 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
 	IOF_LOG_DEBUG("Checking path %s", in->path);
 	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
 	if (rc) {
@@ -446,6 +452,12 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out_no_log;
 	}
 
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
 	IOF_LOG_DEBUG("path %s", in->path);
 
 	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
@@ -524,6 +536,12 @@ int iof_create_handler(crt_rpc_t *rpc)
 		IOF_LOG_ERROR("Could not retrieve input args");
 		out->err = IOF_ERR_CART;
 		goto out_no_log;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
 	}
 
 	IOF_LOG_DEBUG("path %s", in->path);
@@ -1091,6 +1109,12 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
 	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
 	if (rc) {
 		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
@@ -1130,6 +1154,12 @@ int iof_readlink_handler(crt_rpc_t *rpc)
 	in = crt_req_get(rpc);
 	if (!in) {
 		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1175,6 +1205,12 @@ int iof_truncate_handler(crt_rpc_t *rpc)
 	in = crt_req_get(rpc);
 	if (!in) {
 		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1249,6 +1285,105 @@ out:
 	return 0;
 }
 
+int iof_chmod_handler(crt_rpc_t *rpc)
+{
+	struct iof_chmod_in *in;
+	struct iof_status_out *out;
+	char new_path[IOF_MAX_PATH_LEN];
+
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->my_fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = chmod(new_path, in->mode);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_chmod_gah_handler(crt_rpc_t *rpc)
+{
+	struct iof_chmod_gah_in *in;
+	struct iof_status_out *out;
+	struct ionss_file_handle *handle = NULL;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Writing to %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = fchmod(handle->fd, in->mode);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 int iof_rmdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = NULL;
@@ -1265,6 +1400,12 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 	in = crt_req_get(rpc);
 	if (!in) {
 		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1307,6 +1448,12 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 	in = crt_req_get(rpc);
 	if (!in) {
 		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1610,6 +1757,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, write_bulk, iof_write_bulk_handler);
 	PROTO_SET_FUNCTION(proto, truncate, iof_truncate_handler);
 	PROTO_SET_FUNCTION(proto, ftruncate, iof_ftruncate_handler);
+	PROTO_SET_FUNCTION(proto, chmod, iof_chmod_handler);
+	PROTO_SET_FUNCTION(proto, chmod_gah, iof_chmod_gah_handler);
 	PROTO_SET_FUNCTION(proto, rmdir, iof_rmdir_handler);
 	PROTO_SET_FUNCTION(proto, rename, iof_rename_handler);
 	PROTO_SET_FUNCTION(proto, read_bulk, iof_read_bulk_handler);

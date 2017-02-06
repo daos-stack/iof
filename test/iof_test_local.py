@@ -312,6 +312,62 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         print(os.listdir(ndir))
 
+    def test_chmod(self):
+        """Chmod a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'chmod_file')
+        init_mode = stat.S_IRUSR|stat.S_IWUSR
+        fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
+        os.close(fd)
+        fstat = os.stat(filename)
+        print("st_mode is 0%o" % fstat.st_mode)
+
+        actual_mode = stat.S_IMODE(fstat.st_mode)
+        print("0%o" % actual_mode)
+
+        if actual_mode != init_mode:
+            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, init_mode))
+
+        new_mode = stat.S_IRUSR
+        os.chmod(filename, new_mode)
+        fstat = os.stat(filename)
+        print("st_mode is 0%o" % fstat.st_mode)
+
+        actual_mode = stat.S_IMODE(fstat.st_mode)
+        print("0%o" % actual_mode)
+
+        if actual_mode != new_mode:
+            self.fail("Mode is correct 0%o 0%o" % (actual_mode, new_mode))
+
+    def test_fchmod(self):
+        """Fchmod a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'fchmod_file')
+        init_mode = stat.S_IRUSR|stat.S_IWUSR
+        fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
+
+        fstat = os.fstat(fd)
+        print("st_mode is 0%o" % fstat.st_mode)
+
+        actual_mode = stat.S_IMODE(fstat.st_mode)
+        print("0%o" % actual_mode)
+
+        if actual_mode != init_mode:
+            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, init_mode))
+
+        new_mode = stat.S_IRUSR
+        os.fchmod(fd, new_mode)
+        fstat = os.fstat(fd)
+        print("st_mode is 0%o" % fstat.st_mode)
+
+        actual_mode = stat.S_IMODE(fstat.st_mode)
+        print("0%o" % actual_mode)
+
+        if actual_mode != new_mode:
+            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, new_mode))
+
+        os.close(fd)
+
     def test_file_write(self):
         """Write to a file"""
 

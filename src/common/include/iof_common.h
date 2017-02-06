@@ -201,6 +201,17 @@ struct iof_write_out {
 	int len;
 };
 
+struct iof_chmod_in {
+	crt_string_t path;
+	uint64_t my_fs_id;
+	int mode;
+};
+
+struct iof_chmod_gah_in {
+	struct ios_gah gah;
+	int mode;
+};
+
 extern struct crt_req_format QUERY_RPC_FMT;
 
 struct rpc_data {
@@ -233,6 +244,8 @@ struct my_types {
 	MY_TYPE(symlink);
 	MY_TYPE(fsync);
 	MY_TYPE(fdatasync);
+	MY_TYPE(chmod);
+	MY_TYPE(chmod_gah);
 };
 
 struct proto {

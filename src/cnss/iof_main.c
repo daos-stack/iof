@@ -194,10 +194,12 @@ static int ioc_setxattr(const char *path, const char *name, const char *value,
 static struct fuse_operations ops = {
 #if IOF_USE_FUSE3
 	.getattr = ioc_getattr,
+	.chmod = ioc_chmod,
 	.truncate = ioc_truncate,
 	.rename = ioc_rename3,
 #else
 	.getattr = ioc_getattr_name,
+	.chmod = ioc_chmod_name,
 	.truncate = ioc_truncate_name,
 	.rename = ioc_rename,
 #ifndef __APPLE__

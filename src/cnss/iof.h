@@ -147,6 +147,8 @@ int ioc_getattr(const char *, struct stat *, struct fuse_file_info *);
 int ioc_truncate(const char *, off_t, struct fuse_file_info *);
 
 int ioc_rename3(const char *, const char *, unsigned int);
+
+int ioc_chmod(const char *, mode_t, struct fuse_file_info *);
 #else
 int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *);
@@ -156,6 +158,8 @@ int ioc_getattr_name(const char *, struct stat *);
 int ioc_truncate_name(const char *, off_t);
 
 int ioc_rename(const char *, const char *);
+
+int ioc_chmod_name(const char *, mode_t);
 #endif
 
 int ioc_symlink(const char *, const char *);
