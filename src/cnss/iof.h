@@ -45,6 +45,8 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
 /* For IOF Plugin */
 struct iof_state {
+	struct cnss_plugin_cb *cb;
+	size_t cb_size;
 	/*destination group*/
 	crt_group_t *dest_group;
 	/*destination endpoint*/

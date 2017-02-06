@@ -55,12 +55,6 @@
 #include "log.h"
 #include "ios_gah.h"
 
-/* Handle passed to all CNSS callbacks */
-struct iof_handle {
-	struct iof_state *state;
-	struct cnss_plugin_cb *cb;
-};
-
 struct query_cb_r {
 	int complete;
 	int err;
@@ -306,11 +300,10 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 }
 
 
-int iof_reg(void *foo, struct cnss_plugin_cb *cb,
+int iof_reg(void *arg, struct cnss_plugin_cb *cb,
 	    size_t cb_size)
 {
-	struct iof_handle *handle = (struct iof_handle *)foo;
-	struct iof_state *iof_state;
+	struct iof_state *iof_state = (struct iof_state *)arg;
 	crt_group_t *ionss_group;
 	char *prefix;
 	int ret;
@@ -325,14 +318,6 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 		return ret;
 	}
 
-	if (!handle->state) {
-		handle->state = calloc(1, sizeof(struct iof_state));
-		if (!handle->state)
-			return IOF_ERR_NOMEM;
-	}
-
-	/*initialize iof state*/
-	iof_state = handle->state;
 	/*do a group lookup*/
 	iof_state->dest_group = ionss_group;
 
@@ -374,14 +359,15 @@ int iof_reg(void *foo, struct cnss_plugin_cb *cb,
 	iof_state->proto = iof_register();
 	iof_proto_commit(iof_state->proto);
 
-	handle->cb = cb;
+	iof_state->cb = cb;
+	iof_state->cb_size = cb_size;
 
 	return ret;
 }
 
-int iof_post_start(void *foo)
+int iof_post_start(void *arg)
 {
-	struct iof_handle *iof_handle = (struct iof_handle *)foo;
+	struct iof_state *iof_state = (struct iof_state *)arg;
 	struct iof_psr_query *query = NULL;
 	int ret;
 	int i;
@@ -390,15 +376,11 @@ int iof_post_start(void *foo)
 	char ctrl_path[IOF_NAME_LEN_MAX];
 	char base_mount[IOF_NAME_LEN_MAX];
 	struct cnss_plugin_cb *cb;
-	struct iof_state *iof_state = NULL;
-	struct fs_handle *fs_handle = NULL;
+
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
 
-	ret = IOF_SUCCESS;
-	iof_state = iof_handle->state;
-	cb = iof_handle->cb;
-
+	cb = iof_state->cb;
 
 	/*Query PSR*/
 	ret = ioc_get_projection_info(iof_state, &query, &query_rpc);
@@ -415,6 +397,7 @@ int iof_post_start(void *foo)
 
 	strncpy(base_mount, iof_state->cnss_prefix, IOF_NAME_LEN_MAX);
 	for (i = 0; i < fs_num; i++) {
+		struct fs_handle *fs_handle;
 		char *base_name;
 
 		if (tmp[i].mode == 0) {
@@ -458,7 +441,7 @@ int iof_post_start(void *foo)
 	return ret;
 }
 
-void iof_flush(void *handle)
+void iof_flush(void *arg)
 {
 
 	IOF_LOG_INFO("Called iof_flush");
@@ -476,13 +459,12 @@ static int shutdown_cb(const struct crt_cb_info *cb_info)
 	return IOF_SUCCESS;
 }
 
-void iof_finish(void *handle)
+void iof_finish(void *arg)
 {
+	struct iof_state *iof_state = (struct iof_state *)arg;
 	int ret;
 	crt_rpc_t *shut_rpc;
 	int complete;
-	struct iof_handle *iof_handle = (struct iof_handle *)handle;
-	struct iof_state *iof_state = iof_handle->state;
 
 	/*send a detach RPC to IONSS*/
 	ret = crt_req_create(iof_state->crt_ctx, iof_state->dest_ep,
@@ -502,7 +484,7 @@ void iof_finish(void *handle)
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
-	IOF_LOG_INFO("Called iof_finish with %p", handle);
+	IOF_LOG_INFO("Called iof_finish with %p", iof_state);
 
 	ret = crt_group_detach(iof_state->dest_group);
 	if (ret)
@@ -510,7 +492,6 @@ void iof_finish(void *handle)
 
 	free(iof_state->cnss_prefix);
 	free(iof_state);
-	free(iof_handle);
 }
 
 struct cnss_plugin self = {.name            = "iof",
@@ -525,7 +506,7 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 {
 	*size = sizeof(struct cnss_plugin);
 
-	self.handle = calloc(1, sizeof(struct iof_handle));
+	self.handle = calloc(1, sizeof(struct iof_state));
 	if (!self.handle)
 		return IOF_ERR_NOMEM;
 	*fns = &self;

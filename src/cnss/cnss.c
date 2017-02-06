@@ -58,20 +58,39 @@
 #include "iof.h"
 #include "ctrl_common.h"
 
-struct plugin_entry {
-	struct cnss_plugin *plugin;
-	void *dl_handle;
-	size_t size;
-	LIST_ENTRY(plugin_entry) list;
-	int active;
-};
-
+/* struct cnss_plugin_list is a list of plugin_entries */
 LIST_HEAD(cnss_plugin_list, plugin_entry);
 
+/* struct fs_list is a list of fs_infos */
 LIST_HEAD(fs_list, fs_info);
 
+/* A descriptor for the plugin */
+struct plugin_entry {
+	/* The callback functions, as provided by the plugin */
+	struct cnss_plugin *fns;
+	/* The size of the fns struct */
+	size_t fns_size;
+
+	/* The dl_open() reference to this so it can be closed cleanly */
+	void *dl_handle;
+
+	/* The list of plugins */
+	LIST_ENTRY(plugin_entry) list;
+
+	/* Flag to say if plugin is active */
+	int active;
+
+	/* The copy of the plugin->cnss callback functions this
+	 * plugin uses
+	 */
+	struct cnss_plugin_cb self_fns;
+
+	struct fs_list fuse_list;
+};
+
 struct cnss_info {
-	struct fs_list fs_head;
+	struct cnss_plugin_list plugins;
+
 };
 
 struct fs_info {
@@ -99,15 +118,15 @@ struct fs_info {
 #define CHECK_PLUGIN_FUNCTION(ITER, FN)					\
 	if (!ITER->active)						\
 		continue;						\
-	if (!ITER->plugin->FN)						\
+	if (!ITER->fns->FN)						\
 		continue;						\
-	if ((offsetof(struct cnss_plugin, FN) + sizeof(void *)) > ITER->size) \
+	if ((offsetof(struct cnss_plugin, FN) + sizeof(void *)) > ITER->fns_size) \
 		continue;						\
 	IOF_LOG_INFO("Plugin %s(%p) calling %s at %p",			\
-		ITER->plugin->name,					\
-		(void *)ITER->plugin->handle,				\
+		ITER->fns->name,					\
+		(void *)ITER->fns->handle,				\
 		#FN,							\
-		FN_TO_PVOID(ITER->plugin->FN))
+		FN_TO_PVOID(ITER->fns->FN))
 
 /*
  * Call a function in each registered and active plugin
@@ -118,7 +137,7 @@ struct fs_info {
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
 		LIST_FOREACH(_li, LIST, list) {				\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_li->plugin->FN(_li->plugin->handle);		\
+			_li->fns->FN(_li->fns->handle);		\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
@@ -134,10 +153,10 @@ struct fs_info {
 		LIST_FOREACH(_li, LIST, list) {				\
 			int _rc;					\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_rc = _li->plugin->FN(_li->plugin->handle);	\
+			_rc = _li->fns->FN(_li->fns->handle);	\
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
-					_li->plugin->name, _rc);	\
+					_li->fns->name, _rc);	\
 				_li->active = 0;			\
 			}						\
 		}							\
@@ -154,7 +173,7 @@ struct fs_info {
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
 		LIST_FOREACH(_li, LIST, list) {				\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_li->plugin->FN(_li->plugin->handle, __VA_ARGS__); \
+			_li->fns->FN(_li->fns->handle, __VA_ARGS__);	\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
@@ -163,27 +182,36 @@ struct fs_info {
  * Call a function in each registered and active plugin, providing additional
  * parameters.  If the function returns non-zero then disable the plugin
  */
-#define CALL_PLUGIN_FN_START(LIST, FN, ...)				\
+#define CALL_PLUGIN_FN_START(LIST, FN)					\
 	do {								\
 		struct plugin_entry *_li;				\
 		int _rc;						\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
 		LIST_FOREACH(_li, LIST, list) {				\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_rc = _li->plugin->FN(_li->plugin->handle,	\
-					      __VA_ARGS__);		\
+			_rc = _li->fns->FN(_li->fns->handle,		\
+					   &_li->self_fns,		\
+					   sizeof(struct cnss_plugin_cb));	\
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
-					     _li->plugin->name, _rc);	\
+					     _li->fns->name, _rc);	\
 				_li->active = 0;			\
 			}						\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
 
+static const char *get_config_option(const char *var)
+{
+	return getenv((const char *)var);
+}
+
+static int register_fuse(void *arg, struct fuse_operations *ops,
+			 const char *mnt, void *private_data);
+
 /* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
-static int add_plugin(struct cnss_plugin_list *plugin_list,
-		      cnss_plugin_init_t fn, void *dl_handle)
+static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
+		      void *dl_handle)
 {
 	struct plugin_entry *entry;
 	int rc;
@@ -194,7 +222,7 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 	if (!entry)
 		return CNSS_ERR_NOMEM;
 
-	rc = fn(&entry->plugin, &entry->size);
+	rc = fn(&entry->fns, &entry->fns_size);
 	if (rc != 0) {
 		free(entry);
 		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
@@ -204,28 +232,44 @@ static int add_plugin(struct cnss_plugin_list *plugin_list,
 
 	entry->dl_handle = dl_handle;
 
-	LIST_INSERT_HEAD(plugin_list, entry, list);
+#ifdef IOF_USE_FUSE3
+	entry->self_fns.fuse_version = 3;
+#else /* ! IOF_USE_FUSE3 */
+	entry->self_fns.fuse_version = 2;
+#endif /* IOF_USE_FUSE3 */
+
+	entry->self_fns.get_config_option = get_config_option;
+	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
+	entry->self_fns.register_ctrl_event = ctrl_register_event;
+	entry->self_fns.register_ctrl_counter = ctrl_register_counter;
+	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
+	entry->self_fns.register_fuse_fs = register_fuse;
+	entry->self_fns.handle = entry;
+
+	LIST_INSERT_HEAD(&info->plugins, entry, list);
+
+	LIST_INIT(&entry->fuse_list);
 
 	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
-		     entry->plugin->name,
-		     (void *)entry->plugin->handle,
+		     entry->fns->name,
+		     (void *)entry->fns->handle,
 		     FN_TO_PVOID(fn));
 
-	if (entry->plugin->version == CNSS_PLUGIN_VERSION) {
+	if (entry->fns->version == CNSS_PLUGIN_VERSION) {
 		entry->active = 1;
 	} else {
 		IOF_LOG_INFO("Plugin %s(%p) version incorrect %x %x, disabling",
-			     entry->plugin->name,
-			     (void *)entry->plugin->handle,
-			     entry->plugin->version,
+			     entry->fns->name,
+			     (void *)entry->fns->handle,
+			     entry->fns->version,
 			     CNSS_PLUGIN_VERSION);
 	}
 
-	if (sizeof(struct cnss_plugin) != entry->size) {
+	if (sizeof(struct cnss_plugin) != entry->fns_size) {
 		IOF_LOG_INFO("Plugin %s(%p) size incorrect %zd %zd, some functions may be disabled",
-			     entry->plugin->name,
-			     (void *)entry->plugin->handle,
-			     entry->size,
+			     entry->fns->name,
+			     (void *)entry->fns->handle,
+			     entry->fns_size,
 			     sizeof(struct cnss_plugin));
 	}
 
@@ -248,11 +292,12 @@ static void iof_fuse_umount(struct fs_info *info)
  * a filesystem.
  * Returns 0 on success, or non-zero on error.
  */
-static int register_fuse(void *handle, struct fuse_operations *ops,
+static int register_fuse(void *arg, struct fuse_operations *ops,
 			 const char *mnt, void *private_data)
 {
+	struct plugin_entry *plugin = (struct plugin_entry *)arg;
 	struct fs_info *info;
-	struct cnss_info *cnss_info = (struct cnss_info *)handle;
+
 	struct fuse_args args = {0};
 	char *dash_d = "-d";
 
@@ -328,7 +373,7 @@ static int register_fuse(void *handle, struct fuse_operations *ops,
 
 	fuse_opt_free_args(&args);
 
-	LIST_INSERT_HEAD(&cnss_info->fs_head, info, entries);
+	LIST_INSERT_HEAD(&plugin->fuse_list, info, entries);
 
 	return 0;
 cleanup:
@@ -406,58 +451,44 @@ static void *loop_fn(void *args)
 	return NULL;
 }
 
-int launch_fs(struct cnss_info *cnss_info)
+static void launch_fs(struct cnss_info *cnss_info)
 {
-	int ret;
+	struct plugin_entry *plugin;
 	struct fs_info *info;
+	int rc;
 
-	LIST_FOREACH(info, &cnss_info->fs_head, entries) {
-		IOF_LOG_INFO("Starting a FUSE filesystem at %s", info->mnt);
-		ret = pthread_create(&info->thread, NULL, loop_fn,
-				info);
-		if (ret) {
-			IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
-					info->mnt);
-			iof_fuse_umount(info);
-			fuse_destroy(info->fuse);
-			return CNSS_ERR_PTHREAD;
+	LIST_FOREACH(plugin, &cnss_info->plugins, list) {
+		LIST_FOREACH(info, &plugin->fuse_list, entries) {
+			IOF_LOG_INFO("Starting a FUSE filesystem at %s",
+				     info->mnt);
+			rc = pthread_create(&info->thread, NULL,
+					    loop_fn, info);
+			if (rc) {
+				IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
+					      info->mnt);
+				iof_fuse_umount(info);
+				fuse_destroy(info->fuse);
+				return;
+			}
 		}
 	}
-	return ret;
 }
 
 void shutdown_fs(struct cnss_info *cnss_info)
 {
-	int ret;
+	struct plugin_entry *plugin;
 	struct fs_info *info;
+	int rc;
 
-	ret = CNSS_SUCCESS;
-	while (!LIST_EMPTY(&cnss_info->fs_head)) {
-		info = LIST_FIRST(&cnss_info->fs_head);
-		ret = deregister_fuse(info);
-		if (ret)
-			IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
+	LIST_FOREACH(plugin, &cnss_info->plugins, list) {
+		while (!LIST_EMPTY(&plugin->fuse_list)) {
+			info = LIST_FIRST(&plugin->fuse_list);
+			rc = deregister_fuse(info);
+			if (rc)
+				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
+		}
 	}
 }
-
-static const char *get_config_option(const char *var)
-{
-	return getenv((const char *)var);
-}
-
-static struct cnss_plugin_cb cnss_plugin_cb = {
-#ifdef IOF_USE_FUSE3
-	.fuse_version = 3,
-#else /* ! IOF_USE_FUSE3 */
-	.fuse_version = 2,
-#endif /* IOF_USE_FUSE3 */
-	.get_config_option = get_config_option,
-	.register_ctrl_variable = ctrl_register_variable,
-	.register_ctrl_event = ctrl_register_event,
-	.register_ctrl_counter = ctrl_register_counter,
-	.register_ctrl_constant = ctrl_register_constant,
-	.register_fuse_fs = register_fuse,
-};
 
 int cnss_shutdown(void *arg)
 {
@@ -468,28 +499,18 @@ int cnss_shutdown(void *arg)
 
 int cnss_client_attach(int client_id, void *arg)
 {
-	struct cnss_plugin_list *plugin_list;
+	struct cnss_info *info = (struct cnss_info *)arg;
 
-	plugin_list = (struct cnss_plugin_list *)arg;
-
-	if (plugin_list == NULL)
-		return 0;
-
-	CALL_PLUGIN_FN_PARAM(plugin_list, client_attached, client_id);
+	CALL_PLUGIN_FN_PARAM(&info->plugins, client_attached, client_id);
 
 	return 0;
 }
 
 int cnss_client_detach(int client_id, void *arg)
 {
-	struct cnss_plugin_list *plugin_list;
+	struct cnss_info *info = (struct cnss_info *)arg;
 
-	plugin_list = (struct cnss_plugin_list *)arg;
-
-	if (plugin_list == NULL)
-		return 0;
-
-	CALL_PLUGIN_FN_PARAM(plugin_list, client_detached, client_id);
+	CALL_PLUGIN_FN_PARAM(&info->plugins, client_detached, client_id);
 
 	return 0;
 }
@@ -501,7 +522,6 @@ int main(void)
 	const char *prefix;
 	char *version = iof_get_version();
 	struct plugin_entry *list_iter;
-	struct cnss_plugin_list plugin_list;
 	struct cnss_info *cnss_info;
 	int active_plugins = 0;
 
@@ -520,6 +540,10 @@ int main(void)
 		return CNSS_ERR_PREFIX;
 	}
 
+	cnss_info = calloc(1, sizeof(struct cnss_info));
+	if (!cnss_info)
+		return CNSS_ERR_NOMEM;
+
 	ret = asprintf(&ctrl_prefix, "%s/.ctrl", prefix);
 
 	if (ret == -1) {
@@ -534,10 +558,10 @@ int main(void)
 	}
 	free(ctrl_prefix);
 
-	LIST_INIT(&plugin_list);
+	LIST_INIT(&cnss_info->plugins);
 
 	/* Load the build-in iof "plugin" */
-	ret = add_plugin(&plugin_list, iof_plugin_init, NULL);
+	ret = add_plugin(cnss_info, iof_plugin_init, NULL);
 	if (ret != 0)
 		return CNSS_ERR_PLUGIN;
 
@@ -563,7 +587,7 @@ int main(void)
 			     dl_handle,
 			     FN_TO_PVOID(fn));
 		if (fn) {
-			ret = add_plugin(&plugin_list, fn, dl_handle);
+			ret = add_plugin(cnss_info, fn, dl_handle);
 			if (ret != 0)
 				return CNSS_ERR_PLUGIN;
 		}
@@ -572,8 +596,8 @@ int main(void)
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
 	 */
-	LIST_FOREACH(list_iter, &plugin_list, list) {
-		if (list_iter->active && list_iter->plugin->require_service) {
+	LIST_FOREACH(list_iter, &cnss_info->plugins, list) {
+		if (list_iter->active && list_iter->fns->require_service) {
 			service_process_set = CRT_FLAG_BIT_SERVER;
 			break;
 		}
@@ -582,12 +606,6 @@ int main(void)
 	IOF_LOG_INFO("Forming %s process set",
 		     service_process_set ? "service" : "client");
 
-	cnss_info = calloc(1, sizeof(struct cnss_info));
-	if (!cnss_info)
-		return CNSS_ERR_NOMEM;
-
-	LIST_INIT(&cnss_info->fs_head);
-	cnss_plugin_cb.handle = cnss_info;
 	/*initialize CaRT*/
 	ret = crt_init(cnss, service_process_set);
 	if (ret) {
@@ -599,17 +617,16 @@ int main(void)
 	 * operations only.  Plugins can choose to disable themselves
 	 * at this point.
 	 */
-	CALL_PLUGIN_FN_START(&plugin_list, start, &cnss_plugin_cb,
-			     sizeof(cnss_plugin_cb));
+	CALL_PLUGIN_FN_START(&cnss_info->plugins, start);
 
 	/* Call post_start for each plugin, which could communicate over
 	 * the network.  Plugins can choose to disable themselves
 	 * at this point.
 	 */
-	CALL_PLUGIN_FN_CHECK(&plugin_list, post_start);
+	CALL_PLUGIN_FN_CHECK(&cnss_info->plugins, post_start);
 
 	/* Walk the plugins and check for active ones */
-	LIST_FOREACH(list_iter, &plugin_list, list) {
+	LIST_FOREACH(list_iter, &cnss_info->plugins, list) {
 		if (list_iter->active) {
 			active_plugins = 1;
 			break;
@@ -624,21 +641,21 @@ int main(void)
 	}
 
 	launch_fs(cnss_info);
-	register_cnss_controls(1, &plugin_list);
+	register_cnss_controls(1, cnss_info);
 	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
 
-	CALL_PLUGIN_FN(&plugin_list, flush);
+	CALL_PLUGIN_FN(&cnss_info->plugins, flush);
 
 	/* TODO: This doesn't seem right.   After flush, plugins can still
 	 * actively send RPCs.   We really need a barrier here.  Then
 	 * call finish.   Then finalize.
 	 */
 	shutdown_fs(cnss_info);
-	CALL_PLUGIN_FN(&plugin_list, finish);
+	CALL_PLUGIN_FN(&cnss_info->plugins, finish);
 
 	ret = crt_finalize();
-	while (!LIST_EMPTY(&plugin_list)) {
-		struct plugin_entry *entry = LIST_FIRST(&plugin_list);
+	while (!LIST_EMPTY(&cnss_info->plugins)) {
+		struct plugin_entry *entry = LIST_FIRST(&cnss_info->plugins);
 
 		LIST_REMOVE(entry, list);
 		if (entry->dl_handle != NULL)
