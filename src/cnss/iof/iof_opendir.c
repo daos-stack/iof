@@ -143,12 +143,11 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	}
 
 	if (reply.err == 0 && reply.rc == 0) {
-		char *d = ios_gah_to_str(&dir_handle->gah);
 
 		fi->fh = (uint64_t)dir_handle;
 
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
+		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, dir_handle,
+			     GAH_PRINT_FULL_VAL(dir_handle->gah));
 	} else {
 		free(dir_handle);
 	}

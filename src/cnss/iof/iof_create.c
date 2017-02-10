@@ -90,12 +90,9 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -rc;
 	}
 
-	if (reply.err == 0 && reply.rc == 0) {
-		char *d = ios_gah_to_str(&handle->gah);
-
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
-	}
+	if (reply.err == 0 && reply.rc == 0)
+		IOF_LOG_INFO("Handle %p " GAH_PRINT_STR, handle,
+			     GAH_PRINT_VAL(handle->gah));
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 

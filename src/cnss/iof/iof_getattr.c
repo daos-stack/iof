@@ -124,7 +124,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

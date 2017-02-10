@@ -72,7 +72,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
 
 	/* If the GAH has been reported as invalid by the server in the past
 	 * then do not attempt to do anything with it.
@@ -102,13 +102,6 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		rc = EIO;
 		goto out;
-	}
-
-	{
-		char *d = ios_gah_to_str(&dir_handle->gah);
-
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
 	}
 
 	rc = ioc_cb_progress(fs_handle, &reply.complete);

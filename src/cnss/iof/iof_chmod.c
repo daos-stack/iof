@@ -100,7 +100,8 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Chmod %p 0%o", fi, mode);
+	IOF_LOG_INFO("mode 0%o " GAH_PRINT_STR, mode,
+		     GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

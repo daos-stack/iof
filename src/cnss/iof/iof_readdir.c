@@ -229,20 +229,14 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 	int ret;
 
-	IOF_LOG_INFO("path %s %s handle %p", dir, dir_handle->name, dir_handle);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
+
 
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.
 	 */
 	if (!dir_handle->handle_valid)
 		return -EIO;
-
-	{
-		char *d = ios_gah_to_str(&dir_handle->gah);
-
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
-	}
 
 	do {
 		struct iof_readdir_reply *dir_reply;

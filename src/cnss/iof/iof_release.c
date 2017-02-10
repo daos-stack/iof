@@ -79,7 +79,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("path %s %s handle %p", file, handle->name, handle);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",
@@ -107,13 +107,6 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
-	}
-
-	{
-		char *d = ios_gah_to_str(&handle->gah);
-
-		IOF_LOG_INFO("Dah %s", d);
-		free(d);
 	}
 
 	rc = ioc_cb_progress(fs_handle, &reply.complete);

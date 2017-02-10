@@ -198,4 +198,13 @@ enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank);
  */
 char *ios_gah_to_str(struct ios_gah *gah);
 
+#define GAH_PRINT_STR "Gah(%" PRIu8 ".%" PRIu32 ".%" PRIu64 ")"
+#define GAH_PRINT_VAL(P) (P).root, (P).fid, (uint64_t)(P).revision
+
+#define GAH_PRINT_FULL_STR GAH_PRINT_STR " revision: %" PRIu64 " root: %" \
+	PRIu8 " base: %" PRIu8 " version: %" PRIu8 " fid: %" PRIu32
+
+#define GAH_PRINT_FULL_VAL(P) GAH_PRINT_VAL(P), (uint64_t)(P).revision, \
+		(P).root, (P).base, (P).version, (P).fid
+
 #endif

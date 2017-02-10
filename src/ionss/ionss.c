@@ -193,12 +193,7 @@ int iof_getattr_gah_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Reading from %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -259,7 +254,6 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 		out->err = 0;
 		dir_h = opendir(new_path);
 		if (dir_h) {
-			char *s;
 			struct ionss_dir_handle *h;
 
 			h = malloc(sizeof(struct ionss_dir_handle));
@@ -270,10 +264,10 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 			h->fs_id = in->fs_id;
 
 			ios_gah_allocate(gs, &gah, 0, 0, h);
-			s = ios_gah_to_str(&gah);
-			IOF_LOG_INFO("Allocated %s", s);
+
+			IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, h,
+				     GAH_PRINT_FULL_VAL(gah));
 			IOF_LOG_DEBUG("Dirp is %p", dir_h);
-			free(s);
 
 			out->rc = 0;
 			out->gah = gah;
@@ -310,7 +304,6 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	struct dirent *dir_entry;
 	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {0};
 	int reply_idx = 0;
-	char *gah_d;
 	int rc;
 
 	in = crt_req_get(rpc);
@@ -325,9 +318,7 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		return 0;
 	}
 
-	gah_d = ios_gah_to_str(&in->gah);
-	IOF_LOG_INFO("Reading from %s", gah_d);
-	free(gah_d);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -394,7 +385,6 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = NULL;
 	struct ionss_dir_handle *handle = NULL;
-	char *d;
 	int rc;
 
 	in = crt_req_get(rpc);
@@ -403,9 +393,7 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 		return 0;
 	}
 
-	d = ios_gah_to_str(&in->gah);
-	IOF_LOG_INFO("Deallocating %s", d);
-	free(d);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS)
@@ -544,12 +532,8 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *s = ios_gah_to_str(&gah);
-
-		IOF_LOG_INFO("Allocated %s fd %d", s, fd);
-		free(s);
-	}
+	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
+		     GAH_PRINT_FULL_VAL(gah));
 
 	out->gah = gah;
 
@@ -635,12 +619,8 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *s = ios_gah_to_str(&gah);
-
-		IOF_LOG_INFO("Allocated %s fd %d", s, fd);
-		free(s);
-	}
+	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
+		     GAH_PRINT_FULL_VAL(gah));
 
 	out->gah = gah;
 
@@ -674,12 +654,7 @@ int iof_close_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Deallocating %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
 	if (rc != IOS_SUCCESS || !local_handle) {
@@ -728,12 +703,7 @@ int iof_fsync_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Calling fsync %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
 	if (rc != IOS_SUCCESS || !local_handle) {
@@ -778,12 +748,7 @@ int iof_fdatasync_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Calling fdatasync %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
 	if (rc != IOS_SUCCESS || !local_handle) {
@@ -830,12 +795,7 @@ int iof_read_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Reading from %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -961,12 +921,7 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Reading from %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -1319,12 +1274,7 @@ int iof_ftruncate_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Writing to %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -1416,12 +1366,7 @@ int iof_chmod_gah_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Writing to %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -1563,12 +1508,7 @@ int iof_write_direct_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Writing to %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -1690,12 +1630,7 @@ int iof_write_bulk_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
-
-		IOF_LOG_INFO("Writing to %s", d);
-		free(d);
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {

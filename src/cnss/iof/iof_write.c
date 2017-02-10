@@ -228,7 +228,8 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 
-	IOF_LOG_INFO("path %s handle %p len %zi", handle->name, handle, len);
+	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
+		     GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

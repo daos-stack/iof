@@ -305,7 +305,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
 	} else {
 		len = reply.out->len;
-		IOF_LOG_INFO("Received %zi via bulk", len);
+		IOF_LOG_INFO("Received %#zx via bulk", len);
 	}
 
 	rc = crt_req_decref(reply.rpc);
@@ -316,7 +316,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	if (rc)
 		return -EIO;
 
-	IOF_LOG_INFO("Read complete %zi", len);
+	IOF_LOG_INFO("Read complete %#zx", len);
 
 	return len;
 }
@@ -326,7 +326,8 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 
-	IOF_LOG_INFO("path %s handle %p len %zi", handle->name, handle, len);
+	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
+		     GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

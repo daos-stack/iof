@@ -55,7 +55,7 @@ int ioc_truncate_name(const char *file, off_t len)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Truncate %s %zi", file, len);
+	IOF_LOG_INFO("Truncate %s %#zx", file, len);
 
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, truncate), &rpc);
@@ -102,7 +102,8 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Truncate %p %zi", fi, len);
+	IOF_LOG_INFO("Position %#zx " GAH_PRINT_STR, len,
+		     GAH_PRINT_VAL(handle->gah));
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
