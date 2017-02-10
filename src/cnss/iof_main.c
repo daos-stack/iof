@@ -205,11 +205,13 @@ static struct fuse_operations ops = {
 	.chmod = ioc_chmod,
 	.truncate = ioc_truncate,
 	.rename = ioc_rename3,
+	.utimens = ioc_utimens,
 #else
 	.getattr = ioc_getattr_name,
 	.chmod = ioc_chmod_name,
 	.truncate = ioc_truncate_name,
 	.rename = ioc_rename,
+	.utimens = ioc_utimens_name,
 #ifndef __APPLE__
 	.flag_nopath = 1,
 #endif

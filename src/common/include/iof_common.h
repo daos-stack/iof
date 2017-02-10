@@ -212,6 +212,18 @@ struct iof_chmod_gah_in {
 	int mode;
 };
 
+struct iof_time_in {
+	crt_string_t path;
+	crt_iov_t time;
+	uint32_t fs_id;
+
+};
+
+struct iof_time_gah_in {
+	struct ios_gah gah;
+	crt_iov_t time;
+};
+
 extern struct crt_req_format QUERY_RPC_FMT;
 
 struct rpc_data {
@@ -246,6 +258,8 @@ struct my_types {
 	MY_TYPE(fdatasync);
 	MY_TYPE(chmod);
 	MY_TYPE(chmod_gah);
+	MY_TYPE(utimens);
+	MY_TYPE(utimens_gah);
 };
 
 struct proto {

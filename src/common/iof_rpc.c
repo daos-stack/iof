@@ -164,6 +164,17 @@ struct crt_msg_field *chmod_gah_in[] = {
 	&CMF_INT,
 };
 
+struct crt_msg_field *utimens_in[] = {
+	&CMF_STRING,
+	&CMF_IOVEC,
+	&CMF_INT,
+};
+
+struct crt_msg_field *utimens_gah_in[] = {
+	&CMF_GAH,
+	&CMF_IOVEC,
+};
+
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
@@ -199,6 +210,8 @@ static struct proto proto = {
 		RPC_TYPE(fdatasync, gah_in, status_out),
 		RPC_TYPE(chmod, chmod_in, status_out),
 		RPC_TYPE(chmod_gah, chmod_gah_in, status_out),
+		RPC_TYPE(utimens, utimens_in, status_out),
+		RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	},
 };
 

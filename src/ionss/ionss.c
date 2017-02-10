@@ -1704,6 +1704,115 @@ out:
 	return 0;
 }
 
+int iof_utimens_handler(crt_rpc_t *rpc)
+{
+	struct iof_time_in *in;
+	struct iof_status_out *out;
+	char new_path[IOF_MAX_PATH_LEN];
+
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->path) {
+		IOF_LOG_ERROR("No input path");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->time.iov_buf) {
+		IOF_LOG_ERROR("No input times");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
+	if (rc) {
+		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
+			      rc);
+		out->err = rc;
+		goto out;
+	}
+
+	errno = 0;
+	rc = utimensat(0, new_path, in->time.iov_buf, AT_SYMLINK_NOFOLLOW);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
+int iof_utimens_gah_handler(crt_rpc_t *rpc)
+{
+	struct iof_time_gah_in *in;
+	struct iof_status_out *out;
+	struct ionss_file_handle *handle = NULL;
+	int rc;
+
+	out = crt_reply_get(rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	in = crt_req_get(rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	if (!in->time.iov_buf) {
+		IOF_LOG_ERROR("No input times");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	{
+		char *d = ios_gah_to_str(&in->gah);
+
+		IOF_LOG_INFO("Setting time of %s", d);
+		free(d);
+	}
+
+	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	if (rc != IOS_SUCCESS || !handle) {
+		out->err = IOF_GAH_INVALID;
+		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
+			      &in->gah, rc);
+	}
+
+	errno = 0;
+	rc = futimens(handle->fd, in->time.iov_buf);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
+
 /*
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
@@ -1772,6 +1881,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, symlink, iof_symlink_handler);
 	PROTO_SET_FUNCTION(proto, fsync, iof_fsync_handler);
 	PROTO_SET_FUNCTION(proto, fdatasync, iof_fdatasync_handler);
+	PROTO_SET_FUNCTION(proto, utimens, iof_utimens_handler);
+	PROTO_SET_FUNCTION(proto, utimens_gah, iof_utimens_gah_handler);
 	iof_proto_commit(proto);
 
 	return ret;

@@ -488,3 +488,14 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         result = os.readlink(os.path.join(self.export_dir, 'source'))
         if result != 'target':
             self.fail("Link target is wrong '%s'" % result)
+
+
+    def test_set_time(self):
+        """Set the time of a file"""
+
+        filename = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+
+        os.utime(filename)
