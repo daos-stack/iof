@@ -191,7 +191,7 @@ struct fs_info {
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
 			_rc = _li->fns->FN(_li->fns->handle,		\
 					   &_li->self_fns,		\
-					   sizeof(struct cnss_plugin_cb));	\
+					   sizeof(struct cnss_plugin_cb));\
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
 					     _li->fns->name, _rc);	\
@@ -242,6 +242,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 #endif /* IOF_USE_FUSE3 */
 
 	entry->self_fns.get_config_option = get_config_option;
+	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
 	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
 	entry->self_fns.register_ctrl_event = ctrl_register_event;
 	entry->self_fns.register_ctrl_counter = ctrl_register_counter;
@@ -266,6 +267,18 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 			     (void *)entry->fns->handle,
 			     entry->fns->version,
 			     CNSS_PLUGIN_VERSION);
+	}
+
+	if (entry->fns->name == NULL) {
+		IOF_LOG_ERROR("Disabling plugin: name is required\n");
+		entry->active = 0;
+	}
+	rc = ctrl_create_subdir(NULL, entry->fns->name,
+				&entry->self_fns.plugin_dir);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Disabling plugin %s: ctrl dir creation failed"
+			      " %d", entry->fns->name, rc);
+		entry->active = 0;
 	}
 
 	if (sizeof(struct cnss_plugin) != entry->fns_size) {

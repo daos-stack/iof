@@ -56,7 +56,6 @@ struct iof_state {
 	struct proto	*proto;
 	/* CNSS Prefix */
 	char		*cnss_prefix;
-
 };
 
 /* For each projection */

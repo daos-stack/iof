@@ -66,7 +66,8 @@ int register_cnss_controls(int count_start, void *arg)
 	int ret;
 	int rc = 0;
 
-	ret = ctrl_register_event("/shutdown", shutdown_cb /* trigger_cb */,
+	ret = ctrl_register_event(NULL, "shutdown",
+				  shutdown_cb /* trigger_cb */,
 				  NULL /* destroy_cb */, arg);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not register shutdown ctrl");
@@ -74,7 +75,7 @@ int register_cnss_controls(int count_start, void *arg)
 		ctrl_fs_stop();
 	}
 
-	ret = ctrl_register_counter("/client",
+	ret = ctrl_register_counter(NULL, "client",
 				    count_start /* start */,
 				    1, /* increment */
 				    client_attach_cb /* open_cb */,

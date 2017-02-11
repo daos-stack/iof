@@ -207,6 +207,8 @@ int main(int argc, char **argv)
 	int opt;
 	int num_failures;
 	bool interactive = false;
+	struct ctrl_dir *class_dir;
+	struct ctrl_dir *bar_dir;
 
 	memset(large_constant, 'a', TOO_LARGE);
 
@@ -249,10 +251,12 @@ int main(int argc, char **argv)
 
 	register_cnss_controls(3, NULL);
 
-	ctrl_register_variable("/class/bar/foo", read_foo,
+	ctrl_create_subdir(NULL, "class", &class_dir);
+	ctrl_create_subdir(class_dir, "bar", &bar_dir);
+	ctrl_register_variable(bar_dir, "foo", read_foo,
 			       write_foo, check_destroy_foo, &foo);
-	ctrl_register_constant("/large", large_constant);
-	ctrl_register_constant("/class/bar/hello", "Hello World");
+	ctrl_register_constant(NULL, "large", large_constant);
+	ctrl_register_constant(bar_dir, "hello", "Hello World");
 
 	num_failures = run_tests(buf);
 	if (!interactive) { /* Invoke shutdown */

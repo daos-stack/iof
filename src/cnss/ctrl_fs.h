@@ -44,44 +44,63 @@ extern "C" {
 
 #include "cnss_plugin.h"
 
+struct ctrl_dir;
+
 /* Starts the control file system, mounted at <prefix> */
 int ctrl_fs_start(const char *prefix);
 /* Signals to stop the control file system */
 int ctrl_fs_stop(void);
 /* Waits for the control file system to stop */
 int ctrl_fs_wait(void);
+
+/* Create a control subdirectory.  If one exists already of the same
+ * name, it returns a pointer to the existing node.
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
+ * \param[out] newdir A pointer to the new node
+ */
+int ctrl_create_subdir(struct ctrl_dir *dir, const char *name,
+		       struct ctrl_dir **newdir);
+
 /* Register a control variable.
- * \param[in] path Path to file representing the variable
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
  * \param[in] read_cb Optional callback to populate the value on read
  * \param[in] write_cb Optional callback to consume the value on write
  * \param[in] destroy_cb Optional callback to free associated data on exit
  * \param[in] cb_arg Optional argument to pass to callbacks
  */
-int ctrl_register_variable(const char *path, ctrl_fs_read_cb_t read_cb,
+int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
+			   ctrl_fs_read_cb_t read_cb,
 			   ctrl_fs_write_cb_t write_cb,
 			   ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg);
 /* Register a control event.
- * \param[in] path Path to file representing the event
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
  * \param[in] trigger_cb Optional callback to invoke when the file is touched
  * \param[in] destroy_cb Optional callback to free associated data on exit
  * \param[in] cb_arg Optional argument to pass to callbacks
  */
-int ctrl_register_event(const char *path, ctrl_fs_trigger_cb_t trigger_cb,
+int ctrl_register_event(struct ctrl_dir *dir, const char *name,
+			ctrl_fs_trigger_cb_t trigger_cb,
 			ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg);
 /* Register a control constant.
- * \param[in] path Path to file representing the constant
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
  * \param[in] value Contents of the file
  */
-int ctrl_register_constant(const char *path, const char *value);
+int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
+			   const char *value);
 /* Register a control counter
- * \param[in] path Path to file representing the counter
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
  * \param[in] open_cb Optional callback to invoke when the file opened
  * \param[in] close_cb Optional callback to invoke when the file closed
  * \param[in] destroy_cb Optional callback to free associated data on exit
  * \param[in] cb_arg Optional argument to pass to callbacks
  */
-int ctrl_register_counter(const char *path, int start, int increment,
-			  ctrl_fs_open_cb_t open_cb,
+int ctrl_register_counter(struct ctrl_dir *dir, const char *name, int start,
+			  int increment, ctrl_fs_open_cb_t open_cb,
 			  ctrl_fs_close_cb_t close_cb,
 			  ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg);
 

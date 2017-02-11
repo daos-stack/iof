@@ -472,51 +472,55 @@ static int add_ctrl_file(const char *name, struct ctrl_node **node,
 
 }
 
-int add_intermediate_nodes(char *path, const char **basename,
-			   struct ctrl_node **parent)
+int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
+		       struct ctrl_dir **newdir)
 {
-	char *cursor;
-	char *next_token;
-	char *token;
-	int rc;
-	struct ctrl_node *node = &ctrl_fs.root;
+	struct ctrl_node *node;
+	int rc = 0;
 
-	*parent = NULL;
-	*basename = NULL;
+	pthread_once(&once_init, init_root_node);
 
-	token = strtok_r(path, "/", &cursor);
+	if (ctrl_fs.startup_rc != 0)
+		return ctrl_fs.startup_rc;
 
-	if (token == NULL) {
-		IOF_LOG_ERROR("Badly formatted path for ctrl variable %s",
-			      path);
+	if (newdir == NULL) {
+		IOF_LOG_ERROR("Invalid newdir pointer specified");
 		return -EINVAL;
 	}
 
-	next_token = strtok_r(NULL, "/", &cursor);
-	while (next_token != NULL) {
-		/* Intermediate node */
-		rc = add_ctrl_dir(token, &node);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Error adding intermediate ctrl node %s",
-				      token);
-			return rc;
-		}
-		token = next_token;
-		next_token = strtok_r(NULL, "/", &cursor);
+	*newdir = NULL;
+
+	if (subdir == NULL) {
+		IOF_LOG_ERROR("Invalid subdir specified");
+		return -EINVAL;
 	}
 
-	*basename = token;
-	*parent = node;
+	if (strchr(subdir, '/') != NULL) {
+		IOF_LOG_ERROR("/ not allowed in ctrl subdir '%s'", subdir);
+		return -EINVAL;
+	}
 
-	return 0;
+	if (parent == NULL)
+		parent = (struct ctrl_dir *)&ctrl_fs.root;
+
+	node = (struct ctrl_node *)parent;
+
+	rc = add_ctrl_dir(subdir, &node);
+
+	if (rc != 0)
+		IOF_LOG_ERROR("Bad subdir %s specified", subdir);
+
+	*newdir = (struct ctrl_dir *)node;
+	IOF_LOG_INFO("Registered %s as ctrl subdir", subdir);
+
+	return rc;
 }
 
-int ctrl_register_variable(const char *path, ctrl_fs_read_cb_t read_cb,
+int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
+			   ctrl_fs_read_cb_t read_cb,
 			   ctrl_fs_write_cb_t write_cb,
 			   ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg)
 {
-	char *scratch = NULL;
-	const char *basename;
 	struct ctrl_node *node;
 	int rc = 0;
 	int mode = S_IFREG;
@@ -526,32 +530,30 @@ int ctrl_register_variable(const char *path, ctrl_fs_read_cb_t read_cb,
 	if (ctrl_fs.startup_rc != 0)
 		return ctrl_fs.startup_rc;
 
-	if (path == NULL) {
-		IOF_LOG_ERROR("Invalid path specified for ctrl variable");
+	if (name == NULL) {
+		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
-	scratch = strdup(path);
-	if (scratch == NULL) {
-		IOF_LOG_ERROR("No memory to register ctrl variable %s", path);
-		return -ENOMEM;
+	if (strchr(name, '/') != NULL) {
+		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		return -EINVAL;
 	}
 
-	rc = add_intermediate_nodes(scratch, &basename, &node);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Error adding intermediate ctrl nodes %s", path);
-		goto out;
-	}
+	if (dir == NULL)
+		dir = (struct ctrl_dir *)&ctrl_fs.root;
+
+	node = (struct ctrl_node *)dir;
 
 	if (read_cb != NULL)
 		mode |= S_IRUSR;
 	if (write_cb != NULL)
 		mode |= S_IWUSR;
 
-	rc = add_ctrl_file(basename, &node, mode, CTRL_VARIABLE);
+	rc = add_ctrl_file(name, &node, mode, CTRL_VARIABLE);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified in %s", basename, path);
+		IOF_LOG_ERROR("Bad file %s specified", name);
 
 	SET_DATA(node, var, cb_arg, cb_arg);
 	SET_DATA(node, var, read_cb, read_cb);
@@ -561,19 +563,15 @@ int ctrl_register_variable(const char *path, ctrl_fs_read_cb_t read_cb,
 	__sync_synchronize();
 	node->initialized = 1;
 
-	IOF_LOG_INFO("Registered %s as ctrl variable", path);
-out:
-	if (scratch != NULL)
-		free(scratch);
+	IOF_LOG_INFO("Registered %s as ctrl variable", name);
 
 	return rc;
 }
 
-int ctrl_register_event(const char *path, ctrl_fs_trigger_cb_t trigger_cb,
+int ctrl_register_event(struct ctrl_dir *dir, const char *name,
+			ctrl_fs_trigger_cb_t trigger_cb,
 			ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg)
 {
-	char *scratch = NULL;
-	const char *basename;
 	struct ctrl_node *node;
 	int rc = 0;
 	int mode = S_IFREG | S_IWUSR;
@@ -583,27 +581,25 @@ int ctrl_register_event(const char *path, ctrl_fs_trigger_cb_t trigger_cb,
 	if (ctrl_fs.startup_rc != 0)
 		return ctrl_fs.startup_rc;
 
-	if (path == NULL) {
-		IOF_LOG_ERROR("Invalid path specified for ctrl event");
+	if (name == NULL) {
+		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
-	scratch = strdup(path);
-	if (scratch == NULL) {
-		IOF_LOG_ERROR("No memory to register ctrl event %s", path);
-		return -ENOMEM;
+	if (strchr(name, '/') != NULL) {
+		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		return -EINVAL;
 	}
 
-	rc = add_intermediate_nodes(scratch, &basename, &node);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Error adding intermediate ctrl nodes %s", path);
-		goto out;
-	}
+	if (dir == NULL)
+		dir = (struct ctrl_dir *)&ctrl_fs.root;
 
-	rc = add_ctrl_file(basename, &node, mode, CTRL_EVENT);
+	node = (struct ctrl_node *)dir;
+
+	rc = add_ctrl_file(name, &node, mode, CTRL_EVENT);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified in %s", basename, path);
+		IOF_LOG_ERROR("Bad file %s specified", name);
 
 	SET_DATA(node, evnt, cb_arg, cb_arg);
 	SET_DATA(node, evnt, trigger_cb, trigger_cb);
@@ -612,18 +608,13 @@ int ctrl_register_event(const char *path, ctrl_fs_trigger_cb_t trigger_cb,
 	__sync_synchronize();
 	node->initialized = 1;
 
-	IOF_LOG_INFO("Registered %s as ctrl event", path);
-out:
-	if (scratch != NULL)
-		free(scratch);
-
+	IOF_LOG_INFO("Registered %s as ctrl event", name);
 	return rc;
 }
 
-int ctrl_register_constant(const char *path, const char *value)
+int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
+			   const char *value)
 {
-	char *scratch = NULL;
-	const char *basename;
 	struct ctrl_node *node;
 	int rc = 0;
 
@@ -631,55 +622,48 @@ int ctrl_register_constant(const char *path, const char *value)
 
 	if (ctrl_fs.startup_rc != 0)
 		return ctrl_fs.startup_rc;
-
-	if (path == NULL) {
-		IOF_LOG_ERROR("Invalid path specified for ctrl constant");
-		return -EINVAL;
-	}
 
 	if (value == NULL) {
 		IOF_LOG_ERROR("Invalid value specified for ctrl constant");
 		return -EINVAL;
 	}
 
-	scratch = strdup(path);
-	if (scratch == NULL) {
-		IOF_LOG_ERROR("No memory to register ctrl variable %s", path);
-		return -ENOMEM;
+	if (name == NULL) {
+		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
+		return -EINVAL;
 	}
 
-	rc = add_intermediate_nodes(scratch, &basename, &node);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Error adding intermediate ctrl nodes %s", path);
-		goto out;
+	if (strchr(name, '/') != NULL) {
+		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		return -EINVAL;
 	}
 
-	rc = add_ctrl_file(basename, &node, S_IFREG | S_IRUSR, CTRL_CONSTANT);
+	if (dir == NULL)
+		dir = (struct ctrl_dir *)&ctrl_fs.root;
+
+	node = (struct ctrl_node *)dir;
+
+	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_CONSTANT);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified in %s", basename, path);
+		IOF_LOG_ERROR("Bad file %s specified", name);
 
 	strncpy(GET_DATA(node, con, buf), value, CTRL_DATA_MAX);
 	__sync_synchronize();
 	node->initialized = 1;
 
 	IOF_LOG_INFO("Registered %s as ctrl constant.  Value is %s",
-		     path, value);
-out:
-	if (scratch != NULL)
-		free(scratch);
-
+		     name, value);
 	return rc;
 }
 
-int ctrl_register_counter(const char *path, int start, int increment,
+int ctrl_register_counter(struct ctrl_dir *dir, const char *name,
+			  int start, int increment,
 			  ctrl_fs_open_cb_t open_cb,
 			  ctrl_fs_close_cb_t close_cb,
 			  ctrl_fs_destroy_cb_t destroy_cb,
 			  void *cb_arg)
 {
-	char *scratch = NULL;
-	const char *basename;
 	struct ctrl_node *node;
 	int rc = 0;
 
@@ -688,27 +672,25 @@ int ctrl_register_counter(const char *path, int start, int increment,
 	if (ctrl_fs.startup_rc != 0)
 		return ctrl_fs.startup_rc;
 
-	if (path == NULL) {
-		IOF_LOG_ERROR("Invalid path specified for ctrl variable");
+	if (name == NULL) {
+		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
-	scratch = strdup(path);
-	if (scratch == NULL) {
-		IOF_LOG_ERROR("No memory to register ctrl variable %s", path);
-		return -ENOMEM;
+	if (strchr(name, '/') != NULL) {
+		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		return -EINVAL;
 	}
 
-	rc = add_intermediate_nodes(scratch, &basename, &node);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Error adding intermediate ctrl nodes %s", path);
-		goto out;
-	}
+	if (dir == NULL)
+		dir = (struct ctrl_dir *)&ctrl_fs.root;
 
-	rc = add_ctrl_file(basename, &node, S_IFREG | S_IRUSR, CTRL_COUNTER);
+	node = (struct ctrl_node *)dir;
+
+	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_COUNTER);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified in %s", basename, path);
+		IOF_LOG_ERROR("Bad ctrl file %s", name);
 
 	SET_DATA(node, cnt, cb_arg, cb_arg);
 	SET_DATA(node, cnt, open_cb, open_cb);
@@ -721,11 +703,7 @@ int ctrl_register_counter(const char *path, int start, int increment,
 	node->initialized = 1;
 
 	IOF_LOG_INFO("Registered %s as ctrl counter (%d, %d)",
-		     path, start, increment);
-out:
-	if (scratch != NULL)
-		free(scratch);
-
+		     name, start, increment);
 	return rc;
 }
 

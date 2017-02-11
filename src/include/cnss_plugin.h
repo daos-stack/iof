@@ -61,6 +61,7 @@ extern "C" {
 
 struct fuse_operations;
 struct fuse_args;
+struct ctrl_dir;
 
 /* Optional callback invoked when a read is done on a ctrl fs variable */
 typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
@@ -81,6 +82,7 @@ typedef int (*ctrl_fs_trigger_cb_t)(void *cb_arg);
 /* Function lookup table provided by CNSS to plugin */
 struct cnss_plugin_cb {
 	void *handle;
+	struct ctrl_dir *plugin_dir;
 	int fuse_version;
 	const char *(*get_config_option)(const char *); /* A wrapper
 							 * around getenv
@@ -94,7 +96,8 @@ struct cnss_plugin_cb {
 	/* Registers a variable, exported as a control file system file
 	 * and associates optional callbacks with read and write events.
 	 */
-	int (*register_ctrl_variable)(const char *path,
+	int (*register_ctrl_variable)(struct ctrl_dir *dir,
+				      const char *name,
 				      ctrl_fs_read_cb_t read_cb,
 				      ctrl_fs_write_cb_t write_cb,
 				      ctrl_fs_destroy_cb_t destroy_cb,
@@ -102,14 +105,15 @@ struct cnss_plugin_cb {
 	/* Registers an event, exported as a control file system file
 	 * and associates optional callbacks with change events.
 	 */
-	int (*register_ctrl_event)(const char *path,
+	int (*register_ctrl_event)(struct ctrl_dir *dir, const char *name,
 				   ctrl_fs_trigger_cb_t trigger_cb,
 				   ctrl_fs_destroy_cb_t destroy_cb,
 				   void *cb_arg);
 	/* Registers a counter, exported as a control file system file
 	 * and associates optional callbacks with open/close events.
 	 */
-	int (*register_ctrl_counter)(const char *path, int start, int increment,
+	int (*register_ctrl_counter)(struct ctrl_dir *dir, const char *name,
+				     int start, int increment,
 				     ctrl_fs_open_cb_t open_cb,
 				     ctrl_fs_close_cb_t close_cb,
 				     ctrl_fs_destroy_cb_t destroy_cb,
@@ -118,7 +122,11 @@ struct cnss_plugin_cb {
 	 * Control fs constant registration.  Output should be what you want
 	 * to see when you cat <path>.
 	 */
-	int (*register_ctrl_constant)(const char *path, const char *output);
+	int (*register_ctrl_constant)(struct ctrl_dir *dir, const char *name,
+				      const char *output);
+	/* Control fs subdir creation */
+	int (*create_ctrl_subdir)(struct ctrl_dir *dir, const char *name,
+				  struct ctrl_dir **newdir);
 
 	/* CPPR needs to be able to access the "global file system" so needs
 	 * to enumerate over projection to be able to pick a destination and
@@ -172,7 +180,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f004
+#define CNSS_PLUGIN_VERSION 0x10f005
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

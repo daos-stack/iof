@@ -54,6 +54,7 @@
 #define	IOF_ERR_INTERNAL	8
 #define IOF_ERR_PTHREAD		9
 #define IOF_GAH_INVALID        10
+#define IOF_ERR_CTRL_FS        11
 
 #define IOF_NAME_LEN_MAX 256
 #define IOF_PREFIX_MAX 80

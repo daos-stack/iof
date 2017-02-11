@@ -439,8 +439,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 }
 
 
-int iof_reg(void *arg, struct cnss_plugin_cb *cb,
-	    size_t cb_size)
+int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	crt_group_t *ionss_group;
@@ -512,9 +511,10 @@ int iof_post_start(void *arg)
 	int i;
 	int fs_num;
 	char mount[IOF_NAME_LEN_MAX];
-	char ctrl_path[IOF_NAME_LEN_MAX];
+	char ctrl_name[IOF_NAME_LEN_MAX];
 	char base_mount[IOF_NAME_LEN_MAX];
 	struct cnss_plugin_cb *cb;
+	struct ctrl_dir *PA_dir;
 
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
@@ -526,6 +526,13 @@ int iof_post_start(void *arg)
 	if (ret || (query == NULL)) {
 		IOF_LOG_ERROR("Query operation failed");
 		return IOF_ERR_PROJECTION;
+	}
+
+	ret = cb->create_ctrl_subdir(cb->plugin_dir, "PA", &PA_dir);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create control dir for PA mode "
+			      "(rc = %d)\n", ret);
+		return IOF_ERR_CTRL_FS;
 	}
 
 	/*calculate number of projections*/
@@ -560,19 +567,18 @@ int iof_post_start(void *arg)
 			return IOF_NOT_SUPP;
 
 
-		snprintf(ctrl_path, IOF_NAME_LEN_MAX, "/iof/PA/mount%d", i);
-		IOF_LOG_DEBUG("Ctrl path is: %s%s", iof_state->cnss_prefix,
-								ctrl_path);
+		snprintf(ctrl_name, IOF_NAME_LEN_MAX, "mount%d", i);
+		IOF_LOG_DEBUG("Ctrl name is: %s", ctrl_name);
 
 		base_name = basename(tmp[i].mnt);
 
 		IOF_LOG_DEBUG("Projected Mount %s", base_name);
-		snprintf(mount, IOF_NAME_LEN_MAX, "%s/%s", base_mount,
-								base_name);
+		snprintf(mount, IOF_NAME_LEN_MAX, "%s/%s",
+			 base_mount, base_name);
 		IOF_LOG_INFO("Mountpoint for this projection: %s", mount);
 
 		/*Register the mount point with the control filesystem*/
-		cb->register_ctrl_constant(ctrl_path, mount);
+		cb->register_ctrl_constant(PA_dir, ctrl_name, mount);
 
 		fs_handle->fs_id = tmp[i].id;
 		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
