@@ -50,8 +50,7 @@ fi
 if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_ionss.yml
-  python3.4 test_runner scripts/iof_test_local.yml
+  python3.4 test_runner scripts/iof_test_ionss.yml scripts/iof_test_local.yml
   cd -
 fi
 
@@ -59,14 +58,14 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_ionss.yml
+  python3.4 test_runner scripts/iof_test_ionss.yml scripts/iof_test_local.yml
   cd -
+
   RESULTS="valgrind_results"
   if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
 
-  cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_local.yml
-  cd -
-  find ${TESTDIR} -name valgrind*.xml | xargs cp -t ${RESULTS}
+  # Recursive copy to results, including all directories and matching files,
+  # but pruning empty directories from the tree.
+  rsync -rm --include="*/" --include="valgrind*xml" "--exclude=*" ${TESTDIR} ${RESULTS}
 
 fi

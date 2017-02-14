@@ -87,24 +87,37 @@ def commonSetUpModule():
     cts.common_manage_ionss_dir()
     print("Testnss: module setup end\n\n")
 
-def valgrind_suffix():
+def valgrind_suffix(log_path):
     """Return the commands required to launch valgrind"""
     use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
-    log_path = os.path.join(os.getenv("IOF_TESTLOG", "nss"), 'valgrind')
-    os.makedirs(log_path, exist_ok=True)
+    suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
+                                "etc", "memcheck-cart.supp")
     if use_valgrind == 'memcheck':
-        suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
-                                    "etc", "memcheck-cart.supp")
         return ['valgrind', '--xml=yes',
                 '--xml-file=%s' %
-                os.path.join(log_path, 'valgrind.%q{PMIX_ID}.xml'),
-                '--leak-check=yes', '--gen-suppressions=all',
+                os.path.join(log_path,
+                             '1/rank.%q{PMIX_RANK}/valgrind.xml'),
+                '--leak-check=full', '--gen-suppressions=all',
+                '--fullpath-after=',
                 '--suppressions=%s' % suppressfile,
                 '--show-reachable=yes']
     elif use_valgrind == "callgrind":
         return ['valgrind', '--tool=callgrind',
                 '-callgrind-out-file=%s' %
-                os.path.join(log_path, '/callgrind.%q{PMIX_ID}.out')]
+                os.path.join(log_path,
+                             '1/rank.%q{PMIX_RANK}/callgrind.out')]
+    elif use_valgrind == "memcheck-native":
+        cmd = ['valgrind',
+               '--error-exitcode=42',
+               '--log-file=%s' %
+               os.path.join(log_path,
+                            '1/rank.%q{PMIX_RANK}/valgrind.out'),
+               '--leak-check=full', '--gen-suppressions=all',
+               '--fullpath-after=',
+               '--show-reachable=yes']
+        if os.path.exists(suppressfile):
+            cmd.append('--suppressions=%s' % suppressfile)
+        return cmd
     return []
 
 class CommonTestSuite(unittest.TestCase):
@@ -215,9 +228,11 @@ class CommonTestSuite(unittest.TestCase):
         # in the test runner so that on failure only failing methods are
         # shown.
 
-        #    return self.id()[5:]
         parts = self.id().split('.')
-        return os.path.join(parts[1], parts[2][5:])
+        method = parts[2]
+        if method.startswith('test_'):
+            method = method[5:]
+        return os.path.join(parts[1], method)
 
     def common_add_prefix_logdir(self):
         """add the log directory to the prefix"""
@@ -237,7 +252,7 @@ class CommonTestSuite(unittest.TestCase):
         cmdstr = "%sorterun%s--output-filename %s%s" % \
                  (ompi_bin, dvmfile, log_path, allow_root)
 
-        prefix = ' '.join(valgrind_suffix())
+        prefix = ' '.join(valgrind_suffix(log_path))
         return (cmdstr, prefix)
 
     @staticmethod

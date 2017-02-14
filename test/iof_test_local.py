@@ -99,8 +99,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
 
-        log_path = os.getenv("IOF_TESTLOG", 'output/%s' %
-                             self.id().split('.')[0])
+        log_path = os.getenv("IOF_TESTLOG", 'output')
 
         # Append the test case to the log directory to get unique names.
         # Do this in a way that matches the dump_error_messages() logic
@@ -111,7 +110,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         log_mask = os.getenv("CRT_LOG_MASK", "INFO")
 
-        valgrind = iofcommontestsuite.valgrind_suffix()
+        valgrind = iofcommontestsuite.valgrind_suffix(log_path)
 
         cmd = [orterun,
                '--output-filename', log_path,
@@ -592,8 +591,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         for possible in dir(self):
             if not possible.startswith('test_'):
                 continue
-            if possible == 'test_fast':
-                continue
 
             subtest_count += 1
             obj = getattr(self, possible)
@@ -617,7 +614,62 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
 if __name__ == '__main__':
 
-    #Invoke testing if this command is run directly
+    # Invoke testing if this command is run directly
+    #
+    # Add command-line passing here so that the user can specify individual
+    # tests to run easily, and to enable other configuration optins.
+    #
+    # An example command might be the following:
+    #
+    # ./iof_test_local.py --valgrind --log-mask=DEBUG --redirect chmod
+    #
+    # Unrecognised args are passed through to unittest.main().
 
-    # Only run test_fast in this case to provide quick feedback.
-    unittest.main(defaultTest='Testlocal.go')
+    uargs = [sys.argv[0]]
+    iargs = list(sys.argv)
+    iargs.pop(0)
+
+    tests_to_run = []
+    if len(iargs):
+
+        tests = []
+        for a_test in dir(Testlocal):
+            if not a_test.startswith('test_'):
+                continue
+
+            tests.append(a_test[5:])
+
+        unknown = False
+        for arg in iargs:
+            if arg == '--valgrind':
+                os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
+            elif arg.startswith('--log-mask='):
+                os.environ['CRT_LOG_MASK'] = arg[11:]
+            elif arg == '--redirect':
+                os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
+            elif arg in ['-h', '--help']:
+                print("""
+In addition to the options below the following options are supported
+
+  --valgrind        Run the test under valgrind
+  --redirect        Redirect daemon output to file
+  --log-mask=<MASK> Set the CaRT log mask to MASK")
+
+Test methods can be specified directly on the command line""")
+                print("Valid test names are %s" % ','.join(sorted(tests)))
+                print("")
+                uargs.append(arg)
+            elif arg in tests:
+                tests_to_run.append('Testlocal.test_%s' % arg)
+            else:
+                unknown = True
+                uargs.append(arg)
+
+        if unknown:
+            print("Unknown option given, passing through to unittest")
+            print("Valid test names are %s" % ','.join(sorted(tests)))
+
+    if len(tests_to_run) == 0:
+        tests_to_run.append('Testlocal.go')
+
+    unittest.main(defaultTest=tests_to_run, argv=uargs)
