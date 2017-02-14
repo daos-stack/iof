@@ -46,13 +46,7 @@
 
 #define IOF_LOG_FAC(fac, type, fmt, ...)				\
 	do {								\
-		if (fac == 0) {						\
-			fprintf(stderr, #type ": %s:%d:%d:%s() " fmt	\
-				"\n", __FILE__, getpid(), __LINE__,	\
-				__func__, ## __VA_ARGS__);		\
-			break;						\
-		}							\
-		crt_log(fac | CLOG_##type, "%s:%d:%s() " fmt "\n",	\
+		crt_log(fac | CLOG_##type, "%s:%d %s() " fmt "\n",	\
 			__FILE__,  __LINE__, __func__,			\
 			## __VA_ARGS__);				\
 	} while (0)

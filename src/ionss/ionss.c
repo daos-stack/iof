@@ -127,7 +127,7 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 	out = crt_reply_get(rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not retrieve output args");
-		goto out;
+		goto out_no_log;
 	}
 
 	in = crt_req_get(rpc);
@@ -164,6 +164,7 @@ out:
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
+out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
@@ -433,7 +434,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in;
 	struct iof_open_out *out;
-	struct ionss_file_handle *local_handle;
+	struct ionss_file_handle *local_handle = NULL;
 	struct ios_gah gah = {0};
 	int fd;
 	int rc;
@@ -1049,7 +1050,7 @@ int iof_symlink_handler(crt_rpc_t *rpc)
 	out = crt_reply_get(rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not retrieve output args");
-		goto out;
+		goto out_no_log;
 	}
 
 	in = crt_req_get(rpc);
@@ -1082,6 +1083,7 @@ out:
 	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
 		      in->src, in->dst, out->err, out->rc);
 
+out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
