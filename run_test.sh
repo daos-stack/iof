@@ -37,6 +37,9 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 set -e
 
+# A list of tests to run as a single instance on Jenkins
+JENKINS_TEST_LIST=(scripts/iof_test_ionss.yml scripts/iof_test_local.yml)
+
 # Run the tests from the install TESTING directory
 if [ -z "$IOF_TEST_MODE"  ]; then
   IOF_TEST_MODE="native"
@@ -50,7 +53,8 @@ fi
 if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_ionss.yml scripts/iof_test_local.yml
+  # Pass the list of test description files to the test_runner
+  python3.4 test_runner "${JENKINS_TEST_LIST[@]}"
   cd -
 fi
 
@@ -58,7 +62,7 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
   cd ${TESTDIR}
-  python3.4 test_runner scripts/iof_test_ionss.yml scripts/iof_test_local.yml
+  python3.4 test_runner "${JENKINS_TEST_LIST[@]}"
   cd -
 
   RESULTS="valgrind_results"
@@ -67,5 +71,4 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   # Recursive copy to results, including all directories and matching files,
   # but pruning empty directories from the tree.
   rsync -rm --include="*/" --include="valgrind*xml" "--exclude=*" ${TESTDIR} ${RESULTS}
-
 fi

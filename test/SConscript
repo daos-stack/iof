@@ -36,18 +36,14 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """install test scripts"""
 
-TESTSCRIPTS = ["iof_test_ionss.py", "testiof.py", "common_methods.py",
-    "iofcommontestsuite.py", "cleanup_iof.py",
-    "IofRunner.py", "setup_iof.py", "iof_simple_test.py", "iof_test_local.py"]
-
 def scons():
     """Run scons"""
 
     Import('env')
 
-    for script in TESTSCRIPTS:
-        env.Install("$PREFIX/TESTING/scripts", script)
-    # move the testing config files (.yml) to the TESTING scrpits directory
+    # move the testing config files (.py and .yml) to the TESTING scripts
+    # directory
+    env.Install("$PREFIX/TESTING/scripts", Glob("*.py"))
     env.Install("$PREFIX/TESTING/scripts", Glob("*.yml"))
 
 if __name__ == 'SCons.Script':
