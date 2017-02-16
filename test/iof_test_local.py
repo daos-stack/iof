@@ -40,11 +40,11 @@ local iof cnss / ionss test
 
 It's possible to launch this test by running:
 
-python3.4 -m unittest -c iof_test_local
+python3 -m unittest -c iof_test_local
 
 Or to launch a specific test by running:
 
-python3.4 -m unittest -c iof_test_local.Testlocal.test_ionss_link
+python3 -m unittest -c iof_test_local.Testlocal.test_ionss_link
 
 """
 

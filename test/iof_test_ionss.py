@@ -102,7 +102,7 @@ class Testnss(iofcommontestsuite.CommonTestSuite):
             self.fail("Unable to launch (c|io)nss")
         allnode_cmd = self.common_get_all_cn_cmd()
         cnss_prefix = os.environ["CNSS_PREFIX"]
-        cmdstr = "%s python3.4 %s/testiof.py %s" % \
+        cmdstr = "%s python3 %s/testiof.py %s" % \
                  (allnode_cmd, os.path.dirname(os.path.abspath(__file__)), \
                   cnss_prefix)
         rc = self.common_launch_test(testmsg, cmdstr)

@@ -16,7 +16,7 @@ directives:
     renameTestRun: "no"
     printTestLogPath: "no"
     copyHostList: "no"
-    usePython: "python3.4"
+    usePython: "python3"
 
 use_daemon:
     name: "IofRunner"

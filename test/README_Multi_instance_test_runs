@@ -53,4 +53,4 @@ exclude test cases. All entries will be executed as individual test files
 in the order described in the 'execStrategy'.
 
 To launch the test manually:
-python3.4 test_runner config=multiconfigfile scripts/iof_multi_instance.yml
+python3 test_runner config=multiconfigfile scripts/iof_multi_instance.yml

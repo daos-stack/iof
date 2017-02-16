@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Copyright (C) 2016 Intel Corporation
 # All rights reserved.
 #
@@ -54,7 +54,7 @@ if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
   cd ${TESTDIR}
   # Pass the list of test description files to the test_runner
-  python3.4 test_runner "${JENKINS_TEST_LIST[@]}"
+  python3 test_runner "${JENKINS_TEST_LIST[@]}"
   cd -
 fi
 
@@ -62,7 +62,7 @@ if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
   cd ${TESTDIR}
-  python3.4 test_runner "${JENKINS_TEST_LIST[@]}"
+  python3 test_runner "${JENKINS_TEST_LIST[@]}"
   cd -
 
   RESULTS="valgrind_results"
