@@ -75,20 +75,23 @@ def scons():
     """Scons function"""
 
     Import('env prereqs')
-    # Run config in a new environment so the environment isn't polluted
-    # causing tests to be rebuilt when utest target is used
-    config_env = env.Clone()
-    config = Configure(config_env)
-    if not config.CheckHeader('CUnit/Basic.h') or \
-       not config.CheckLib('cunit'):
-        print "\n*****************************************************"
-        print "CUnit packages must be installed to enable unit tests"
-        print "*****************************************************\n"
-        # Just returning is the desired behavior here.  The utest target
-        # has yet to be defined so the build will just fail.
+
+    if not env.GetOption('clean'):
+
+        # Run config in a new environment so the environment isn't polluted
+        # causing tests to be rebuilt when utest target is used
+        config_env = env.Clone()
+        config = Configure(config_env)
+        if not config.CheckHeader('CUnit/Basic.h') or \
+           not config.CheckLib('cunit'):
+            print "\n*****************************************************"
+            print "CUnit packages must be installed to enable unit tests"
+            print "*****************************************************\n"
+            # Just returning is the desired behavior here.  The utest target
+            # has yet to be defined so the build will just fail.
+            config.Finish()
+            return
         config.Finish()
-        return
-    config.Finish()
 
     test_env = env.Clone()
     if test_env.get('fuse3'):

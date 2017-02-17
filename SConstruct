@@ -46,6 +46,13 @@ except ImportError:
 
 IOF_VERSION = "0.0.1"
 
+# Desired compiler flags that will be used if the compiler supports them.
+DESIRED_FLAGS = ['-Wdeclaration-after-statement',
+                 '-Wno-missing-braces',
+                 '-Wunknown-warning-option',
+                 '-Wno-gnu-designator',
+                 '-Wno-gnu-zero-variadic-macro-arguments']
+
 def save_build_info(env, prereqs, platform):
     """Save the build information"""
 
@@ -62,6 +69,60 @@ def save_build_info(env, prereqs, platform):
                   sh_build_vars)
     env.InstallAs('$PREFIX/TESTING/.build_vars.json',
                   json_build_vars)
+
+def check_flag(context, flag):
+    """Helper function to allow checking for compiler flags"""
+
+    cc_name = context.env.get('CC')
+    context.Message("Checking %s %s " % (cc_name, flag))
+    context.env.Replace(CFLAGS=['-Werror', flag])
+    ret = context.TryCompile("""
+int main() {
+    return 0;
+}
+""", ".c")
+    context.Result(ret)
+    return ret
+
+def run_checks(env, platform, check_flags):
+    """Run all configure time checks"""
+
+    cenv = env.Clone()
+    cenv.Append(CFLAGS='-Werror')
+    config = Configure(cenv, custom_tests={'CheckFlag' : check_flag})
+    try:
+        cmd = 'setfattr'
+        if platform == 'Darwin':
+            cmd = 'xattr'
+
+        if not config.CheckProg(cmd):
+            print '%s command not installed, extended attribute test ' \
+               'will not work' % cmd
+
+    except AttributeError:
+        print 'CheckProg not present'
+
+    # Check for configure flags.
+    # Some configure flags are always enabled (-g etc) however check in the
+    # compiler supports other ones before using them.  Additional flags
+    # might have been specified by the user in ~/.scons_localrc so check
+    # those as well as DESIRED_FLAGS, and do it in such a way as user
+    # flags come last so they can be used to disable locally defined flags.
+
+    # Any flag that doesn't start with -W gets passed through unmodified.
+
+    checked = []
+    for flag in check_flags:
+        if flag in checked:
+            continue
+        if not flag.startswith('-W') or config.CheckFlag(flag):
+            env.Append(CFLAGS=[flag])
+        checked.append(flag)
+    config.Finish()
+
+    print 'Compiler options: %s %s' % (env.get('CC'),
+                                       ' '.join(env.get('CFLAGS')))
+
 
 def scons():
     """Scons function"""
@@ -91,8 +152,11 @@ def scons():
 
     Export('env prereqs IOF_VERSION')
 
-    env.Append(CFLAGS=['-g', '-Wall', '-Wdeclaration-after-statement',
-                       '-std=gnu99', '-Wno-missing-braces'])
+    # Pull out the defined CFLAGS to use them later on for checking.
+    check_flags = list(DESIRED_FLAGS)
+    check_flags.extend(env.get('CFLAGS'))
+    env.Replace(CFLAGS='')
+    env.Append(CFLAGS=['-g', '-Wall', '-std=gnu99'])
 
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',
@@ -106,20 +170,9 @@ def scons():
     #pylint: enable=undefined-variable
 
     opts.Update(env)
-    config = Configure(env)
-    try:
-        cmd = 'setfattr'
-        if platform == 'Darwin':
-            cmd = 'xattr'
 
-        if not config.CheckProg(cmd):
-            print '%s command not installed, extended attribute test ' \
-               'will not work' % cmd
-
-    except AttributeError:
-        print 'CheckProg not present'
-    config.Finish()
-
+    if not env.GetOption('clean'):
+        run_checks(env, platform, check_flags)
     opts.Save(opts_file, env)
 
     unknown = opts.UnknownVariables()
