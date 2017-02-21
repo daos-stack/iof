@@ -55,6 +55,7 @@ import sys
 import time
 import stat
 import shutil
+import getpass
 import tempfile
 import logging
 import unittest
@@ -99,7 +100,9 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
 
-        log_path = os.getenv("IOF_TESTLOG", 'output')
+        log_path = os.getenv("IOF_TESTLOG",
+                             os.path.join(os.path.dirname(
+                                 os.path.realpath(__file__)), 'output'))
 
         # Append the test case to the log directory to get unique names.
         # Do this in a way that matches the dump_error_messages() logic
@@ -113,10 +116,13 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         valgrind = iofcommontestsuite.valgrind_suffix(log_path)
 
         cmd = [orterun,
-               '--output-filename', log_path,
-               '-n', '1',
-               '-x', 'CRT_LOG_MASK=%s' % log_mask,
-               '-x', 'CNSS_PREFIX=%s' % self.import_dir]
+               '--output-filename', log_path]
+
+        if getpass.getuser() == 'root':
+            cmd.append('--allow-run-as-root')
+        cmd.extend(['-n', '1',
+                    '-x', 'CRT_LOG_MASK=%s' % log_mask,
+                    '-x', 'CNSS_PREFIX=%s' % self.import_dir])
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
@@ -132,6 +138,9 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             elapsed_time += 1
             if elapsed_time > 30:
                 self.fail("Could not detect startup in 30 seconds")
+            if not self.check_process(self.proc):
+                procrtn = self.common_stop_process(self.proc)
+                self.fail("orterun process did not start %d" % procrtn)
             time.sleep(1)
 
         self.logger.info("Running")
@@ -148,23 +157,37 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             except OSError:
                 pass
 
+        procrtn = 0
         # Now try to kill the orterun process
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
-            if procrtn != 0:
-                self.fail("Stopping job returned %d" % procrtn)
+
+        self.cleanup(procrtn)
+
+    def cleanup(self, procrtn):
+        """Delete any temporary files or directories created"""
 
         # Call fusermount on mount points in case there are stale mounts.
         # Remove the mount directories
         for mount in ['.ctrl', 'usr', 'exp']:
             mp = os.path.join(self.import_dir, mount)
-            self.common_launch_test("", "fusermount -q -u %s" % mp)
+            try:
+                self.common_launch_test("", "fusermount -q -u %s" % mp)
+            except FileNotFoundError:
+                pass
             os.rmdir(mp)
 
         # Finally, remove any temporary files created.
         os.rmdir(self.import_dir)
         shutil.rmtree(self.export_dir)
         os.rmdir(self.e_dir)
+
+        # Now exit if there was an error after the rest of the cleanup has
+        # completed.
+        if procrtn == 42:
+            self.fail("Job completed with valgrind errors")
+        elif procrtn != 0:
+            self.fail("Non-zero exit code from orterun %d" % procrtn)
 
     def test_ionss_link(self):
         """CORFSHIP-336 Check that stat does not deference symlinks"""
@@ -612,6 +635,27 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         print("Ran %d subtests" % (subtest_count))
 
+def local_launch():
+    """Launch a local filesystem for interactive use"""
+
+    fs = Testlocal()
+    fs.setUp()
+
+    print("IOF projections up and running")
+    print(fs.import_dir)
+    print("Ctrl-C to shutdown or run")
+    print("echo 1 > %s/.ctrl/shutdown" % fs.import_dir)
+    print("")
+    my_rc = 0
+    try:
+        my_rc = fs.wait_process(fs.proc)
+    except KeyboardInterrupt:
+        print("Caught Ctrl-C")
+        my_rc = 1
+    fs.cleanup(my_rc)
+
+    return my_rc
+
 if __name__ == '__main__':
 
     # Invoke testing if this command is run directly
@@ -630,6 +674,7 @@ if __name__ == '__main__':
     iargs.pop(0)
 
     tests_to_run = []
+    launch = False
     if len(iargs):
 
         tests = []
@@ -653,12 +698,15 @@ In addition to the options below the following options are supported
 
   --valgrind        Run the test under valgrind
   --redirect        Redirect daemon output to file
-  --log-mask=<MASK> Set the CaRT log mask to MASK")
+  --log-mask=<MASK> Set the CaRT log mask to MASK
+  --launch          Launch a local filesystem for interactive use
 
 Test methods can be specified directly on the command line""")
                 print("Valid test names are %s" % ','.join(sorted(tests)))
                 print("")
                 uargs.append(arg)
+            elif arg == '--launch':
+                launch = True
             elif arg in tests:
                 tests_to_run.append('Testlocal.test_%s' % arg)
             else:
@@ -668,6 +716,10 @@ Test methods can be specified directly on the command line""")
         if unknown:
             print("Unknown option given, passing through to unittest")
             print("Valid test names are %s" % ','.join(sorted(tests)))
+
+    if launch:
+        rc = local_launch()
+        sys.exit(rc)
 
     if len(tests_to_run) == 0:
         tests_to_run.append('Testlocal.go')

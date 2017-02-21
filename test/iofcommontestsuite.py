@@ -186,6 +186,15 @@ class CommonTestSuite(unittest.TestCase):
                                     stderr=subprocess.DEVNULL)
         return proc
 
+    def check_process(self, proc):
+        """Check if a process is still running"""
+        proc.poll()
+        procrtn = proc.returncode
+        if procrtn is None:
+            return True
+        self.logger.info("Process has exited")
+        return False
+
     def common_stop_process(self, proc):
         """wait for processes to terminate
 
@@ -216,6 +225,18 @@ class CommonTestSuite(unittest.TestCase):
             except Exception:
                 self.logger.info("Killing processes: %s", proc.pid)
                 proc.kill()
+
+        self.logger.info("Test: return code: %s\n", procrtn)
+        return procrtn
+
+    def wait_process(self, proc):
+        """wait for processes to terminate
+
+        Wait forever for the process to exit, and return the return code.
+        """
+        self.logger.info("Test: waiting for process :%s", proc.pid)
+
+        procrtn = proc.wait()
 
         self.logger.info("Test: return code: %s\n", procrtn)
         return procrtn
