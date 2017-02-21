@@ -54,7 +54,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("dir %s mode %x", file, (uint32_t)mode);
+	IOF_LOG_INFO("dir %s mode 0%o", file, (uint32_t)mode);
 
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, mkdir), &rpc);

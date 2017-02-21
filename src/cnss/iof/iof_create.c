@@ -56,13 +56,46 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
+	 * defined to 0 so check that LARGEFILE is set and reject the open
+	 * if not.
+	 */
+	if (!(fi->flags & LARGEFILE)) {
+		IOF_LOG_INFO("%p O_LARGEFILE required 0%o", fs_handle,
+			     fi->flags);
+		return -ENOTSUP;
+	}
+
+	/* Check that a regular file is requested */
+	if (!(mode & S_IFREG)) {
+		IOF_LOG_INFO("%p S_IFREG required 0%o", fs_handle,
+			     fi->flags);
+		return -ENOTSUP;
+	}
+
+	/* Check for flags that do not make sense in this context.
+	 */
+	if (fi->flags & IOF_UNSUPPORTED_CREATE_FLAGS) {
+		IOF_LOG_INFO("%p unsupported flag requested 0%o", fs_handle,
+			     fi->flags);
+		return -ENOTSUP;
+	}
+
+	/* Check that only the flag for a regular file is specified */
+	if ((mode & S_IFMT) != S_IFREG) {
+		IOF_LOG_INFO("%p unsupported mode requested 0%o", fs_handle,
+			     mode);
+		return -ENOTSUP;
+	}
+
 	handle = ioc_fh_new(file);
 	if (!handle)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
 
-	IOF_LOG_INFO("file %s handle %p", file, handle);
+	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
+		     mode, handle);
 
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, create), &rpc);
@@ -84,6 +117,10 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
+
+	LOG_FLAGS(handle, fi->flags);
+	LOG_MODES(handle, mode);
+
 	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc) {
 		free(handle);

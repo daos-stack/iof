@@ -80,12 +80,68 @@ struct fs_handle {
 	char			*base_dir;
 };
 
-#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proto->mt.FN.op_id)
-
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
  * point we should split this header file up into two.
  */
+
+/* Helper macros for open() and creat() to log file access modes */
+#define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
+		if ((FLAGS) & (MODE))				\
+			IOF_LOG_DEBUG("%p " #MODE, HANDLE);	\
+		FLAGS &= ~MODE;					\
+	} while (0)
+
+/* Dump the file open mode to the logile
+ *
+ * On a 64 bit system O_LARGEFILE is assumed so always set but defined to zero
+ * so set LARGEFILE here for debugging
+ */
+#define LARGEFILE 0100000
+#define LOG_FLAGS(HANDLE, INPUT) do {					\
+		int _flag = (INPUT);					\
+		LOG_MODE((HANDLE), _flag, O_APPEND);			\
+		LOG_MODE((HANDLE), _flag, O_RDONLY);			\
+		LOG_MODE((HANDLE), _flag, O_WRONLY);			\
+		LOG_MODE((HANDLE), _flag, O_RDWR);			\
+		LOG_MODE((HANDLE), _flag, O_ASYNC);			\
+		LOG_MODE((HANDLE), _flag, O_CLOEXEC);			\
+		LOG_MODE((HANDLE), _flag, O_CREAT);			\
+		LOG_MODE((HANDLE), _flag, O_DIRECT);			\
+		LOG_MODE((HANDLE), _flag, O_DIRECTORY);			\
+		LOG_MODE((HANDLE), _flag, O_DSYNC);			\
+		LOG_MODE((HANDLE), _flag, O_EXCL);			\
+		LOG_MODE((HANDLE), _flag, O_LARGEFILE);			\
+		LOG_MODE((HANDLE), _flag, LARGEFILE);			\
+		LOG_MODE((HANDLE), _flag, O_NOATIME);			\
+		LOG_MODE((HANDLE), _flag, O_NOCTTY);			\
+		LOG_MODE((HANDLE), _flag, O_NONBLOCK);			\
+		LOG_MODE((HANDLE), _flag, O_PATH);			\
+		LOG_MODE((HANDLE), _flag, O_SYNC);			\
+		LOG_MODE((HANDLE), _flag, O_TRUNC);			\
+		if (_flag)						\
+			IOF_LOG_ERROR("%p Flags 0%o", (HANDLE), _flag);	\
+	} while (0)
+
+/* Dump the file mode to the logfile
+ */
+#define LOG_MODES(HANDLE, INPUT) do {					\
+		int _flag = (INPUT) & S_IFMT;				\
+		LOG_MODE((HANDLE), _flag, S_IFREG);			\
+		LOG_MODE((HANDLE), _flag, S_ISUID);			\
+		LOG_MODE((HANDLE), _flag, S_ISGID);			\
+		LOG_MODE((HANDLE), _flag, S_ISVTX);			\
+		if (_flag)						\
+			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
+	} while (0)
+
+#define IOF_UNSUPPORTED_CREATE_FLAGS (O_ASYNC | O_CLOEXEC | O_DIRECTORY | \
+					O_NOCTTY | O_PATH)
+
+#define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
+					O_EXCL)
+
+#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proto->mt.FN.op_id)
 
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {

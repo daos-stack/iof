@@ -108,13 +108,31 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
+	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
+	 * would otherwise be using and check that is set.
+	 */
+	if (!(fi->flags & LARGEFILE)) {
+		IOF_LOG_INFO("%p O_LARGEFILE required 0%o", fs_handle,
+			     fi->flags);
+		return -ENOTSUP;
+	}
+
+	/* Check for flags that do not make sense in this context.
+	 */
+	if (fi->flags & IOF_UNSUPPORTED_OPEN_FLAGS) {
+		IOF_LOG_INFO("%p unsupported flag requested 0%o", fs_handle,
+			     fi->flags);
+		return -ENOTSUP;
+	}
+
 	handle = ioc_fh_new(file);
 	if (!handle)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
 
-	IOF_LOG_INFO("file %s handle %p", file, handle);
+	IOF_LOG_INFO("file %s flags 0%o handle %p", file, fi->flags, handle);
 
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, open), &rpc);
@@ -136,6 +154,9 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
+
+	LOG_FLAGS(handle, fi->flags);
+
 	rc = ioc_cb_progress(fs_handle, &reply.complete);
 	if (rc) {
 		free(handle);
