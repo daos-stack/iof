@@ -611,7 +611,7 @@ int iof_post_start(void *arg)
 					   iof_int_read, NULL, NULL,
 					   &fs_handle->stats->getattr);
 
-		IOF_LOG_INFO("Filesystem ID %" PRIu64, tmp[i].id);
+		IOF_LOG_INFO("Filesystem ID %d", fs_handle->fs_id);
 
 		ret = cb->register_fuse_fs(cb->handle, &ops, &args,
 					   fs_handle->mount_point, fs_handle);

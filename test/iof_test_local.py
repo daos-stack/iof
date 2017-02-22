@@ -158,7 +158,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof', 'projections', '0', 'stats')
         if not os.path.exists(stats_dir):
-            self.fail("Stats dir missig")
+            self.fail("Stats dir missing")
 
         self.logger.info("Dumping statistics for filesystem 0")
         for stat_file in os.listdir(stats_dir):

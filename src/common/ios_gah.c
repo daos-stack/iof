@@ -178,13 +178,11 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 		return IOS_ERR_INVALID_PARAM;
 	/** check for active handles */
 	if (ios_gah_store->size != 0) {
-		fprintf(stderr, "global access handles still in use.\n");
 		return IOS_ERR_OTHER;
 	}
 
 	for (ii = 0; ii < ios_gah_store->capacity; ii++) {
 		if (ios_gah_store->ptr_array[ii]->in_use == 1) {
-			fprintf(stderr, "global access handles in use.\n");
 			return IOS_ERR_OTHER;
 		}
 	}

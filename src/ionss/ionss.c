@@ -39,7 +39,6 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
-#include <dirent.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -50,42 +49,17 @@
 
 #include <fcntl.h>
 
+#include "ionss.h"
+
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
-#include "ios_gah.h"
 
 #define IOF_MAX_PATH_LEN 4096
 
-static struct iof_fs_info *fs_list;
-static struct ios_gah_store *gs;
-static struct ionss_projection *projections;
-static int num_fs;
 static int shutdown;
 
-#define IONSS_READDIR_ENTRIES_PER_RPC (2)
-
-struct ionss_projection {
-	DIR	*dir;
-	int	dir_fd;
-	uint64_t dev_no;
-};
-
-struct ionss_dir_handle {
-	int	fs_id;
-	char	*h_name;
-	DIR	*h_dir;
-	int	fd;
-	off_t	offset;
-};
-
-struct ionss_file_handle {
-	int	fs_id;
-	int	fd;
-	ino_t	inode_no;
-};
-
-struct proto *proto;
+static struct ios_base base;
 
 int shutdown_handler(crt_rpc_t *rpc)
 {
@@ -100,8 +74,6 @@ int shutdown_handler(crt_rpc_t *rpc)
 
 	return 0;
 }
-
-#define ID_TO_FD(ID) (projections[(ID)].dir_fd)
 
 /* Convert an absolute path into a real one, returning a pointer
  * to a string.
@@ -126,12 +98,12 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 	int ret;
 
 	/*lookup mnt by ID in projection data structure*/
-	if (id >= num_fs) {
+	if (id >= base.projection_count) {
 		IOF_LOG_ERROR("Filesystem ID invalid");
 		return IOF_BAD_DATA;
 	}
 
-	mnt = fs_list[id].mnt;
+	mnt = base.fs_list[id].mnt;
 
 	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s", mnt,
 			old_path);
@@ -144,6 +116,7 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 
 int iof_getattr_handler(crt_rpc_t *rpc)
 {
+	struct ios_projection *projection;
 	struct iof_string_in *in;
 	struct iof_getattr_out *out;
 	struct stat stbuf = {0};
@@ -170,18 +143,19 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
 
-	if (in->fs_id >= num_fs) {
+	projection = ID_TO_PROJECTION(&base, in->fs_id);
+	if (!projection) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
 	errno = 0;
-	rc = fstatat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), &stbuf,
+	rc = fstatat(projection->dir_fd, iof_get_rel_path(in->path), &stbuf,
 		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
 	/* Deny access if this path is a mount point for another file system*/
-	else if (projections[in->fs_id].dev_no != stbuf.st_dev)
+	else if (base.projection_array[in->fs_id].dev_no != stbuf.st_dev)
 		out->rc = EACCES;
 	else
 		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
@@ -233,11 +207,9 @@ int iof_getattr_gah_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
 		goto out;
 	}
 
@@ -257,9 +229,11 @@ out:
 		      out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
-
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -291,7 +265,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -321,7 +295,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	local_handle->fs_id = in->fs_id;
 	local_handle->offset = 0;
 
-	rc = ios_gah_allocate(gs, &out->gah, 0, 0, local_handle);
+	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
 	if (rc != IOS_SUCCESS) {
 		closedir(local_handle->h_dir);
 		free(local_handle);
@@ -377,7 +351,7 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
 		     GAH_PRINT_VAL(in->gah), in->offset);
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	rc = ios_gah_get_info(base.gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
 		out->err = IOF_GAH_INVALID;
 		IOF_LOG_DEBUG("Failed to load handle from gah %p %d",
@@ -464,7 +438,7 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
+	rc = ios_gah_get_info(base.gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS)
 		IOF_LOG_DEBUG("Failed to load DIR* from gah %p %d",
 			      &in->gah, rc);
@@ -479,7 +453,7 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 		free(handle);
 	}
 
-	ios_gah_deallocate(gs, &in->gah);
+	ios_gah_deallocate(base.gs, &in->gah);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -540,8 +514,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_open_in *in;
 	struct iof_open_out *out;
-	struct ionss_file_handle *local_handle = NULL;
-	struct ios_gah gah = {0};
+	struct ionss_file_handle *handle = NULL;
 	int fd;
 	int rc;
 
@@ -564,7 +537,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -579,37 +552,25 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	local_handle = malloc(sizeof(*local_handle));
-	if (!local_handle) {
-		IOF_LOG_ERROR("Could not allocate handle");
+	rc = ios_fh_alloc(&base, &handle);
+	if (rc || !handle) {
 		out->err = IOF_ERR_NOMEM;
 		close(fd);
 		goto out;
 	}
 
-	local_handle->fd = fd;
-	local_handle->fs_id = in->fs_id;
+	handle->fd = fd;
+	handle->fs_id = in->fs_id;
 
-	rc = ios_gah_allocate(gs, &gah, 0, 0, local_handle);
-	if (rc != IOS_SUCCESS) {
-		close(fd);
-		free(local_handle);
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
-		     GAH_PRINT_FULL_VAL(gah));
-
-	out->gah = gah;
+	out->gah = handle->gah;
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o ", in->path, in->flags);
 
-	LOG_FLAGS(local_handle, in->flags);
+	LOG_FLAGS(handle, in->flags);
 
-	IOF_LOG_INFO("path %s result err %d rc %d",
-		     in->path, out->err, out->rc);
+	IOF_LOG_INFO("%p path %s result err %d rc %d",
+		     handle, in->path, out->err, out->rc);
 
 out_no_log:
 
@@ -623,8 +584,8 @@ int iof_create_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in;
 	struct iof_open_out *out;
-	struct ionss_file_handle *local_handle;
-	struct ios_gah gah = {0};
+	struct ionss_file_handle *handle = NULL;
+
 	int fd;
 	int rc;
 
@@ -647,7 +608,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -663,39 +624,27 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	local_handle = malloc(sizeof(*local_handle));
-	if (!local_handle) {
-		IOF_LOG_ERROR("Could not allocate handle");
+	rc = ios_fh_alloc(&base, &handle);
+	if (rc || !handle) {
 		out->err = IOF_ERR_NOMEM;
 		close(fd);
 		goto out;
 	}
 
-	local_handle->fd = fd;
-	local_handle->fs_id = in->fs_id;
+	handle->fd = fd;
+	handle->fs_id = in->fs_id;
 
-	rc = ios_gah_allocate(gs, &gah, 0, 0, local_handle);
-	if (rc != IOS_SUCCESS) {
-		close(fd);
-		free(local_handle);
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
-		     GAH_PRINT_FULL_VAL(gah));
-
-	out->gah = gah;
+	out->gah = handle->gah;
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o 0%o", in->path, in->flags,
 		      in->mode & S_IFREG, in->mode & ~S_IFREG);
 
-	LOG_FLAGS(local_handle, in->flags);
-	LOG_MODES(local_handle, in->mode);
+	LOG_FLAGS(handle, in->flags);
+	LOG_MODES(handle, in->mode);
 
-	IOF_LOG_INFO("path %s result err %d rc %d",
-		     in->path, out->err, out->rc);
+	IOF_LOG_INFO("%p path %s result err %d rc %d",
+		     handle, in->path, out->err, out->rc);
 
 out_no_log:
 
@@ -707,8 +656,8 @@ out_no_log:
 
 int iof_close_handler(crt_rpc_t *rpc)
 {
+	struct ionss_file_handle *handle = NULL;
 	struct iof_gah_in *in;
-	struct ionss_file_handle *local_handle = NULL;
 	int rc;
 
 	in = crt_req_get(rpc);
@@ -717,27 +666,11 @@ int iof_close_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
-	if (rc != IOS_SUCCESS || !local_handle) {
-		IOF_LOG_INFO("Failed to load handle from gah %p %d",
-			     &in->gah, rc);
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle)
 		goto out;
-	}
 
-	IOF_LOG_DEBUG("Closing handle %p fd %d", local_handle,
-		      local_handle->fd);
-
-	rc = close(local_handle->fd);
-	if (rc != 0)
-		IOF_LOG_ERROR("Failed to close file %d", local_handle->fd);
-
-	free(local_handle);
-
-	rc = ios_gah_deallocate(gs, &in->gah);
-	if (rc)
-		IOF_LOG_ERROR("Failed to deallocate GAH");
+	ios_fh_decref(&base, handle, 2);
 
 out:
 	rc = crt_reply_send(rpc);
@@ -750,7 +683,7 @@ int iof_fsync_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in;
 	struct iof_status_out *out;
-	struct ionss_file_handle *local_handle = NULL;
+	struct ionss_file_handle *handle = NULL;
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -768,15 +701,14 @@ int iof_fsync_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
-	if (rc != IOS_SUCCESS || !local_handle) {
-		IOF_LOG_INFO("Failed to load handle from gah %p %d",
-			     &in->gah, rc);
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
+		out->err = IOF_GAH_INVALID;
 		goto out;
 	}
 
 	errno = 0;
-	rc = fsync(local_handle->fd);
+	rc = fsync(handle->fd);
 	if (rc)
 		out->rc = errno;
 
@@ -785,9 +717,12 @@ out:
 		      out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
-
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
+
 	return 0;
 }
 
@@ -795,7 +730,7 @@ int iof_fdatasync_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in;
 	struct iof_status_out *out;
-	struct ionss_file_handle *local_handle = NULL;
+	struct ionss_file_handle *handle = NULL;
 	int rc;
 
 	out = crt_reply_get(rpc);
@@ -813,15 +748,14 @@ int iof_fdatasync_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&local_handle);
-	if (rc != IOS_SUCCESS || !local_handle) {
-		IOF_LOG_INFO("Failed to load handle from gah %p %d",
-			     &in->gah, rc);
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
+		out->err = IOF_GAH_INVALID;
 		goto out;
 	}
 
 	errno = 0;
-	rc = fdatasync(local_handle->fd);
+	rc = fdatasync(handle->fd);
 	if (rc)
 		out->rc = errno;
 
@@ -833,6 +767,10 @@ out:
 
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
+
 	return 0;
 }
 
@@ -860,11 +798,9 @@ int iof_read_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
 		goto out;
 	}
 
@@ -891,6 +827,9 @@ out:
 
 	if (data)
 		free(data);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -986,11 +925,9 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
 		goto out;
 	}
 
@@ -1047,9 +984,12 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	/* Do not call crt_reply_send() in this case as it'll be done in
-	 * the bulk handler.
+	/* Do not call crt_reply_send() in this case as it'll be done in the
+	 * bulk handler however it's safe to drop the handle as the read
+	 * has completed at this point.
 	 */
+
+	ios_fh_decref(&base, handle, 1);
 
 	return 0;
 
@@ -1061,6 +1001,9 @@ out:
 
 	if (data)
 		free(data);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -1090,7 +1033,7 @@ int iof_rename_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1176,7 +1119,7 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1231,7 +1174,7 @@ int iof_readlink_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1324,11 +1267,10 @@ int iof_ftruncate_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
+		goto out;
 	}
 
 	errno = 0;
@@ -1341,6 +1283,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -1370,7 +1315,7 @@ int iof_chmod_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1418,12 +1363,9 @@ int iof_chmod_gah_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
-		out->err = rc;
 		goto out;
 	}
 
@@ -1437,6 +1379,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -1468,7 +1413,7 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1509,7 +1454,7 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1556,11 +1501,10 @@ int iof_write_direct_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
+		goto out;
 	}
 
 	bytes_written = pwrite(handle->fd, in->data.iov_buf, in->data.iov_len,
@@ -1574,6 +1518,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -1607,11 +1554,9 @@ int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 		goto out;
 	}
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
 		goto out;
 	}
 
@@ -1647,6 +1592,12 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("Unable to drop reference, ret = %u", rc);
 
+	/* There will be two references on the handle here, once from this
+	 * function, but a second one from iof_bulk_write_handler() itself
+	 */
+	if (handle)
+		ios_fh_decref(&base, handle, 2);
+
 	return 0;
 }
 
@@ -1678,11 +1629,9 @@ int iof_write_bulk_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
 		goto out;
 	}
 
@@ -1744,6 +1693,9 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
+
 	return 0;
 }
 
@@ -1778,7 +1730,7 @@ int iof_utimens_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	if (in->fs_id >= num_fs) {
+	if (in->fs_id >= base.projection_count) {
 		out->err = IOF_BAD_DATA;
 		goto out;
 	}
@@ -1826,18 +1778,12 @@ int iof_utimens_gah_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	{
-		char *d = ios_gah_to_str(&in->gah);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-		IOF_LOG_INFO("Setting time of %s", d);
-		free(d);
-	}
-
-	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
+	handle = ios_fh_find(&base, &in->gah);
+	if (!handle) {
 		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load fd from gah %p %d",
-			      &in->gah, rc);
+		goto out;
 	}
 
 	errno = 0;
@@ -1850,6 +1796,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 1);
 
 	return 0;
 }
@@ -1869,8 +1818,8 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 		return IOF_ERR_CART;
 	}
 
-	crt_iov_set(&query->query_list, fs_list,
-			num_fs * sizeof(struct iof_fs_info));
+	crt_iov_set(&query->query_list, base.fs_list,
+		    base.projection_count * sizeof(struct iof_fs_info));
 
 	ret = crt_reply_send(query_rpc);
 	if (ret)
@@ -1880,6 +1829,7 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 
 int ionss_register(void)
 {
+	struct proto *proto;
 	int ret;
 
 	ret = crt_rpc_srv_register(QUERY_PSR_OP, &QUERY_RPC_FMT,
@@ -1926,6 +1876,8 @@ int ionss_register(void)
 	PROTO_SET_FUNCTION(proto, utimens_gah, iof_utimens_gah_handler);
 	iof_proto_commit(proto);
 
+	base.proto = proto;
+
 	return ret;
 }
 
@@ -1955,7 +1907,7 @@ int main(int argc, char **argv)
 	char *ionss_grp = "IONSS";
 	crt_context_t crt_ctx;
 	int i;
-	int ret = IOF_SUCCESS;
+	int ret;
 	pthread_t progress_tid;
 	int err;
 
@@ -1967,26 +1919,28 @@ int main(int argc, char **argv)
 		IOF_LOG_ERROR("Expected at least one directory as command line option");
 		return IOF_BAD_DATA;
 	}
-	num_fs = argc - 1;
+	base.projection_count = argc - 1;
 	/*hardcoding the number and path for projected filesystems*/
-	fs_list = calloc(num_fs, sizeof(*fs_list));
-	if (!fs_list) {
+	base.fs_list = calloc(base.projection_count,
+			      sizeof(struct iof_fs_info));
+	if (!base.fs_list) {
 		IOF_LOG_ERROR("Filesystem list not allocated");
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
 	}
 
-	projections = calloc(num_fs, sizeof(*projections));
-	if (!projections) {
-		IOF_LOG_ERROR("Filesystem list not allocated");
+	base.projection_array = calloc(base.projection_count,
+				       sizeof(*base.projection_array));
+	if (!base.projection_array) {
+		IOF_LOG_ERROR("Failed to allocate memory");
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
 	}
 
-	IOF_LOG_INFO("Projecting %d exports", num_fs);
+	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
 
 	/*
-	 * Check each export location.
+	 * Populate the projection_array with every projection.
 	 *
 	 * Exports must be directories.
 	 * Exports are identified by the absolute path, without allowing for
@@ -1994,16 +1948,20 @@ int main(int argc, char **argv)
 	 * The maximum path length of exports is checked.
 	 */
 	err = 0;
-	for (i = 0; i < num_fs; i++) {
-		struct ionss_projection *projection = &projections[i];
+
+	for (i = 0; i < base.projection_count; i++) {
+		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
 		char *full_path = realpath(argv[i + 1], NULL);
 		int rc;
+
+		projection->active = 0;
 
 		if (!full_path) {
 			IOF_LOG_ERROR("Export path does not exist: %s",
 				      argv[i + 1]);
 			err = 1;
+			free(full_path);
 			continue;
 		}
 
@@ -2012,6 +1970,7 @@ int main(int argc, char **argv)
 			IOF_LOG_ERROR("Could not stat export path %s %d",
 				      full_path, errno);
 			err = 1;
+			free(full_path);
 			continue;
 		}
 
@@ -2019,6 +1978,7 @@ int main(int argc, char **argv)
 			IOF_LOG_ERROR("Export path is not a directory %s",
 				      full_path);
 			err = 1;
+			free(full_path);
 			continue;
 		}
 
@@ -2027,6 +1987,7 @@ int main(int argc, char **argv)
 			IOF_LOG_ERROR("Could not open export directory %s",
 				      full_path);
 			err = 1;
+			free(full_path);
 			continue;
 		}
 		projection->dir_fd = dirfd(projection->dir);
@@ -2037,17 +1998,28 @@ int main(int argc, char **argv)
 			IOF_LOG_ERROR("Export path is too deep %s",
 				      full_path);
 			err = 1;
+			free(full_path);
 			continue;
 		}
 
 		IOF_LOG_INFO("Projecting %s", full_path);
-		fs_list[i].mode = 0;
-		fs_list[i].id = i;
-		strncpy(fs_list[i].mnt, full_path, IOF_NAME_LEN_MAX);
-		free(full_path);
+
+		projection->active = 1;
+		projection->full_path = full_path;
+		projection->id = i;
 	}
-	if (err)
-		return 1;
+	if (err) {
+		ret = 1;
+		goto cleanup;
+	}
+
+	/* Create a fs_list from the projection array */
+	for (i = 0; i < base.projection_count ; i++) {
+		base.fs_list[i].mode = base.projection_array[i].mode;
+		base.fs_list[i].id = base.projection_array[i].id;
+		strncpy(base.fs_list[i].mnt, base.projection_array[i].full_path,
+			IOF_NAME_LEN_MAX);
+	}
 
 	/*initialize CaRT*/
 	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);
@@ -2063,7 +2035,7 @@ int main(int argc, char **argv)
 	}
 	ionss_register();
 
-	gs = ios_gah_init();
+	base.gs = ios_gah_init();
 
 	shutdown = 0;
 	ret = pthread_create(&progress_tid, NULL, progress_thread, crt_ctx);
@@ -2076,24 +2048,44 @@ int main(int argc, char **argv)
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
 
+	/* TODO:
+	 *
+	 * This means a resource leak, or failed cleanup after client eviction.
+	 * We really should have the ability to iterate over any handles that
+	 * remain open at this point.
+	 */
+	ret = ios_gah_destroy(base.gs);
+	if (ret)
+		IOF_LOG_ERROR("Could not close GAH pool");
+
 	ret = crt_finalize();
 	if (ret)
 		IOF_LOG_ERROR("Could not finalize cart");
 
-	ios_gah_destroy(gs);
 cleanup:
-	if (fs_list)
-		free(fs_list);
+	if (base.fs_list)
+		free(base.fs_list);
 
-	for (i = 0; i < num_fs; i++) {
-		struct ionss_projection *projection = &projections[i];
+	if (base.projection_array && base.projection_count > 0) {
+		for (i = 0 ; i < base.projection_count ; i++) {
+			struct ios_projection *p = &base.projection_array[i];
 
-		if (projection->dir)
-			closedir(projection->dir);
+			if (!p->active)
+				continue;
+
+			free(p->full_path);
+
+			if (p->dir)
+				closedir(p->dir);
+		}
+
+		free(base.projection_array);
 	}
 
-	if (projections)
-		free(projections);
+	/* Memset base to zero to delete any dangling memory references so that
+	 * valgrind can better detect lost memory
+	 */
+	memset(&base, 0, sizeof(base));
 
 	iof_log_close();
 
