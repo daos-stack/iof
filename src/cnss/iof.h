@@ -99,6 +99,7 @@ struct iof_file_handle {
 	struct fs_handle	*fs_handle;
 	struct ios_gah		gah;
 	int			gah_valid;
+	ino_t			inode_no;
 	char			name[];
 };
 

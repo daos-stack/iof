@@ -155,6 +155,9 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	if (rc)
 		return -rc;
 
+	/* Cache the inode number */
+	handle->inode_no = stbuf->st_ino;
+
 	IOF_LOG_DEBUG("rc %d", reply.err == 0 ? -reply.rc : -EIO);
 
 	return reply.err == 0 ? -reply.rc : -EIO;

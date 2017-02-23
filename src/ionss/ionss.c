@@ -80,6 +80,7 @@ struct ionss_dir_handle {
 struct ionss_file_handle {
 	int	fs_id;
 	int	fd;
+	ino_t	inode_no;
 };
 
 struct proto *proto;
@@ -193,6 +194,17 @@ out_no_log:
 	return 0;
 }
 
+/*
+ * Given a GAH, return the file attributes.
+ *
+ * Although a GAH may represent either a file or a directory, this function
+ * will only be called on regular files that are already open. The kernel sets
+ * the FUSE_GETATTR_FH exclusively in case of regular open files.
+ * In the absence of the flag, FUSE passes a NULL fuse_file_info pointer to
+ * the 'getattr' implementation on the client which routes the call to
+ * iof_getattr_handler instead. Thus it is safe to assume that this function
+ * will never be called on a directory.
+ */
 int iof_getattr_gah_handler(crt_rpc_t *rpc)
 {
 	struct ionss_file_handle *handle = NULL;
@@ -226,6 +238,10 @@ int iof_getattr_gah_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = fstat(handle->fd, &stbuf);
+
+	/* Cache the inode number */
+	handle->inode_no = stbuf.st_ino;
+
 	if (rc)
 		out->rc = errno;
 	else
