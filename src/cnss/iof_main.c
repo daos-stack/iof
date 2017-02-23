@@ -68,24 +68,28 @@ struct fs_handle *ioc_get_handle(void)
 	return (struct fs_handle *)context->private_data;
 }
 
-/* on-demand progress */
-static int iof_progress(crt_context_t crt_ctx, int num_retries,
-			unsigned int wait_len_ms, int *complete_flag)
+static int iof_check_complete(void *arg)
 {
-	int		retry;
+	int *complete = (int *)arg;
+	return *complete;
+}
+
+/* on-demand progress */
+static int iof_progress(crt_context_t crt_ctx, int *complete_flag)
+{
 	int		rc;
 
-	for (retry = 0; retry < num_retries; retry++) {
-		rc = crt_progress(crt_ctx, wait_len_ms * 1000, NULL, NULL);
-		if (rc != 0 && rc != -CER_TIMEDOUT) {
-			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
-			break;
-		}
+	do {
+		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
+				  complete_flag);
+
 		if (*complete_flag)
 			return 0;
-		sched_yield();
-	}
-	return -ETIMEDOUT;
+
+	} while (rc == 0 || rc == -CER_TIMEDOUT);
+
+	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+	return -1;
 }
 
 /* Progress, from within FUSE callbacks during normal I/O
@@ -98,7 +102,7 @@ int ioc_cb_progress(struct fs_handle *fs_handle, int *complete_flag)
 {
 	int rc;
 
-	rc = iof_progress(fs_handle->crt_ctx, 50, 6000, complete_flag);
+	rc = iof_progress(fs_handle->crt_ctx, complete_flag);
 	if (rc) {
 		/* TODO: check is PSR is alive before exiting fuse */
 		IOF_LOG_ERROR("exiting fuse loop rc %d", rc);
@@ -221,7 +225,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	}
 
 	/*make on-demand progress*/
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &reply.complete);
+	ret = iof_progress(iof_state->crt_ctx, &reply.complete);
 	if (ret)
 		IOF_LOG_ERROR("Could not complete PSR query");
 
@@ -475,7 +479,7 @@ void iof_finish(void *arg)
 	if (ret)
 		IOF_LOG_ERROR("shutdown RPC not sent");
 
-	ret = iof_progress(iof_state->crt_ctx, 50, 6000, &complete);
+	ret = iof_progress(iof_state->crt_ctx, &complete);
 	if (ret)
 		IOF_LOG_ERROR("Could not progress shutdown RPC");
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);

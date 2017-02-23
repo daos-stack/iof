@@ -533,6 +533,12 @@ int main(void)
 		return CNSS_ERR_PREFIX;
 	}
 
+	ret = crt_group_config_path_set(prefix);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Could not set group config prefix");
+		return CNSS_ERR_CART;
+	}
+
 	cnss_info = calloc(1, sizeof(struct cnss_info));
 	if (!cnss_info)
 		return CNSS_ERR_NOMEM;
@@ -604,6 +610,18 @@ int main(void)
 	if (ret) {
 		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
 		return CNSS_ERR_CART;
+	}
+
+	if (service_process_set) {
+		/* Need to dump the CNSS attach info for singleton
+		 * CNSS clients (e.g. libcppr)
+		 */
+		ret = crt_group_config_save(NULL);
+		if (ret != 0) {
+			IOF_LOG_ERROR("Could not save attach info for CNSS");
+
+			return CNSS_ERR_CART;
+		}
 	}
 
 	/* Call start for each plugin which should perform none-local

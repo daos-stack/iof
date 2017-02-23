@@ -1619,6 +1619,12 @@ int ionss_register(void)
 	return ret;
 }
 
+static int check_shutdown(void *arg)
+{
+	int *valuep = (int *)arg;
+	return *valuep;
+}
+
 static void *progress_thread(void *arg)
 {
 	int			rc;
@@ -1627,7 +1633,8 @@ static void *progress_thread(void *arg)
 	crt_ctx = (crt_context_t) arg;
 	/* progress loop */
 	do {
-		rc = crt_progress(crt_ctx, 1, NULL, NULL);
+		rc = crt_progress(crt_ctx, 1000 * 1000, check_shutdown,
+				  &shutdown);
 		if (rc != 0 && rc != -CER_TIMEDOUT) {
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 			break;
