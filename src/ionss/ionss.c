@@ -68,6 +68,7 @@ static int shutdown;
 struct ionss_projection {
 	DIR	*dir;
 	int	dir_fd;
+	uint64_t dev_no;
 };
 
 struct ionss_dir_handle {
@@ -178,6 +179,9 @@ int iof_getattr_handler(crt_rpc_t *rpc)
 		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
+	/* Deny access if this path is a mount point for another file system*/
+	else if (projections[in->fs_id].dev_no != stbuf.st_dev)
+		out->rc = EACCES;
 	else
 		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
 
@@ -2013,6 +2017,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 		projection->dir_fd = dirfd(projection->dir);
+		projection->dev_no = buf.st_dev;
 
 		if (strnlen(full_path, IOF_MAX_PATH_LEN - 1) ==
 			(IOF_MAX_PATH_LEN - 1)) {
