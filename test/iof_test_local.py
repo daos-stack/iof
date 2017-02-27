@@ -448,6 +448,37 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
+    def test_mdtest(self):
+        """Run mdtest"""
+        topdir = os.path.join(self.import_dir, 'exp')
+
+        mdtest = ['mdtest', '-d', topdir]
+        try:
+            rtn = self.common_launch_cmd('mdtest', 'mdtest -h')
+            if rtn != 0:
+                self.skipTest('mdtest not installed')
+        except FileNotFoundError:
+            self.skipTest('mdtest not installed')
+        mdtest = ['mdtest', '-d', topdir]
+        short_run = list(mdtest)
+        short_run.extend(['-i', '3', '-I', '100'])
+        start_time = time.time()
+        rtn = self.common_launch_cmd('mdtest', ' '.join(short_run))
+        elapsed = time.time() - start_time
+        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
+        if rtn != 0:
+            self.skipTest("Mdtest exited badly")
+        if elapsed > 5:
+            return
+        long_run = list(mdtest)
+        long_run.extend(['-i', '5', '-I', '1000'])
+        start_time = time.time()
+        rtn = self.common_launch_cmd('mdtest', ' '.join(long_run))
+        elapsed = time.time() - start_time
+        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
+        if rtn != 0:
+            self.skipTest("Mdtest exited badly")
+
     def go(self):
         """A wrapper method to invoke all methods as subTests"""
 
