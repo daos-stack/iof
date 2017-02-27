@@ -202,4 +202,7 @@ int ioc_unlink(const char *);
 
 int ioc_readlink(const char *, char *, size_t);
 
+int ioc_ioctl(const char *, int, void *, struct fuse_file_info *,
+	      unsigned int, void *);
+
 #endif

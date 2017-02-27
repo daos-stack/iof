@@ -356,6 +356,7 @@ static struct fuse_operations ops = {
 	.write = ioc_write,
 	.unlink = ioc_unlink,
 	.readlink = ioc_readlink,
+	.ioctl = ioc_ioctl,
 };
 
 static int query_callback(const struct crt_cb_info *cb_info)

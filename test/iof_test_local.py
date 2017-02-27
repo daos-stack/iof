@@ -56,11 +56,13 @@ import time
 import stat
 import shutil
 import getpass
+import subprocess
 import tempfile
 import logging
 import unittest
 import common_methods
 import iofcommontestsuite
+
 
 class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     """Local test"""
@@ -570,6 +572,23 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         fd.close()
 
         os.utime(filename)
+
+    def test_ioil(self):
+        """Run the interception library test"""
+
+        dirname = os.path.dirname(os.path.realpath(__file__))
+        testname = os.path.join(dirname, '..', 'tests', 's_test_ioil')
+        if not os.path.exists(testname):
+            testname = os.path.join(dirname, '..', 'install', os.uname()[0],
+                                    'TESTING', 'tests', 's_test_ioil')
+        if not os.path.exists(testname):
+            self.skipTest("s_test_ioil executable not found")
+
+        self.logger.info("Testnss: interception test - input string:\n %s\n",
+                         testname)
+        procrtn = subprocess.call([testname, self.import_dir], timeout=180)
+        if procrtn != 0:
+            self.fail("IO interception test failed: %s" % procrtn)
 
     @unittest.skip("Fails on FUSE2")
     def test_file_read_rename(self):

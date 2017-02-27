@@ -1,5 +1,4 @@
-#!/bin/bash
-# Copyright (C) 2016 Intel Corporation
+# Copyright (C) 2017 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -35,25 +34,68 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+"""Build ping test"""
 
+IOIL_TEST_SRC = ['test_ioil.c']
+IOIL_BUILD_STATIC = False
 
-FLIST="-s SConstruct -s src/SConscript -s src/utest/SConscript "
-FLIST+="-s src/test/SConscript"
+def build_static_tests(env):
+    """build the static interception library"""
 
-FILE=`ls -1 proto/*/SConscript`
-for FNAME in $FILE
-do
-  FLIST+=" -s $FNAME"
-done
+    #This code requires a full static chain or some major
+    #linker magic.  Disabled for now.
+    if IOIL_BUILD_STATIC:
+        to_build = env.get('libioil')
+        if to_build == 'none' or to_build == 'shared':
+            return []
 
-FILE=`ls -1 test/*.py`
-for FNAME in $FILE
-do
-  FLIST+=" -P3 $FNAME"
-done
+        ilenv = env.Clone()
+        print ilenv.subst("CPPPATH = $CPPPATH")
 
-./scons_local/check_python.sh $FLIST
-if [ $? -ne 0 ]; then
-  exit 1
-fi
-exit 0
+        ioil_opt = '-Wl,--whole-archive -lioil -Wl,--no-whole-archive'
+        ioil_script = "%s/../il/ioil-ld-opts" % Dir('.').abspath
+        ilenv.AppendUnique(CFLAGS=['-Wl,@%s' % ioil_script, ioil_opt])
+        ilenv.AppendUnique(LINKFLAGS=['-static', '-Wl,--whole-archive',
+                                      '-lioil', '-Wl,--no-whole-archive'])
+
+        il_test = []
+        for test in IOIL_TEST_SRC:
+            il_test += ilenv.Program(test)
+
+        return il_test
+
+    return []
+
+def scons():
+    """Scons function"""
+
+    Import('env')
+
+    # Set options which are used throughout the src.
+    tenv = env.Clone()
+    tenv.AppendUnique(CFLAGS=['-pthread'])
+    tenv.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
+    tenv.AppendUnique(CPPPATH=['../common/include'])
+    tenv.AppendUnique(CPPPATH=['../include'])
+    tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+    tenv.AppendUnique(LIBPATH='../il')
+    tenv.AppendUnique(RPATH='$PREFIX/lib')
+
+    print tenv.subst("CPPPATH = $CPPPATH")
+
+    il_test = []
+
+    il_test += build_static_tests(tenv)
+
+    tenv.AppendUnique(OBJPREFIX='s_')
+    tenv.AppendUnique(LIBS=['ioil'])
+
+    for test in IOIL_TEST_SRC:
+        il_test += tenv.Program(test)
+
+    Default(il_test)
+
+    tenv.Install('$PREFIX/TESTING/tests', il_test)
+
+if __name__ == "SCons.Script":
+    scons()

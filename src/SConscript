@@ -45,6 +45,7 @@ RPC_SRC = ['chmod',
            'create',
            'fsync',
            'getattr',
+           'ioctl',
            'mkdir',
            'open',
            'opendir',
@@ -186,6 +187,7 @@ def scons():
 
 
     SConscript('utest/SConscript')
+    SConscript('test/SConscript')
 
 if __name__ == "SCons.Script":
     scons()
