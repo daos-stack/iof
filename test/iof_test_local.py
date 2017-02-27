@@ -85,10 +85,16 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             __ch = logging.StreamHandler(sys.stdout)
             self.logger.addHandler(__ch)
 
-        self.import_dir = tempfile.mkdtemp(prefix='tmp_iof_test_import_')
+        # Allow the use of a custom temp directory.  This can be needed on
+        # docker when /tmp is an overlay fs.
+        export_tmp_dir = os.getenv("IOF_TMP_DIR", '/tmp')
+
+        self.import_dir = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
+                                           dir=export_tmp_dir)
         self.ctrl_dir = os.path.join(self.import_dir, '.ctrl')
         self.shutdown_file = os.path.join(self.ctrl_dir, 'shutdown')
-        self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_')
+        self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
+                                      dir=export_tmp_dir)
 
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
 
