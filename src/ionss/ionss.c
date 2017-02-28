@@ -76,6 +76,7 @@ struct ionss_dir_handle {
 	char	*h_name;
 	DIR	*h_dir;
 	int	fd;
+	off_t	offset;
 };
 
 struct ionss_file_handle {
@@ -318,6 +319,7 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	local_handle->h_dir = fdopendir(local_handle->fd);
 	local_handle->h_name = strdup(in->path);
 	local_handle->fs_id = in->fs_id;
+	local_handle->offset = 0;
 
 	rc = ios_gah_allocate(gs, &out->gah, 0, 0, local_handle);
 	if (rc != IOS_SUCCESS) {
@@ -345,8 +347,6 @@ out_no_log:
  * Read dirent from a directory and reply to the origin.
  *
  * TODO:
- * Handle offset properly.  Currently offset is passed as part of the RPC
- * but not dealt with at all.
  * Use readdir_r().  This code is not thread safe.
  * Parse GAH better.  If a invalid GAH is passed then it's handled but we
  * really should pass this back to the client properly so it doesn't retry.
@@ -374,7 +374,8 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		return 0;
 	}
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
+	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
+		     GAH_PRINT_VAL(in->gah), in->offset);
 
 	rc = ios_gah_get_info(gs, &in->gah, (void **)&handle);
 	if (rc != IOS_SUCCESS || !handle) {
@@ -384,7 +385,13 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	IOF_LOG_DEBUG("Reading %p", handle->h_dir);
+	if (handle->offset != in->offset) {
+		IOF_LOG_DEBUG("Changing offset %zi %zi",
+			      handle->offset, in->offset);
+		seekdir(handle->h_dir, in->offset);
+		handle->offset = in->offset;
+	}
+
 	reply_idx = 0;
 	do {
 		errno = 0;
@@ -409,8 +416,14 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		if (strncmp("..", dir_entry->d_name, 3) == 0)
 			continue;
 
+		handle->offset = telldir(handle->h_dir);
+		replies[reply_idx].nextoff = handle->offset;
+
 		/* TODO: Check this */
 		strncpy(replies[reply_idx].d_name, dir_entry->d_name, NAME_MAX);
+
+		IOF_LOG_DEBUG("File %s nextoff %zi", dir_entry->d_name,
+			      handle->offset);
 
 		errno = 0;
 		rc = fstatat(handle->fd,

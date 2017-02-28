@@ -131,14 +131,15 @@ struct iof_opendir_out {
 
 struct iof_readdir_in {
 	struct ios_gah gah;
+	uint64_t offset;
 	uint32_t fs_id;
-	int offsef;
 };
 
 /* Each READDIR rpc contains an array of these */
 struct iof_readdir_reply {
 	char d_name[256];
 	struct stat stat;
+	off_t nextoff;
 	int read_rc;
 	int stat_rc;
 	int last;

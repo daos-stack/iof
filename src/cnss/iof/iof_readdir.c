@@ -120,7 +120,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 
 	in = crt_req_get(rpc);
 	in->gah = dir_handle->gah;
-	in->offsef = offset;
+	in->offset = offset;
 	in->fs_id = fs_handle->fs_id;
 
 	ret = crt_req_send(rpc, readdir_cb, &reply);
@@ -226,10 +226,11 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	)
 {
 	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
-
+	off_t next_offset = offset;
 	int ret;
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
+	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
+		     GAH_PRINT_VAL(dir_handle->gah), offset);
 
 
 	/* If the handle has been reported as invalid in the past then do not
@@ -241,7 +242,7 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	do {
 		struct iof_readdir_reply *dir_reply;
 
-		ret = readdir_next_reply(dir_handle, offset,
+		ret = readdir_next_reply(dir_handle, next_offset,
 					 &dir_reply);
 
 		IOF_LOG_DEBUG("err %d buf %p", ret, dir_reply);
@@ -285,18 +286,21 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 		ret = filler(buf, dir_reply->d_name,
 			     dir_reply->stat_rc == 0 ? &dir_reply->stat :  NULL,
-			     0
+			     dir_reply->nextoff
 #ifdef IOF_USE_FUSE3
 			     , 0
 #endif
 			     );
 
-		IOF_LOG_DEBUG("New file %s %d", dir_reply->d_name, ret);
+		IOF_LOG_DEBUG("New file off %zi %s %d", dir_reply->nextoff,
+			      dir_reply->d_name, ret);
 
 		/* Check for filler() returning full.  The filler function
 		 * returns -1 once the internal FUSE buffer is full so check
 		 * for that case and exit the loop here.
 		 */
+
+		next_offset = dir_reply->nextoff;
 	} while (ret == 0);
 	readdir_next_reply_consume(dir_handle);
 	IOF_LOG_INFO("Returning zero");

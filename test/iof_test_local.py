@@ -301,7 +301,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         os.mkdir(os.path.join(self.export_dir, 'many'))
 
-
         files = []
         for x in range(0, 100):
             this_file = 'file_%d' % x
@@ -311,11 +310,11 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             files.append(this_file)
 
         export_list = os.listdir(os.path.join(self.export_dir, 'many'))
+        import_list = os.listdir(test_dir)
+
         self.logger.info(sorted(files))
         self.logger.info(sorted(export_list))
-
-        import_list = os.listdir(test_dir)
-        self.logger.info(sorted(export_list))
+        self.logger.info(sorted(import_list))
 
         if sorted(files) != sorted(export_list):
             self.fail("Export directory contents are wrong")
