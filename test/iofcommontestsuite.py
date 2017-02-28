@@ -99,6 +99,7 @@ def valgrind_suffix(log_path):
                              '1/rank.%q{PMIX_RANK}/valgrind.xml'),
                 '--leak-check=full', '--gen-suppressions=all',
                 '--fullpath-after=',
+                '--partial-loads-ok=yes',
                 '--suppressions=%s' % suppressfile,
                 '--show-reachable=yes']
     elif use_valgrind == "callgrind":
@@ -114,6 +115,7 @@ def valgrind_suffix(log_path):
                             '1/rank.%q{PMIX_RANK}/valgrind.out'),
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
+               '--partial-loads-ok=yes',
                '--show-reachable=yes']
         if os.path.exists(suppressfile):
             cmd.append('--suppressions=%s' % suppressfile)
