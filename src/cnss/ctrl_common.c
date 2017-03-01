@@ -47,20 +47,6 @@ static int shutdown_cb(void *arg)
 	return cnss_shutdown(arg);
 }
 
-static int client_attach_cb(int client_id, void *arg)
-{
-	IOF_LOG_INFO("Client attached %d", client_id);
-
-	return cnss_client_attach(client_id, arg);
-}
-
-static int client_detach_cb(int client_id, void *arg)
-{
-	IOF_LOG_INFO("Client detached %d", client_id);
-
-	return cnss_client_detach(client_id, arg);
-}
-
 int register_cnss_controls(int count_start, void *arg)
 {
 	int ret;
@@ -71,19 +57,6 @@ int register_cnss_controls(int count_start, void *arg)
 				  NULL /* destroy_cb */, arg);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not register shutdown ctrl");
-		rc = ret;
-		ctrl_fs_stop();
-	}
-
-	ret = ctrl_register_counter(NULL, "client",
-				    count_start /* start */,
-				    1, /* increment */
-				    client_attach_cb /* open_cb */,
-				    client_detach_cb /* close_cb */,
-				    NULL /* destroy_cb */,
-				    arg);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register client ctrl");
 		rc = ret;
 		ctrl_fs_stop();
 	}

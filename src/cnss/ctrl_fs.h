@@ -91,7 +91,8 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
  */
 int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 			   const char *value);
-/* Register a control counter
+
+/* Register a control tracker
  * \param[in] dir Parent directory (NULL means root)
  * \param[in] name Name of the subdirectory
  * \param[in] open_cb Optional callback to invoke when the file opened
@@ -99,8 +100,8 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
  * \param[in] destroy_cb Optional callback to free associated data on exit
  * \param[in] cb_arg Optional argument to pass to callbacks
  */
-int ctrl_register_counter(struct ctrl_dir *dir, const char *name, int start,
-			  int increment, ctrl_fs_open_cb_t open_cb,
+int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
+			  ctrl_fs_open_cb_t open_cb,
 			  ctrl_fs_close_cb_t close_cb,
 			  ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg);
 

@@ -67,7 +67,7 @@ enum {
 	CTRL_VARIABLE,
 	CTRL_EVENT,
 	CTRL_CONSTANT,
-	CTRL_COUNTER,
+	CTRL_TRACKER,
 	NUM_CTRL_TYPES,
 };
 
@@ -92,9 +92,7 @@ struct ctrl_constant {
 	char buf[CTRL_DATA_MAX];
 };
 
-struct ctrl_counter {
-	int next_value;
-	int increment;
+struct ctrl_tracker {
 	void *cb_arg;
 	ctrl_fs_open_cb_t open_cb;
 	ctrl_fs_close_cb_t close_cb;
@@ -105,7 +103,7 @@ union ctrl_data {
 	struct ctrl_variable var;
 	struct ctrl_event    evnt;
 	struct ctrl_constant con;
-	struct ctrl_counter  cnt;
+	struct ctrl_tracker  tckr;
 };
 
 
@@ -213,8 +211,8 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 	case CTRL_CONSTANT:
 		dsize = sizeof(struct ctrl_constant);
 		break;
-	case CTRL_COUNTER:
-		dsize = sizeof(struct ctrl_counter);
+	case CTRL_TRACKER:
+		dsize = sizeof(struct ctrl_tracker);
 		break;
 	default:
 		size = 0; /* No data */
@@ -290,9 +288,9 @@ static int cleanup_node(struct ctrl_node *node)
 	} else if (node->ctrl_type == CTRL_EVENT) {
 		cb_arg = GET_DATA(node, evnt, cb_arg);
 		destroy_cb = GET_DATA(node, evnt, destroy_cb);
-	} else if (node->ctrl_type == CTRL_COUNTER) {
-		cb_arg = GET_DATA(node, cnt, cb_arg);
-		destroy_cb = GET_DATA(node, cnt, destroy_cb);
+	} else if (node->ctrl_type == CTRL_TRACKER) {
+		cb_arg = GET_DATA(node, tckr, cb_arg);
+		destroy_cb = GET_DATA(node, tckr, destroy_cb);
 	}
 
 	if (destroy_cb == NULL)
@@ -657,8 +655,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	return rc;
 }
 
-int ctrl_register_counter(struct ctrl_dir *dir, const char *name,
-			  int start, int increment,
+int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 			  ctrl_fs_open_cb_t open_cb,
 			  ctrl_fs_close_cb_t close_cb,
 			  ctrl_fs_destroy_cb_t destroy_cb,
@@ -687,23 +684,20 @@ int ctrl_register_counter(struct ctrl_dir *dir, const char *name,
 
 	node = (struct ctrl_node *)dir;
 
-	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_COUNTER);
+	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_TRACKER);
 
 	if (rc != 0)
 		IOF_LOG_ERROR("Bad ctrl file %s", name);
 
-	SET_DATA(node, cnt, cb_arg, cb_arg);
-	SET_DATA(node, cnt, open_cb, open_cb);
-	SET_DATA(node, cnt, close_cb, close_cb);
-	SET_DATA(node, cnt, destroy_cb, destroy_cb);
-	SET_DATA(node, cnt, next_value, start);
-	SET_DATA(node, cnt, increment, increment);
+	SET_DATA(node, tckr, cb_arg, cb_arg);
+	SET_DATA(node, tckr, open_cb, open_cb);
+	SET_DATA(node, tckr, close_cb, close_cb);
+	SET_DATA(node, tckr, destroy_cb, destroy_cb);
 
 	__sync_synchronize();
 	node->initialized = 1;
 
-	IOF_LOG_INFO("Registered %s as ctrl counter (%d, %d)",
-		     name, start, increment);
+	IOF_LOG_INFO("Registered %s as ctrl tracker", name);
 	return rc;
 }
 
@@ -887,20 +881,17 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 
 	finfo->fh = 0;
 
-	if (node->ctrl_type == CTRL_COUNTER) {
-		int count;
-		int *next_value = &GET_DATA(node, cnt, next_value);
-		int increment = GET_DATA(node, cnt, increment);
+	if (node->ctrl_type == CTRL_TRACKER) {
+		int value;
 		ctrl_fs_open_cb_t open_cb;
-		void *cb_arg = GET_DATA(node, cnt, cb_arg);
+		void *cb_arg = GET_DATA(node, tckr, cb_arg);
 
-		open_cb = GET_DATA(node, cnt, open_cb);
-		count = __sync_fetch_and_add(next_value, increment);
+		open_cb = GET_DATA(node, tckr, open_cb);
 
 		if (open_cb != NULL)
-			open_cb(count, cb_arg);
+			open_cb(&value, cb_arg);
 
-		finfo->fh = count;
+		finfo->fh = value;
 	}
 
 	/* Nothing to do for EVENT, VARIABLE, or CONSTANT on open */
@@ -974,7 +965,7 @@ static int ctrl_read(const char *fname,
 			}
 		}
 		payload = mybuf;
-	} else if (node->ctrl_type == CTRL_COUNTER) {
+	} else if (node->ctrl_type == CTRL_TRACKER) {
 		sprintf(mybuf, "%d", (int)finfo->fh);
 		payload = mybuf;
 	} else {
@@ -1089,17 +1080,17 @@ static int ctrl_release(const char *fname,
 	if (rc != 0 || node == NULL || node->initialized == 0)
 		return -ENOENT;
 
-	if (node->ctrl_type == CTRL_COUNTER) {
-		int count = (int)finfo->fh;
+	if (node->ctrl_type == CTRL_TRACKER) {
+		int value = (int)finfo->fh;
 		ctrl_fs_close_cb_t close_cb;
-		void *cb_arg = GET_DATA(node, cnt, cb_arg);
+		void *cb_arg = GET_DATA(node, tckr, cb_arg);
 
-		close_cb = GET_DATA(node, cnt, close_cb);
+		close_cb = GET_DATA(node, tckr, close_cb);
 
 		if (close_cb != NULL) {
-			rc = close_cb(count, cb_arg);
+			rc = close_cb(value, cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error closing ctrl counter");
+				IOF_LOG_ERROR("Error closing ctrl tracker");
 				return -ENOENT;
 			}
 		}

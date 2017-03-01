@@ -245,7 +245,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
 	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
 	entry->self_fns.register_ctrl_event = ctrl_register_event;
-	entry->self_fns.register_ctrl_counter = ctrl_register_counter;
+	entry->self_fns.register_ctrl_tracker = ctrl_register_tracker;
 	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
 	entry->self_fns.register_fuse_fs = register_fuse;
 	entry->self_fns.handle = entry;
@@ -505,24 +505,6 @@ void shutdown_fs(struct cnss_info *cnss_info)
 int cnss_shutdown(void *arg)
 {
 	/* TODO: broadcast the shutdown to other CNSS nodes */
-
-	return 0;
-}
-
-int cnss_client_attach(int client_id, void *arg)
-{
-	struct cnss_info *info = (struct cnss_info *)arg;
-
-	CALL_PLUGIN_FN_PARAM(&info->plugins, client_attached, client_id);
-
-	return 0;
-}
-
-int cnss_client_detach(int client_id, void *arg)
-{
-	struct cnss_info *info = (struct cnss_info *)arg;
-
-	CALL_PLUGIN_FN_PARAM(&info->plugins, client_detached, client_id);
 
 	return 0;
 }

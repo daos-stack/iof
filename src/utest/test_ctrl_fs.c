@@ -1,3 +1,40 @@
+/* Copyright (C) 2016-2017 Intel Corporation
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted for any purpose (including commercial purposes)
+ * provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions, and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions, and the following disclaimer in the
+ *    documentation and/or materials provided with the distribution.
+ *
+ * 3. In addition, redistributions of modified forms of the source or binary
+ *    code must carry prominent notices stating that the original code was
+ *    changed and the date of the change.
+ *
+ *  4. All publications or advertising materials mentioning features or use of
+ *     this software are asked, but not required, to acknowledge that it was
+ *     developed by Intel Corporation and credit the contributors.
+ *
+ * 5. Neither the name of Intel Corporation, nor the name of any Contributor
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -189,12 +226,35 @@ static int run_tests(const char *ctrl_prefix)
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "65\n");
 	num_failures += CHECK_FILE_WRITE(ctrl_prefix, "/class/bar/foo", "-12");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "53\n");
+	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "1\n");
+	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "2\n");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "3\n");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "4\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "5\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "6\n");
 
 	return num_failures;
+}
+
+static int track_open(int *value, void *cb_arg)
+{
+	int *current = (int *)cb_arg;
+
+	(*current)++;
+	*value = *current;
+
+	return 0;
+}
+
+static int track_close(int value, void *cb_arg)
+{
+	int *current = (int *)cb_arg;
+
+	if (value != *current) {
+		printf("Unexpected value for tracker %d\n", value);
+		/* Changing this will cause the test to fail */
+		(*current)++;
+	}
+
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -205,6 +265,7 @@ int main(int argc, char **argv)
 	char *end;
 	int foo = 0;
 	int opt;
+	int tracker_value = 0;
 	int num_failures;
 	bool interactive = false;
 	struct ctrl_dir *class_dir;
@@ -258,6 +319,9 @@ int main(int argc, char **argv)
 	ctrl_register_constant(NULL, "large", large_constant);
 	ctrl_register_constant(bar_dir, "hello", "Hello World");
 
+	ctrl_register_tracker(NULL, "client", track_open, track_close,
+			      check_destroy_foo, &tracker_value);
+
 	num_failures = run_tests(buf);
 	if (!interactive) { /* Invoke shutdown */
 		strcpy(end, "/.ctrl/shutdown");
@@ -269,6 +333,10 @@ int main(int argc, char **argv)
 	if (foo != -1) {
 		num_failures++;
 		printf("Destroy callback never invoked\n");
+	}
+	if (tracker_value != -1) {
+		num_failures++;
+		printf("Tracker destroy callback never invoked\n");
 	}
 	if (num_failures != 0)
 		printf("%d ctrl_fs tests failed\n", num_failures);

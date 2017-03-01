@@ -68,9 +68,11 @@ typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
 /* Optional callback invoked when a write is done on a ctrl fs variable */
 typedef int (*ctrl_fs_write_cb_t)(const char *value, void *cb_arg);
 
-/* Optional callback invoked when an open is done on a ctrl fs counter */
-typedef int (*ctrl_fs_open_cb_t)(int value, void *cb_arg);
-/* Optional callback invoked when a close is done on a ctrl fs counter */
+/* Optional callback invoked when an open to retreive a value for a ctrl
+ * fs tracker which value will be passed to the close callback
+ */
+typedef int (*ctrl_fs_open_cb_t)(int *value, void *cb_arg);
+/* Optional callback invoked when a close is done on a ctrl fs tracker */
 typedef int (*ctrl_fs_close_cb_t)(int value, void *cb_arg);
 /* Optional callback invoked when ctrl fs is shutting down */
 typedef int (*ctrl_fs_destroy_cb_t)(void *cb_arg);
@@ -109,11 +111,10 @@ struct cnss_plugin_cb {
 				   ctrl_fs_trigger_cb_t trigger_cb,
 				   ctrl_fs_destroy_cb_t destroy_cb,
 				   void *cb_arg);
-	/* Registers a counter, exported as a control file system file
+	/* Registers a tracker, exported as a control file system file
 	 * and associates optional callbacks with open/close events.
 	 */
-	int (*register_ctrl_counter)(struct ctrl_dir *dir, const char *name,
-				     int start, int increment,
+	int (*register_ctrl_tracker)(struct ctrl_dir *dir, const char *name,
 				     ctrl_fs_open_cb_t open_cb,
 				     ctrl_fs_close_cb_t close_cb,
 				     ctrl_fs_destroy_cb_t destroy_cb,
@@ -149,13 +150,6 @@ struct cnss_plugin {
 			       * is disabled and no more callbacks are made.
 			       */
 	int (*post_start)(void *);
-	void (*client_attached)(void *, int); /* Notify plugin of a new
-					       * local process
-					       */
-	void (*client_detached)(void *, int); /* Notify plugin of local
-					       * process removal
-					       */
-
 	void (*flush)(void *); /* Commence shutdown procedure */
 	void (*finish)(void *); /* Shutdown, free all memory before returning */
 };
@@ -180,7 +174,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f005
+#define CNSS_PLUGIN_VERSION 0x10f006
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network
