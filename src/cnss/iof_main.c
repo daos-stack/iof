@@ -587,6 +587,7 @@ int iof_post_start(void *arg)
 					   fs_handle);
 		if (ret) {
 			IOF_LOG_ERROR("Unable to register FUSE fs");
+			free(fs_handle);
 			return 1;
 		}
 		IOF_LOG_DEBUG("Fuse mount installed at: %s", mount);
@@ -599,6 +600,14 @@ int iof_post_start(void *arg)
 	if (ret)
 		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
 	return ret;
+}
+
+/* Called once per projection, after the FUSE filesystem has been torn down */
+void iof_deregister_fuse(void *arg)
+{
+	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+
+	free(fs_handle);
 }
 
 void iof_flush(void *arg)
@@ -659,6 +668,7 @@ struct cnss_plugin self = {.name            = "iof",
 			   .require_service = 0,
 			   .start           = iof_reg,
 			   .post_start      = iof_post_start,
+			   .deregister_fuse = iof_deregister_fuse,
 			   .flush           = iof_flush,
 			   .finish          = iof_finish};
 

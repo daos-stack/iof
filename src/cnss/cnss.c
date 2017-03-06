@@ -101,7 +101,7 @@ struct fs_info {
 #endif
 	pthread_t thread;
 	pthread_mutex_t lock;
-	struct fs_handle *fs_handle;
+	void *private_data;
 	LIST_ENTRY(fs_info) entries;
 	int running:1;
 };
@@ -352,7 +352,7 @@ static int register_fuse(void *arg,
 	}
 #endif
 
-	info->fs_handle = private_data;
+	info->private_data = private_data;
 #if IOF_USE_FUSE3
 	info->fuse = fuse_new(args, ops,
 			sizeof(struct fuse_operations), private_data);
@@ -393,15 +393,13 @@ cleanup:
 cleanup_no_mutex:
 	if (info->mnt)
 		free(info->mnt);
-	if (private_data)
-		free(private_data);
 	if (info)
 		free(info);
 
 	return 1;
 }
 
-static int deregister_fuse(struct fs_info *info)
+static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 {
 	pthread_mutex_lock(&info->lock);
 
@@ -434,7 +432,8 @@ static int deregister_fuse(struct fs_info *info)
 
 	pthread_mutex_destroy(&info->lock);
 	free(info->mnt);
-	free(info->fs_handle);
+	if (plugin->active && plugin->fns->deregister_fuse)
+		plugin->fns->deregister_fuse(info->private_data);
 	free(info);
 	return CNSS_SUCCESS;
 }
@@ -495,7 +494,7 @@ void shutdown_fs(struct cnss_info *cnss_info)
 	LIST_FOREACH(plugin, &cnss_info->plugins, list) {
 		while (!LIST_EMPTY(&plugin->fuse_list)) {
 			info = LIST_FIRST(&plugin->fuse_list);
-			rc = deregister_fuse(info);
+			rc = deregister_fuse(plugin, info);
 			if (rc)
 				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
 		}
