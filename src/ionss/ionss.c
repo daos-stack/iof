@@ -61,6 +61,113 @@ static int shutdown;
 
 static struct ios_base base;
 
+#define IONSS_READDIR_ENTRIES_PER_RPC (2)
+
+#define VALIDATE_WRITE(fs_handle, out) \
+	do {\
+		if (!out) \
+			break; \
+		out->rc = 0; \
+		if (!(fs_handle)) { \
+			out->err = IOF_BAD_DATA; \
+			break; \
+		} \
+		if (!IOF_IS_WRITEABLE((fs_handle)->flags)) { \
+			IOF_LOG_INFO("Attempt to modify " \
+				"Read-Only Projection!"); \
+			(out)->rc = EROFS; \
+		} \
+	} while (0)
+
+#define VALIDATE_ARGS_STR(rpc, in, out) \
+	do {\
+		out = crt_reply_get(rpc); \
+		if (!out) { \
+			IOF_LOG_ERROR("Could not retrieve output args"); \
+			break; \
+		} \
+		out->err = 0; \
+		in = crt_req_get(rpc); \
+		if (!in) { \
+			IOF_LOG_ERROR("Could not retrieve input args"); \
+			out->err = IOF_ERR_CART; \
+			break; \
+		} \
+		if (in->fs_id >= base.projection_count) { \
+			IOF_LOG_ERROR("Invalid Projection: " \
+				      "[ID=%d]", in->fs_id); \
+			out->err = IOF_BAD_DATA; \
+			break; \
+		} \
+		if (!in->path) { \
+			IOF_LOG_ERROR("No input path"); \
+			out->err = IOF_ERR_CART; \
+			break; \
+		} \
+	} while (0)
+
+#define VALIDATE_ARGS_STR2(rpc, in, out) \
+	do {\
+		out = crt_reply_get(rpc); \
+		if (!out) { \
+			IOF_LOG_ERROR("Could not retrieve output args"); \
+			break; \
+		} \
+		out->err = 0; \
+		in = crt_req_get(rpc); \
+		if (!in) { \
+			IOF_LOG_ERROR("Could not retrieve input args"); \
+			out->err = IOF_ERR_CART; \
+			break; \
+		} \
+		if (in->fs_id >= base.projection_count) { \
+			IOF_LOG_ERROR("Invalid Projection: " \
+				      "[ID=%d]", in->fs_id); \
+			out->err = IOF_BAD_DATA; \
+			break; \
+		} \
+		if (!in->src || !in->dst) { \
+			IOF_LOG_ERROR("Missing inputs."); \
+			out->err = IOF_ERR_CART; \
+			break; \
+		} \
+	} while (0)
+
+#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) \
+	do {\
+		out = crt_reply_get(rpc); \
+		if (!out) { \
+			IOF_LOG_ERROR("Could not retrieve output args"); \
+			break; \
+		} \
+		out->err = 0; \
+		in = crt_req_get(rpc); \
+		if (!in) { \
+			IOF_LOG_ERROR("Could not retrieve input args"); \
+			out->err = IOF_ERR_CART; \
+			break; \
+		} \
+		IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah)); \
+		handle = ios_##handle_type##_find(&base, &in->gah); \
+		if (!handle) { \
+			out->err = IOF_GAH_INVALID; \
+			break; \
+		} \
+	} while (0)
+
+#define VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle) \
+	VALIDATE_ARGS_GAH(rpc, in, out, handle, fh)
+
+#define VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle) \
+	VALIDATE_ARGS_GAH(rpc, in, out, handle, dirh)
+
+static void iof_register_default_handlers(void);
+
+static void (*register_handlers
+		  [IOF_PROTO_CLASSES])(void) = {
+	iof_register_default_handlers
+};
+
 int shutdown_handler(crt_rpc_t *rpc)
 {
 	int rc;
@@ -116,41 +223,18 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 
 int iof_getattr_handler(crt_rpc_t *rpc)
 {
-	struct ios_projection *projection;
 	struct iof_string_in *in;
 	struct iof_getattr_out *out;
 	struct stat stbuf = {0};
 	int rc;
-
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out)
 		goto out_no_log;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	if (out->err)
 		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
-
-	projection = ID_TO_PROJECTION(&base, in->fs_id);
-	if (!projection) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
-
 	errno = 0;
-	rc = fstatat(projection->dir_fd, iof_get_rel_path(in->path), &stbuf,
+	rc = fstatat(base.projection_array[in->fs_id].dir_fd,
+		     iof_get_rel_path(in->path), &stbuf,
 		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
@@ -192,26 +276,9 @@ int iof_getattr_gah_handler(crt_rpc_t *rpc)
 	struct stat stbuf = {0};
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = fstat(handle->fd, &stbuf);
@@ -246,29 +313,11 @@ int iof_opendir_handler(crt_rpc_t *rpc)
 	int rc;
 	int fd;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || !in)
 		goto out_no_log;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out_no_log;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
+	if (out->err)
 		goto out;
-	}
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	IOF_LOG_DEBUG("Opening path %s", in->path);
 
@@ -336,28 +385,12 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	int reply_idx = 0;
 	int rc;
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
+	VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle);
+	if (!in || !out)
 		return 0;
-	}
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
-		return 0;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
-		     GAH_PRINT_VAL(in->gah), in->offset);
-
-	rc = ios_gah_get_info(base.gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS || !handle) {
-		out->err = IOF_GAH_INVALID;
-		IOF_LOG_DEBUG("Failed to load handle from gah %p %d",
-			      &in->gah, rc);
+	if (out->err)
 		goto out;
-	}
 
 	if (handle->offset != in->offset) {
 		IOF_LOG_DEBUG("Changing offset %zi %zi",
@@ -518,28 +551,17 @@ int iof_open_handler(crt_rpc_t *rpc)
 	int fd;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!in || !out)
 		goto out_no_log;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out_no_log;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
+	if (out->err)
 		goto out;
-	}
 
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
+	if (in->flags & O_WRONLY || in->flags & O_RDWR) {
+		VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+		if (out->err || out->rc)
+			goto out;
 	}
 
 	IOF_LOG_DEBUG("path %s flags 0%o",
@@ -589,29 +611,16 @@ int iof_create_handler(crt_rpc_t *rpc)
 	int fd;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!in || !out)
 		goto out_no_log;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out_no_log;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
+	if (out->err)
 		goto out;
-	}
 
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
 
 	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
 		      in->path, in->flags, in->mode);
@@ -686,26 +695,13 @@ int iof_fsync_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = fsync(handle->fd);
@@ -733,26 +729,12 @@ int iof_fdatasync_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = fdatasync(handle->fd);
@@ -783,26 +765,9 @@ int iof_read_handler(crt_rpc_t *rpc)
 	size_t bytes_read;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
@@ -910,26 +875,9 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	crt_size_t len;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
@@ -1014,29 +962,12 @@ int iof_rename_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR2(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	if (!in->dst || !in->src) {
-		IOF_LOG_ERROR("Missing inputs");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	rc = renameat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->src),
 		      ID_TO_FD(in->fs_id), iof_get_rel_path(in->dst));
@@ -1061,24 +992,14 @@ int iof_symlink_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR2(rpc, in, out);
+	if (!out)
 		goto out_no_log;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	if (out->err)
 		goto out;
-	}
-
-	if (!in->dst || !in->src) {
-		IOF_LOG_ERROR("Missing inputs");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
 
 	rc = symlinkat(in->dst, ID_TO_FD(in->fs_id),
 		       iof_get_rel_path(in->src));
@@ -1104,30 +1025,13 @@ int iof_mkdir_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
-
-	if (!in->path) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	errno = 0;
 	rc = mkdirat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->mode);
@@ -1155,29 +1059,9 @@ int iof_readlink_handler(crt_rpc_t *rpc)
 	char reply[IOF_MAX_PATH_LEN] = {0};
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	errno = 0;
 	rc = readlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
@@ -1204,24 +1088,12 @@ int iof_truncate_handler(crt_rpc_t *rpc)
 
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
 	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
 	if (rc) {
@@ -1252,26 +1124,12 @@ int iof_ftruncate_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = ftruncate(handle->fd, in->len);
@@ -1296,29 +1154,12 @@ int iof_chmod_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	IOF_LOG_INFO("Setting mode for %s to 0%o", in->path, in->mode);
 
@@ -1348,26 +1189,13 @@ int iof_chmod_gah_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = fchmod(handle->fd, in->mode);
@@ -1392,31 +1220,12 @@ int iof_rmdir_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	errno = 0;
 	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
@@ -1439,30 +1248,12 @@ int iof_unlink_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_DEBUG("path %d %s", in->fs_id, in->path);
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
-
-	if (!in->path) {
-		out->err = IOF_BAD_DATA;
-		goto out;
-	}
 
 	errno = 0;
 	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), 0);
@@ -1486,26 +1277,12 @@ int iof_write_direct_handler(crt_rpc_t *rpc)
 	size_t bytes_written;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	bytes_written = pwrite(handle->fd, in->data.iov_buf, in->data.iov_len,
 			       in->base);
@@ -1559,6 +1336,9 @@ int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 		out->err = IOF_GAH_INVALID;
 		goto out;
 	}
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
+		goto out;
 
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
@@ -1614,26 +1394,13 @@ int iof_write_bulk_handler(crt_rpc_t *rpc)
 
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	rc = crt_req_addref(rpc);
 	if (rc) {
@@ -1705,33 +1472,13 @@ int iof_utimens_handler(crt_rpc_t *rpc)
 	struct iof_status_out *out;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_STR(rpc, in, out);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (!in->path) {
-		IOF_LOG_ERROR("No input path");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
 	if (!in->time.iov_buf) {
 		IOF_LOG_ERROR("No input times");
 		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (in->fs_id >= base.projection_count) {
-		out->err = IOF_BAD_DATA;
 		goto out;
 	}
 
@@ -1759,18 +1506,9 @@ int iof_utimens_gah_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle = NULL;
 	int rc;
 
-	out = crt_reply_get(rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (!out || out->err)
 		goto out;
-	}
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
 	if (!in->time.iov_buf) {
 		IOF_LOG_ERROR("No input times");
@@ -1779,12 +1517,6 @@ int iof_utimens_gah_handler(crt_rpc_t *rpc)
 	}
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
 
 	errno = 0;
 	rc = futimens(handle->fd, in->time.iov_buf);
@@ -1801,6 +1533,42 @@ out:
 		ios_fh_decref(&base, handle, 1);
 
 	return 0;
+}
+
+
+static void iof_register_default_handlers(void)
+{
+#define DECL_RPC_HANDLER(NAME, FN) [DEF_RPC_TYPE(DEFAULT, NAME)] = FN
+
+	crt_rpc_cb_t handlers[] = {
+		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
+		DECL_RPC_HANDLER(readdir, iof_readdir_handler),
+		DECL_RPC_HANDLER(closedir, iof_closedir_handler),
+		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
+		DECL_RPC_HANDLER(getattr_gah, iof_getattr_gah_handler),
+		DECL_RPC_HANDLER(write_direct, iof_write_direct_handler),
+		DECL_RPC_HANDLER(write_bulk, iof_write_bulk_handler),
+		DECL_RPC_HANDLER(truncate, iof_truncate_handler),
+		DECL_RPC_HANDLER(ftruncate, iof_ftruncate_handler),
+		DECL_RPC_HANDLER(chmod, iof_chmod_handler),
+		DECL_RPC_HANDLER(chmod_gah, iof_chmod_gah_handler),
+		DECL_RPC_HANDLER(rmdir, iof_rmdir_handler),
+		DECL_RPC_HANDLER(rename, iof_rename_handler),
+		DECL_RPC_HANDLER(read_bulk, iof_read_bulk_handler),
+		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
+		DECL_RPC_HANDLER(open, iof_open_handler),
+		DECL_RPC_HANDLER(create, iof_create_handler),
+		DECL_RPC_HANDLER(read, iof_read_handler),
+		DECL_RPC_HANDLER(close, iof_close_handler),
+		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
+		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
+		DECL_RPC_HANDLER(symlink, iof_symlink_handler),
+		DECL_RPC_HANDLER(fsync, iof_fsync_handler),
+		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),
+		DECL_RPC_HANDLER(utimens, iof_utimens_handler),
+		DECL_RPC_HANDLER(utimens_gah, iof_utimens_gah_handler),
+	};
+	iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
 }
 
 /*
@@ -1829,8 +1597,7 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 
 int ionss_register(void)
 {
-	struct proto *proto;
-	int ret;
+	int i, reg_count, ret;
 
 	ret = crt_rpc_srv_register(QUERY_PSR_OP, &QUERY_RPC_FMT,
 			iof_query_handler);
@@ -1845,39 +1612,10 @@ int ionss_register(void)
 		return ret;
 	}
 
-#define PROTO_SET_FUNCTION(PROTO, NAME, FN) (PROTO)->mt.NAME.fn = FN
-
-	proto = iof_register();
-	PROTO_SET_FUNCTION(proto, opendir, iof_opendir_handler);
-	PROTO_SET_FUNCTION(proto, readdir, iof_readdir_handler);
-	PROTO_SET_FUNCTION(proto, closedir, iof_closedir_handler);
-	PROTO_SET_FUNCTION(proto, getattr, iof_getattr_handler);
-	PROTO_SET_FUNCTION(proto, getattr_gah, iof_getattr_gah_handler);
-	PROTO_SET_FUNCTION(proto, write_direct, iof_write_direct_handler);
-	PROTO_SET_FUNCTION(proto, write_bulk, iof_write_bulk_handler);
-	PROTO_SET_FUNCTION(proto, truncate, iof_truncate_handler);
-	PROTO_SET_FUNCTION(proto, ftruncate, iof_ftruncate_handler);
-	PROTO_SET_FUNCTION(proto, chmod, iof_chmod_handler);
-	PROTO_SET_FUNCTION(proto, chmod_gah, iof_chmod_gah_handler);
-	PROTO_SET_FUNCTION(proto, rmdir, iof_rmdir_handler);
-	PROTO_SET_FUNCTION(proto, rename, iof_rename_handler);
-	PROTO_SET_FUNCTION(proto, read_bulk, iof_read_bulk_handler);
-	PROTO_SET_FUNCTION(proto, unlink, iof_unlink_handler);
-	PROTO_SET_FUNCTION(proto, open, iof_open_handler);
-	PROTO_SET_FUNCTION(proto, create, iof_create_handler);
-	PROTO_SET_FUNCTION(proto, read, iof_read_handler);
-	PROTO_SET_FUNCTION(proto, close, iof_close_handler);
-	PROTO_SET_FUNCTION(proto, mkdir, iof_mkdir_handler);
-	PROTO_SET_FUNCTION(proto, readlink, iof_readlink_handler);
-	PROTO_SET_FUNCTION(proto, symlink, iof_symlink_handler);
-	PROTO_SET_FUNCTION(proto, fsync, iof_fsync_handler);
-	PROTO_SET_FUNCTION(proto, fdatasync, iof_fdatasync_handler);
-	PROTO_SET_FUNCTION(proto, utimens, iof_utimens_handler);
-	PROTO_SET_FUNCTION(proto, utimens_gah, iof_utimens_gah_handler);
-	iof_proto_commit(proto);
-
-	base.proto = proto;
-
+	reg_count = sizeof(register_handlers)
+		  / sizeof(*register_handlers);
+	for (i = 0; i < reg_count; i++)
+		register_handlers[i]();
 	return ret;
 }
 
@@ -2002,6 +1740,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		/* Set feature flags. These will be sent to the client */
+		base.projection_array[i].flags = IOF_FS_DEFAULT;
+		if (access(full_path, W_OK) == 0)
+			base.projection_array[i].flags |= IOF_WRITEABLE;
+
 		IOF_LOG_INFO("Projecting %s", full_path);
 
 		projection->active = 1;
@@ -2015,7 +1758,7 @@ int main(int argc, char **argv)
 
 	/* Create a fs_list from the projection array */
 	for (i = 0; i < base.projection_count ; i++) {
-		base.fs_list[i].mode = base.projection_array[i].mode;
+		base.fs_list[i].flags = base.projection_array[i].flags;
 		base.fs_list[i].id = base.projection_array[i].id;
 		strncpy(base.fs_list[i].mnt, base.projection_array[i].full_path,
 			IOF_NAME_LEN_MAX);

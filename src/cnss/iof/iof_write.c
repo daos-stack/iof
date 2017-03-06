@@ -231,6 +231,11 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(handle->gah));
 
+	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it

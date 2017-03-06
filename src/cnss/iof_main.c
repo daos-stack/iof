@@ -61,18 +61,6 @@ struct query_cb_r {
 	struct iof_psr_query **query;
 };
 
-static int string_to_bool(const char *str, int *value)
-{
-	if (strcmp(str, "1") == 0) {
-		*value = 1;
-		return 1;
-	} else if (strcmp(str, "0") == 0) {
-		*value = 0;
-		return 1;
-	}
-	return 0;
-}
-
 struct fs_handle *ioc_get_handle(void)
 {
 	struct fuse_context *context = fuse_get_context();
@@ -162,202 +150,6 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 	reply->complete = 1;
 	return 0;
 }
-
-/*
- * Temporary way of shutting down. This fuse callback is currently not going to
- * IONSS
- */
-#ifdef __APPLE__
-
-static int ioc_setxattr(const char *path,  const char *name, const char *value,
-			size_t size, int options, uint32_t position)
-#else
-static int ioc_setxattr(const char *path, const char *name, const char *value,
-			size_t size, int flags)
-#endif
-{
-	struct fuse_context *context;
-	int ret;
-
-	context = fuse_get_context();
-	if (strcmp(name, "user.exit") == 0) {
-		if (string_to_bool(value, &ret)) {
-			if (ret) {
-				IOF_LOG_INFO("Exiting fuse loop");
-				fuse_session_exit(
-					fuse_get_session(context->fuse));
-				return -EINTR;
-			} else
-				return 0;
-		}
-		return -EINVAL;
-	}
-	return -ENOTSUP;
-}
-
-#define SHOW_FLAG(FLAGS, FLAG) do {					\
-		if (FLAGS & FLAG)					\
-			IOF_LOG_INFO("Flag " #FLAG " enabled");		\
-		else							\
-			IOF_LOG_INFO("Flag " #FLAG " disable");		\
-		FLAGS &= ~FLAG;						\
-	} while (0)
-
-static void ioc_show_flags(unsigned in)
-{
-	IOF_LOG_INFO("Flags are 0x%x", in);
-	SHOW_FLAG(in, FUSE_CAP_ASYNC_READ);
-	SHOW_FLAG(in, FUSE_CAP_POSIX_LOCKS);
-	SHOW_FLAG(in, FUSE_CAP_ATOMIC_O_TRUNC);
-	SHOW_FLAG(in, FUSE_CAP_EXPORT_SUPPORT);
-	SHOW_FLAG(in, FUSE_CAP_DONT_MASK);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_WRITE);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_MOVE);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_READ);
-	SHOW_FLAG(in, FUSE_CAP_FLOCK_LOCKS);
-	SHOW_FLAG(in, FUSE_CAP_IOCTL_DIR);
-#if IOF_USE_FUSE3
-	SHOW_FLAG(in, FUSE_CAP_AUTO_INVAL_DATA);
-	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS);
-	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS_AUTO);
-	SHOW_FLAG(in, FUSE_CAP_ASYNC_DIO);
-	SHOW_FLAG(in, FUSE_CAP_WRITEBACK_CACHE);
-	SHOW_FLAG(in, FUSE_CAP_NO_OPEN_SUPPORT);
-	SHOW_FLAG(in, FUSE_CAP_PARALLEL_DIROPS);
-	SHOW_FLAG(in, FUSE_CAP_POSIX_ACL);
-	SHOW_FLAG(in, FUSE_CAP_HANDLE_KILLPRIV);
-#endif
-#ifdef FUSE_CAP_BIG_WRITES
-	SHOW_FLAG(in, FUSE_CAP_BIG_WRITES);
-#endif
-
-	if (in)
-		IOF_LOG_ERROR("Unknown flags 0x%x", in);
-}
-
-/* Called on filesystem init.  It has the ability to both observe configuration
- * options, but also to modify them.  As we do not use the FUSE command line
- * parsing this is where we apply tunables.
- *
- * The return value is used to set private_data, however as we want
- * private_data to be set by the CNSS register routine we simply read it and
- * return the value here.
- */
-static void *ioc_init(struct fuse_conn_info *conn)
-{
-	struct fs_handle *fs_handle;
-	struct fuse_context *context;
-
-	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
-
-	IOF_LOG_INFO("Fuse configuration for projection %d",
-		     fs_handle->fs_id);
-
-	IOF_LOG_INFO("Proto %d %d", conn->proto_major, conn->proto_minor);
-#if IOF_USE_FUSE3
-
-	/* This value has to be set here to the same value passed to
-	 * register_fuse().  Fuse always sets this value to zero so
-	 * set it before reporting the value.
-	 */
-	conn->max_read = (1024 * 1024);
-	IOF_LOG_INFO("max read 0x%x", conn->max_read);
-
-#endif
-	IOF_LOG_INFO("max write 0x%x", conn->max_write);
-	IOF_LOG_INFO("readahead 0x%x", conn->max_readahead);
-
-	IOF_LOG_INFO("Capability supported 0x%x ", conn->capable);
-
-	ioc_show_flags(conn->capable);
-
-#ifdef FUSE_CAP_BIG_WRITES
-	conn->want |= FUSE_CAP_BIG_WRITES;
-#endif
-
-	IOF_LOG_INFO("Capability requested 0x%x", conn->want);
-
-	ioc_show_flags(conn->want);
-
-	return fs_handle;
-}
-
-#if IOF_USE_FUSE3
-static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
-{
-	void *handle = ioc_init(conn);
-	/* Disable caching entirely */
-	cfg->entry_timeout = 0;
-	cfg->negative_timeout = 0;
-	cfg->attr_timeout = 0;
-
-	/* Use FUSE provided inode numbers to match the backing filesystem */
-	cfg->use_ino = 1;
-
-	/* Do not resolve the PATH for every operation, but let IOF access
-	 * the information via the fh pointer instead
-	 */
-	cfg->nullpath_ok = 1;
-
-	cfg->direct_io = 1;
-
-	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
-		     cfg->entry_timeout,
-		     cfg->negative_timeout,
-		     cfg->attr_timeout);
-
-	IOF_LOG_INFO("max_background %d", conn->max_background);
-	IOF_LOG_INFO("congestion_threshold %d", conn->congestion_threshold);
-
-	IOF_LOG_INFO("use_ino %d", cfg->use_ino);
-
-	IOF_LOG_INFO("nullpath_ok %d", cfg->nullpath_ok);
-
-	IOF_LOG_INFO("direct_io %d", cfg->direct_io);
-
-	return handle;
-}
-#endif
-
-static struct fuse_operations ops = {
-#if IOF_USE_FUSE3
-	.init = ioc_init_full,
-	.getattr = ioc_getattr,
-	.chmod = ioc_chmod,
-	.truncate = ioc_truncate,
-	.rename = ioc_rename3,
-	.utimens = ioc_utimens,
-#else
-	.init = ioc_init,
-	.getattr = ioc_getattr_name,
-	.chmod = ioc_chmod_name,
-	.truncate = ioc_truncate_name,
-	.rename = ioc_rename,
-	.utimens = ioc_utimens_name,
-#ifndef __APPLE__
-	.flag_nullpath_ok = 1,
-	.flag_nopath = 1,
-#endif
-#endif
-
-	.opendir = ioc_opendir,
-	.readdir = ioc_readdir,
-	.releasedir = ioc_closedir,
-	.setxattr = ioc_setxattr,
-	.open = ioc_open,
-	.release = ioc_release,
-	.create = ioc_create,
-	.fsync = ioc_fsync,
-	.read = ioc_read,
-	.symlink = ioc_symlink,
-	.mkdir = ioc_mkdir,
-	.rmdir = ioc_rmdir,
-	.write = ioc_write,
-	.unlink = ioc_unlink,
-	.readlink = ioc_readlink,
-	.ioctl = ioc_ioctl,
-};
 
 static int query_callback(const struct crt_cb_info *cb_info)
 {
@@ -495,9 +287,7 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	iof_state->proto = iof_register();
-	iof_proto_commit(iof_state->proto);
-
+	iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
 	iof_state->cb = cb;
 	iof_state->cb_size = cb_size;
 
@@ -561,11 +351,12 @@ int iof_post_start(void *arg)
 		args.argc = sizeof(opts) / sizeof(*opts);
 		args.argv = (char **)opts;
 
-		if (tmp[i].mode == 0) {
+		if (iof_is_mode_supported(tmp[i].flags)) {
 			fs_handle = calloc(1, sizeof(struct fs_handle));
 			if (!fs_handle)
 				return IOF_ERR_NOMEM;
 			fs_handle->iof_state = iof_state;
+			fs_handle->flags = tmp[i].flags;
 			IOF_LOG_INFO("Filesystem mode: Private");
 
 		} else
@@ -613,8 +404,11 @@ int iof_post_start(void *arg)
 
 		IOF_LOG_INFO("Filesystem ID %d", fs_handle->fs_id);
 
-		ret = cb->register_fuse_fs(cb->handle, &ops, &args,
-					   fs_handle->mount_point, fs_handle);
+		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
+
+		ret = cb->register_fuse_fs(cb->handle, fs_handle->fuse_ops,
+					   &args, fs_handle->mount_point,
+					   fs_handle);
 		if (ret) {
 			IOF_LOG_ERROR("Unable to register FUSE fs");
 			free(fs_handle);
@@ -622,7 +416,6 @@ int iof_post_start(void *arg)
 		}
 		IOF_LOG_DEBUG("Fuse mount installed at: %s",
 			      fs_handle->mount_point);
-		fs_handle->proto = iof_state->proto;
 		fs_handle->dest_ep = iof_state->psr_ep;
 		fs_handle->crt_ctx = iof_state->crt_ctx;
 	}
@@ -638,6 +431,7 @@ void iof_deregister_fuse(void *arg)
 {
 	struct fs_handle *fs_handle = (struct fs_handle *)arg;
 
+	free(fs_handle->fuse_ops);
 	free(fs_handle->base_dir);
 	free(fs_handle->mount_point);
 	free(fs_handle->stats);

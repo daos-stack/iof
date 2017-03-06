@@ -96,8 +96,8 @@ void ios_fh_decref(struct ios_base *base, struct ionss_file_handle *fh,
 }
 
 struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
-					   struct ios_gah *gah,
-					   const char *fn)
+		  struct ios_gah *gah,
+		  const char *fn)
 {
 	struct ionss_file_handle *fh = NULL;
 	uint oldref;
@@ -116,4 +116,24 @@ struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
 		      fn, GAH_PRINT_VAL(fh->gah), oldref);
 
 	return fh;
+}
+
+struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *base,
+		  struct ios_gah *gah,
+		  const char *fn)
+{
+	struct ionss_dir_handle *dirh = NULL;
+	int rc;
+
+	rc = ios_gah_get_info(base->gs, gah, (void **)&dirh);
+	if (rc || !dirh) {
+		IOF_LOG_ERROR("Failed to load dirh from " GAH_PRINT_FULL_STR,
+			      GAH_PRINT_FULL_VAL(*gah));
+		return NULL;
+	}
+
+	IOF_LOG_DEBUG("%s() Found " GAH_PRINT_STR,
+		      fn, GAH_PRINT_VAL(*gah));
+
+	return dirh;
 }

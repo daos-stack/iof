@@ -88,6 +88,11 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -ENOTSUP;
 	}
 
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	handle = ioc_fh_new(file);
 	if (!handle)
 		return -ENOMEM;

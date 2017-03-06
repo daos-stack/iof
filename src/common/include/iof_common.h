@@ -63,13 +63,65 @@
 #define QUERY_PSR_OP	(0x201)
 #define SHUTDOWN_OP	(0x202)
 
+/*
+ * IOF features are represented by an 8-bit unsigned bit vector
+ * \ref iof_fs_info.flags and are used turn various features on or off.
+ * A combination of different features defines the projection mode
+ *
+ * Features that don't require separate implementations:
+ * Bit [0]	: 0=Read-Only, 1=Read-Write
+ * Bit [1]	: Failover [0=Off, 1=On]
+ *
+ * Features that may require separate implementations::
+ * Bit [2]	: Striped Metadata [0=Off, 1=On]
+ * Bit [3]	: Striped Data [0=Off, 1=On]
+ *
+ * Features of the projected storage type:
+ * Bit [5,4]	: 00=Default, 01=Lustre, 010=DW-Scratch, 011=DW-Cache
+ *
+ */
+#define IOF_FS_DEFAULT			0x00
+#define IOF_FS_LUSTRE			0x10
+#define IOF_DW_SCRATCH			0x20
+#define IOF_DW_CACHE			0x30
+
+#define IOF_WRITEABLE			0x01
+#define IOF_FAILOVER			0x02
+#define IOF_STRIPED_METADATA		0x04
+#define IOF_STRIPED_DATA		0x08
+
+#define IOF_IS_WRITEABLE(FLAGS) ((FLAGS) & IOF_WRITEABLE)
+
+enum iof_projection_mode {
+	/* Private Access Mode */
+	IOF_DEFAULT_PRIVATE,
+	/* Striped Metadata on PFS */
+	IOF_PFS_STRIPED_METADATA,
+	/* Striped Data on PFS */
+	IOF_PFS_STRIPED_DATA,
+	/* Striped Metadata on Lustre */
+	IOF_LUSTRE_STRIPED_METADATA,
+
+	/* Data Warp [Scratch], Private */
+	IOF_DWS_PRIVATE,
+	/* Data Warp [Cache], Private */
+	IOF_DWC_PRIVATE,
+	/* Data Warp [Scratch], Striped Data */
+	IOF_DWS_STRIPED_DATA,
+	/* Data Warp [Cache], Striped Data */
+	IOF_DWC_STRIPED_DATA,
+
+	/* Total number of Projection Modes */
+	IOF_PROJECTION_MODES
+};
+
 struct iof_fs_info {
 	/*Associated mount point*/
 	char mnt[IOF_NAME_LEN_MAX];
 	/*id of filesystem*/
-	uint64_t id;
-	/*mode of projection, set to 0 for private mode*/
-	uint8_t mode;
+	int id;
+	/*Feature flags, as described above*/
+	uint8_t flags;
 };
 
 struct iof_psr_query {
@@ -235,48 +287,56 @@ extern struct crt_req_format QUERY_RPC_FMT;
 
 struct rpc_data {
 	struct crt_req_format fmt;
-	crt_rpc_cb_t fn;
 	crt_opcode_t op_id;
 };
 
-#define MY_TYPE(TYPE) struct rpc_data TYPE
-struct my_types {
-	MY_TYPE(opendir);
-	MY_TYPE(readdir);
-	MY_TYPE(closedir);
-	MY_TYPE(getattr);
-	MY_TYPE(getattr_gah);
-	MY_TYPE(write_direct);
-	MY_TYPE(write_bulk);
-	MY_TYPE(truncate);
-	MY_TYPE(ftruncate);
-	MY_TYPE(rmdir);
-	MY_TYPE(rename);
-	MY_TYPE(read_bulk);
-	MY_TYPE(unlink);
-	MY_TYPE(open);
-	MY_TYPE(read);
-	MY_TYPE(create);
-	MY_TYPE(close);
-	MY_TYPE(mkdir);
-	MY_TYPE(readlink);
-	MY_TYPE(symlink);
-	MY_TYPE(fsync);
-	MY_TYPE(fdatasync);
-	MY_TYPE(chmod);
-	MY_TYPE(chmod_gah);
-	MY_TYPE(utimens);
-	MY_TYPE(utimens_gah);
+#define DEF_PROTO_CLASS(NAME) IOF_PROTO_##NAME
+#define DEF_RPC_TYPE(CLASS, TYPE) IOF_##CLASS##_##TYPE
+
+enum iof_rpc_type_default {
+	DEF_RPC_TYPE(DEFAULT, opendir),
+	DEF_RPC_TYPE(DEFAULT, readdir),
+	DEF_RPC_TYPE(DEFAULT, closedir),
+	DEF_RPC_TYPE(DEFAULT, getattr),
+	DEF_RPC_TYPE(DEFAULT, getattr_gah),
+	DEF_RPC_TYPE(DEFAULT, write_direct),
+	DEF_RPC_TYPE(DEFAULT, write_bulk),
+	DEF_RPC_TYPE(DEFAULT, truncate),
+	DEF_RPC_TYPE(DEFAULT, ftruncate),
+	DEF_RPC_TYPE(DEFAULT, rmdir),
+	DEF_RPC_TYPE(DEFAULT, rename),
+	DEF_RPC_TYPE(DEFAULT, read_bulk),
+	DEF_RPC_TYPE(DEFAULT, unlink),
+	DEF_RPC_TYPE(DEFAULT, open),
+	DEF_RPC_TYPE(DEFAULT, read),
+	DEF_RPC_TYPE(DEFAULT, create),
+	DEF_RPC_TYPE(DEFAULT, close),
+	DEF_RPC_TYPE(DEFAULT, mkdir),
+	DEF_RPC_TYPE(DEFAULT, readlink),
+	DEF_RPC_TYPE(DEFAULT, symlink),
+	DEF_RPC_TYPE(DEFAULT, fsync),
+	DEF_RPC_TYPE(DEFAULT, fdatasync),
+	DEF_RPC_TYPE(DEFAULT, chmod),
+	DEF_RPC_TYPE(DEFAULT, chmod_gah),
+	DEF_RPC_TYPE(DEFAULT, utimens),
+	DEF_RPC_TYPE(DEFAULT, utimens_gah),
+	IOF_DEFAULT_RPC_TYPES,
+};
+
+enum iof_proto_class {
+	DEF_PROTO_CLASS(DEFAULT),
+	IOF_PROTO_CLASSES
 };
 
 struct proto {
 	char name[16];
 	crt_opcode_t id_base;
-	struct my_types mt;
+	int rpc_type_count;
+	struct rpc_data *rpc_types;
 };
 
-struct proto *iof_register();
+extern const struct proto iof_protocol_registry[];
 
-int iof_proto_commit(struct proto *);
+int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[]);
 
 #endif

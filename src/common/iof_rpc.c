@@ -188,58 +188,59 @@ struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
 							 psr_out);
 
-#define RPC_TYPE(NAME, in, out) .NAME = { .fmt = \
-					  DEFINE_CRT_REQ_FMT(#NAME, in, out) }
-static struct proto proto = {
-	.name = "IOF",
-	.id_base = 0x10F00,
-	.mt = {
-		RPC_TYPE(opendir, string_in, gah_pair),
-		RPC_TYPE(readdir, readdir_in, readdir_out),
-		RPC_TYPE(closedir, gah_in, NULL),
-		RPC_TYPE(getattr, string_in, iov_pair),
-		RPC_TYPE(getattr_gah, gah_in, iov_pair),
-		RPC_TYPE(write_direct, write_direct, write_out),
-		RPC_TYPE(write_bulk, write_bulk, write_out),
-		RPC_TYPE(truncate, truncate_in, status_out),
-		RPC_TYPE(ftruncate, ftruncate_in, status_out),
-		RPC_TYPE(rmdir, string_in, status_out),
-		RPC_TYPE(rename, two_string_in, status_out),
-		RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
-		RPC_TYPE(unlink, string_in, status_out),
-		RPC_TYPE(open, open_in, gah_pair),
-		RPC_TYPE(read, read_in, iov_pair),
-		RPC_TYPE(create, create_in, gah_pair),
-		RPC_TYPE(close, gah_in, NULL),
-		RPC_TYPE(mkdir, create_in, status_out),
-		RPC_TYPE(readlink, string_in, string_out),
-		RPC_TYPE(symlink, two_string_in, status_out),
-		RPC_TYPE(fsync, gah_in, status_out),
-		RPC_TYPE(fdatasync, gah_in, status_out),
-		RPC_TYPE(chmod, chmod_in, status_out),
-		RPC_TYPE(chmod_gah, chmod_gah_in, status_out),
-		RPC_TYPE(utimens, utimens_in, status_out),
-		RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
-	},
+#define RPC_TYPE(NAME, in, out) { .fmt = DEFINE_CRT_REQ_FMT(#NAME, in, out) }
+
+struct rpc_data default_rpc_types[] = {
+	RPC_TYPE(opendir, string_in, gah_pair),
+	RPC_TYPE(readdir, readdir_in, readdir_out),
+	RPC_TYPE(closedir, gah_in, NULL),
+	RPC_TYPE(getattr, string_in, iov_pair),
+	RPC_TYPE(getattr_gah, gah_in, iov_pair),
+	RPC_TYPE(write_direct, write_direct, write_out),
+	RPC_TYPE(write_bulk, write_bulk, write_out),
+	RPC_TYPE(truncate, truncate_in, status_out),
+	RPC_TYPE(ftruncate, ftruncate_in, status_out),
+	RPC_TYPE(rmdir, string_in, status_out),
+	RPC_TYPE(rename, two_string_in, status_out),
+	RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
+	RPC_TYPE(unlink, string_in, status_out),
+	RPC_TYPE(open, open_in, gah_pair),
+	RPC_TYPE(read, read_in, iov_pair),
+	RPC_TYPE(create, create_in, gah_pair),
+	RPC_TYPE(close, gah_in, NULL),
+	RPC_TYPE(mkdir, create_in, status_out),
+	RPC_TYPE(readlink, string_in, string_out),
+	RPC_TYPE(symlink, two_string_in, status_out),
+	RPC_TYPE(fsync, gah_in, status_out),
+	RPC_TYPE(fdatasync, gah_in, status_out),
+	RPC_TYPE(chmod, chmod_in, status_out),
+	RPC_TYPE(chmod_gah, chmod_gah_in, status_out),
+	RPC_TYPE(utimens, utimens_in, status_out),
+	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 };
 
-struct proto *iof_register()
-{
-	return &proto;
-}
+const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
+	[DEF_PROTO_CLASS(DEFAULT)] = {
+		.name = "IOF_PRIVATE",
+		.id_base = 0x10F00,
+		.rpc_type_count = IOF_DEFAULT_RPC_TYPES,
+		.rpc_types = default_rpc_types
+	}
+};
 
-int iof_proto_commit(struct proto *proto)
+int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 {
 	int i;
-	int rpc_count = sizeof(struct my_types) / sizeof(struct rpc_data);
-	struct rpc_data *rp = (struct rpc_data *)&proto->mt;
+	const struct proto *proto = &iof_protocol_registry[cls];
+	struct rpc_data *rp = proto->rpc_types;
 
-	for (i = 0 ; i < rpc_count ; i++) {
+	for (i = 0 ; i < iof_protocol_registry->rpc_type_count ; i++) {
 		int rc;
 
 		rp->op_id = proto->id_base + i;
-		if (rp->fn)
-			rc = crt_rpc_srv_register(rp->op_id, &rp->fmt, rp->fn);
+		if (handlers)
+			rc = crt_rpc_srv_register
+				(rp->op_id, &rp->fmt, handlers[i]);
 		else
 			rc = crt_rpc_register(rp->op_id, &rp->fmt);
 		if (rc != 0)

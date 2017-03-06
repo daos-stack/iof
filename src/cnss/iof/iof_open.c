@@ -126,6 +126,14 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		return -ENOTSUP;
 	}
 
+	if (fi->flags & O_WRONLY || fi->flags & O_RDWR) {
+		if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+			IOF_LOG_INFO("Attempt to modify "
+				     "Read-Only File System");
+			return -EROFS;
+		}
+	}
+
 	handle = ioc_fh_new(file);
 	if (!handle)
 		return -ENOMEM;

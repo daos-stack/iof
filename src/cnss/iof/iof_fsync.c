@@ -57,6 +57,11 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
 
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it

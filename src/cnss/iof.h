@@ -58,7 +58,6 @@ struct iof_state {
 	crt_endpoint_t	psr_ep;
 	/* cart context */
 	crt_context_t	crt_ctx;
-	struct proto	*proto;
 	/* CNSS Prefix */
 	char		*cnss_prefix;
 	struct ctrl_dir	*projections_dir;
@@ -71,14 +70,42 @@ struct fs_handle {
 	crt_endpoint_t		dest_ep;
 	/* cart context */
 	crt_context_t		crt_ctx;
-	struct proto		*proto;
 	int			fs_id;
 	struct ctrl_dir		*fs_dir;
 	struct ctrl_dir		*stats_dir;
 	struct iof_stats	*stats;
 	char			*mount_point;
 	char			*base_dir;
+	/* fuse client implementation */
+	struct fuse_operations	*fuse_ops;
+	/* Feature Flags */
+	uint8_t			flags;
 };
+
+/*
+ * This will be defined by the calling function to select
+ * the correct RPC type from the protocol registry.
+ * This is used in the FS_TO_OP Macro below.
+ */
+#ifndef IOF_PROTO_CLASS
+#define IOF_PROTO_CLASS DEFAULT
+#endif
+
+/*
+ * Helpers for forcing macro expansion.
+ */
+#define EVAL_PROTO_CLASS(CLS) DEF_PROTO_CLASS(CLS)
+#define EVAL_RPC_TYPE(CLS, TYPE) DEF_RPC_TYPE(CLS, TYPE)
+/*
+ * Returns the correct RPC Type ID from the protocol registry.
+ */
+#define FS_TO_OP(HANDLE, FN) \
+		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
+		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
+
+int iof_is_mode_supported(uint8_t flags);
+
+struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
 
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
@@ -140,8 +167,6 @@ struct fs_handle {
 
 #define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
 					O_EXCL)
-
-#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proto->mt.FN.op_id)
 
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {

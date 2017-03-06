@@ -56,6 +56,11 @@ int ioc_symlink(const char *dst, const char *src)
 
 	IOF_LOG_INFO("src %s dst %s", src, dst);
 
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, symlink), &rpc);
 	if (rc || !rpc) {

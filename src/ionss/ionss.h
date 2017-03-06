@@ -64,7 +64,7 @@ struct ios_projection {
 	DIR		*dir;
 	uint		dir_fd;
 	uint		id;
-	uint		mode;
+	uint		flags;
 	uint		active;
 	uint64_t	dev_no;
 };
@@ -121,6 +121,12 @@ struct ionss_file_handle *ios_fh_find_real(struct ios_base *,
 					   struct ios_gah *gah,
 					   const char *fn);
 
+struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *,
+					    struct ios_gah *gah,
+					    const char *fn);
+
 #define ios_fh_find(BASE, GAH) ios_fh_find_real((BASE), (GAH), __func__)
+
+#define ios_dirh_find(BASE, GAH) ios_dirh_find_real((BASE), (GAH), __func__)
 
 #endif

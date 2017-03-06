@@ -57,6 +57,11 @@ int ioc_chmod_name(const char *file, mode_t mode)
 
 	IOF_LOG_INFO("chmod %s 0%o", file, mode);
 
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, chmod), &rpc);
 	if (rc || !rpc) {
@@ -102,6 +107,11 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO("mode 0%o " GAH_PRINT_STR, mode,
 		     GAH_PRINT_VAL(handle->gah));
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
