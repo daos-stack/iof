@@ -49,6 +49,7 @@
 IOIL_FORWARD_DECL(int, open, (const char *pathname, int flags, ...));
 IOIL_FORWARD_DECL(int, open64, (const char *pathname, int flags, ...));
 IOIL_FORWARD_DECL(int, close, (int fd));
+IOIL_FORWARD_DECL(FILE *, fdopen, (int fd, const char *mode));
 
 static void check_ioctl_on_open(int fd)
 {
@@ -149,4 +150,13 @@ int IOIL_DECL(close)(int fd)
 	DEBUG_PRINT("close intercepted\n");
 
 	return __real_close(fd);
+}
+
+FILE *IOIL_DECL(fdopen)(int fd, const char *mode)
+{
+	IOIL_FORWARD_MAP_OR_FAIL(fdopen);
+
+	DEBUG_PRINT("fdopen intercepted\n");
+
+	return __real_fdopen(fd, mode);
 }
