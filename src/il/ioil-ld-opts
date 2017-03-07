@@ -3,5 +3,4 @@
 --wrap=creat
 --wrap=creat64
 --wrap=close
---wrap=fclose
 --wrap=fdopen

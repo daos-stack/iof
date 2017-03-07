@@ -36,6 +36,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdarg.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -51,6 +52,22 @@ IOIL_FORWARD_DECL(int, open64, (const char *pathname, int flags, ...));
 IOIL_FORWARD_DECL(int, close, (int fd));
 IOIL_FORWARD_DECL(FILE *, fdopen, (int fd, const char *mode));
 
+bool ioil_initialized;
+
+static __attribute__((constructor)) void ioil_init(void)
+{
+	iof_log_init("IL", "IOIL");
+
+	__sync_synchronize();
+
+	ioil_initialized = true;
+}
+
+static __attribute__((destructor)) void ioil_fini(void)
+{
+	iof_log_close();
+}
+
 static void check_ioctl_on_open(int fd)
 {
 	struct ios_gah gah;
@@ -64,10 +81,10 @@ static void check_ioctl_on_open(int fd)
 
 	rc = ioctl(fd, IOF_IOCTL_GAH, &gah);
 	if (rc == -1)
-		DEBUG_PRINT("Opened a non-IOF file, %s\n", strerror(errno));
+		IOIL_LOG_INFO("opened non-IOF file, %s", strerror(errno));
 	else
-		DEBUG_PRINT("Opened an IOF file " GAH_PRINT_STR "\n",
-			    GAH_PRINT_VAL(gah));
+		IOIL_LOG_INFO("opened IOF file " GAH_PRINT_STR,
+			     GAH_PRINT_VAL(gah));
 
 	errno = saved_errno; /* Restore the errno from open */
 }
@@ -81,8 +98,6 @@ int IOIL_DECL(open)(const char *pathname, int flags, ...)
 
 	IOIL_FORWARD_MAP_OR_FAIL(open);
 
-	DEBUG_PRINT("open %s intercepted\n", pathname);
-
 	if (flags & O_CREAT) {
 		va_list ap;
 
@@ -90,11 +105,18 @@ int IOIL_DECL(open)(const char *pathname, int flags, ...)
 		mode = va_arg(ap, unsigned int);
 		va_end(ap);
 
-		fd = __real_open(pathname, flags, mode);
-	} else
-		fd =  __real_open(pathname, flags);
+		IOIL_LOG_INFO("open(%s, 0%o, 0%o) intercepted",
+			     pathname, flags, mode);
 
-	check_ioctl_on_open(fd);
+		fd = __real_open(pathname, flags, mode);
+	} else {
+		IOIL_LOG_INFO("open(%s, 0%o) intercepted", pathname, flags);
+
+		fd =  __real_open(pathname, flags);
+	}
+
+	if (ioil_initialized)
+		check_ioctl_on_open(fd);
 
 	return fd;
 }
@@ -107,8 +129,6 @@ int IOIL_DECL(open64)(const char *pathname, int flags, ...)
 			    */
 	IOIL_FORWARD_MAP_OR_FAIL(open64);
 
-	DEBUG_PRINT("open64 %s intercepted\n", pathname);
-
 	if (flags & O_CREAT) {
 		va_list ap;
 
@@ -116,11 +136,18 @@ int IOIL_DECL(open64)(const char *pathname, int flags, ...)
 		mode = va_arg(ap, unsigned int);
 		va_end(ap);
 
-		fd = __real_open64(pathname, flags, mode);
-	} else
-		fd =  __real_open64(pathname, flags);
+		IOIL_LOG_INFO("open64(%s, 0%o, 0%o) intercepted",
+			     pathname, flags, mode);
 
-	check_ioctl_on_open(fd);
+		fd = __real_open64(pathname, flags, mode);
+	} else {
+		IOIL_LOG_INFO("open64(%s, 0%o) intercepted", pathname, flags);
+
+		fd =  __real_open64(pathname, flags);
+	}
+
+	if (ioil_initialized)
+		check_ioctl_on_open(fd);
 
 	return fd;
 }
@@ -129,7 +156,7 @@ int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(open);
 
-	DEBUG_PRINT("creat %s intercepted\n", pathname);
+	IOIL_LOG_INFO("creat(%s, 0%o) intercepted", pathname, mode);
 	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
 	return __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 }
@@ -138,7 +165,7 @@ int IOIL_DECL(creat64)(const char *pathname, mode_t mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(open64);
 
-	DEBUG_PRINT("creat64 %s intercepted\n", pathname);
+	IOIL_LOG_INFO("creat64(%s, 0%o) intercepted", pathname, mode);
 	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
 	return __real_open64(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 }
@@ -147,7 +174,7 @@ int IOIL_DECL(close)(int fd)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(close);
 
-	DEBUG_PRINT("close intercepted\n");
+	IOIL_LOG_INFO("close(%d) intercepted", fd);
 
 	return __real_close(fd);
 }
@@ -156,7 +183,7 @@ FILE *IOIL_DECL(fdopen)(int fd, const char *mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(fdopen);
 
-	DEBUG_PRINT("fdopen intercepted\n");
+	IOIL_LOG_INFO("fdopen(%d, %s) intercepted", fd, mode);
 
 	return __real_fdopen(fd, mode);
 }

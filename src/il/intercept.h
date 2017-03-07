@@ -40,18 +40,7 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-/* TODO: We need to figure out how to handle logging.  We may need
- * to make sure CART logging turns itself off inside a log routine
- * or we can get an infinite recursion.  For now, this macro is
- * added for debugging
- */
-/* #define IOIL_DEBUG */
-#ifdef IOIL_DEBUG
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
-#else
-#define DEBUG_PRINT(...) (void)0
-#endif
+#include "log.h"
 
 #ifdef IOIL_PRELOAD
 #include <dlfcn.h>
@@ -84,5 +73,18 @@
 #define IOIL_FORWARD_MAP_OR_FAIL(name) (void)0
 
 #endif /* IOIL_PRELOAD */
+
+extern bool ioil_initialized;
+
+#define IOIL_LOG_(type, ...)                         \
+	do {                                         \
+		if (ioil_initialized)                \
+			IOF_LOG_##type(__VA_ARGS__); \
+	} while (0)
+
+#define IOIL_LOG_ERROR(...) IOIL_LOG_(ERROR, __VA_ARGS__)
+#define IOIL_LOG_WARNING(...) IOIL_LOG_(WARNING, __VA_ARGS__)
+#define IOIL_LOG_INFO(...) IOIL_LOG_(INFO, __VA_ARGS__)
+#define IOIL_LOG_DEBUG(...) IOIL_LOG_(DEBUG, __VA_ARGS__)
 
 #endif /* __INTERCEPT_H__ */
