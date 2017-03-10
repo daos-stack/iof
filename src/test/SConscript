@@ -71,6 +71,22 @@ def scons():
 
     Import('env')
 
+    if not env.GetOption('clean'):
+        # Run config in a new environment so the environment isn't polluted
+        # causing tests to be rebuilt when utest target is used
+        config_env = env.Clone()
+        config = Configure(config_env)
+        if not config.CheckHeader('CUnit/Basic.h') or \
+           not config.CheckLib('cunit'):
+            print "\n************************************************"
+            print "CUnit packages must be installed to enable tests"
+            print "************************************************\n"
+            # Just returning is the desired behavior here.  The utest target
+            # has yet to be defined so the build will just fail.
+            config.Finish()
+            return
+        config.Finish()
+
     # Set options which are used throughout the src.
     tenv = env.Clone()
     tenv.AppendUnique(CFLAGS=['-pthread'])
@@ -79,6 +95,7 @@ def scons():
     tenv.AppendUnique(CPPPATH=['../include'])
     tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
     tenv.AppendUnique(LIBPATH='../il')
+    tenv.AppendUnique(LIBS=['cunit'])
     tenv.AppendUnique(RPATH='$PREFIX/lib')
 
     print tenv.subst("CPPPATH = $CPPPATH")

@@ -44,16 +44,51 @@
 
 #define IOIL_PUBLIC __attribute__((visibility("default")))
 
+/* Low level I/O functions we intercept
+ *
+ * We purposefully skip the following:
+ * fileno
+ * fileno_unlocked
+ * sync
+ * munmap
+ * msync
+ * mremap
+ * select
+ * all aio routines (for now)
+ * fcntl (for now though we likely need for dup)
+ */
+#define FOREACH_INTERCEPT(ACTION)                                            \
+	ACTION(int,     open,      (const char *, int, ...))                 \
+	ACTION(int,     open64,    (const char *, int, ...))                 \
+	ACTION(int,     close,     (int))                                    \
+	ACTION(ssize_t, read,      (int, void *, size_t))                    \
+	ACTION(ssize_t, pread,     (int, void *, size_t, off_t))             \
+	ACTION(ssize_t, pread64,   (int, void *, size_t, off64_t))           \
+	ACTION(ssize_t, write,     (int, const void *, size_t))              \
+	ACTION(ssize_t, pwrite,    (int, const void *, size_t, off_t))       \
+	ACTION(ssize_t, pwrite64,  (int, const void *, size_t, off64_t))     \
+	ACTION(off_t,   lseek,     (int, off_t, int))                        \
+	ACTION(off64_t, lseek64,   (int, off64_t, int))                      \
+	ACTION(ssize_t, readv,     (int, const struct iovec *, int))         \
+	ACTION(ssize_t, writev,    (int, const struct iovec *, int))         \
+	ACTION(void *,  mmap,      (void *, size_t, int, int, int, off_t))   \
+	ACTION(void *,  mmap64,    (void *, size_t, int, int, int, off64_t)) \
+	ACTION(int,     fsync,     (int))                                    \
+	ACTION(int,     fdatasync, (int))                                    \
+	ACTION(int,     dup,       (int))                                    \
+	ACTION(int,     dup2,      (int, int))                               \
+	ACTION(FILE *,  fdopen,    (int, const char *))
+
 #ifdef IOIL_PRELOAD
 #include <dlfcn.h>
 
-#define IOIL_FORWARD_DECL(type, name, args)  \
-	static type (*__real_##name) args
+#define IOIL_FORWARD_DECL(type, name, params)  \
+	static type (*__real_##name) params;
 
 #define IOIL_DECL(name) name
 
 /* Initialize the __real_##name function pointer */
-#define IOIL_FORWARD_MAP_OR_FAIL(name)                                      \
+#define IOIL_FORWARD_MAP_OR_FAIL(type, name, params)                        \
 	do {                                                                \
 		if (__real_##name != NULL)                                  \
 			break;                                              \
@@ -64,15 +99,15 @@
 				"libiofil couldn't map " #name "\n");       \
 			exit(1);                                            \
 		}                                                           \
-	} while (0)
+	} while (0);
 
 #else /* !IOIL_PRELOAD */
-#define IOIL_FORWARD_DECL(type, name, args)  \
-	extern type __real_##name args
+#define IOIL_FORWARD_DECL(type, name, params)  \
+	extern type __real_##name params;
 
 #define IOIL_DECL(name) __wrap_##name
 
-#define IOIL_FORWARD_MAP_OR_FAIL(name) (void)0
+#define IOIL_FORWARD_MAP_OR_FAIL(type, name, params) (void)0;
 
 #endif /* IOIL_PRELOAD */
 
