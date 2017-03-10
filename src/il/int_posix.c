@@ -89,7 +89,7 @@ static void check_ioctl_on_open(int fd)
 	errno = saved_errno; /* Restore the errno from open */
 }
 
-int IOIL_DECL(open)(const char *pathname, int flags, ...)
+IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
 {
 	int fd;
 	unsigned int mode; /* mode_t gets "promoted" to unsigned int
@@ -121,7 +121,7 @@ int IOIL_DECL(open)(const char *pathname, int flags, ...)
 	return fd;
 }
 
-int IOIL_DECL(open64)(const char *pathname, int flags, ...)
+IOIL_PUBLIC int IOIL_DECL(open64)(const char *pathname, int flags, ...)
 {
 	int fd;
 	unsigned int mode; /* mode_t gets "promoted" to unsigned int
@@ -152,7 +152,7 @@ int IOIL_DECL(open64)(const char *pathname, int flags, ...)
 	return fd;
 }
 
-int IOIL_DECL(creat)(const char *pathname, mode_t mode)
+IOIL_PUBLIC int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(open);
 
@@ -161,7 +161,7 @@ int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 	return __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 }
 
-int IOIL_DECL(creat64)(const char *pathname, mode_t mode)
+IOIL_PUBLIC int IOIL_DECL(creat64)(const char *pathname, mode_t mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(open64);
 
@@ -170,7 +170,7 @@ int IOIL_DECL(creat64)(const char *pathname, mode_t mode)
 	return __real_open64(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 }
 
-int IOIL_DECL(close)(int fd)
+IOIL_PUBLIC int IOIL_DECL(close)(int fd)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(close);
 
@@ -179,7 +179,7 @@ int IOIL_DECL(close)(int fd)
 	return __real_close(fd);
 }
 
-FILE *IOIL_DECL(fdopen)(int fd, const char *mode)
+IOIL_PUBLIC FILE *IOIL_DECL(fdopen)(int fd, const char *mode)
 {
 	IOIL_FORWARD_MAP_OR_FAIL(fdopen);
 

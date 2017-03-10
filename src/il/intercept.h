@@ -42,6 +42,8 @@
 #include <stdlib.h>
 #include "log.h"
 
+#define IOIL_PUBLIC __attribute__((visibility("default")))
+
 #ifdef IOIL_PRELOAD
 #include <dlfcn.h>
 
