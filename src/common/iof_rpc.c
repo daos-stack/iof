@@ -90,12 +90,15 @@ struct crt_msg_field *gah_pair[] = {
 
 struct crt_msg_field *readdir_in[] = {
 	&CMF_GAH,
+	&CMF_BULK,
 	&CMF_UINT64,
 	&CMF_INT,
 };
 
 struct crt_msg_field *readdir_out[] = {
 	&CMF_IOVEC,
+	&CMF_INT,
+	&CMF_INT,
 	&CMF_INT,
 	&CMF_INT,
 };

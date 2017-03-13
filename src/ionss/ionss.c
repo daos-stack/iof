@@ -403,6 +403,59 @@ out:
 	return 0;
 }
 
+int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
+{
+	struct iof_readdir_in *in;
+	struct iof_readdir_out *out;
+	crt_iov_t iov = {0};
+	crt_sg_list_t sgl = {0};
+	int rc;
+
+	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!out) {
+		IOF_LOG_ERROR("Could not retrieve output args");
+		goto out;
+	}
+
+	if (cb_info->bci_rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
+	if (!in) {
+		IOF_LOG_ERROR("Could not retrieve input args");
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	IOF_LOG_DEBUG("Freeing buffer %p", iov.iov_buf);
+	free(iov.iov_buf);
+
+	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
+	if (rc)
+		out->err = IOF_ERR_CART;
+
+out:
+	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
+
+	return 0;
+}
+
 /*
  * Read dirent from a directory and reply to the origin.
  *
@@ -417,14 +470,46 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 	struct iof_readdir_in *in = crt_req_get(rpc);
 	struct iof_readdir_out *out = crt_reply_get(rpc);
 	struct ionss_dir_handle *handle;
+	struct iof_readdir_reply *replies = NULL;
+	int max_reply_count;
 	struct dirent *dir_entry;
-	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {0};
+	struct crt_bulk_desc bulk_desc = {0};
+	crt_bulk_t local_bulk_hdl = {0};
+	crt_sg_list_t sgl = {0};
+	crt_iov_t iov = {0};
+	crt_size_t len = 0;
 	int reply_idx = 0;
 	int rc;
 
 	VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle);
+
+	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi rpc %p",
+		     GAH_PRINT_VAL(in->gah), in->offset, rpc);
+
 	if (out->err)
 		goto out;
+
+	if (in->bulk) {
+		rc = crt_bulk_get_len(in->bulk, &len);
+		if (rc || !len) {
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+		max_reply_count = len / sizeof(struct iof_readdir_reply);
+	} else {
+		IOF_LOG_INFO("No bulk descriptor, replying inline");
+		max_reply_count = IONSS_READDIR_ENTRIES_PER_RPC;
+		len = sizeof(struct iof_readdir_reply) * max_reply_count;
+	}
+
+	IOF_LOG_DEBUG("max_replies %d len %zi bulk %p", max_reply_count, len,
+		      in->bulk);
+
+	replies = calloc(max_reply_count, sizeof(*replies));
+	if (!replies) {
+		out->err = IOF_ERR_NOMEM;
+		goto out;
+	}
 
 	if (handle->offset != in->offset) {
 		IOF_LOG_DEBUG("Changing offset %zi %zi",
@@ -440,6 +525,7 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 
 		if (!dir_entry) {
 			if (errno == 0) {
+				IOF_LOG_DEBUG("Last entry %d", reply_idx);
 				/* End of directory */
 				out->last = 1;
 			} else {
@@ -475,19 +561,60 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 			replies[reply_idx].stat_rc = errno;
 
 		reply_idx++;
-	} while (reply_idx < (IONSS_READDIR_ENTRIES_PER_RPC));
+	} while (reply_idx < (max_reply_count));
 
 out:
 
 	IOF_LOG_INFO("Sending %d replies", reply_idx);
 
-	if (reply_idx)
+	if (reply_idx > IONSS_READDIR_ENTRIES_PER_RPC) {
+		rc = crt_req_addref(rpc);
+		if (rc) {
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		iov.iov_len = sizeof(struct iof_readdir_reply) * reply_idx;
+		iov.iov_buf = replies;
+		iov.iov_buf_len = sizeof(struct iof_readdir_reply) * reply_idx;
+		sgl.sg_iovs = &iov;
+		sgl.sg_nr.num = 1;
+
+		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
+				     &local_bulk_hdl);
+		if (rc) {
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		bulk_desc.bd_rpc = rpc;
+		bulk_desc.bd_bulk_op = CRT_BULK_PUT;
+		bulk_desc.bd_remote_hdl = in->bulk;
+		bulk_desc.bd_local_hdl = local_bulk_hdl;
+		bulk_desc.bd_len = sizeof(struct iof_readdir_reply) * reply_idx;
+
+		out->bulk_count = reply_idx;
+
+		rc = crt_bulk_transfer(&bulk_desc, iof_readdir_bulk_cb,
+				       NULL, NULL);
+		if (rc) {
+			out->err = IOF_ERR_CART;
+			goto out;
+		}
+
+		return 0;
+	} else if (reply_idx) {
+		out->iov_count = reply_idx;
 		crt_iov_set(&out->replies, &replies[0],
 			    sizeof(struct iof_readdir_reply) * reply_idx);
+	}
 
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR(" response not sent, rc = %u", rc);
+
+	if (replies)
+		free(replies);
 	return 0;
 }
 

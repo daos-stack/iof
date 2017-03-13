@@ -99,6 +99,8 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
  * Send, and wait for a readdir() RPC.  Populate the dir_handle with the
  * replies, count and rpc which a reference is held on.
  *
+ * If this function returns a non-zero status then that status is returned to
+ * FUSE and the handle is marked as invalid.
  */
 static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 {
@@ -106,15 +108,17 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	struct iof_readdir_in *in;
 	struct readdir_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
-
-	int ret;
+	crt_bulk_t bulk = 0;
+	crt_iov_t iov = {0};
+	size_t len = IOF_READDIR_BULK_SIZE;
+	int ret = 0;
 	int rc;
 
-	ret = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
-			     FS_TO_OP(fs_handle, readdir), &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %d",
-			      ret);
+	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+			    FS_TO_OP(fs_handle, readdir), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %d",
+			      rc);
 		return EIO;
 	}
 
@@ -123,72 +127,146 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	in->offset = offset;
 	in->fs_id = fs_handle->fs_id;
 
-	ret = crt_req_send(rpc, readdir_cb, &reply);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %d", ret);
+	iov.iov_len = len;
+	iov.iov_buf_len = len;
+	iov.iov_buf = malloc(len);
+
+	if (iov.iov_buf) {
+		crt_sg_list_t sgl = {0};
+
+		sgl.sg_iovs = &iov;
+		sgl.sg_nr.num = 1;
+		rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RW,
+				     &in->bulk);
+		if (rc) {
+			IOF_LOG_ERROR("Failed to make local bulk handle %d",
+				      rc);
+			free(iov.iov_buf);
+			ret = EIO;
+			goto out;
+		}
+		bulk = in->bulk;
+	} else {
+		IOF_LOG_INFO("Failed to allocate memory for bulk");
+	}
+
+	rc = crt_req_send(rpc, readdir_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
 		return EIO;
 	}
 
 	rc = ioc_cb_progress(fs_handle, &reply.complete);
-	if (rc)
-		return rc;
+	if (rc) {
+		ret = rc;
+		goto out;
+	}
 
-	if (reply.err != 0)
-		return reply.err;
+	if (reply.err != 0) {
+		ret = reply.err;
+		goto out;
+	}
 
 	if (reply.out->err != 0) {
 		if (reply.out->err == IOF_GAH_INVALID)
 			dir_handle->gah_valid = 0;
 		IOF_LOG_ERROR("Error from target %d", reply.out->err);
 		crt_req_decref(reply.rpc);
-		return EIO;
+		ret = EIO;
+		goto out;
 	}
 
-	dir_handle->reply_count = reply.out->replies.iov_len /
-		sizeof(struct iof_readdir_reply);
-	IOF_LOG_DEBUG("More data received %d %p", dir_handle->reply_count,
-		      reply.out->replies.iov_buf);
+	IOF_LOG_DEBUG("Reply received iov: %d bulk: %d", reply.out->iov_count,
+		      reply.out->bulk_count);
 
-	if (dir_handle->reply_count != 0) {
+	if (reply.out->iov_count > 0) {
+		dir_handle->reply_count = reply.out->iov_count;
+
+		if (reply.out->replies.iov_len != reply.out->iov_count *
+			sizeof(struct iof_readdir_reply)) {
+			IOF_LOG_ERROR("Incorrect iov reply");
+			ret = EIO;
+			goto out;
+		}
 		dir_handle->replies = reply.out->replies.iov_buf;
 		dir_handle->rpc = reply.rpc;
 		dir_handle->last_replies = reply.out->last;
+		goto out_with_rpc;
+	} else if (reply.out->bulk_count > 0) {
+		dir_handle->reply_count = reply.out->bulk_count;
+		dir_handle->last_replies = reply.out->last;
+		dir_handle->replies = iov.iov_buf;
+		dir_handle->rpc = NULL;
+		dir_handle->replies_base = iov.iov_buf;
 	} else {
-		crt_req_decref(reply.rpc);
+		dir_handle->reply_count = 0;
 		dir_handle->replies = NULL;
 		dir_handle->rpc = NULL;
+
 	}
 
-	return 0;
+out:
+	if (reply.rpc)
+		crt_req_decref(reply.rpc);
+
+out_with_rpc:
+	if (iov.iov_buf && iov.iov_buf != dir_handle->replies)
+		free(iov.iov_buf);
+
+	if (bulk) {
+		rc = crt_bulk_free(bulk);
+		if (rc)
+			ret = EIO;
+	}
+
+	return ret;
 }
 
-/* Mark a previously fetched handle complete */
-static void readdir_next_reply_consume(struct iof_dir_handle *dir_handle)
+/* Mark a previously fetched handle complete
+ *
+ * Returns True if the consumed entry is the last one.
+ */
+static int readdir_next_reply_consume(struct iof_dir_handle *dir_handle)
 {
-	if (dir_handle->reply_count == 0 && dir_handle->rpc) {
-		crt_req_decref(dir_handle->rpc);
-		dir_handle->rpc = NULL;
+	if (dir_handle->reply_count != 0) {
+		dir_handle->replies++;
+		dir_handle->reply_count--;
 	}
+
+	if (dir_handle->reply_count == 0) {
+		if (dir_handle->rpc) {
+			crt_req_decref(dir_handle->rpc);
+			dir_handle->rpc = NULL;
+		} else if (dir_handle->replies_base) {
+			free(dir_handle->replies_base);
+			dir_handle->replies_base = NULL;
+		}
+	}
+	if (dir_handle->reply_count == 0 && dir_handle->last_replies)
+		return 1;
+	return 0;
 }
 
 /* Fetch a pointer to the next reply entry from the target
  *
  * Replies are read from the server in batches, configurable on the server side,
  * the client keeps a array of received but unprocessed replies.  This function
- * returns a new reply if possible, either from the from the front of the local
+ * fetches a new reply if possible, either from the from the front of the local
  * array, or if the array is empty by sending a new RPC.
+ *
+ * If this function returns a non-zero status then that status is returned to
+ * FUSE and the handle is marked as invalid.
  *
  * There is no caching on the server, and when the server responds to a RPC it
  * can include zero or more replies.
  */
 static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 			      off_t offset,
-			      struct iof_readdir_reply **reply, int *lastp)
+			      struct iof_readdir_reply **reply)
 {
 	int rc;
 
 	*reply = NULL;
-	*lastp = 0;
 
 	/* Check for available data and fetch more if none */
 	if (dir_handle->reply_count == 0) {
@@ -214,14 +292,9 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 	}
 
 	*reply = dir_handle->replies;
-	dir_handle->replies++;
-	dir_handle->reply_count--;
 
 	IOF_LOG_INFO("Count %d last_replies %d", dir_handle->reply_count,
 		     dir_handle->last_replies);
-
-	if (dir_handle->reply_count == 0 && dir_handle->last_replies)
-		*lastp = 1;
 
 	return 0;
 }
@@ -249,12 +322,11 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 	do {
 		struct iof_readdir_reply *dir_reply;
-		int last;
 
 		ret = readdir_next_reply(dir_handle, next_offset,
-					 &dir_reply, &last);
+					 &dir_reply);
 
-		IOF_LOG_DEBUG("err %d buf %p last %d", ret, dir_reply, last);
+		IOF_LOG_DEBUG("err %d buf %p", ret, dir_reply);
 
 		if (ret != 0)
 			return -ret;
@@ -270,8 +342,8 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 			return 0;
 		}
 
-		IOF_LOG_DEBUG("reply last %d rc %d stat_rc %d",
-			      last, dir_reply->read_rc,
+		IOF_LOG_DEBUG("reply rc %d stat_rc %d",
+			      dir_reply->read_rc,
 			      dir_reply->stat_rc);
 
 		/* Check for error.  Error on the remote readdir() call exits
@@ -300,27 +372,33 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 #endif
 			     );
 
+		IOF_LOG_DEBUG("New file off %zi %s %d", dir_reply->nextoff,
+			      dir_reply->d_name, ret);
+
 		/* Check for this being the last entry in a directory, this is
 		 * the typical end-of-directory case where readdir() returned
 		 * no more information on the sever
 		 */
-		if (last != 0) {
-			readdir_next_reply_consume(dir_handle);
-			IOF_LOG_INFO("Returning no more data");
-			return 0;
+
+		if (ret == 0) {
+			int last;
+
+			next_offset = dir_reply->nextoff;
+			last = readdir_next_reply_consume(dir_handle);
+
+			if (last) {
+				IOF_LOG_INFO("Returning no more data");
+				return 0;
+			}
 		}
 
-		IOF_LOG_DEBUG("New file off %zi %s %d", dir_reply->nextoff,
-			      dir_reply->d_name, ret);
-
 		/* Check for filler() returning full.  The filler function
-		 * returns -1 once the internal FUSE buffer is full so check
+		 * returns 1 once the internal FUSE buffer is full so check
 		 * for that case and exit the loop here.
 		 */
 
 		next_offset = dir_reply->nextoff;
 	} while (ret == 0);
-	readdir_next_reply_consume(dir_handle);
 	IOF_LOG_INFO("Returning zero");
 	return 0;
 }

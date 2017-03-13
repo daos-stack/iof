@@ -113,6 +113,14 @@ struct fs_handle {
 	uint32_t		max_write;
 };
 
+/* The size of bulk request to use for readdir from the cnss.
+ *
+ * The CNSS is free to choose the size, and the IONSS will attempt
+ * to allocate matching amounts of memory, but may choose to return
+ * smaller amounts of data.
+ */
+#define IOF_READDIR_BULK_SIZE (1024 * 64)
+
 /*
  * This will be defined by the calling function to select
  * the correct RPC type from the protocol registry.
@@ -212,6 +220,7 @@ struct iof_dir_handle {
 	/* Pointer to any retreived data from readdir() RPCs */
 	struct iof_readdir_reply *replies;
 	int			reply_count;
+	void			*replies_base;
 	/* Set to True if the current batch of replies is the final one */
 	int			last_replies;
 	/* Set to 1 initially, but 0 if there is a unrecoverable error */

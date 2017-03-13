@@ -187,6 +187,7 @@ struct iof_opendir_out {
 
 struct iof_readdir_in {
 	struct ios_gah gah;
+	crt_bulk_t bulk;
 	uint64_t offset;
 	uint32_t fs_id;
 };
@@ -203,6 +204,8 @@ struct iof_readdir_reply {
 struct iof_readdir_out {
 	crt_iov_t replies;
 	int last;
+	int iov_count;
+	int bulk_count;
 	int err;
 };
 
