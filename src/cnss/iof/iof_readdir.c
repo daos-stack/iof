@@ -152,6 +152,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	if (dir_handle->reply_count != 0) {
 		dir_handle->replies = reply.out->replies.iov_buf;
 		dir_handle->rpc = reply.rpc;
+		dir_handle->last_replies = reply.out->last;
 	} else {
 		crt_req_decref(reply.rpc);
 		dir_handle->replies = NULL;
@@ -182,11 +183,12 @@ static void readdir_next_reply_consume(struct iof_dir_handle *dir_handle)
  */
 static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 			      off_t offset,
-			      struct iof_readdir_reply **reply)
+			      struct iof_readdir_reply **reply, int *lastp)
 {
 	int rc;
 
 	*reply = NULL;
+	*lastp = 0;
 
 	/* Check for available data and fetch more if none */
 	if (dir_handle->reply_count == 0) {
@@ -215,6 +217,12 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 	dir_handle->replies++;
 	dir_handle->reply_count--;
 
+	IOF_LOG_INFO("Count %d last_replies %d", dir_handle->reply_count,
+		     dir_handle->last_replies);
+
+	if (dir_handle->reply_count == 0 && dir_handle->last_replies)
+		*lastp = 1;
+
 	return 0;
 }
 
@@ -241,23 +249,29 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 	do {
 		struct iof_readdir_reply *dir_reply;
+		int last;
 
 		ret = readdir_next_reply(dir_handle, next_offset,
-					 &dir_reply);
+					 &dir_reply, &last);
 
-		IOF_LOG_DEBUG("err %d buf %p", ret, dir_reply);
+		IOF_LOG_DEBUG("err %d buf %p last %d", ret, dir_reply, last);
 
 		if (ret != 0)
 			return -ret;
 
-		/* Check for end of directory.  When the end of the directory
-		 * stream is reached on the server then we exit here.
+		/* Check for end of directory.  This is the code-path taken
+		 * where a RPC contains 0 replies, either because a directory
+		 * is empty, or where the number of entries fits exactly in
+		 * the last RPC.
+		 * In this case there is no next entry to consume.
 		 */
-		if (!dir_reply)
+		if (!dir_reply) {
+			IOF_LOG_INFO("No more directory contents");
 			return 0;
+		}
 
 		IOF_LOG_DEBUG("reply last %d rc %d stat_rc %d",
-			      dir_reply->last, dir_reply->read_rc,
+			      last, dir_reply->read_rc,
 			      dir_reply->stat_rc);
 
 		/* Check for error.  Error on the remote readdir() call exits
@@ -267,12 +281,6 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 			ret = dir_reply->read_rc;
 			readdir_next_reply_consume(dir_handle);
 			return -ret;
-		}
-
-		if (dir_reply->last != 0) {
-			readdir_next_reply_consume(dir_handle);
-			IOF_LOG_INFO("Returning no more data");
-			return 0;
 		}
 
 		/* Process any new information received in this RPC.  The
@@ -291,6 +299,16 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 			     , 0
 #endif
 			     );
+
+		/* Check for this being the last entry in a directory, this is
+		 * the typical end-of-directory case where readdir() returned
+		 * no more information on the sever
+		 */
+		if (last != 0) {
+			readdir_next_reply_consume(dir_handle);
+			IOF_LOG_INFO("Returning no more data");
+			return 0;
+		}
 
 		IOF_LOG_DEBUG("New file off %zi %s %d", dir_reply->nextoff,
 			      dir_reply->d_name, ret);

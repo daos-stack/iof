@@ -153,6 +153,8 @@ struct iof_dir_handle {
 	/* Pointer to any retreived data from readdir() RPCs */
 	struct iof_readdir_reply *replies;
 	int			reply_count;
+	/* Set to True if the current batch of replies is the final one */
+	int			last_replies;
 	/* Set to 1 initially, but 0 if there is a unrecoverable error */
 	int			handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */

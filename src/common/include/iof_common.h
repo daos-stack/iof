@@ -142,11 +142,11 @@ struct iof_readdir_reply {
 	off_t nextoff;
 	int read_rc;
 	int stat_rc;
-	int last;
 };
 
 struct iof_readdir_out {
 	crt_iov_t replies;
+	int last;
 	int err;
 };
 

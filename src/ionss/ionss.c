@@ -374,13 +374,13 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 		if (!dir_entry) {
 			if (errno == 0) {
 				/* End of directory */
-				replies[reply_idx].read_rc = 0;
-				replies[reply_idx].last = 1;
+				out->last = 1;
 			} else {
 				/* An error occoured */
 				replies[reply_idx].read_rc = errno;
+				reply_idx++;
 			}
-			reply_idx++;
+
 			goto out;
 		}
 
