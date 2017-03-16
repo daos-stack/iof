@@ -36,16 +36,19 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """Unit tests"""
 
-CUNIT_SRC = ['utest_gah.c', 'test_ctrl_fs.c']
+CUNIT_SRC = ['utest_gah.c', 'test_ctrl_fs.c', 'utest_pool.c']
 VALGRIND_EXCLUSIONS = ['test_ctrl_fs.c']
 OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
+        'utest_pool.c':['../common/iof_obj_pool$OBJSUFFIX'],
         'test_ctrl_fs.c':['../cnss/ctrl_fs$OBJSUFFIX',
                           '../cnss/ctrl_common$OBJSUFFIX',
                           '../common/log$OBJSUFFIX']
        }
-DEPS = {'test_ctrl_fs.c':['cart']}
+DEPS = {'test_ctrl_fs.c':['cart'],
+        'utest_pool.c':['cart']}
 CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include']}
-LIBS = {'test_ctrl_fs.c':['pthread']}
+LIBS = {'test_ctrl_fs.c':['pthread'],
+        'utest_pool.c':['pthread']}
 DEFINES = {}
 
 def compile_tests(env, sources, prereqs):
