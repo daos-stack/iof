@@ -39,16 +39,7 @@
 #define __IONSS_H__
 
 #include <dirent.h>
-
-#if HAVE_STDATOMIC
-#include <stdatomic.h>
-#define ATOMIC _Atomic
-#else
-#define atomic_fetch_sub __sync_fetch_and_sub
-#define atomic_fetch_add __sync_fetch_and_add
-#define ATOMIC
-#endif
-
+#include "iof_atomic.h"
 #include "ios_gah.h"
 
 struct ios_base {
