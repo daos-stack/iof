@@ -96,7 +96,7 @@ def valgrind_suffix(log_path):
         return ['valgrind', '--xml=yes',
                 '--xml-file=%s' %
                 os.path.join(log_path,
-                             '1/rank.%q{PMIX_RANK}/valgrind.xml'),
+                             'valgrind-${PMIX_RANK}.xml'),
                 '--leak-check=full', '--gen-suppressions=all',
                 '--fullpath-after=',
                 '--partial-loads-ok=yes',
@@ -106,13 +106,13 @@ def valgrind_suffix(log_path):
         return ['valgrind', '--tool=callgrind',
                 '-callgrind-out-file=%s' %
                 os.path.join(log_path,
-                             '1/rank.%q{PMIX_RANK}/callgrind.out')]
+                             'valgrind-${PMIX_RANK}.xml')]
     elif use_valgrind == "memcheck-native":
         cmd = ['valgrind',
                '--error-exitcode=42',
                '--log-file=%s' %
                os.path.join(log_path,
-                            '1/rank.%q{PMIX_RANK}/valgrind.out'),
+                            'valgrind-${PMIX_RANK}.xml'),
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
                '--partial-loads-ok=yes',
