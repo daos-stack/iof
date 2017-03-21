@@ -116,6 +116,10 @@ class IofRunner():
     def add_server(self):
         """Create the server prefix"""
         ion = self.test_info.get_defaultENV('IOF_TEST_ION')
+
+        #Passing the list to the config file so that iof_ionss_verify
+        #can access it.
+        self.test_info.set_passToConfig('IOF_TEST_ION', ion)
         if ion:
             local_ion = " -H %s -N 1 " % (ion)
         else:
@@ -219,18 +223,19 @@ class IofRunner():
         procrtn = None
         cnss_dir = self.test_info.get_passToConfig('CNSS_PREFIX')
         ionss_dir = self.test_info.get_passToConfig('ION_TEMPDIR')
-        cnss_mp = os.path.join(cnss_dir, ".ctrl")
         testmsg = "Unmount CNSS dirs"
-        cmdstr = "fusermount -u %s" % cnss_mp
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_CN', testmsg)
-        testmsg = "Remove CNSS dirs"
-        cmdstr = "rm -rf " + cnss_dir
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_CN', testmsg)
-        if procrtn:
-            self.logger.error(
-                "TestIOF: Failed to remove CNSS dirs. Error code: %d", procrtn)
+        for mount in ['.ctrl', 'FS_1', 'FS_2']:
+            cnss_mp = os.path.join(cnss_dir, mount)
+            cmdstr = "fusermount -u %s" % cnss_mp
+            try:
+                procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
+                                                        'IOF_TEST_CN', testmsg)
+            except FileNotFoundError:
+                pass
+            testmsg = "Remove CNSS sub dirs"
+            cmdstr = "rmdir %s" % cnss_mp
+            procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
+                                                    'IOF_TEST_CN', testmsg)
         testmsg = "Remove IONSS dirs"
         cmdstr = "rm -rf " + ionss_dir
         procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
@@ -238,3 +243,10 @@ class IofRunner():
         if procrtn:
             self.logger.error(
                 "TestIOF: Failed to remove IONSS dirs. Error code: %d", procrtn)
+        testmsg = "Remove CNSS dirs"
+        cmdstr = "rm -rf " + cnss_dir
+        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
+                                                'IOF_TEST_CN', testmsg)
+        if procrtn:
+            self.logger.error(
+                "TestIOF: Failed to remove CNSS dirs. Error code: %d", procrtn)

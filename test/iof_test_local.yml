@@ -4,6 +4,7 @@ defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
     TR_REDIRECT_OUTPUT: "yes"
     CRT_LOG_MASK: "INFO"
+    MULTI_INSTANCE_TESTS: "no"
 
 module:
     name: "iof_test_local"

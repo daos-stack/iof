@@ -1,23 +1,21 @@
-description: "iof multi-instance test"
+description: "ionss verify tests"
 
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
     MCL_LOG_LEVEL: "4"
-    MULTI_INSTANCE_TESTS: "yes"
 
 module:
-    name: "iof_simple"
+    name: "iof_ionss_verify"
     subLogKey: "IOF_TESTLOG"
     setKeyFromInfo:
         - [IOF_PREFIX, PREFIX, ""]
         - [IOF_OMPI_PREFIX, OMPI_PREFIX, ""]
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
-    srcDir: ["src/cnss", "src/ionss"]
 
 directives:
     loop: "no"
 
 execStrategy:
-    - id: "simple"
+    - id: "ionss_verify"
       setEnvVars:

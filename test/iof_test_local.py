@@ -60,8 +60,8 @@ import subprocess
 import tempfile
 import logging
 import unittest
-import common_methods
 import iofcommontestsuite
+import common_methods
 
 
 class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
@@ -93,8 +93,9 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         self.import_dir = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
                                            dir=export_tmp_dir)
-        self.ctrl_dir = os.path.join(self.import_dir, '.ctrl')
-        self.shutdown_file = os.path.join(self.ctrl_dir, 'shutdown')
+        self.base_dir = os.path.join(self.import_dir, 'exp')
+        common_methods.CTRL_DIR = os.path.join(self.import_dir, '.ctrl')
+        self.shutdown_file = os.path.join(common_methods.CTRL_DIR, 'shutdown')
         self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
                                       dir=export_tmp_dir)
 
@@ -242,26 +243,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         os.rmdir(os.path.join(self.export_dir, 'test_dir'))
 
-    @unittest.skip("Test not complete")
-    def test_file_open(self):
-        """Open a file for reading
-
-        This is supposed to fail, as the file doesn't exist.
-        """
-
-        filename = os.path.join(self.import_dir, 'exp', 'test_file')
-
-        fd = open(filename, 'r')
-        fd.close()
-
-    def test_file_open_new(self):
-        """Create a new file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'test_file2')
-
-        fd = open(filename, 'w')
-        fd.close()
-
     def test_use_ino(self):
         """Test that stat returns correct information"""
 
@@ -298,20 +279,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         if len(diffs):
             self.fail("Stat attributes are different %s" % diffs)
-
-    def test_file_truncate(self):
-        """Write to a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'c_file')
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
 
     def test_many_files(self):
         """Create lots of files, and then perform readdir"""
@@ -373,81 +340,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
-
-    def test_file_read_zero(self):
-        """Read 0 bytes from a file"""
-
-        tfile = os.path.join(self.import_dir, 'exp', 'empty_file')
-
-        fd = os.open(tfile, os.O_RDWR|os.O_CREAT)
-        os.read(fd, 10)
-        os.close(fd)
-
-    def test_mkdir(self):
-        """Create a directory"""
-
-        ndir = os.path.join(self.import_dir, 'exp', 'new_dir')
-
-        os.mkdir(ndir)
-
-        print(os.listdir(ndir))
-
-    def test_chmod(self):
-        """Chmod a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'chmod_file')
-        init_mode = stat.S_IRUSR|stat.S_IWUSR
-        fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
-        os.close(fd)
-        fstat = os.stat(filename)
-        print("st_mode is 0%o" % fstat.st_mode)
-
-        actual_mode = stat.S_IMODE(fstat.st_mode)
-        print("0%o" % actual_mode)
-
-        if actual_mode != init_mode:
-            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, init_mode))
-
-        new_mode = stat.S_IRUSR
-        os.chmod(filename, new_mode)
-        fstat = os.stat(filename)
-        print("st_mode is 0%o" % fstat.st_mode)
-
-        actual_mode = stat.S_IMODE(fstat.st_mode)
-        print("0%o" % actual_mode)
-
-        if actual_mode != new_mode:
-            self.fail("Mode is correct 0%o 0%o" % (actual_mode, new_mode))
-
-    def test_fchmod(self):
-        """Fchmod a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'fchmod_file')
-        init_mode = stat.S_IRUSR|stat.S_IWUSR
-        fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
-
-        fstat = os.fstat(fd)
-        print("st_mode is 0%o" % fstat.st_mode)
-
-        actual_mode = stat.S_IMODE(fstat.st_mode)
-        print("0%o" % actual_mode)
-
-        if actual_mode != init_mode:
-            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, init_mode))
-
-        new_mode = stat.S_IRUSR
-        os.fchmod(fd, new_mode)
-        fstat = os.fstat(fd)
-        print("st_mode is 0%o" % fstat.st_mode)
-
-        actual_mode = stat.S_IMODE(fstat.st_mode)
-        print("0%o" % actual_mode)
-
-        if actual_mode != new_mode:
-            self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, new_mode))
-
-        os.close(fd)
-
     def test_file_write(self):
         """Write to a file"""
 
@@ -466,59 +358,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if data != 'World':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
-    def test_file_sync(self):
-        """Sync a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'b_file')
-
-        fd = os.open(filename, os.O_RDWR|os.O_CREAT)
-        os.write(fd, bytes("Hello world", 'UTF-8'))
-        os.fsync(fd)
-        os.ftruncate(fd, 100)
-        os.close(fd)
-
-    def test_file_copy(self):
-        """Copy a file into a projecton
-
-        Basic copy, using large I/O.  No permissions or metadata are used.
-        """
-
-        filename = os.path.join(self.import_dir, 'exp', 'ls')
-        shutil.copyfile('/bin/ls', filename)
-
-    def test_file_ftruncate(self):
-        """Truncate a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 't_file')
-
-        fd = open(filename, 'w')
-        fd.truncate()
-        fd.truncate(100)
-        fd.close()
-
-    def test_rmdir(self):
-        """Remove a directory"""
-
-        ndir = os.path.join(self.import_dir, 'exp', 'my_dir')
-
-        os.mkdir(ndir)
-
-        print(os.listdir(ndir))
-
-        os.rmdir(ndir)
-
-    def test_file_rename(self):
-        """Write to a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'c_file')
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
-        new_file = os.path.join(self.import_dir, 'exp', 'd_file')
-        os.rename(filename, new_file)
-
     def test_file_copy_from(self):
         """Copy a file into a projecton
 
@@ -532,15 +371,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         dst_file = os.path.join(self.export_dir, 'ls.2')
 
         shutil.copyfile(filename, dst_file)
-
-    def test_file_unlink(self):
-        """Create and remove a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'unlink_file')
-
-        fd = open(filename, 'w')
-        fd.close()
-        os.unlink(filename)
 
     def test_read_symlink(self):
         """Read a symlink"""
@@ -568,16 +398,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         result = os.readlink(os.path.join(self.export_dir, 'source'))
         if result != 'target':
             self.fail("Link target is wrong '%s'" % result)
-
-    def test_set_time(self):
-        """Set the time of a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'test_file')
-
-        fd = open(filename, 'w')
-        fd.close()
-
-        os.utime(filename)
 
     def test_ioil(self):
         """Run the interception library test"""
@@ -623,17 +443,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
-
-    def test_file_read_empty(self):
-        """Read from a empty file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'empty_file')
-        fd = open(filename, 'w')
-        fd.close()
-
-        fd = open(filename, 'r')
-        fd.read()
-        fd.close()
 
     def go(self):
         """A wrapper method to invoke all methods as subTests"""

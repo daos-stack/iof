@@ -7,10 +7,6 @@ module:
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
         - [CCI_CONFIG, CART_PREFIX, "/etc/cci.ini"]
-    hostConfig:
-        type: buildList
-        numServers: 2
-        numClients: 3
 
 directives:
     renameTestRun: "no"

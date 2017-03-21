@@ -50,6 +50,14 @@ import common_methods
 import logging
 from stat import S_ISDIR
 
+def setUpModule():
+    """Set the global variables for the projection on CN"""
+
+    startdir = os.environ["CNSS_PREFIX"]
+    common_methods.CTRL_DIR = os.path.join(startdir, ".ctrl")
+    common_methods.IMPORT_MNT = common_methods.get_writeable_import()
+    common_methods.IMPORT_BASE = TestIof.get_unique(common_methods.IMPORT_MNT)
+
 class TestIof(common_methods.CnssChecks):
     """IOF filesystem tests in private access mode"""
 
@@ -57,13 +65,21 @@ class TestIof(common_methods.CnssChecks):
 
     def setUp(self):
         """Set up the test"""
-        startdir = os.environ["CNSS_PREFIX"]
-        self.ctrl_dir = os.path.join(startdir, ".ctrl")
+
+        # A unittest workaround to run the common_methods, both
+        # iof_test_local and iof_simple. The former requires the variables
+        # to be set up and torn down for each test. The latter requires the
+        # variables to be set only once for each run.
+        self.import_dir = common_methods.IMPORT_MNT
+        self.base_dir = common_methods.IMPORT_BASE
+        self.logger.info("\n")
+        self.logger.info("*************************************************")
+        self.logger.info("Starting for %s", self.id())
 
     def test_iof_fs(self):
         """Test private access mount points"""
         self.logger.info("starting to stat the mountpoints")
-        entry = os.path.join(self.ctrl_dir, "iof", "projections")
+        entry = os.path.join(common_methods.CTRL_DIR, "iof", "projections")
 
         self.assertTrue(os.path.isdir(entry), \
             "Mount point %s not found" % entry)
