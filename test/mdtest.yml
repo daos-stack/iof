@@ -1,0 +1,27 @@
+description: "scripts test module"
+
+defaultENV:
+
+module:
+    name: "mdtest"
+    logBaseName: "mdtest"
+
+directives:
+    testMode: "scripts"
+    renameTestRun: "yes"
+    copyHostList: "no"
+
+subList:
+    nodename: node
+
+execStrategy:
+    - name: "iof_mdtest_short"
+      exe: $HOME/bin/mdtest
+      type: exe
+      parameters: "-i 3 -I 100 -d {CNSS_PREFIX}/{nodename}"
+      waittime: "60"
+    - name: "iof_mdtest_long"
+      exe: $HOME/bin/mdtest
+      type: exe
+      parameters: "-i 5 -I 1000 -d {CNSS_PREFIX}/{nodename}"
+      waittime: "60"
