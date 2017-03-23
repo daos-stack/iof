@@ -42,20 +42,62 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
+#include <sys/resource.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include <string.h>
+#include <crt_util/list.h>
 #include "intercept.h"
 #include "iof_ioctl.h"
+#include "iof_vector.h"
 
-FOREACH_INTERCEPT(IOIL_FORWARD_DECL);
+FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
 bool ioil_initialized;
+static vector_t fd_table;
+
+#define BLOCK_SIZE 1024
+
+struct fd_entry {
+	struct ios_gah gah;
+	off_t pos;
+	int flags;
+	bool is_mapped;
+};
+
+int ioil_initialize_fd_table(int max_fds)
+{
+	int rc;
+
+	rc = vector_init(&fd_table, sizeof(struct fd_entry), max_fds);
+
+	if (rc != 0)
+		IOF_LOG_ERROR("Could not allocated file descriptor table"
+			      ", disabling interception: rc = %d", rc);
+	return rc;
+}
 
 static __attribute__((constructor)) void ioil_init(void)
 {
+	struct rlimit rlimit;
+	int rc;
+
 	FOREACH_INTERCEPT(IOIL_FORWARD_MAP_OR_FAIL);
 
 	iof_log_init("IL", "IOIL");
+
+	/* Get maximum number of file desciptors */
+	rc = getrlimit(RLIMIT_NOFILE, &rlimit);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not get process file descriptor limit"
+			      ", disabling interception");
+		return;
+	}
+
+	rc = ioil_initialize_fd_table(rlimit.rlim_max);
+	if (rc != 0)
+		return;
 
 	__sync_synchronize();
 
@@ -64,12 +106,18 @@ static __attribute__((constructor)) void ioil_init(void)
 
 static __attribute__((destructor)) void ioil_fini(void)
 {
+	ioil_initialized = false;
+
+	__sync_synchronize();
+
 	iof_log_close();
+
+	vector_destroy(&fd_table);
 }
 
-static void check_ioctl_on_open(int fd)
+static void check_ioctl_on_open(int fd, int flags)
 {
-	struct ios_gah gah;
+	struct fd_entry entry;
 	int saved_errno;
 	int rc;
 
@@ -78,14 +126,33 @@ static void check_ioctl_on_open(int fd)
 
 	saved_errno = errno; /* Save the errno from open */
 
-	rc = ioctl(fd, IOF_IOCTL_GAH, &gah);
-	if (rc == -1)
-		IOIL_LOG_INFO("opened non-IOF file, %s", strerror(errno));
-	else
-		IOIL_LOG_INFO("opened IOF file " GAH_PRINT_STR,
-			     GAH_PRINT_VAL(gah));
+	rc = ioctl(fd, IOF_IOCTL_GAH, &entry.gah);
+	if (rc == 0) {
+		IOIL_LOG_INFO("Opened an IOF file (fd = %d) "
+			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry.gah));
+		entry.pos = 0;
+		entry.flags = flags;
+		entry.is_mapped = false;
+		rc = vector_set(&fd_table, fd, &entry);
+		if (rc != 0)
+			IOF_LOG_INFO("Failed to insert gah in table, rc = %d",
+				     rc);
+	}
 
 	errno = saved_errno; /* Restore the errno from open */
+}
+
+static bool drop_reference_if_mapped(int fd, struct fd_entry *entry)
+{
+	if (!entry->is_mapped)
+		return false;
+
+	IOF_LOG_INFO("Dropped reference to mapped file " GAH_PRINT_STR,
+		     GAH_PRINT_VAL(entry->gah));
+	vector_remove(&fd_table, fd, NULL);
+	vector_decref(&fd_table, entry);
+
+	return true;
 }
 
 IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
@@ -112,200 +179,374 @@ IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
 		fd =  __real_open(pathname, flags);
 	}
 
-	if (ioil_initialized)
-		check_ioctl_on_open(fd);
-
-	return fd;
-}
-
-IOIL_PUBLIC int IOIL_DECL(open64)(const char *pathname, int flags, ...)
-{
-	int fd;
-	unsigned int mode; /* mode_t gets "promoted" to unsigned int
-			    * for va_arg routine
-			    */
-
-	if (flags & O_CREAT) {
-		va_list ap;
-
-		va_start(ap, flags);
-		mode = va_arg(ap, unsigned int);
-		va_end(ap);
-
-		IOIL_LOG_INFO("open64(%s, 0%o, 0%o) intercepted",
-			     pathname, flags, mode);
-
-		fd = __real_open64(pathname, flags, mode);
-	} else {
-		IOIL_LOG_INFO("open64(%s, 0%o) intercepted", pathname, flags);
-
-		fd =  __real_open64(pathname, flags);
-	}
-
-	if (ioil_initialized)
-		check_ioctl_on_open(fd);
+	/* Ignore O_APPEND files for now */
+	if (ioil_initialized && ((flags & O_APPEND) == 0))
+		check_ioctl_on_open(fd, flags);
 
 	return fd;
 }
 
 IOIL_PUBLIC int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 {
+	int fd;
+
 	IOIL_LOG_INFO("creat(%s, 0%o) intercepted", pathname, mode);
 
 	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
-	return __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
-}
+	fd = __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 
-IOIL_PUBLIC int IOIL_DECL(creat64)(const char *pathname, mode_t mode)
-{
-	IOIL_LOG_INFO("creat64(%s, 0%o) intercepted", pathname, mode);
+	if (ioil_initialized)
+		check_ioctl_on_open(fd, O_CREAT|O_WRONLY|O_TRUNC);
 
-	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
-	return __real_open64(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
+	return fd;
 }
 
 IOIL_PUBLIC int IOIL_DECL(close)(int fd)
 {
+	struct fd_entry *entry;
+	int rc;
+
 	IOIL_LOG_INFO("close(%d) intercepted", fd);
+
+	rc = vector_remove(&fd_table, fd, &entry);
+
+	if (rc == 0) {
+		IOIL_LOG_INFO("Removed IOF entry for fd=%d "
+			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry->gah));
+		vector_decref(&fd_table, entry);
+	}
 
 	return __real_close(fd);
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 {
-	IOIL_LOG_INFO("read(%d, %p, %zu) intercepted", fd, buf, len);
+	struct fd_entry *entry;
+	ssize_t bytes_read;
+	off_t oldpos;
+	int rc;
 
-	return __real_read(fd, buf, len);
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_read(fd, buf, len);
+
+	IOIL_LOG_INFO("read(%d, %p, %zu) intercepted " GAH_PRINT_STR,
+		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
+
+	oldpos = entry->pos;
+	bytes_read = __real_pread(fd, buf, len, entry->pos);
+	if (bytes_read > 0)
+		entry->pos = oldpos + bytes_read;
+	vector_decref(&fd_table, entry);
+
+	return bytes_read;
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 				     size_t len, off_t offset)
 {
-	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted",
-		     fd, buf, len, offset);
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_pread(fd, buf, len, offset);
+
+	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
+		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
+	vector_decref(&fd_table, entry);
 
 	return __real_pread(fd, buf, len, offset);
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(pread64)(int fd, void *buf,
-				       size_t len, off64_t offset)
-{
-	IOIL_LOG_INFO("pread64(%d, %p, %zu, %" PRId64 ") intercepted",
-		     fd, buf, len, offset);
-
-	return __real_pread64(fd, buf, len, offset);
-}
-
 IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 {
-	/* Logging here currently creates an infinite recursion on the
-	 * cart log.   Eventually, we can only log when it's one of our
-	 * files.  Turn it off for now.
-	 * IOIL_LOG_INFO("write(%d, %p, %zu) intercepted", fd, buf, len);
-	 */
+	struct fd_entry *entry;
+	ssize_t bytes_written;
+	off_t oldpos;
+	int rc;
 
-	return __real_write(fd, buf, len);
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_write(fd, buf, len);
+
+	IOIL_LOG_INFO("write(%d, %p, %zu) intercepted " GAH_PRINT_STR,
+		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
+
+	oldpos = entry->pos;
+	bytes_written = __real_pwrite(fd, buf, len, entry->pos);
+	if (bytes_written > 0)
+		entry->pos = oldpos + bytes_written;
+	vector_decref(&fd_table, entry);
+
+	return bytes_written;
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
-				      size_t len, off_t offset)
+					size_t len, off_t offset)
 {
-	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted",
-		     fd, buf, len, offset);
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_pwrite(fd, buf, len, offset);
+
+	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
+		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
+	vector_decref(&fd_table, entry);
 
 	return __real_pwrite(fd, buf, len, offset);
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(pwrite64)(int fd, const void *buf,
-					size_t len, off64_t offset)
-{
-	IOIL_LOG_INFO("pwrite64(%d, %p, %zu, %" PRId64 ") intercepted",
-		     fd, buf, len, offset);
-
-	return __real_pwrite64(fd, buf, len, offset);
-}
-
 IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 {
-	IOIL_LOG_INFO("lseek(%d, %zd, %d) intercepted", fd, offset, whence);
+	struct fd_entry *entry;
+	off_t new_offset = -1;
+	int rc;
 
-	return __real_lseek(fd, offset, whence);
-}
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_lseek(fd, offset, whence);
 
-IOIL_PUBLIC off64_t IOIL_DECL(lseek64)(int fd, off64_t offset, int whence)
-{
-	IOIL_LOG_INFO("lseek64(%d, %" PRId64 ", %d) intercepted",
-		     fd, offset, whence);
+	IOIL_LOG_INFO("lseek(%d, %zd, %d) intercepted " GAH_PRINT_STR, fd,
+		      offset, whence, GAH_PRINT_VAL(entry->gah));
 
-	return __real_lseek64(fd, offset, whence);
+	if (whence == SEEK_SET)
+		new_offset = offset;
+	else if (whence == SEEK_CUR)
+		new_offset = entry->pos + offset;
+	else if (whence == SEEK_END)
+		new_offset = __real_lseek(fd, offset, whence);
+
+	if (new_offset < 0) {
+		new_offset = (off_t)-1;
+		errno = EINVAL;
+	} else
+		entry->pos = new_offset;
+
+	vector_decref(&fd_table, entry);
+
+	return new_offset;
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 				     int count)
 {
-	IOIL_LOG_INFO("readv(%d, %p, %d) intercepted", fd, vector, count);
+	struct fd_entry *entry;
+	ssize_t bytes_read;
+	off_t oldpos;
+	int rc;
 
-	return __real_readv(fd, vector, count);
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_readv(fd, vector, count);
+
+	IOIL_LOG_INFO("readv(%d, %p, %d) intercepted " GAH_PRINT_STR,
+		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
+
+	oldpos = entry->pos;
+	bytes_read = __real_preadv(fd, vector, count, entry->pos);
+	if (bytes_read > 0)
+		entry->pos = oldpos + bytes_read;
+	vector_decref(&fd_table, entry);
+
+	return bytes_read;
+}
+
+IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
+				      int count, off_t offset)
+{
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_preadv(fd, vector, count, offset);
+
+	IOIL_LOG_INFO("preadv(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
+		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
+
+	vector_decref(&fd_table, entry);
+	return __real_preadv(fd, vector, count, offset);
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 				      int count)
 {
-	IOIL_LOG_INFO("writev(%d, %p, %d) intercepted", fd, vector, count);
+	struct fd_entry *entry;
+	ssize_t bytes_written;
+	off_t oldpos;
+	int rc;
 
-	return __real_writev(fd, vector, count);
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_writev(fd, vector, count);
+
+	IOIL_LOG_INFO("writev(%d, %p, %d) intercepted " GAH_PRINT_STR,
+		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
+
+	oldpos = entry->pos;
+	bytes_written = __real_pwritev(fd, vector, count, entry->pos);
+	if (bytes_written > 0)
+		entry->pos = oldpos + bytes_written;
+	vector_decref(&fd_table, entry);
+
+	return bytes_written;
+}
+
+IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
+					 int count, off_t offset)
+{
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_pwritev(fd, vector, count, offset);
+
+	IOIL_LOG_INFO("pwritev(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
+		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
+
+	vector_decref(&fd_table, entry);
+	return __real_pwritev(fd, vector, count, offset);
 }
 
 IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
-				  int flags, int fd, off_t offset)
+				    int flags, int fd, off_t offset)
 {
-	IOIL_LOG_INFO("mmap(%p, %zu, %d, %d, %d, %zd) intercepted",
-		     address, length, protect, flags, fd, offset);
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_remove(&fd_table, fd, &entry);
+	if (rc == 0) {
+		IOIL_LOG_INFO("mmap(%p, %zu, %d, %d, %d, %zd) intercepted, "
+			      "stopping interception " GAH_PRINT_STR, address,
+			      length, protect, flags, fd, offset,
+			      GAH_PRINT_VAL(entry->gah));
+
+		if (entry->pos != 0)
+			__real_lseek(fd, entry->pos, SEEK_SET);
+		entry->is_mapped = true; /* Signal others to drop references */
+
+		vector_decref(&fd_table, entry);
+	}
 
 	return __real_mmap(address, length, protect, flags, fd, offset);
-
-}
-
-IOIL_PUBLIC void *IOIL_DECL(mmap64)(void *address, size_t length, int protect,
-				    int flags, int fd, off64_t offset)
-{
-	IOIL_LOG_INFO("mmap64(%p, %zu, %d, %d, %d, %" PRId64 ") intercepted",
-		     address, length, protect, flags, fd, offset);
-
-	return __real_mmap64(address, length, protect, flags, fd, offset);
 }
 
 IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
 {
-	IOIL_LOG_INFO("fsync(%d) intercepted", fd);
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_fsync(fd);
+
+	IOIL_LOG_INFO("fsync(%d) intercepted " GAH_PRINT_STR, fd,
+		      GAH_PRINT_VAL(entry->gah));
+	vector_decref(&fd_table, entry);
 
 	return __real_fsync(fd);
 }
 
 IOIL_PUBLIC int IOIL_DECL(fdatasync)(int fd)
 {
-	IOIL_LOG_INFO("fdatasync(%d) intercepted", fd);
+	struct fd_entry *entry;
+	int rc;
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+		return __real_fdatasync(fd);
+
+	IOIL_LOG_INFO("fdatasync(%d) intercepted " GAH_PRINT_STR,
+		      fd, GAH_PRINT_VAL(entry->gah));
+	vector_decref(&fd_table, entry);
 
 	return __real_fdatasync(fd);
 }
 
 IOIL_PUBLIC int IOIL_DECL(dup)(int fd)
 {
-	IOIL_LOG_INFO("dup(%d) intercepted", fd);
+	struct fd_entry *entry = NULL;
+	int rc;
+	int newfd = __real_dup(fd);
 
-	return __real_dup(fd);
+	if (newfd == -1)
+		return -1;
+
+	rc = vector_dup(&fd_table, fd, newfd, &entry);
+	if (rc == 0 && entry != NULL) {
+		IOIL_LOG_INFO("dup(%d) intercepted " GAH_PRINT_STR,
+			      fd, GAH_PRINT_VAL(entry->gah));
+		if (drop_reference_if_mapped(newfd, entry)) {
+			/* If the file was mmapped, get the duplicated
+			 * entry and if it hasn't changed, drop its
+			 * reference too
+			 */
+			rc = vector_get(&fd_table, fd, &entry);
+			if (rc == 0) {
+				if (!drop_reference_if_mapped(fd, entry))
+					vector_decref(&fd_table, entry);
+			}
+		} else
+			vector_decref(&fd_table, entry);
+	}
+
+	return newfd;
 }
 
 IOIL_PUBLIC int IOIL_DECL(dup2)(int old, int new)
 {
-	IOIL_LOG_INFO("dup2(%d, %d) intercepted", old, new);
+	struct fd_entry *entry = NULL;
+	int newfd = __real_dup2(old, new);
+	int rc;
 
-	return __real_dup2(old, new);
+	if (newfd == -1)
+		return -1;
+
+	rc = vector_dup(&fd_table, old, newfd, &entry);
+	if (rc == 0 && entry != NULL) {
+		IOIL_LOG_INFO("dup2(%d, %d) intercepted " GAH_PRINT_STR,
+			      old, new, GAH_PRINT_VAL(entry->gah));
+		if (drop_reference_if_mapped(new, entry)) {
+			/* If the file was mmapped, get the duplicated
+			 * entry and if it hasn't changed, drop its
+			 * reference too
+			 */
+			rc = vector_get(&fd_table, old, &entry);
+			if (rc == 0) {
+				if (!drop_reference_if_mapped(old, entry))
+					vector_decref(&fd_table, entry);
+			}
+		} else
+			vector_decref(&fd_table, entry);
+		vector_decref(&fd_table, entry);
+	}
+
+	return newfd;
 }
 
 IOIL_PUBLIC FILE * IOIL_DECL(fdopen)(int fd, const char *mode)
 {
+	struct fd_entry *entry;
+	int rc;
+
 	IOIL_LOG_INFO("fdopen(%d, %s) intercepted", fd, mode);
+
+	rc = vector_remove(&fd_table, fd, &entry);
+	if (rc == 0) {
+		IOIL_LOG_INFO("Removed IOF entry for fd=%d "
+			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry->gah));
+
+		if (entry->pos != 0)
+			__real_lseek(fd, entry->pos, SEEK_SET);
+
+		vector_decref(&fd_table, entry);
+	}
 
 	return __real_fdopen(fd, mode);
 }
+
+FOREACH_ALIASED_INTERCEPT(IOIL_DECLARE_ALIAS)

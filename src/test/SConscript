@@ -93,7 +93,6 @@ def scons():
     tenv.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
     tenv.AppendUnique(CPPPATH=['../common/include'])
     tenv.AppendUnique(CPPPATH=['../include'])
-    tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
     tenv.AppendUnique(LIBPATH='../il')
     tenv.AppendUnique(LIBS=['cunit'])
     tenv.AppendUnique(RPATH='$PREFIX/lib')
@@ -102,13 +101,23 @@ def scons():
 
     il_test = []
 
+    lfenv = tenv.Clone()
+    lfenv.AppendUnique(OBJPREFIX='lf_')
+    lfenv.AppendUnique(CPPDEFINES='LARGEFILE64_SOURCE')
+
+    tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
+
     il_test += build_static_tests(tenv)
+    il_test += build_static_tests(lfenv)
 
     tenv.AppendUnique(OBJPREFIX='s_')
     tenv.AppendUnique(LIBS=['ioil'])
+    lfenv.AppendUnique(OBJPREFIX='s_')
+    lfenv.AppendUnique(LIBS=['ioil'])
 
     for test in IOIL_TEST_SRC:
         il_test += tenv.Program(test)
+        il_test += lfenv.Program(test)
 
     Default(il_test)
 

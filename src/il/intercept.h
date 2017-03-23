@@ -38,7 +38,6 @@
 #ifndef __INTERCEPT_H__
 #define __INTERCEPT_H__
 #include <unistd.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include "log.h"
 
@@ -57,27 +56,30 @@
  * all aio routines (for now)
  * fcntl (for now though we likely need for dup)
  */
-#define FOREACH_INTERCEPT(ACTION)                                            \
-	ACTION(int,     open,      (const char *, int, ...))                 \
-	ACTION(int,     open64,    (const char *, int, ...))                 \
-	ACTION(int,     close,     (int))                                    \
-	ACTION(ssize_t, read,      (int, void *, size_t))                    \
-	ACTION(ssize_t, pread,     (int, void *, size_t, off_t))             \
-	ACTION(ssize_t, pread64,   (int, void *, size_t, off64_t))           \
-	ACTION(ssize_t, write,     (int, const void *, size_t))              \
-	ACTION(ssize_t, pwrite,    (int, const void *, size_t, off_t))       \
-	ACTION(ssize_t, pwrite64,  (int, const void *, size_t, off64_t))     \
-	ACTION(off_t,   lseek,     (int, off_t, int))                        \
-	ACTION(off64_t, lseek64,   (int, off64_t, int))                      \
-	ACTION(ssize_t, readv,     (int, const struct iovec *, int))         \
-	ACTION(ssize_t, writev,    (int, const struct iovec *, int))         \
-	ACTION(void *,  mmap,      (void *, size_t, int, int, int, off_t))   \
-	ACTION(void *,  mmap64,    (void *, size_t, int, int, int, off64_t)) \
-	ACTION(int,     fsync,     (int))                                    \
-	ACTION(int,     fdatasync, (int))                                    \
-	ACTION(int,     dup,       (int))                                    \
-	ACTION(int,     dup2,      (int, int))                               \
+#define FOREACH_ALIASED_INTERCEPT(ACTION)                                     \
+	ACTION(int,     open,      (const char *, int, ...))                  \
+	ACTION(ssize_t, pread,     (int, void *, size_t, off_t))              \
+	ACTION(ssize_t, pwrite,    (int, const void *, size_t, off_t))        \
+	ACTION(off_t,   lseek,     (int, off_t, int))                         \
+	ACTION(ssize_t, preadv,    (int, const struct iovec *, int, off_t))   \
+	ACTION(ssize_t, pwritev,   (int, const struct iovec *, int, off_t))   \
+	ACTION(void *,  mmap,      (void *, size_t, int, int, int, off_t))
+
+#define FOREACH_SINGLE_INTERCEPT(ACTION)                                     \
+	ACTION(int,     close,     (int))                                     \
+	ACTION(ssize_t, read,      (int, void *, size_t))                     \
+	ACTION(ssize_t, write,     (int, const void *, size_t))               \
+	ACTION(ssize_t, readv,     (int, const struct iovec *, int))          \
+	ACTION(ssize_t, writev,    (int, const struct iovec *, int))          \
+	ACTION(int,     fsync,     (int))                                     \
+	ACTION(int,     fdatasync, (int))                                     \
+	ACTION(int,     dup,       (int))                                     \
+	ACTION(int,     dup2,      (int, int))                                \
 	ACTION(FILE *,  fdopen,    (int, const char *))
+
+#define FOREACH_INTERCEPT(ACTION)            \
+	FOREACH_SINGLE_INTERCEPT(ACTION)     \
+	FOREACH_ALIASED_INTERCEPT(ACTION)
 
 #ifdef IOIL_PRELOAD
 #include <dlfcn.h>
@@ -86,6 +88,9 @@
 	static type (*__real_##name) params;
 
 #define IOIL_DECL(name) name
+
+#define IOIL_DECLARE_ALIAS(type, name, params) \
+	IOIL_PUBLIC type name##64 params __attribute__((weak, alias(#name)));
 
 /* Initialize the __real_##name function pointer */
 #define IOIL_FORWARD_MAP_OR_FAIL(type, name, params)                        \
@@ -108,6 +113,10 @@
 #define IOIL_DECL(name) __wrap_##name
 
 #define IOIL_FORWARD_MAP_OR_FAIL(type, name, params) (void)0;
+
+#define IOIL_DECLARE_ALIAS(type, name, params)                 \
+	IOIL_PUBLIC type __wrap_##name##64 params                \
+		__attribute__((weak, alias("__wrap_" #name)));
 
 #endif /* IOIL_PRELOAD */
 

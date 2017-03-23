@@ -582,18 +582,21 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         """Run the interception library test"""
 
         dirname = os.path.dirname(os.path.realpath(__file__))
-        testname = os.path.join(dirname, '..', 'tests', 's_test_ioil')
-        if not os.path.exists(testname):
-            testname = os.path.join(dirname, '..', 'install', os.uname()[0],
-                                    'TESTING', 'tests', 's_test_ioil')
-        if not os.path.exists(testname):
-            self.skipTest("s_test_ioil executable not found")
+        test_path = os.path.join(dirname, '..', 'tests')
 
-        self.logger.info("Testnss: interception test - input string:\n %s\n",
-                         testname)
-        procrtn = subprocess.call([testname, self.import_dir], timeout=180)
-        if procrtn != 0:
-            self.fail("IO interception test failed: %s" % procrtn)
+        if not os.path.exists(test_path):
+            test_path = os.path.join(dirname, '..', 'install', os.uname()[0],
+                                    'TESTING', 'tests')
+
+        for tname in ['s_test_ioil', 'lf_s_test_ioil']:
+            testname = os.path.join(test_path, tname)
+            if not os.path.exists(testname):
+                self.skipTest("%s executable not found", tname)
+
+            self.logger.info("libioil test - input string:\n %s\n", testname)
+            procrtn = subprocess.call([testname, self.import_dir], timeout=180)
+            if procrtn != 0:
+                self.fail("IO interception test failed: %s" % procrtn)
 
     @unittest.skip("Fails on FUSE2")
     def test_file_read_rename(self):

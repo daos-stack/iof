@@ -278,6 +278,22 @@ static void do_misc_tests(const char *fname, size_t len)
 	printf("Opened %s, fd = %d\n", fname, fd);
 	CU_ASSERT_NOT_EQUAL(fd, -1);
 
+	new_fd = dup(fd);
+	printf("Duped %d, new_fd = %d\n", fd, new_fd);
+	CU_ASSERT_NOT_EQUAL(new_fd, -1);
+
+	rc = close(new_fd);
+	printf("close returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	new_fd = dup2(fd, 80);
+	printf("dup2(%d, 80) returned %d\n", fd, new_fd);
+	CU_ASSERT_EQUAL(new_fd, 80);
+
+	rc = close(new_fd);
+	printf("close returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
 	address = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE,
 		       MAP_SHARED, fd, 0);
 	printf("mmap returned %p\n", address);
@@ -314,22 +330,6 @@ static void do_misc_tests(const char *fname, size_t len)
 		CU_ASSERT_STRING_EQUAL(buf, "@@@@@@@@");
 	}
 skip_mmap:
-	new_fd = dup(fd);
-	printf("dup returned %d\n", new_fd);
-	CU_ASSERT_NOT_EQUAL(new_fd, -1);
-
-	rc = close(new_fd);
-	printf("close returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
-
-	new_fd = dup2(fd, 80);
-	printf("dup2 returned %d\n", new_fd);
-	CU_ASSERT_NOT_EQUAL(new_fd, -1);
-
-	rc = close(new_fd);
-	printf("close returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
-
 	rc = close(fd);
 	printf("close returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
@@ -368,9 +368,10 @@ int main(int argc, char **argv)
 
 	cnss_prefix = argv[1];
 
-	if (CU_initialize_registry() != CUE_SUCCESS)
+	if (CU_initialize_registry() != CUE_SUCCESS) {
 		printf("CU_initialize_registry() failed\n");
 		return CU_get_error();
+	}
 
 	pSuite = CU_add_suite("IO interception library test",
 			      init_suite, clean_suite);
