@@ -8,7 +8,7 @@ defaultENV:
 module:
     name: "iof_test_local"
     subLogKey: "IOF_TESTLOG"
-    setKeyFromHost: ["IOF_TEST_CN", "IOF_TEST_ION"]
+    setKeyFromHost: ["IOF_TEST_CN"]
     setKeyFromInfo:
         - [IOF_CART_PREFIX, CART_PREFIX, ""]
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
