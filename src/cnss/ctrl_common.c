@@ -35,6 +35,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <inttypes.h>
+#include <string.h>
+#include <crt_util/clog.h>
 #include "ctrl_common.h"
 
 static int shutdown_cb(void *arg)
@@ -47,6 +50,39 @@ static int shutdown_cb(void *arg)
 	return cnss_shutdown(arg);
 }
 
+#define MAX_MASK_LEN 256
+static int log_mask_cb(const char *mask,  void *cb_arg)
+{
+	char newmask[MAX_MASK_LEN];
+	char *pos;
+	size_t len;
+
+	if (strcmp(mask, "\n") == 0 || strlen(mask) == 0) {
+		IOF_LOG_INFO("No log mask specified, resetting to ERR");
+		strcpy(newmask, "ERR");
+	} else {
+		/* strip '\n' */
+		pos = strchr(mask, '\n');
+		if (pos != NULL)
+			len = ((uintptr_t)pos - (uintptr_t)mask);
+		else
+			len = strlen(mask);
+
+		if (len > MAX_MASK_LEN - 1)
+			len = MAX_MASK_LEN - 1;
+
+		strncpy(newmask, mask, len);
+		newmask[len] = 0;
+
+		IOF_LOG_INFO("Setting log mask to %s", newmask);
+	}
+
+	crt_log_setmasks(newmask, strlen(newmask));
+
+	return 0;
+}
+
+
 int register_cnss_controls(int count_start, void *arg)
 {
 	int ret;
@@ -57,6 +93,16 @@ int register_cnss_controls(int count_start, void *arg)
 				  NULL /* destroy_cb */, arg);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not register shutdown ctrl");
+		rc = ret;
+		ctrl_fs_stop();
+	}
+
+	ret = ctrl_register_variable(NULL, "log_mask",
+				  NULL /* read_cb */,
+				  log_mask_cb /* write_cb */,
+				  NULL /* destroy_cb */, NULL);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Could not register log_mask ctrl");
 		rc = ret;
 		ctrl_fs_stop();
 	}
