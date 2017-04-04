@@ -45,10 +45,10 @@ COMMON_SRC = ['version.c',
               'iof_obj_pool.c',
               'iof_vector.c']
 CNSS_SRC = ['cnss.c',
-	        'iof_main.c',
-	        'ctrl_common.c',
-	        'ctrl_fs.c',
-	        'iof_fuseops.c']
+            'iof_main.c',
+            'ctrl_common.c',
+            'ctrl_fs.c',
+            'iof_fuseops.c']
 IONSS_SRC = ['ionss.c', 'fh.c']
 RPC_SRC = ['chmod',
            'closedir',
@@ -131,6 +131,7 @@ def build_libioil_static(env, common):
 
     return il_lib
 
+#pylint: disable=too-many-statements
 def scons():
     """Scons function"""
 
@@ -214,6 +215,7 @@ def scons():
 
     SConscript('utest/SConscript')
     SConscript('test/SConscript')
+#pylint: enable=too-many-statements
 
 if __name__ == "SCons.Script":
     scons()

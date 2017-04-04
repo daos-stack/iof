@@ -156,7 +156,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def tearDown(self):
         """tear down the test"""
 
-        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof', 'projections', '0', 'stats')
+        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
+                                 'projections', '0', 'stats')
         if not os.path.exists(stats_dir):
             self.fail("Stats dir missing")
 
@@ -165,7 +166,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             f = open(os.path.join(stats_dir, stat_file), 'r')
             data = f.read()
             f.close()
-            self.logger.info("%s:%s" % (stat_file, data.rstrip("\n")))
+            self.logger.info("%s:%s", stat_file, data.rstrip("\n"))
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
@@ -586,12 +587,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         if not os.path.exists(test_path):
             test_path = os.path.join(dirname, '..', 'install', os.uname()[0],
-                                    'TESTING', 'tests')
+                                     'TESTING', 'tests')
 
         for tname in ['s_test_ioil', 'lf_s_test_ioil']:
             testname = os.path.join(test_path, tname)
             if not os.path.exists(testname):
-                self.skipTest("%s executable not found", tname)
+                self.skipTest("%s executable not found" % tname)
 
             self.logger.info("libioil test - input string:\n %s\n", testname)
             procrtn = subprocess.call([testname, self.import_dir], timeout=180)
