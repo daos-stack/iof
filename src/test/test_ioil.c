@@ -294,6 +294,22 @@ static void do_misc_tests(const char *fname, size_t len)
 	printf("close returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
 
+	new_fd = fcntl(fd, F_DUPFD, 80);
+	printf("fcntl(%d, F_DUPFD, 80) returned %d\n", fd, new_fd);
+	CU_ASSERT(new_fd >= 80);
+
+	rc = close(new_fd);
+	printf("close returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	new_fd = fcntl(fd, F_DUPFD_CLOEXEC, 90);
+	printf("fcntl(%d, F_DUPFD, 90) returned %d\n", fd, new_fd);
+	CU_ASSERT(new_fd >= 90);
+
+	rc = close(new_fd);
+	printf("close returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
 	address = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE,
 		       MAP_SHARED, fd, 0);
 	printf("mmap returned %p\n", address);
@@ -330,6 +346,30 @@ static void do_misc_tests(const char *fname, size_t len)
 		CU_ASSERT_STRING_EQUAL(buf, "@@@@@@@@");
 	}
 skip_mmap:
+	rc = close(fd);
+	printf("close returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	fd = open(fname, O_RDWR);
+	printf("Opened %s, fd = %d\n", fname, fd);
+	CU_ASSERT_NOT_EQUAL(fd, -1);
+
+	rc = fsync(fd);
+	printf("fsync returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	rc = fdatasync(fd);
+	printf("fdatasync returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	rc = fcntl(fd, F_SETFL, O_APPEND);
+	printf("fcntl F_SETFL returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	rc = fcntl(fd, F_GETFL);
+	printf("fcntl F_GETFL returned %d\n", rc);
+	CU_ASSERT(rc & O_APPEND);
+
 	rc = close(fd);
 	printf("close returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);

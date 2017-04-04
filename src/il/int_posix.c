@@ -63,7 +63,7 @@ struct fd_entry {
 	struct ios_gah gah;
 	off_t pos;
 	int flags;
-	bool is_mapped;
+	bool disabled;
 };
 
 int ioil_initialize_fd_table(int max_fds)
@@ -132,22 +132,22 @@ static void check_ioctl_on_open(int fd, int flags)
 			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry.gah));
 		entry.pos = 0;
 		entry.flags = flags;
-		entry.is_mapped = false;
+		entry.disabled = false;
 		rc = vector_set(&fd_table, fd, &entry);
 		if (rc != 0)
-			IOF_LOG_INFO("Failed to insert gah in table, rc = %d",
+			IOIL_LOG_INFO("Failed to insert gah in table, rc = %d",
 				     rc);
 	}
 
 	errno = saved_errno; /* Restore the errno from open */
 }
 
-static bool drop_reference_if_mapped(int fd, struct fd_entry *entry)
+static bool drop_reference_if_disabled(int fd, struct fd_entry *entry)
 {
-	if (!entry->is_mapped)
+	if (!entry->disabled)
 		return false;
 
-	IOF_LOG_INFO("Dropped reference to mapped file " GAH_PRINT_STR,
+	IOIL_LOG_INFO("Dropped reference to disabled file " GAH_PRINT_STR,
 		     GAH_PRINT_VAL(entry->gah));
 	vector_remove(&fd_table, fd, NULL);
 	vector_decref(&fd_table, entry);
@@ -227,7 +227,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_read(fd, buf, len);
 
 	IOIL_LOG_INFO("read(%d, %p, %zu) intercepted " GAH_PRINT_STR,
@@ -249,7 +249,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_pread(fd, buf, len, offset);
 
 	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
@@ -267,7 +267,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_write(fd, buf, len);
 
 	IOIL_LOG_INFO("write(%d, %p, %zu) intercepted " GAH_PRINT_STR,
@@ -289,7 +289,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_pwrite(fd, buf, len, offset);
 
 	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
@@ -306,7 +306,7 @@ IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_lseek(fd, offset, whence);
 
 	IOIL_LOG_INFO("lseek(%d, %zd, %d) intercepted " GAH_PRINT_STR, fd,
@@ -339,7 +339,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_readv(fd, vector, count);
 
 	IOIL_LOG_INFO("readv(%d, %p, %d) intercepted " GAH_PRINT_STR,
@@ -361,7 +361,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_preadv(fd, vector, count, offset);
 
 	IOIL_LOG_INFO("preadv(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
@@ -380,7 +380,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_writev(fd, vector, count);
 
 	IOIL_LOG_INFO("writev(%d, %p, %d) intercepted " GAH_PRINT_STR,
@@ -402,7 +402,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_pwritev(fd, vector, count, offset);
 
 	IOIL_LOG_INFO("pwritev(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
@@ -427,7 +427,7 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 
 		if (entry->pos != 0)
 			__real_lseek(fd, entry->pos, SEEK_SET);
-		entry->is_mapped = true; /* Signal others to drop references */
+		entry->disabled = true; /* Signal others to drop references */
 
 		vector_decref(&fd_table, entry);
 	}
@@ -441,7 +441,7 @@ IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_fsync(fd);
 
 	IOIL_LOG_INFO("fsync(%d) intercepted " GAH_PRINT_STR, fd,
@@ -457,7 +457,7 @@ IOIL_PUBLIC int IOIL_DECL(fdatasync)(int fd)
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
-	if (rc != 0 || drop_reference_if_mapped(fd, entry))
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
 		return __real_fdatasync(fd);
 
 	IOIL_LOG_INFO("fdatasync(%d) intercepted " GAH_PRINT_STR,
@@ -480,14 +480,14 @@ IOIL_PUBLIC int IOIL_DECL(dup)(int fd)
 	if (rc == 0 && entry != NULL) {
 		IOIL_LOG_INFO("dup(%d) intercepted " GAH_PRINT_STR,
 			      fd, GAH_PRINT_VAL(entry->gah));
-		if (drop_reference_if_mapped(newfd, entry)) {
-			/* If the file was mmapped, get the duplicated
+		if (drop_reference_if_disabled(newfd, entry)) {
+			/* If the file was disabled, get the duplicated
 			 * entry and if it hasn't changed, drop its
 			 * reference too
 			 */
 			rc = vector_get(&fd_table, fd, &entry);
 			if (rc == 0) {
-				if (!drop_reference_if_mapped(fd, entry))
+				if (!drop_reference_if_disabled(fd, entry))
 					vector_decref(&fd_table, entry);
 			}
 		} else
@@ -510,19 +510,18 @@ IOIL_PUBLIC int IOIL_DECL(dup2)(int old, int new)
 	if (rc == 0 && entry != NULL) {
 		IOIL_LOG_INFO("dup2(%d, %d) intercepted " GAH_PRINT_STR,
 			      old, new, GAH_PRINT_VAL(entry->gah));
-		if (drop_reference_if_mapped(new, entry)) {
-			/* If the file was mmapped, get the duplicated
+		if (drop_reference_if_disabled(new, entry)) {
+			/* If the file was disabled, get the duplicated
 			 * entry and if it hasn't changed, drop its
 			 * reference too
 			 */
 			rc = vector_get(&fd_table, old, &entry);
 			if (rc == 0) {
-				if (!drop_reference_if_mapped(old, entry))
+				if (!drop_reference_if_disabled(old, entry))
 					vector_decref(&fd_table, entry);
 			}
 		} else
 			vector_decref(&fd_table, entry);
-		vector_decref(&fd_table, entry);
 	}
 
 	return newfd;
@@ -547,6 +546,69 @@ IOIL_PUBLIC FILE * IOIL_DECL(fdopen)(int fd, const char *mode)
 	}
 
 	return __real_fdopen(fd, mode);
+}
+
+IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
+{
+	va_list ap;
+	void *arg;
+	struct fd_entry *entry = NULL;
+	int rc;
+	int newfd = -1;
+	int fdarg;
+
+	va_start(ap, cmd);
+	arg = va_arg(ap, void *);
+	va_end(ap);
+
+	rc = vector_get(&fd_table, fd, &entry);
+	if (rc != 0 || drop_reference_if_disabled(fd, entry))
+		return __real_fcntl(fd, cmd, arg);
+
+	if (cmd == F_SETFL) { /* We don't support this flag for interception */
+		entry->disabled = true;
+		IOIL_LOG_INFO("Removed IOF entry for fd=%d " GAH_PRINT_STR ": "
+			      "F_SETFL not supported for interception",
+			      fd, GAH_PRINT_VAL(entry->gah));
+		vector_remove(&fd_table, fd, NULL);
+		vector_decref(&fd_table, entry);
+		return __real_fcntl(fd, cmd, arg);
+	}
+
+	vector_decref(&fd_table, entry);
+
+	if (cmd != F_DUPFD && cmd != F_DUPFD_CLOEXEC)
+		return __real_fcntl(fd, cmd, arg);
+
+	va_start(ap, cmd);
+	fdarg = va_arg(ap, int);
+	va_end(ap);
+	newfd = __real_fcntl(fd, cmd, fdarg);
+
+	if (newfd == -1)
+		return newfd;
+
+	/* Ok, newfd is a duplicate of fd */
+	rc = vector_dup(&fd_table, fd, newfd, &entry);
+	if (rc == 0 && entry != NULL) {
+		IOIL_LOG_INFO("fcntl(%d, %d /* F_DUPFD* */, %d) intercepted "
+			      GAH_PRINT_STR, fd, cmd, fdarg,
+			      GAH_PRINT_VAL(entry->gah));
+		if (drop_reference_if_disabled(newfd, entry)) {
+			/* If the file was disabled, get the duplicated
+			 * entry and if it hasn't changed, drop its
+			 * reference too
+			 */
+			rc = vector_get(&fd_table, fd, &entry);
+			if (rc == 0) {
+				if (!drop_reference_if_disabled(fd, entry))
+					vector_decref(&fd_table, entry);
+			}
+		} else
+			vector_decref(&fd_table, entry);
+	}
+
+	return newfd;
 }
 
 FOREACH_ALIASED_INTERCEPT(IOIL_DECLARE_ALIAS)
