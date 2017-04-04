@@ -316,8 +316,15 @@ IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 		new_offset = offset;
 	else if (whence == SEEK_CUR)
 		new_offset = entry->pos + offset;
-	else if (whence == SEEK_END)
+	else {
+		/* Let the system handle SEEK_END as well as non-standard
+		 * values such as SEEK_DATA and SEEK_HOLE
+		 */
 		new_offset = __real_lseek(fd, offset, whence);
+		if (new_offset >= 0)
+			entry->pos = new_offset;
+		goto cleanup;
+	}
 
 	if (new_offset < 0) {
 		new_offset = (off_t)-1;
@@ -325,6 +332,7 @@ IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 	} else
 		entry->pos = new_offset;
 
+cleanup:
 	vector_decref(&fd_table, entry);
 
 	return new_offset;
