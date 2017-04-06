@@ -37,6 +37,7 @@
  */
 #ifndef __IOF_FS_MOUNTS_H__
 #define __IOF_FS_MOUNTS_H__
+#include <mntent.h>
 
 #define IOF_MAX_MNTENT_LEN 1024
 

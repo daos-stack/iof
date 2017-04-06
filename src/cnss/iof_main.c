@@ -235,6 +235,13 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	return ret;
 }
 
+static int iof_int_read(char *buf, size_t buflen, void *arg)
+{
+	int *value = (int *)arg;
+
+	snprintf(buf, buflen, "%d", *value);
+	return 0;
+}
 
 int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
@@ -262,9 +269,24 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->psr_ep.ep_rank = 0;
 	iof_state->psr_ep.ep_tag = 0;
 
+	cb->register_ctrl_variable(cb->plugin_dir, "psr_rank",
+				   iof_int_read, NULL, NULL,
+				   &iof_state->psr_ep.ep_rank);
+	cb->register_ctrl_variable(cb->plugin_dir, "psr_tag",
+				   iof_int_read, NULL, NULL,
+				   &iof_state->psr_ep.ep_tag);
+
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret)
 		IOF_LOG_ERROR("Context not created");
+
+	ret = crt_group_config_save(ionss_group);
+	if (ret) {
+		IOF_LOG_ERROR("crt_group_config_save failed for ionss "
+			      "with ret = %d", ret);
+		return ret;
+	}
+
 	prefix = getenv("CNSS_PREFIX");
 	iof_state->cnss_prefix = realpath(prefix, NULL);
 	prefix_dir = opendir(iof_state->cnss_prefix);
@@ -296,14 +318,6 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->cb_size = cb_size;
 
 	return ret;
-}
-
-static int iof_int_read(char *buf, size_t buflen, void *arg)
-{
-	int *value = (int *)arg;
-
-	snprintf(buf, buflen, "%d", *value);
-	return 0;
 }
 
 int iof_post_start(void *arg)

@@ -1181,11 +1181,15 @@ static struct fuse_operations fuse_ops = {
 
 int ctrl_fs_start(const char *prefix)
 {
-	static char *name = "";
-	struct fuse_args args = {.argv = &name, .argc = 1};
+	static char const *opts[] = {"", "-ofsname=CNSS",
+				     "-osubtype=ctrl"};
+	struct fuse_args args = {0};
+
 	struct stat stat_info;
 	int rc;
 
+	args.argc = sizeof(opts) / sizeof(*opts);
+	args.argv = (char **)opts;
 	pthread_once(&once_init, init_root_node);
 
 	if (ctrl_fs.startup_rc != 0)

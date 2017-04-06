@@ -199,6 +199,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             os.rmdir(mp)
 
         # Finally, remove any temporary files created.
+        os.unlink("%s/IONSS.attach_info_tmp" % self.import_dir)
         os.rmdir(self.import_dir)
         shutil.rmtree(self.export_dir)
         os.rmdir(self.e_dir)

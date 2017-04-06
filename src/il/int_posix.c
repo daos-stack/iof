@@ -37,7 +37,9 @@
  */
 #include <stdarg.h>
 #include <inttypes.h>
+#include <libgen.h>
 #include <stdbool.h>
+#include <string.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -48,6 +50,8 @@
 #include <sys/ioctl.h>
 #include <string.h>
 #include <crt_util/list.h>
+#include <crt_api.h>
+#include "iof_mntent.h"
 #include "intercept.h"
 #include "iof_ioctl.h"
 #include "iof_vector.h"
@@ -56,6 +60,10 @@ FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
 bool ioil_initialized;
 static vector_t fd_table;
+static char *ctrl_prefix;
+static char *cnss_prefix;
+static char *cnss_env;
+static crt_group_t *ionss_grp;
 
 #define BLOCK_SIZE 1024
 
@@ -78,6 +86,102 @@ int ioil_initialize_fd_table(int max_fds)
 	return rc;
 }
 
+static int check_mnt(struct mntent *entry, void *priv)
+{
+	char *ctrl_dir;
+	char *dir;
+	char *cnss_dir;
+	char *p;
+	struct stat buf;
+	int rc;
+
+	p = strstr(entry->mnt_dir, "/.ctrl");
+	if (p == NULL || strcmp(entry->mnt_type, "fuse.ctrl") ||
+	    strcmp(entry->mnt_fsname, "CNSS"))
+		return 0;
+
+	IOF_LOG_INFO("Checking possible IONSS: ctrl dir at %s", entry->mnt_dir);
+	rc = stat(entry->mnt_dir, &buf);
+	if (rc != 0) {
+		IOF_LOG_INFO("Skipping IONSS: ctrl dir is %s: %s",
+			     entry->mnt_dir, strerror(errno));
+		return 0;
+	}
+
+	dir = strdup(entry->mnt_dir);
+	if (dir == NULL) {
+		IOF_LOG_ERROR("Insufficient memory to configure interception");
+		return 0;
+	}
+
+	ctrl_dir = strdup(entry->mnt_dir);
+	if (ctrl_dir == NULL) {
+		IOF_LOG_ERROR("Insufficient memory to configure interception");
+		free(dir);
+		return 0;
+	}
+
+	cnss_dir = strdup(dirname(dir));
+	if (cnss_dir == NULL) {
+		IOF_LOG_ERROR("Insufficient memory to configure interception");
+		free(dir);
+		free(ctrl_dir);
+		return 0;
+	}
+
+	free(dir);
+
+	if (cnss_env != NULL && strcmp(cnss_dir, cnss_env)) {
+		IOF_LOG_INFO("Skipping IONSS: CNSS_PREFIX doesn't match");
+		free(ctrl_dir);
+		free(cnss_dir);
+		return 0;
+	}
+
+	rc = crt_group_config_path_set(cnss_dir);
+	if (rc != 0) {
+		IOF_LOG_INFO("Could not set group config path, rc = %d", rc);
+		free(cnss_dir);
+		free(ctrl_dir);
+		return 0;
+	}
+
+	/* Ok, now try to attach.  Note, this will change when we
+	 * attach to multiple IONSS processes
+	 */
+	rc = crt_group_attach("IONSS", &ionss_grp);
+	if (rc != 0) {
+		IOF_LOG_INFO("Could not attach to ionss, rc = %d", rc);
+		free(cnss_dir);
+		free(ctrl_dir);
+		return 0;
+	}
+
+	if (ctrl_prefix != NULL) {
+		IOF_LOG_ERROR("Multiple viable IOF options not supported");
+		goto handle_error;
+	}
+
+	cnss_prefix = cnss_dir;
+	ctrl_prefix = ctrl_dir;
+
+	return 0;
+handle_error:
+	crt_group_detach(ionss_grp);
+	free(ctrl_dir);
+	free(cnss_dir);
+	if (ctrl_prefix != NULL &&  ctrl_dir != ctrl_prefix) {
+		free(ctrl_prefix);
+		ctrl_prefix = NULL;
+	}
+	if (cnss_prefix != NULL &&  cnss_dir != cnss_prefix) {
+		free(cnss_prefix);
+		cnss_prefix = NULL;
+	}
+
+	return 0;
+}
+
 static __attribute__((constructor)) void ioil_init(void)
 {
 	struct rlimit rlimit;
@@ -96,8 +200,35 @@ static __attribute__((constructor)) void ioil_init(void)
 	}
 
 	rc = ioil_initialize_fd_table(rlimit.rlim_max);
-	if (rc != 0)
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not create fd_table, rc = %d,"
+			      ", disabling interception", rc);
 		return;
+	}
+
+	rc = crt_init(NULL, CRT_FLAG_BIT_SINGLETON);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not initialize crt, rc = %d,"
+			      " disabling interception", rc);
+		return;
+	}
+
+	cnss_env = getenv("CNSS_PREFIX");
+
+	iof_mntent_foreach(check_mnt, NULL);
+
+	if (cnss_prefix == NULL) {
+		if (cnss_env != NULL)
+			IOF_LOG_ERROR("CNSS_PREFIX is set but indicates"
+				      " invalid IOF session. Is it set by "
+				      "mistake?  Disabling interception");
+		else
+			IOF_LOG_ERROR("Could not detect active IOF session"
+				      ", disabling interception");
+		return;
+	}
+
+	IOF_LOG_INFO("Using IONSS: ctrl dir at %s", ctrl_prefix);
 
 	__sync_synchronize();
 
@@ -106,11 +237,18 @@ static __attribute__((constructor)) void ioil_init(void)
 
 static __attribute__((destructor)) void ioil_fini(void)
 {
+	if (ioil_initialized) {
+		crt_group_detach(ionss_grp);
+		crt_finalize();
+	}
 	ioil_initialized = false;
 
 	__sync_synchronize();
 
 	iof_log_close();
+
+	free(cnss_prefix);
+	free(ctrl_prefix);
 
 	vector_destroy(&fd_table);
 }
