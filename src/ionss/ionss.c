@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <mntent.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -54,6 +55,7 @@
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
+#include "iof_mntent.h"
 
 #define IOF_MAX_PATH_LEN 4096
 
@@ -1647,6 +1649,76 @@ static void *progress_thread(void *arg)
 	pthread_exit(NULL);
 }
 
+int fslookup_entry(struct mntent *entry, void *priv)
+{
+	int *path_lengths = priv;
+	int i, cur_path_len;
+
+	cur_path_len = strnlen(entry->mnt_dir, IOF_MAX_MNTENT_LEN);
+	for (i = 0; i < base.projection_count; i++) {
+		if (strstr(base.projection_array[i].full_path,
+			   entry->mnt_dir) == NULL)
+			continue;
+		if (cur_path_len < path_lengths[i])
+			continue;
+		path_lengths[i] = cur_path_len;
+		strncpy(base.projection_array[i].fs_type,
+			entry->mnt_type, IOF_MAX_FSTYPE_LEN);
+
+		/* Safety Check */
+		if (base.projection_array[i].fs_type
+		    [IOF_MAX_FSTYPE_LEN - 1] != '\0') {
+			IOF_LOG_ERROR("Overflow parsing File System"
+					" type: %s", entry->mnt_type);
+			return -ERANGE;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Identify the type of file system for projected paths using the longest
+ * matching prefix to determine the mount point. This is used to turn
+ * specific features on or off depending on the type of file system.
+ * e.g. Distributed Metadata for Parallel File Systems.
+ *
+ */
+int filesystem_lookup(void)
+{
+	int i, rc = 0, *path_lengths;
+
+	errno = 0;
+	path_lengths = calloc(sizeof(*path_lengths),
+			      base.projection_count);
+	if (path_lengths == NULL) {
+		IOF_LOG_ERROR("Could not allocate memory [path_lengths]");
+		return -ENOMEM;
+	}
+
+	rc = iof_mntent_foreach(fslookup_entry, path_lengths);
+	if (rc) {
+		IOF_LOG_ERROR("Error parsing mount entries.");
+		goto cleanup;
+	}
+
+	for (i = 0; i < base.projection_count; i++) {
+		if (path_lengths[i] == 0) {
+			IOF_LOG_ERROR("No mount point found for path %s",
+				      base.projection_array[i].full_path);
+			rc = -ENOENT;
+			continue;
+		}
+		IOF_LOG_DEBUG("File System: %s; Path: %s",
+			      base.projection_array[i].fs_type,
+			      base.projection_array[i].full_path);
+	}
+
+cleanup:
+	if (path_lengths)
+		free(path_lengths);
+	return rc;
+}
+
 int main(int argc, char **argv)
 {
 	char *ionss_grp = "IONSS";
@@ -1760,6 +1832,12 @@ int main(int argc, char **argv)
 	}
 	if (err) {
 		ret = 1;
+		goto cleanup;
+	}
+
+	ret = filesystem_lookup();
+	if (ret) {
+		IOF_LOG_ERROR("File System look up failed with ret = %d", ret);
 		goto cleanup;
 	}
 

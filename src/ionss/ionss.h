@@ -42,6 +42,8 @@
 #include "iof_atomic.h"
 #include "ios_gah.h"
 
+#define IOF_MAX_FSTYPE_LEN 32
+
 struct ios_base {
 	struct ios_projection	*projection_array;
 	struct iof_fs_info	*fs_list;
@@ -52,6 +54,7 @@ struct ios_base {
 
 struct ios_projection {
 	char		*full_path;
+	char		fs_type[IOF_MAX_FSTYPE_LEN];
 	DIR		*dir;
 	uint		dir_fd;
 	uint		id;

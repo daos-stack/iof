@@ -43,7 +43,8 @@ COMMON_SRC = ['version.c',
               'log.c',
               'iof_rpc.c',
               'iof_obj_pool.c',
-              'iof_vector.c']
+              'iof_vector.c',
+              'iof_mntent.c']
 CNSS_SRC = ['cnss.c',
             'iof_main.c',
             'ctrl_common.c',
