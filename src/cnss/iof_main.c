@@ -285,9 +285,9 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = crt_rpc_register(SHUTDOWN_OP, NULL);
+	ret = crt_rpc_register(DETACH_OP, NULL);
 	if (ret) {
-		IOF_LOG_ERROR("shutdown registration failed with ret: %d", ret);
+		IOF_LOG_ERROR("Detach registration failed with ret: %d", ret);
 		return ret;
 	}
 
@@ -449,7 +449,7 @@ void iof_flush(void *arg)
 
 }
 
-static int shutdown_cb(const struct crt_cb_info *cb_info)
+static int detach_cb(const struct crt_cb_info *cb_info)
 {
 	int *complete;
 
@@ -469,19 +469,19 @@ void iof_finish(void *arg)
 
 	/*send a detach RPC to IONSS*/
 	ret = crt_req_create(iof_state->crt_ctx, iof_state->psr_ep,
-			     SHUTDOWN_OP, &rpc);
+			     DETACH_OP, &rpc);
 	if (ret || !rpc)
-		IOF_LOG_ERROR("Could not create shutdown request ret = %d",
+		IOF_LOG_ERROR("Could not create detach request ret = %d",
 				ret);
 
 	complete = 0;
-	ret = crt_req_send(rpc, shutdown_cb, &complete);
+	ret = crt_req_send(rpc, detach_cb, &complete);
 	if (ret)
-		IOF_LOG_ERROR("shutdown RPC not sent");
+		IOF_LOG_ERROR("Detach RPC not sent");
 
 	ret = iof_progress(iof_state->crt_ctx, &complete);
 	if (ret)
-		IOF_LOG_ERROR("Could not progress shutdown RPC");
+		IOF_LOG_ERROR("Could not progress detach RPC");
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");

@@ -50,6 +50,9 @@ struct ios_base {
 	struct ios_gah_store	*gs;
 	struct proto		*proto;
 	uint			projection_count;
+	crt_group_t		*primary_group;
+	crt_rank_t		my_rank;
+	uint32_t		num_ranks;
 };
 
 struct ios_projection {

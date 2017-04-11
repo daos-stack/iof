@@ -61,7 +61,7 @@
 /* IOF Registration op codes for RPC's*/
 
 #define QUERY_PSR_OP	(0x201)
-#define SHUTDOWN_OP	(0x202)
+#define DETACH_OP	(0x202)
 
 /*
  * IOF features are represented by an 8-bit unsigned bit vector

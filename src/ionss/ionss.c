@@ -50,16 +50,18 @@
 
 #include <fcntl.h>
 
-#include "ionss.h"
-
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
 #include "iof_mntent.h"
 
+#include "ionss.h"
+
 #define IOF_MAX_PATH_LEN 4096
+#define SHUTDOWN_BCAST_OP (0xFFF0)
 
 static int shutdown;
+static uint32_t	cnss_count;
 
 static struct ios_base base;
 
@@ -170,17 +172,91 @@ static void (*register_handlers
 	iof_register_default_handlers
 };
 
-int shutdown_handler(crt_rpc_t *rpc)
+int shutdown_impl(void)
+{
+	IOF_LOG_DEBUG("Shutting Down");
+	shutdown = 1;
+	return 0;
+}
+
+/*
+ * Call the shutdown implementation in the broadcast RPC callback in order
+ * to ensure that the broadcast actually made it to all other IONSS ranks.
+ */
+static int shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 {
 	int rc;
+	if (cb_info->cci_rc == 0)
+		return shutdown_impl();
+	IOF_LOG_ERROR("Broadcast failed, rc = %u", cb_info->cci_rc);
+	/* Retry in case of failure */
+	rc = crt_req_send(cb_info->cci_rpc, shutdown_bcast_cb, NULL);
+	if (rc) {
+		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
+		return rc;
+	}
+	return cb_info->cci_rc;
+}
 
-	IOF_LOG_DEBUG("Shutdown request received");
+/*
+ * Handle broadcast shutdown RPCs from other IONSS ranks.
+ */
+static int shutdown_handler(crt_rpc_t *rpc)
+{
+	int rc = 0;
+
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+	return shutdown_impl();
+}
+
+/*
+ * The IONSS shuts down when the last CNSS detaches. In case there are
+ * other running IONSS processes in the primary group, the local decision
+ * to shut down must be broadcast to the others before exiting.
+ */
+static int cnss_detach_handler(crt_rpc_t *rpc)
+{
+	int rc;
+	crt_rpc_t *rpc_bcast = NULL;
+	crt_rank_list_t exclude_me = {  .rl_nr = { 1, 1 },
+					.rl_ranks = &base.my_rank };
+
+	IOF_LOG_DEBUG("CNSS detach received (attached: %d)", cnss_count);
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
-	shutdown = 1;
+	/* Do nothing if there are more CNSS attached */
+	if (--cnss_count)
+		return 0;
 
+	IOF_LOG_DEBUG("Last CNSS detached from Rank %d",
+			base.my_rank);
+
+	/* Call shutdown directly if this is the only IONSS running */
+	if (base.num_ranks == 1)
+		return shutdown_impl();
+
+	IOF_LOG_DEBUG("Broadcasting shutdown to %d IONSS",
+			(base.num_ranks - 1));
+	rc = crt_corpc_req_create(rpc->cr_ctx,
+				  base.primary_group,
+				  &exclude_me, SHUTDOWN_BCAST_OP,
+				  NULL, NULL, 0,
+				  crt_tree_topo(CRT_TREE_FLAT, 0),
+				  &rpc_bcast);
+	if (rc || !rpc_bcast) {
+		IOF_LOG_ERROR("Could not create broadcast"
+			      " shutdown request ret = %d", rc);
+		return rc;
+	}
+	rc = crt_req_send(rpc_bcast, shutdown_bcast_cb, NULL);
+	if (rc) {
+		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
+		return rc;
+	}
 	return 0;
 }
 
@@ -1594,6 +1670,8 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 	ret = crt_reply_send(query_rpc);
 	if (ret)
 		IOF_LOG_ERROR("query rpc response not sent, ret = %d", ret);
+
+	cnss_count++;
 	return ret;
 }
 
@@ -1604,16 +1682,30 @@ int ionss_register(void)
 	ret = crt_rpc_srv_register(QUERY_PSR_OP, &QUERY_RPC_FMT,
 			iof_query_handler);
 	if (ret) {
-		IOF_LOG_ERROR("Can not register query RPC, ret = %d", ret);
+		IOF_LOG_ERROR("Cannot register query RPC, ret = %d", ret);
 		return ret;
 	}
 
-	ret = crt_rpc_srv_register(SHUTDOWN_OP, NULL, shutdown_handler);
+	ret = crt_rpc_srv_register(DETACH_OP, NULL, cnss_detach_handler);
 	if (ret) {
-		IOF_LOG_ERROR("Can not register shutdown RPC, ret = %d", ret);
+		IOF_LOG_ERROR("Cannot register CNSS detach"
+				" RPC, ret = %d", ret);
 		return ret;
 	}
 
+	ret = crt_rpc_srv_register(SHUTDOWN_BCAST_OP,
+				   NULL, shutdown_handler);
+	if (ret) {
+		IOF_LOG_ERROR("Cannot register shutdown "
+				"broadcast RPC handler, ret = %d", ret);
+		return ret;
+	}
+	ret = crt_rpc_register(SHUTDOWN_BCAST_OP, NULL);
+	if (ret) {
+		IOF_LOG_ERROR("Cannot register shutdown "
+				"broadcast RPC, ret = %d", ret);
+		return ret;
+	}
 	reg_count = sizeof(register_handlers)
 		  / sizeof(*register_handlers);
 	for (i = 0; i < reg_count; i++)
@@ -1853,8 +1945,19 @@ int main(int argc, char **argv)
 	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);
 	if (ret) {
 		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
-		return ret;
+		goto cleanup;
 	}
+
+	cnss_count = 0;
+	base.primary_group = crt_group_lookup(ionss_grp);
+	if (base.primary_group == NULL) {
+		IOF_LOG_ERROR("Failed to look up primary group");
+		ret = 1;
+		goto cleanup;
+	}
+	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
+	crt_group_rank(base.primary_group, &base.my_rank);
+	crt_group_size(base.primary_group, &base.num_ranks);
 
 	ret = crt_context_create(NULL, &crt_ctx);
 	if (ret) {
