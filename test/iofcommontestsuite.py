@@ -126,8 +126,6 @@ class CommonTestSuite(unittest.TestCase):
     """Attributes common to the IOF tests"""
     fs_list = []
     logger = logging.getLogger("TestRunnerLogger")
-    if logger.getEffectiveLevel() == 30:
-        logger.setLevel(logging.INFO)
     __ion_dir = None
 
     @staticmethod

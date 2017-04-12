@@ -80,12 +80,12 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def setUp(self):
         """set up the test"""
 
-        self.logger.info("Starting for %s", self.id())
-
         if self.logger.getEffectiveLevel() == logging.WARNING:
             self.logger.setLevel(logging.INFO)
             __ch = logging.StreamHandler(sys.stdout)
             self.logger.addHandler(__ch)
+
+        self.logger.info("Starting for %s", self.id())
 
         # Allow the use of a custom temp directory.  This can be needed on
         # docker when /tmp is an overlay fs.
