@@ -185,6 +185,7 @@ class CommonTestSuite(unittest.TestCase):
                 os.makedirs(log_path)
             cmdfileout = os.path.join(log_path, "common_launch_test.out")
             cmdfileerr = os.path.join(log_path, "common_launch_test.err")
+            procrtn = -1
             try:
                 with open(cmdfileout, mode='a') as outfile, \
                     open(cmdfileerr, mode='a') as errfile:
@@ -193,9 +194,12 @@ class CommonTestSuite(unittest.TestCase):
                     procrtn = subprocess.call(cmdarg, timeout=180,
                                               stdout=outfile,
                                               stderr=errfile)
-            except (FileNotFoundError, IOError) as e:
+            except (FileNotFoundError) as e:
+                self.logger.info("Testnss: %s", \
+                                 e.strerror)
+            except (IOError) as e:
                 self.logger.info("Testnss: Error opening the log files: %s", \
-                                  e.errno)
+                                 e.errno)
 
         return procrtn
 
