@@ -93,6 +93,7 @@ struct ionss_file_handle {
 	struct ios_gah	gah;
 	uint		fs_id;
 	uint		fd;
+	int		flags;
 	ATOMIC uint	ref;
 	ino_t		inode_no;
 	LIST_ENTRY(ionss_file_handle) list;

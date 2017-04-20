@@ -361,9 +361,6 @@ int iof_getattr_gah_handler(crt_rpc_t *rpc)
 	errno = 0;
 	rc = fstat(handle->fd, &stbuf);
 
-	/* Cache the inode number */
-	handle->inode_no = stbuf.st_ino;
-
 	if (rc)
 		out->rc = errno;
 	else
@@ -626,7 +623,9 @@ int iof_open_handler(crt_rpc_t *rpc)
 	struct iof_open_in *in;
 	struct iof_open_out *out;
 	struct ionss_file_handle *handle = NULL;
+	struct ionss_file_handle *tmp_handle = NULL;
 	struct ios_projection *projection;
+	struct stat stbuf = {0};
 	int fd;
 	int rc;
 
@@ -658,19 +657,58 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	pthread_mutex_lock(&projection->lock);
-
-	rc = ios_fh_alloc(&base, &handle);
-	if (rc || !handle) {
-		out->err = IOF_ERR_NOMEM;
+	rc = fstat(fd, &stbuf);
+	if (rc) {
+		out->rc = errno;
 		close(fd);
 		goto out;
 	}
 
-	handle->fd = fd;
-	handle->fs_id = in->fs_id;
+	pthread_mutex_lock(&projection->lock);
 
-	LIST_INSERT_HEAD(&projection->files, handle, list);
+	/* Check if a pre-existing GAH can be reused for this open call.
+	 *
+	 * To be re-used the file must be the same (inode number must match),
+	 * some of the open flags must match.  Currently this code checks all
+	 * flags however this could be relaxed in future.
+	 *
+	 * If the handle can be re-used then close the new file descriptor
+	 * and take a reference on the existing GAH.
+	 */
+	LIST_FOREACH(tmp_handle, &projection->files, list) {
+		if (stbuf.st_ino != tmp_handle->inode_no)
+			continue;
+
+		if (in->flags != tmp_handle->flags)
+			continue;
+
+		IOF_LOG_INFO("Subsequent open, reusing GAH " GAH_PRINT_STR,
+			     GAH_PRINT_VAL(tmp_handle->gah));
+
+		handle = tmp_handle;
+		close(fd);
+
+		atomic_fetch_add(&handle->ref, 1);
+
+		break;
+	}
+
+	if (!handle) {
+		rc = ios_fh_alloc(&base, &handle);
+		if (rc || !handle) {
+			out->err = IOF_ERR_NOMEM;
+			close(fd);
+			pthread_mutex_unlock(&projection->lock);
+			goto out;
+		}
+
+		handle->fd = fd;
+		handle->fs_id = in->fs_id;
+		handle->flags = in->flags;
+		handle->inode_no = stbuf.st_ino;
+
+		LIST_INSERT_HEAD(&projection->files, handle, list);
+	}
 
 	pthread_mutex_unlock(&projection->lock);
 
@@ -697,7 +735,9 @@ int iof_create_handler(crt_rpc_t *rpc)
 	struct iof_create_in *in;
 	struct iof_open_out *out;
 	struct ionss_file_handle *handle = NULL;
+	struct ionss_file_handle *tmp_handle = NULL;
 	struct ios_projection *projection;
+	struct stat stbuf = {0};
 	int fd;
 	int rc;
 
@@ -728,19 +768,58 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	pthread_mutex_lock(&projection->lock);
-
-	rc = ios_fh_alloc(&base, &handle);
-	if (rc || !handle) {
-		out->err = IOF_ERR_NOMEM;
+	rc = fstat(fd, &stbuf);
+	if (rc) {
+		out->rc = errno;
 		close(fd);
 		goto out;
 	}
 
-	handle->fd = fd;
-	handle->fs_id = in->fs_id;
+	pthread_mutex_lock(&projection->lock);
 
-	LIST_INSERT_HEAD(&base.projection_array[in->fs_id].files, handle, list);
+	/* Check if a pre-existing GAH can be reused for this open call.
+	 *
+	 * To be re-used the file must be the same (inode number must match),
+	 * some of the open flags must match.  Currently this code checks all
+	 * flags however this could be relaxed in future.
+	 *
+	 * If the handle can be re-used then close the new file descriptor
+	 * and take a reference on the existing GAH.
+	 */
+	LIST_FOREACH(tmp_handle, &projection->files, list) {
+		if (stbuf.st_ino != tmp_handle->inode_no)
+			continue;
+
+		if (in->flags != tmp_handle->flags)
+			continue;
+
+		IOF_LOG_INFO("Subsequent open, reusing GAH " GAH_PRINT_STR,
+			     GAH_PRINT_VAL(tmp_handle->gah));
+
+		handle = tmp_handle;
+		close(fd);
+
+		atomic_fetch_add(&handle->ref, 1);
+
+		break;
+	}
+
+	if (!handle) {
+		rc = ios_fh_alloc(&base, &handle);
+		if (rc || !handle) {
+			out->err = IOF_ERR_NOMEM;
+			close(fd);
+			pthread_mutex_unlock(&projection->lock);
+			goto out;
+		}
+
+		handle->fd = fd;
+		handle->fs_id = in->fs_id;
+		handle->flags = in->flags;
+		handle->inode_no = stbuf.st_ino;
+
+		LIST_INSERT_HEAD(&projection->files, handle, list);
+	}
 
 	pthread_mutex_unlock(&projection->lock);
 
