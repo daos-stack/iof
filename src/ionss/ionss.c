@@ -626,6 +626,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	struct iof_open_in *in;
 	struct iof_open_out *out;
 	struct ionss_file_handle *handle = NULL;
+	struct ios_projection *projection;
 	int fd;
 	int rc;
 
@@ -642,6 +643,11 @@ int iof_open_handler(crt_rpc_t *rpc)
 			goto out;
 	}
 
+	/* in->fs_id will have been verified by the VALIDATE_ARGS_STR call
+	 * above
+	 */
+	projection = &base.projection_array[in->fs_id];
+
 	IOF_LOG_DEBUG("path %s flags 0%o",
 		      in->path, in->flags);
 
@@ -652,6 +658,8 @@ int iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	pthread_mutex_lock(&projection->lock);
+
 	rc = ios_fh_alloc(&base, &handle);
 	if (rc || !handle) {
 		out->err = IOF_ERR_NOMEM;
@@ -661,6 +669,10 @@ int iof_open_handler(crt_rpc_t *rpc)
 
 	handle->fd = fd;
 	handle->fs_id = in->fs_id;
+
+	LIST_INSERT_HEAD(&projection->files, handle, list);
+
+	pthread_mutex_unlock(&projection->lock);
 
 	out->gah = handle->gah;
 
@@ -685,7 +697,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 	struct iof_create_in *in;
 	struct iof_open_out *out;
 	struct ionss_file_handle *handle = NULL;
-
+	struct ios_projection *projection;
 	int fd;
 	int rc;
 
@@ -700,6 +712,11 @@ int iof_create_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
+	/* in->fs_id will have been verified by the VALIDATE_ARGS_STR call
+	 * above
+	 */
+	projection = &base.projection_array[in->fs_id];
+
 	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
 		      in->path, in->flags, in->mode);
 
@@ -711,6 +728,8 @@ int iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	pthread_mutex_lock(&projection->lock);
+
 	rc = ios_fh_alloc(&base, &handle);
 	if (rc || !handle) {
 		out->err = IOF_ERR_NOMEM;
@@ -720,6 +739,10 @@ int iof_create_handler(crt_rpc_t *rpc)
 
 	handle->fd = fd;
 	handle->fs_id = in->fs_id;
+
+	LIST_INSERT_HEAD(&base.projection_array[in->fs_id].files, handle, list);
+
+	pthread_mutex_unlock(&projection->lock);
 
 	out->gah = handle->gah;
 
@@ -1741,6 +1764,23 @@ static void *progress_thread(void *arg)
 	pthread_exit(NULL);
 }
 
+/* Close all file handles associated with a projection, and release all GAH
+ * which are currently in use.
+ */
+static void release_projection_resources(struct ios_projection *projection)
+{
+	while (!LIST_EMPTY(&projection->files)) {
+		struct ionss_file_handle *handle;
+
+		handle = LIST_FIRST(&projection->files);
+
+		IOF_LOG_INFO("Closing handle %p fd %d " GAH_PRINT_STR,
+			     handle, handle->fd, GAH_PRINT_VAL(handle->gah));
+
+		ios_fh_decref(&base, handle, handle->ref);
+	}
+}
+
 int fslookup_entry(struct mntent *entry, void *priv)
 {
 	int *path_lengths = priv;
@@ -1865,6 +1905,8 @@ int main(int argc, char **argv)
 		int rc;
 
 		projection->active = 0;
+		LIST_INIT(&projection->files);
+		pthread_mutex_init(&projection->lock, NULL);
 
 		if (!full_path) {
 			IOF_LOG_ERROR("Export path does not exist: %s",
@@ -1975,9 +2017,29 @@ int main(int argc, char **argv)
 	if (ret)
 		IOF_LOG_ERROR("Could not join progress thread");
 
+	IOF_LOG_INFO("Shutting down, threads terminated");
+
 	ret = crt_context_destroy(crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
+
+	/* After shutdown has been invoked close all files and free any memory,
+	 * in normal operation all files should be closed as a result of CNSS
+	 * requests prior to shutdown being triggered however perform a full
+	 * shutdown here and log any which remained open.
+	 */
+	for (i = 0; i < base.projection_count; i++) {
+		struct ios_projection *projection = &base.projection_array[i];
+
+		/* Close all file handles associated with a projection.
+		 *
+		 * No locks are held here because at this point all progression
+		 * threads have already been terminated
+		 */
+		release_projection_resources(projection);
+
+		pthread_mutex_destroy(&projection->lock);
+	}
 
 	/* TODO:
 	 *

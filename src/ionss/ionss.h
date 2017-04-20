@@ -55,6 +55,8 @@ struct ios_base {
 	uint32_t		num_ranks;
 };
 
+LIST_HEAD(active_files, ionss_file_handle);
+
 struct ios_projection {
 	char		*full_path;
 	char		fs_type[IOF_MAX_FSTYPE_LEN];
@@ -64,6 +66,8 @@ struct ios_projection {
 	uint		flags;
 	uint		active;
 	uint64_t	dev_no;
+	struct active_files files;
+	pthread_mutex_t lock;
 };
 
 /* Convert from a fs_id as received over the network to a projection pointer.
@@ -91,6 +95,7 @@ struct ionss_file_handle {
 	uint		fd;
 	ATOMIC uint	ref;
 	ino_t		inode_no;
+	LIST_ENTRY(ionss_file_handle) list;
 
 };
 

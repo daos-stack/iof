@@ -92,6 +92,8 @@ void ios_fh_decref(struct ios_base *base, struct ionss_file_handle *fh,
 	if (rc)
 		IOF_LOG_ERROR("Failed to deallocate GAH %d", rc);
 
+	LIST_REMOVE(fh, list);
+
 	free(fh);
 }
 
