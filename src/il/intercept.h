@@ -39,7 +39,9 @@
 #define __INTERCEPT_H__
 #include <unistd.h>
 #include <stdlib.h>
+#include <sys/uio.h>
 #include "log.h"
+#include "ios_gah.h"
 
 #define IOIL_PUBLIC __attribute__((visibility("default")))
 
@@ -133,5 +135,19 @@ extern bool ioil_initialized;
 #define IOIL_LOG_WARNING(...) IOIL_LOG_(WARNING, __VA_ARGS__)
 #define IOIL_LOG_INFO(...) IOIL_LOG_(INFO, __VA_ARGS__)
 #define IOIL_LOG_DEBUG(...) IOIL_LOG_(DEBUG, __VA_ARGS__)
+
+struct file_info {
+	crt_context_t crt_ctx;
+	crt_endpoint_t dest_ep;
+	struct ios_gah gah;
+	bool gah_valid;
+	int errcode;
+};
+
+int ioil_cb_progress(struct file_info *f_info, int *complete_flag);
+ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
+		      struct file_info *f_info);
+ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
+		       struct file_info *f_info);
 
 #endif /* __INTERCEPT_H__ */

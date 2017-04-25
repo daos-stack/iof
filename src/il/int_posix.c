@@ -55,6 +55,7 @@
 #include "intercept.h"
 #include "iof_ioctl.h"
 #include "iof_vector.h"
+#include "iof_common.h"
 
 FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
@@ -64,6 +65,7 @@ static char *ctrl_prefix;
 static char *cnss_prefix;
 static char *cnss_env;
 static crt_group_t *ionss_grp;
+static crt_context_t context;
 
 #define BLOCK_SIZE 1024
 
@@ -73,6 +75,44 @@ struct fd_entry {
 	int flags;
 	bool disabled;
 };
+
+static int iof_check_complete(void *arg)
+{
+	int *complete = (int *)arg;
+	return *complete;
+}
+
+/* on-demand progress */
+static int iof_progress(crt_context_t crt_ctx, int *complete_flag)
+{
+	int		rc;
+
+	do {
+		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
+				  complete_flag);
+
+		if (*complete_flag)
+			return 0;
+
+	} while (rc == 0 || rc == -CER_TIMEDOUT);
+
+	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+	return -1;
+}
+
+/* Progress, from within ioil entry point during normal I/O */
+int ioil_cb_progress(struct file_info *f_info, int *complete_flag)
+{
+	int rc;
+
+	rc = iof_progress(f_info->crt_ctx, complete_flag);
+	if (rc) {
+		IOF_LOG_ERROR("Progress loop exited, rc %d", rc);
+		return -1;
+	}
+	return 0;
+}
+
 
 int ioil_initialize_fd_table(int max_fds)
 {
@@ -182,6 +222,49 @@ handle_error:
 	return 0;
 }
 
+static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
+			 off_t offset, int *err)
+{
+	ssize_t bytes_read;
+	struct file_info fi;
+
+	/* Just get rpc working then work out how to really do this */
+	fi.crt_ctx = context;
+	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_rank = entry->gah.base;
+	fi.dest_ep.ep_tag = 0;
+	fi.gah = entry->gah;
+	fi.gah_valid = true;
+	fi.errcode = 0;
+
+	bytes_read = ioil_do_pread(buff, len, offset, &fi);
+	if (bytes_read < 0)
+		*err = fi.errcode;
+	return bytes_read;
+}
+
+/* Start simple and just loop */
+static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
+			  int count, off_t offset, int *err)
+{
+	ssize_t bytes_read;
+	struct file_info fi;
+
+	/* Just get rpc working then work out how to really do this */
+	fi.crt_ctx = context;
+	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_rank = entry->gah.base;
+	fi.dest_ep.ep_tag = 0;
+	fi.gah = entry->gah;
+	fi.gah_valid = true;
+	fi.errcode = 0;
+
+	bytes_read = ioil_do_preadv(iov, count, offset, &fi);
+	if (bytes_read < 0)
+		*err = fi.errcode;
+	return bytes_read;
+}
+
 static __attribute__((constructor)) void ioil_init(void)
 {
 	struct rlimit rlimit;
@@ -213,6 +296,23 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
+	rc = crt_context_create(NULL, &context);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
+			      " disabling interception", rc);
+		crt_finalize();
+		return;
+	}
+
+	rc = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
+	if (rc != 0) {
+		crt_context_destroy(context, 0);
+		crt_finalize();
+		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
+			      " disabling interception", rc);
+		return;
+	}
+
 	cnss_env = getenv("CNSS_PREFIX");
 
 	iof_mntent_foreach(check_mnt, NULL);
@@ -239,6 +339,7 @@ static __attribute__((destructor)) void ioil_fini(void)
 {
 	if (ioil_initialized) {
 		crt_group_detach(ionss_grp);
+		crt_context_destroy(context, 0);
 		crt_finalize();
 	}
 	ioil_initialized = false;
@@ -362,6 +463,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 	struct fd_entry *entry;
 	ssize_t bytes_read;
 	off_t oldpos;
+	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -372,11 +474,13 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_read = __real_pread(fd, buf, len, entry->pos);
+	bytes_read = pread_rpc(entry, buf, len, oldpos, &err);
 	if (bytes_read > 0)
 		entry->pos = oldpos + bytes_read;
 	vector_decref(&fd_table, entry);
 
+	if (bytes_read < 0)
+		errno = err;
 	return bytes_read;
 }
 
@@ -384,6 +488,8 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 				     size_t len, off_t offset)
 {
 	struct fd_entry *entry;
+	ssize_t bytes_read;
+	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -392,9 +498,15 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 
 	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
 		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
+
+	bytes_read = pread_rpc(entry, buf, len, offset, &err);
+
 	vector_decref(&fd_table, entry);
 
-	return __real_pread(fd, buf, len, offset);
+	if (bytes_read < 0)
+		errno = err;
+
+	return bytes_read;
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
@@ -482,6 +594,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 	struct fd_entry *entry;
 	ssize_t bytes_read;
 	off_t oldpos;
+	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -492,10 +605,13 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_read = __real_preadv(fd, vector, count, entry->pos);
+	bytes_read = preadv_rpc(entry, vector, count, entry->pos, &err);
 	if (bytes_read > 0)
 		entry->pos = oldpos + bytes_read;
 	vector_decref(&fd_table, entry);
+
+	if (bytes_read < 0)
+		errno = err;
 
 	return bytes_read;
 }
@@ -504,6 +620,8 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 				      int count, off_t offset)
 {
 	struct fd_entry *entry;
+	ssize_t bytes_read;
+	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -513,8 +631,13 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 	IOIL_LOG_INFO("preadv(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
 		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
 
+	bytes_read = preadv_rpc(entry, vector, count, offset, &err);
 	vector_decref(&fd_table, entry);
-	return __real_preadv(fd, vector, count, offset);
+
+	if (bytes_read < 0)
+		errno = err;
+
+	return bytes_read;
 }
 
 IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
