@@ -149,5 +149,9 @@ ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
 		      struct file_info *f_info);
 ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
 		       struct file_info *f_info);
+ssize_t ioil_do_pwrite(const char *buff, size_t len, off_t position,
+		       struct file_info *f_info);
+ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
+			struct file_info *f_info);
 
 #endif /* __INTERCEPT_H__ */

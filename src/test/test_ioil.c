@@ -42,6 +42,7 @@
 #include <sys/uio.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -190,6 +191,10 @@ static void do_write_tests(int fd, char *buf, size_t len)
 	printf("Wrote %zd bytes, expected %zu\n", bytes, len * 2);
 	CU_ASSERT_EQUAL(bytes, len * 2);
 
+	offset = lseek(fd, 0, SEEK_END);
+	printf("Seek offset is %zd, expected %zu\n", offset, len * 4);
+	CU_ASSERT_EQUAL(offset, len * 4);
+
 	rc = close(fd);
 	printf("Closed file, rc = %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
@@ -264,6 +269,7 @@ static void do_read_tests(const char *fname, size_t len)
 
 static void do_misc_tests(const char *fname, size_t len)
 {
+	struct stat stat_info;
 	void *address;
 	char buf[BUF_SIZE];
 	FILE *fp;
@@ -274,6 +280,9 @@ static void do_misc_tests(const char *fname, size_t len)
 
 	memset(buf, 0, sizeof(buf));
 
+	rc = stat(fname, &stat_info);
+	CU_ASSERT_EQUAL_FATAL(rc, 0);
+	CU_ASSERT_NOT_EQUAL_FATAL(stat_info.st_size, 0);
 	fd = open(fname, O_RDWR);
 	printf("Opened %s, fd = %d\n", fname, fd);
 	CU_ASSERT_NOT_EQUAL(fd, -1);
@@ -310,11 +319,19 @@ static void do_misc_tests(const char *fname, size_t len)
 	printf("close returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
 
+	rc = fsync(fd);
+	printf("fsync returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
+	rc = fdatasync(fd);
+	printf("fdatasync returned %d\n", rc);
+	CU_ASSERT_EQUAL(rc, 0);
+
 	address = mmap(NULL, BUF_SIZE, PROT_READ | PROT_WRITE,
 		       MAP_SHARED, fd, 0);
+
 	printf("mmap returned %p\n", address);
-	fflush(stdout);
-	if (errno == ENODEV) {
+	if (address == MAP_FAILED && errno == ENODEV) {
 		printf("mmap not supported on file system\n");
 		goto skip_mmap;
 	}
@@ -324,14 +341,6 @@ static void do_misc_tests(const char *fname, size_t len)
 
 	rc = munmap(address, BUF_SIZE);
 	printf("munmap returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
-
-	rc = fsync(fd);
-	printf("fsync returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
-
-	rc = fdatasync(fd);
-	printf("fdatasync returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
 
 	fp = fdopen(fd, "r");
@@ -353,14 +362,6 @@ skip_mmap:
 	fd = open(fname, O_RDWR);
 	printf("Opened %s, fd = %d\n", fname, fd);
 	CU_ASSERT_NOT_EQUAL(fd, -1);
-
-	rc = fsync(fd);
-	printf("fsync returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
-
-	rc = fdatasync(fd);
-	printf("fdatasync returned %d\n", rc);
-	CU_ASSERT_EQUAL(rc, 0);
 
 	rc = fcntl(fd, F_SETFL, O_APPEND);
 	printf("fcntl F_SETFL returned %d\n", rc);
