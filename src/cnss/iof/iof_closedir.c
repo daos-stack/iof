@@ -72,6 +72,8 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	STAT_ADD(fs_handle->stats, closedir);
+
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
 
 	/* If the GAH has been reported as invalid by the server in the past

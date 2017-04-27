@@ -56,6 +56,8 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	STAT_ADD(fs_handle->stats, create);
+
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so check that LARGEFILE is set and reject the open
 	 * if not.

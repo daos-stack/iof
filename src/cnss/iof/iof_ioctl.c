@@ -55,6 +55,8 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
 		     GAH_PRINT_VAL(handle->gah));
 
+	STAT_ADD(handle->fs_handle->stats, ioctl);
+
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH, nothing to do */
 		return -EIO;
@@ -63,6 +65,8 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	if (cmd == IOF_IOCTL_GAH) {
 		if (data == NULL)
 			return -EIO;
+
+		STAT_ADD(handle->fs_handle->stats, il_ioctl);
 
 		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
 		 * allocated that many bytes in data

@@ -81,6 +81,8 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
+	STAT_ADD(fs_handle->stats, release);
+
 	if (!handle->gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",
 			     handle);

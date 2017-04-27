@@ -85,7 +85,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 
 	IOF_LOG_DEBUG("Path: %s", path);
 
-	fs_handle->stats->getattr++;
+	STAT_ADD(fs_handle->stats, getattr);
 
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, getattr), &rpc);
@@ -128,7 +128,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
-	fs_handle->stats->getattr++;
+	STAT_ADD(fs_handle->stats, getfattr);
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

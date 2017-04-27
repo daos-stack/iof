@@ -56,6 +56,8 @@ int ioc_rmdir(const char *file)
 
 	IOF_LOG_INFO("file %s", file);
 
+	STAT_ADD(fs_handle->stats, rmdir);
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;

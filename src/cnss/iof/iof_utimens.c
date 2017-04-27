@@ -56,6 +56,8 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 
 	IOF_LOG_INFO("file %s", file);
 
+	STAT_ADD(fs_handle->stats, utimens);
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
@@ -93,6 +95,8 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
+
+	STAT_ADD(fs_handle->stats, futimens);
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

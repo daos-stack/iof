@@ -56,6 +56,8 @@ int ioc_mkdir(const char *file, mode_t mode)
 
 	IOF_LOG_INFO("dir %s mode 0%o", file, (uint32_t)mode);
 
+	STAT_ADD(fs_handle->stats, mkdir);
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;

@@ -320,6 +320,18 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	return ret;
 }
 
+#define REGISTER_STAT(_STAT) cb->register_ctrl_variable( \
+		fs_handle->stats_dir,					\
+		#_STAT,							\
+		iof_int_read,						\
+		NULL, NULL,						\
+		&fs_handle->stats->_STAT)
+#if IOF_USE_FUSE3
+#define REGISTER_STAT3(_STAT) REGISTER_STAT(_STAT)
+#else
+#define REGISTER_STAT3(_STAT) (void)0
+#endif
+
 int iof_post_start(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
@@ -415,13 +427,29 @@ int iof_post_start(void *arg)
 		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
 				       &fs_handle->stats_dir);
 
-		cb->register_ctrl_variable(fs_handle->stats_dir, "opendir",
-					   iof_int_read, NULL, NULL,
-					   &fs_handle->stats->opendir);
+		REGISTER_STAT(opendir);
+		REGISTER_STAT(closedir);
+		REGISTER_STAT(getattr);
+		REGISTER_STAT(chmod);
+		REGISTER_STAT(create);
+		REGISTER_STAT(readlink);
+		REGISTER_STAT(rmdir);
+		REGISTER_STAT(mkdir);
+		REGISTER_STAT(unlink);
+		REGISTER_STAT(ioctl);
+		REGISTER_STAT(open);
+		REGISTER_STAT(release);
+		REGISTER_STAT(symlink);
+		REGISTER_STAT(rename);
+		REGISTER_STAT(truncate);
+		REGISTER_STAT(utimens);
 
-		cb->register_ctrl_variable(fs_handle->stats_dir, "getattr",
-					   iof_int_read, NULL, NULL,
-					   &fs_handle->stats->getattr);
+		REGISTER_STAT3(getfattr);
+		REGISTER_STAT3(ftruncate);
+		REGISTER_STAT3(fchmod);
+		REGISTER_STAT3(futimens);
+
+		REGISTER_STAT(il_ioctl);
 
 		IOF_LOG_INFO("Filesystem ID %d", fs_handle->fs_id);
 

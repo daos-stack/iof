@@ -46,6 +46,27 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 struct iof_stats {
 	int opendir;
 	int getattr;
+	int closedir;
+	int chmod;
+	int create;
+	int readlink;
+	int rmdir;
+	int mkdir;
+	int unlink;
+	int ioctl;
+	int open;
+	int release;
+	int symlink;
+	int rename;
+	int truncate;
+	int utimens;
+#ifdef IOF_USE_FUSE3
+	int ftruncate;
+	int getfattr;
+	int fchmod;
+	int futimens;
+#endif
+	int il_ioctl;
 };
 
 /*For IOF Plugin*/
@@ -111,6 +132,8 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
  * CNSS, everything below here relates to internals to the plugin.  At some
  * point we should split this header file up into two.
  */
+
+#define STAT_ADD(STATS, STAT) ((STATS)->STAT++)
 
 /* Helper macros for open() and creat() to log file access modes */
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\

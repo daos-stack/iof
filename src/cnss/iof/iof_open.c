@@ -108,6 +108,8 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	STAT_ADD(fs_handle->stats, open);
+
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
 	 * would otherwise be using and check that is set.

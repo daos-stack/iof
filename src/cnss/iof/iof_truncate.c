@@ -57,6 +57,8 @@ int ioc_truncate_name(const char *file, off_t len)
 
 	IOF_LOG_INFO("Truncate %s %#zx", file, len);
 
+	STAT_ADD(fs_handle->stats, truncate);
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -109,6 +111,8 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 
 	IOF_LOG_INFO("Position %#zx " GAH_PRINT_STR, len,
 		     GAH_PRINT_VAL(handle->gah));
+
+	STAT_ADD(fs_handle->stats, ftruncate);
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
