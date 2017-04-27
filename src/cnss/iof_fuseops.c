@@ -240,8 +240,6 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	 */
 	cfg->nullpath_ok = 1;
 
-	cfg->direct_io = 1;
-
 	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
 		     cfg->entry_timeout,
 		     cfg->negative_timeout,

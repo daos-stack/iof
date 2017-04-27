@@ -360,6 +360,9 @@ int iof_post_start(void *arg)
 		static char const *opts[] = {"", "-omax_read=1048576",
 #if !IOF_USE_FUSE3
 					     "-o", "use_ino",
+					     "-o", "entry_timeout=0",
+					     "-o", "negative_timeout=0",
+					     "-o", "attr_timeout=0",
 #endif
 					     "-ofsname=IOF",
 					     "-osubtype=pam"};
