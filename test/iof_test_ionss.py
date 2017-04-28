@@ -61,9 +61,6 @@ set TR_USE_VALGRIND in iof_test_ionss.yml to callgrind
 import os
 import iofcommontestsuite
 
-def setUpModule():
-    """ set up test environment """
-    iofcommontestsuite.commonSetUpModule()
 
 class Checknss(iofcommontestsuite.CommonTestSuite):
     """Simple test"""
@@ -72,6 +69,7 @@ class Checknss(iofcommontestsuite.CommonTestSuite):
     def setUp(self):
         """set up the test"""
         self.logger.info("Checknss: setUp begin")
+        iofcommontestsuite.commonSetUpModule()
         self.logger.info("Checknss: setUp end\n")
 
     def tearDown(self):

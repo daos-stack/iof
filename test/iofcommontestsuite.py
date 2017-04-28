@@ -126,7 +126,6 @@ class CommonTestSuite(unittest.TestCase):
     """Attributes common to the IOF tests"""
     fs_list = []
     logger = logging.getLogger("TestRunnerLogger")
-    __ion_dir = None
 
     @staticmethod
     def common_get_all_cn_cmd():
@@ -146,16 +145,15 @@ class CommonTestSuite(unittest.TestCase):
 
     def common_manage_ionss_dir(self):
         """create dirs for IONSS backend"""
-        ion_dir = tempfile.mkdtemp(prefix='tmp_iof_ionss_')
-        self.__ion_dir = ion_dir
+        _ion_dir = tempfile.mkdtemp(prefix='tmp_iof_ionss_')
         allnode_cmd = self.common_get_all_ion_cmd()
-        testmsg = "create base ION dirs %s" % ion_dir
-        cmdstr = "%smkdir -p %s " % (allnode_cmd, ion_dir)
+        testmsg = "create base ION dirs %s" % _ion_dir
+        cmdstr = "%smkdir -p %s " % (allnode_cmd, _ion_dir)
         self.common_launch_cmd(testmsg, cmdstr)
         i = 2
         while i > 0:
             fs = "FS_%s" % i
-            abs_path = os.path.join(ion_dir, fs)
+            abs_path = os.path.join(_ion_dir, fs)
             self.fs_list.append(abs_path)
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "%smkdir -p %s" % (allnode_cmd, abs_path)
@@ -189,7 +187,10 @@ class CommonTestSuite(unittest.TestCase):
             try:
                 with open(cmdfileout, mode='a') as outfile, \
                     open(cmdfileerr, mode='a') as errfile:
-                    outfile.write("\n============================\n")
+                    outfile.write("==============================\n " + \
+                                  " Command: " + str(cmdstr) + \
+                                  "\n============================\n")
+                    outfile.flush()
                     errfile.write("\n============================\n")
                     procrtn = subprocess.call(cmdarg, timeout=180,
                                               stdout=outfile,
@@ -228,7 +229,10 @@ class CommonTestSuite(unittest.TestCase):
             cmdfileerr = os.path.join(log_path, "common_launch_process.err")
             with open(cmdfileout, mode='a') as outfile, \
                 open(cmdfileerr, mode='a') as errfile:
-                outfile.write("\n============================\n")
+                outfile.write("=======================================\n " + \
+                              " Command: " + str(cmdstr) + \
+                              "\n======================================\n")
+                outfile.flush()
                 errfile.write("\n============================\n")
                 proc = subprocess.Popen(cmdarg,
                                         stdout=outfile,
@@ -346,11 +350,13 @@ class CommonTestSuite(unittest.TestCase):
 
         print("Testnss: module tearDown begin")
         allnode_cmd = self.common_get_all_cn_cmd()
-        testmsg = "remove %s on all CNs" % os.environ["CNSS_PREFIX"]
-        cmdstr = "%srm -rf %s " % (allnode_cmd, os.environ["CNSS_PREFIX"])
+        cnss_prefix = os.environ.pop("CNSS_PREFIX")
+        testmsg = "remove %s on all CNs" % cnss_prefix
+        cmdstr = "%srm -rf %s " % (allnode_cmd, cnss_prefix)
         self.common_launch_cmd(testmsg, cmdstr)
-        if self.__ion_dir is not None:
-            testmsg = "remove %s on all IONs" % self.__ion_dir
-            cmdstr = "%srm -rf %s " % (allnode_cmd, self.__ion_dir)
+        if len(self.fs_list):
+            iondir = os.path.dirname(self.fs_list[0])
+            testmsg = "remove %s on all IONs" % iondir
+            cmdstr = "%srm -rf %s " % (allnode_cmd, iondir)
             self.common_launch_cmd(testmsg, cmdstr)
         print("Testnss: module tearDown end\n\n")

@@ -416,7 +416,10 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                 self.skipTest("%s executable not found" % tname)
 
             self.logger.info("libioil test - input string:\n %s\n", testname)
+            # set this to match value used by this job
+            os.environ["CNSS_PREFIX"] = self.import_dir
             procrtn = subprocess.call([testname, self.import_dir], timeout=180)
+            os.environ.pop("CNSS_PREFIX")
             if procrtn != 0:
                 self.fail("IO interception test failed: %s" % procrtn)
 
