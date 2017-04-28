@@ -62,6 +62,21 @@
 #include "log.h"
 #include "ctrl_fs.h"
 
+static int ctrl_log_handle;
+
+#define CTRL_LOG_WARNING(...)	\
+	IOF_LOG_FAC(ctrl_log_handle, WARN, __VA_ARGS__)
+
+#define CTRL_LOG_ERROR(...)	\
+	IOF_LOG_FAC(ctrl_log_handle, ERR, __VA_ARGS__)
+
+#define CTRL_LOG_DEBUG(...)	\
+	IOF_LOG_FAC(ctrl_log_handle, DBG, __VA_ARGS__)
+
+#define CTRL_LOG_INFO(...)	\
+	IOF_LOG_FAC(ctrl_log_handle, INFO, __VA_ARGS__)
+
+
 enum {
 	CTRL_DIR = 0,
 	CTRL_VARIABLE,
@@ -155,8 +170,8 @@ static int init_node(struct ctrl_node *node, const char *name,
 
 	rc = pthread_rwlock_init(&node->lock, NULL);
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not initialize rwlock for ctrl node %s",
-			      name);
+		CTRL_LOG_ERROR("Could not initialize rwlock for ctrl node %s",
+			       name);
 		return rc;
 	}
 
@@ -182,11 +197,13 @@ static void init_root_node(void)
 {
 	int rc;
 
+	ctrl_log_handle = iof_log_allocfacility("CTRL", "CTRLFS");
+
 	rc = init_node(&ctrl_fs.root, "", S_IFDIR | S_IRWXU, 0);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not init control file system (rc = %d)",
-			      rc);
+		CTRL_LOG_ERROR("Could not init control file system (rc = %d)",
+			       rc);
 		ctrl_fs.startup_rc = rc;
 	}
 }
@@ -224,14 +241,14 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 					     sizeof(struct ctrl_node) + dsize);
 
 	if (newnode == NULL) {
-		IOF_LOG_ERROR("Not enough memory to allocate ctrl node");
+		CTRL_LOG_ERROR("Not enough memory to allocate ctrl node");
 		return -ENOMEM;
 	}
 
 	rc = init_node(newnode, name, mode, size);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not initialize ctrl node %s", name);
+		CTRL_LOG_ERROR("Could not initialize ctrl node %s", name);
 		free(newnode);
 		return rc;
 	}
@@ -256,8 +273,8 @@ static int free_child_nodes(struct ctrl_node *node)
 		bad_rc = free_node(item);
 
 		if (bad_rc != 0) {
-			IOF_LOG_ERROR("Could not clean child ctrl nodes %s",
-				      node->name);
+			CTRL_LOG_ERROR("Could not clean child ctrl nodes %s",
+				       node->name);
 			/* Save the value but don't exit the loop */
 			rc = bad_rc;
 		}
@@ -275,7 +292,7 @@ static int cleanup_node(struct ctrl_node *node)
 	rc = pthread_rwlock_destroy(&node->lock);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not destroy rwlock in ctrl node");
+		CTRL_LOG_ERROR("Could not destroy rwlock in ctrl node");
 		return rc;
 	}
 
@@ -298,7 +315,7 @@ static int cleanup_node(struct ctrl_node *node)
 
 	rc = destroy_cb(cb_arg);
 	if (rc != 0)
-		IOF_LOG_ERROR("Error destroying ctrl node %s", node->name);
+		CTRL_LOG_ERROR("Error destroying ctrl node %s", node->name);
 
 	return rc;
 }
@@ -310,7 +327,7 @@ static int free_node(struct ctrl_node *node)
 	rc = cleanup_node(node);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Could not clean ctrl node %s", node->name);
+		CTRL_LOG_ERROR("Could not clean ctrl node %s", node->name);
 
 	free(node);
 
@@ -328,8 +345,8 @@ static int find_node(struct ctrl_node *parent, struct ctrl_node **node,
 	if (!lock_held) {
 		rc = pthread_rwlock_rdlock(&parent->lock);
 		if (rc != 0) {
-			IOF_LOG_ERROR("Could not acquire lock on ctrl node %s",
-				      parent->name);
+			CTRL_LOG_ERROR("Could not acquire lock on ctrl node %s",
+				       parent->name);
 			return rc;
 		}
 	}
@@ -342,8 +359,8 @@ static int find_node(struct ctrl_node *parent, struct ctrl_node **node,
 	if (!lock_held) {
 		rc = pthread_rwlock_unlock(&parent->lock);
 		if (rc != 0) {
-			IOF_LOG_ERROR("Could not release lock on ctrl node %s",
-				      parent->name);
+			CTRL_LOG_ERROR("Could not release lock on ctrl node %s",
+				       parent->name);
 			return rc;
 		}
 	}
@@ -363,15 +380,15 @@ static int insert_node(struct ctrl_node *parent, struct ctrl_node *child)
 	rc = find_node(parent, &node, child->name, true);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Error while searching for ctrl node");
+		CTRL_LOG_ERROR("Error while searching for ctrl node");
 		goto out;
 	}
 
 	if (node != NULL) {/* file/directory already exists */
 		if (node->ctrl_type != CTRL_DIR ||
 		    child->ctrl_type != CTRL_DIR) {
-			IOF_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
-				      child->name);
+			CTRL_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
+				       child->name);
 			rc = -EEXIST;
 		}
 		free_node(child); /* Node conflict so node is not needed */
@@ -396,13 +413,13 @@ static int add_ctrl_dir(const char *name, struct ctrl_node **node)
 	rc = find_node(parent, &item, name, false);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Error while searching for ctrl node");
+		CTRL_LOG_ERROR("Error while searching for ctrl node");
 		return rc;
 	}
 
 	if (item != NULL) {/* file/directory already exists */
 		if (item->ctrl_type != CTRL_DIR) {
-			IOF_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
+			CTRL_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
 				      name);
 			return -EEXIST;
 		}
@@ -413,14 +430,14 @@ static int add_ctrl_dir(const char *name, struct ctrl_node **node)
 	rc = allocate_node(&newnode, name, S_IFDIR | S_IRUSR | S_IXUSR,
 			   CTRL_DIR);
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not allocate ctrl node %s", name);
+		CTRL_LOG_ERROR("Could not allocate ctrl node %s", name);
 		return rc;
 	}
 
 	rc = insert_node(parent, newnode);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not insert ctrl node %s", name);
+		CTRL_LOG_ERROR("Could not insert ctrl node %s", name);
 		return rc;
 	}
 
@@ -441,26 +458,26 @@ static int add_ctrl_file(const char *name, struct ctrl_node **node,
 	rc = find_node(parent, &item, name, false);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Error while searching for ctrl node");
+		CTRL_LOG_ERROR("Error while searching for ctrl node");
 		return rc;
 	}
 
 	if (item != NULL) {/* file/directory already exists */
-		IOF_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
-			      name);
+		CTRL_LOG_ERROR("Conflict trying to add %s to ctrl_fs",
+			       name);
 		return -EEXIST;
 	}
 
 	rc = allocate_node(&newnode, name, mode, ctrl_type);
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not allocate ctrl node %s", name);
+		CTRL_LOG_ERROR("Could not allocate ctrl node %s", name);
 		return rc;
 	}
 
 	rc = insert_node(parent, newnode);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not insert ctrl node %s", name);
+		CTRL_LOG_ERROR("Could not insert ctrl node %s", name);
 		return rc;
 	}
 
@@ -482,19 +499,19 @@ int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
 		return ctrl_fs.startup_rc;
 
 	if (newdir == NULL) {
-		IOF_LOG_ERROR("Invalid newdir pointer specified");
+		CTRL_LOG_ERROR("Invalid newdir pointer specified");
 		return -EINVAL;
 	}
 
 	*newdir = NULL;
 
 	if (subdir == NULL) {
-		IOF_LOG_ERROR("Invalid subdir specified");
+		CTRL_LOG_ERROR("Invalid subdir specified");
 		return -EINVAL;
 	}
 
 	if (strchr(subdir, '/') != NULL) {
-		IOF_LOG_ERROR("/ not allowed in ctrl subdir '%s'", subdir);
+		CTRL_LOG_ERROR("/ not allowed in ctrl subdir '%s'", subdir);
 		return -EINVAL;
 	}
 
@@ -506,7 +523,7 @@ int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
 	rc = add_ctrl_dir(subdir, &node);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad subdir %s specified", subdir);
+		CTRL_LOG_ERROR("Bad subdir %s specified", subdir);
 
 	*newdir = (struct ctrl_dir *)node;
 	IOF_LOG_INFO("Registered %s as ctrl subdir", subdir);
@@ -529,12 +546,12 @@ int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
 		return ctrl_fs.startup_rc;
 
 	if (name == NULL) {
-		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
+		CTRL_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
 	if (strchr(name, '/') != NULL) {
-		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		CTRL_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
 		return -EINVAL;
 	}
 
@@ -551,7 +568,7 @@ int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
 	rc = add_ctrl_file(name, &node, mode, CTRL_VARIABLE);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified", name);
+		CTRL_LOG_ERROR("Bad file %s specified", name);
 
 	SET_DATA(node, var, cb_arg, cb_arg);
 	SET_DATA(node, var, read_cb, read_cb);
@@ -580,12 +597,12 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
 		return ctrl_fs.startup_rc;
 
 	if (name == NULL) {
-		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
+		CTRL_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
 	if (strchr(name, '/') != NULL) {
-		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		CTRL_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
 		return -EINVAL;
 	}
 
@@ -597,7 +614,7 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
 	rc = add_ctrl_file(name, &node, mode, CTRL_EVENT);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified", name);
+		CTRL_LOG_ERROR("Bad file %s specified", name);
 
 	SET_DATA(node, evnt, cb_arg, cb_arg);
 	SET_DATA(node, evnt, trigger_cb, trigger_cb);
@@ -622,17 +639,17 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 		return ctrl_fs.startup_rc;
 
 	if (value == NULL) {
-		IOF_LOG_ERROR("Invalid value specified for ctrl constant");
+		CTRL_LOG_ERROR("Invalid value specified for ctrl constant");
 		return -EINVAL;
 	}
 
 	if (name == NULL) {
-		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
+		CTRL_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
 	if (strchr(name, '/') != NULL) {
-		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		CTRL_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
 		return -EINVAL;
 	}
 
@@ -644,7 +661,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_CONSTANT);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad file %s specified", name);
+		CTRL_LOG_ERROR("Bad file %s specified", name);
 
 	strncpy(GET_DATA(node, con, buf), value, CTRL_DATA_MAX);
 	__sync_synchronize();
@@ -670,12 +687,12 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 		return ctrl_fs.startup_rc;
 
 	if (name == NULL) {
-		IOF_LOG_ERROR("Invalid name specified for ctrl variable");
+		CTRL_LOG_ERROR("Invalid name specified for ctrl variable");
 		return -EINVAL;
 	}
 
 	if (strchr(name, '/') != NULL) {
-		IOF_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
+		CTRL_LOG_ERROR("/ not allowed in ctrl name '%s'", name);
 		return -EINVAL;
 	}
 
@@ -687,7 +704,7 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_TRACKER);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Bad ctrl file %s", name);
+		CTRL_LOG_ERROR("Bad ctrl file %s", name);
 
 	SET_DATA(node, tckr, cb_arg, cb_arg);
 	SET_DATA(node, tckr, open_cb, open_cb);
@@ -705,14 +722,14 @@ static void *ctrl_thread_func(void *arg)
 {
 	int rc;
 
-	IOF_LOG_INFO("Starting ctrl fs loop");
+	CTRL_LOG_INFO("Starting ctrl fs loop");
 
 	rc = fuse_loop(ctrl_fs.fuse); /* Blocking */
 
-	IOF_LOG_INFO("Exited ctrl fs loop %d", rc);
+	CTRL_LOG_INFO("Exited ctrl fs loop %d", rc);
 
 	if (rc)
-		IOF_LOG_ERROR("Fuse loop exited with %d", rc);
+		CTRL_LOG_ERROR("Fuse loop exited with %d", rc);
 
 #ifdef IOF_USE_FUSE3
 	fuse_unmount(ctrl_fs.fuse);
@@ -727,7 +744,7 @@ static void *ctrl_thread_func(void *arg)
 
 static void cleanup_ctrl_fs(void)
 {
-	IOF_LOG_INFO("Cleaning up ctrl fs");
+	CTRL_LOG_INFO("Cleaning up ctrl fs");
 	free(ctrl_fs.prefix);
 }
 
@@ -782,7 +799,7 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	if (!ctrl_fs.started)
 		return -ENOENT;
 
-	IOF_LOG_INFO("ctrl_fs readdir called for %s", path);
+	CTRL_LOG_INFO("ctrl_fs readdir called for %s", path);
 
 	rc = find_path_node(path, &node);
 
@@ -819,17 +836,17 @@ static int ctrl_getattr(const char *fname, struct stat *stat)
 	struct ctrl_node *node = NULL;
 	int rc;
 
-	IOF_LOG_INFO("ctrl_fs getattr called for %s", fname);
+	CTRL_LOG_INFO("ctrl_fs getattr called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
 	if (rc != 0 || !node) {
-		IOF_LOG_INFO("Failed for %s %d", fname, rc);
+		CTRL_LOG_INFO("Failed for %s %d", fname, rc);
 		return -ENOENT;
 	}
 
-	IOF_LOG_INFO("Returning getattr for '%s' mode = 0%o", node->name,
-		     node->stat_info.st_mode & ~(S_IFMT));
+	CTRL_LOG_INFO("Returning getattr for '%s' mode = 0%o", node->name,
+		      node->stat_info.st_mode & ~(S_IFMT));
 	memcpy(stat, &node->stat_info, sizeof(struct stat));
 
 	return 0;
@@ -853,7 +870,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs open called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs open called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -868,14 +885,14 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 		read_access = true;
 
 	if (read_access && ((node->stat_info.st_mode & S_IRUSR) == 0)) {
-		IOF_LOG_DEBUG("Could not open %s due to read permissions",
-			      fname);
+		CTRL_LOG_DEBUG("Could not open %s due to read permissions",
+			       fname);
 		return -EPERM;
 	}
 
 	if (write_access && ((node->stat_info.st_mode & S_IWUSR) == 0)) {
-		IOF_LOG_DEBUG("Could not open %s due to write permissions",
-			      fname);
+		CTRL_LOG_DEBUG("Could not open %s due to write permissions",
+			       fname);
 		return -EPERM;
 	}
 
@@ -907,7 +924,7 @@ static int ctrl_truncate(const char *fname, off_t size)
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs truncate called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs truncate called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -940,7 +957,7 @@ static int ctrl_read(const char *fname,
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs read called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs read called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -960,7 +977,7 @@ static int ctrl_read(const char *fname,
 		if (read_cb != NULL) {
 			rc = read_cb(mybuf, CTRL_DATA_MAX, cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error reading ctrl variable");
+				CTRL_LOG_ERROR("Error reading ctrl variable");
 				return -ENOENT;
 			}
 		}
@@ -969,19 +986,19 @@ static int ctrl_read(const char *fname,
 		sprintf(mybuf, "%d", (int)finfo->fh);
 		payload = mybuf;
 	} else {
-		IOF_LOG_WARNING("Read not supported for ctrl node %s", fname);
+		CTRL_LOG_WARNING("Read not supported for ctrl node %s", fname);
 		return -EINVAL;
 	}
 
 	len = snprintf(buf, size, "%s\n", payload);
 	if (len >= size) {
 		len = size;
-		IOF_LOG_WARNING("Truncated value for %s", fname);
+		CTRL_LOG_WARNING("Truncated value for %s", fname);
 		buf[size - 1] = '\n';
 	}
 
-	IOF_LOG_INFO("Done copying contents to output buffer %s len is %ld",
-		     fname, len);
+	CTRL_LOG_INFO("Done copying contents to output buffer %s len is %ld",
+		      fname, len);
 
 	return len;
 }
@@ -996,7 +1013,7 @@ static int ctrl_mknod(const char *path,
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs mknod called for %s", path);
+	CTRL_LOG_INFO("ctrl fs mknod called for %s", path);
 
 	rc = find_path_node(path, &node);
 
@@ -1019,7 +1036,7 @@ static int ctrl_write(const char *fname,
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs write called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs write called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -1035,7 +1052,7 @@ static int ctrl_write(const char *fname,
 		if (trigger_cb != NULL) {
 			trigger_cb(cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error triggering ctrl variable");
+				CTRL_LOG_ERROR("Error triggering ctrl event");
 				return -ENOENT;
 			}
 		}
@@ -1055,7 +1072,7 @@ static int ctrl_write(const char *fname,
 			mybuf[mylen] = 0;
 			rc = write_cb(mybuf, cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error writing ctrl variable");
+				CTRL_LOG_ERROR("Error writing ctrl variable");
 				return -ENOENT;
 			}
 		}
@@ -1073,7 +1090,7 @@ static int ctrl_release(const char *fname,
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs release called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs release called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -1090,7 +1107,7 @@ static int ctrl_release(const char *fname,
 		if (close_cb != NULL) {
 			rc = close_cb(value, cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error closing ctrl tracker");
+				CTRL_LOG_ERROR("Error closing ctrl tracker");
 				return -ENOENT;
 			}
 		}
@@ -1107,7 +1124,7 @@ static int ctrl_utimens(const char *fname, const struct timespec tv[2])
 	if (!ctrl_fs.started)
 		return 0;
 
-	IOF_LOG_INFO("ctrl fs utimens called for %s", fname);
+	CTRL_LOG_INFO("ctrl fs utimens called for %s", fname);
 
 	rc = find_path_node(fname, &node);
 
@@ -1122,7 +1139,7 @@ static int ctrl_utimens(const char *fname, const struct timespec tv[2])
 		if (trigger_cb != NULL) {
 			trigger_cb(cb_arg);
 			if (rc != 0) {
-				IOF_LOG_ERROR("Error triggering ctrl variable");
+				CTRL_LOG_ERROR("Error triggering ctrl event");
 				return -ENOENT;
 			}
 		}
@@ -1143,17 +1160,16 @@ static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	struct fuse_context *context = fuse_get_context();
 	void *handle = (void *)context->private_data;
 
-	IOF_LOG_INFO("Fuse configuration for ctrl fs");
+	CTRL_LOG_INFO("Fuse configuration for ctrl fs");
 
 	cfg->entry_timeout = 0;
 	cfg->negative_timeout = 0;
 	cfg->attr_timeout = 0;
 	cfg->remember = -1;
 
-	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
-		     cfg->entry_timeout,
-		     cfg->negative_timeout,
-		     cfg->attr_timeout);
+	CTRL_LOG_INFO("timeouts entry %f negative %f attr %f",
+		      cfg->entry_timeout, cfg->negative_timeout,
+		      cfg->attr_timeout);
 
 	return handle;
 }
@@ -1199,8 +1215,8 @@ int ctrl_fs_start(const char *prefix)
 
 	if (rc != 0 && errno != EEXIST) {
 		ctrl_fs.startup_rc = -errno;
-		IOF_LOG_ERROR("Could not create %s for ctrl fs: %s",
-			      prefix, strerror(errno));
+		CTRL_LOG_ERROR("Could not create %s for ctrl fs: %s",
+			       prefix, strerror(errno));
 		return ctrl_fs.startup_rc;
 	}
 
@@ -1208,8 +1224,8 @@ int ctrl_fs_start(const char *prefix)
 		/* Make sure it's a directory */
 		rc = stat(prefix, &stat_info);
 		if (rc != 0 || !S_ISDIR(stat_info.st_mode)) {
-			IOF_LOG_ERROR("Could not create %s for ctrl fs: %s",
-				      prefix, strerror(errno));
+			CTRL_LOG_ERROR("Could not create %s for ctrl fs: %s",
+				       prefix, strerror(errno));
 			ctrl_fs.startup_rc = -EEXIST;
 			return -EEXIST;
 		}
@@ -1218,7 +1234,7 @@ int ctrl_fs_start(const char *prefix)
 	ctrl_fs.prefix = strdup(prefix);
 
 	if (ctrl_fs.prefix == NULL) {
-		IOF_LOG_ERROR("Could not allocate memory for ctrl fs");
+		CTRL_LOG_ERROR("Could not allocate memory for ctrl fs");
 		ctrl_fs.startup_rc = -ENOMEM;
 		return -ENOMEM;
 	}
@@ -1227,21 +1243,21 @@ int ctrl_fs_start(const char *prefix)
 	ctrl_fs.fuse = fuse_new(&args, &fuse_ops, sizeof(fuse_ops),
 				NULL);
 	if (ctrl_fs.fuse == NULL) {
-		IOF_LOG_ERROR("Could not initialize ctrl fs");
+		CTRL_LOG_ERROR("Could not initialize ctrl fs");
 		ctrl_fs.startup_rc = -EIO;
 		goto out;
 	}
 
 	rc = fuse_mount(ctrl_fs.fuse, ctrl_fs.prefix);
 	if (rc == -1) {
-		IOF_LOG_ERROR("Could not mount ctrl fs");
+		CTRL_LOG_ERROR("Could not mount ctrl fs");
 		ctrl_fs.startup_rc = -EIO;
 		goto out;
 	}
 #else
 	ctrl_fs.ch = fuse_mount(ctrl_fs.prefix, &args);
 	if (ctrl_fs.ch == NULL) {
-		IOF_LOG_ERROR("Could not mount ctrl fs");
+		CTRL_LOG_ERROR("Could not mount ctrl fs");
 		ctrl_fs.startup_rc = -EIO;
 		goto out;
 	}
@@ -1249,7 +1265,7 @@ int ctrl_fs_start(const char *prefix)
 	ctrl_fs.fuse = fuse_new(ctrl_fs.ch, &args, &fuse_ops, sizeof(fuse_ops),
 				NULL);
 	if (ctrl_fs.fuse == NULL) {
-		IOF_LOG_ERROR("Could not initialize ctrl fs");
+		CTRL_LOG_ERROR("Could not initialize ctrl fs");
 		ctrl_fs.startup_rc = -EIO;
 		goto out;
 	}
@@ -1260,7 +1276,8 @@ int ctrl_fs_start(const char *prefix)
 			    ctrl_thread_func, NULL);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Couldn't start thread for ctrl fs (rc = %d", rc);
+		CTRL_LOG_ERROR("Couldn't start thread for ctrl fs (rc = %d)",
+			       rc);
 		ctrl_fs.startup_rc = -errno;
 		goto out;
 	}
@@ -1298,7 +1315,7 @@ int ctrl_fs_wait(void)
 
 	if (rc != 0) {
 		rc = errno;
-		IOF_LOG_ERROR("Error joining ctrl_fs thread %d", rc);
+		CTRL_LOG_ERROR("Error joining ctrl_fs thread %d", rc);
 		return -rc;
 	}
 

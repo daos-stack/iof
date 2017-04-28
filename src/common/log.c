@@ -38,12 +38,22 @@
 #include "log.h"
 
 int iof_log_handle;
+
+int iof_log_allocfacility(const char *shortname, const char *longname)
+{
+	int handle;
+
+	handle = crt_log_allocfacility(shortname, longname);
+	crt_log_sync_mask();
+
+	return handle;
+}
+
 void iof_log_init(const char *shortname, const char *longname)
 {
 
 	crt_log_init();
-	iof_log_handle = crt_log_allocfacility(shortname, longname);
-	crt_log_sync_mask();
+	iof_log_handle = iof_log_allocfacility(shortname, longname);
 }
 
 void iof_log_close(void)

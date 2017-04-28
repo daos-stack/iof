@@ -72,6 +72,7 @@ extern int iof_log_handle;
 
 void iof_log_init(const char *shortname, const char *longname);
 void iof_log_close(void);
+int iof_log_allocfacility(const char *shortname, const char *longname);
 
 #if defined(__cplusplus)
 }
