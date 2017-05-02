@@ -60,6 +60,7 @@
 FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
 bool ioil_initialized;
+static __thread int saved_errno;
 static vector_t fd_table;
 static char *ctrl_prefix;
 static char *cnss_prefix;
@@ -68,6 +69,18 @@ static crt_group_t *ionss_grp;
 static crt_context_t context;
 
 #define BLOCK_SIZE 1024
+
+#define SAVE_ERRNO(is_error)                 \
+	do {                                 \
+		if (is_error)                \
+			saved_errno = errno; \
+	} while (0)
+
+#define RESTORE_ERRNO(is_error)              \
+	do {                                 \
+		if (is_error)                \
+			errno = saved_errno; \
+	} while (0)
 
 struct fd_entry {
 	struct ios_gah gah;
@@ -223,7 +236,7 @@ handle_error:
 }
 
 static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
-			 off_t offset, int *err)
+			 off_t offset)
 {
 	ssize_t bytes_read;
 	struct file_info fi;
@@ -239,13 +252,13 @@ static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
 
 	bytes_read = ioil_do_pread(buff, len, offset, &fi);
 	if (bytes_read < 0)
-		*err = fi.errcode;
+		saved_errno = fi.errcode;
 	return bytes_read;
 }
 
 /* Start simple and just loop */
 static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
-			  int count, off_t offset, int *err)
+			  int count, off_t offset)
 {
 	ssize_t bytes_read;
 	struct file_info fi;
@@ -261,12 +274,12 @@ static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 	bytes_read = ioil_do_preadv(iov, count, offset, &fi);
 	if (bytes_read < 0)
-		*err = fi.errcode;
+		saved_errno = fi.errcode;
 	return bytes_read;
 }
 
 static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
-			  off_t offset, int *err)
+			  off_t offset)
 {
 	ssize_t bytes_written;
 	struct file_info fi;
@@ -282,14 +295,14 @@ static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
 
 	bytes_written = ioil_do_pwrite(buff, len, offset, &fi);
 	if (bytes_written < 0)
-		*err = fi.errcode;
+		saved_errno = fi.errcode;
 
 	return bytes_written;
 }
 
 /* Start simple and just loop */
 static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
-			   int count, off_t offset, int *err)
+			   int count, off_t offset)
 {
 	ssize_t bytes_written;
 	struct file_info fi;
@@ -305,7 +318,7 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 	bytes_written = ioil_do_pwritev(iov, count, offset, &fi);
 	if (bytes_written < 0)
-		*err = fi.errcode;
+		saved_errno = fi.errcode;
 
 	return bytes_written;
 }
@@ -402,13 +415,10 @@ static __attribute__((destructor)) void ioil_fini(void)
 static void check_ioctl_on_open(int fd, int flags)
 {
 	struct fd_entry entry;
-	int saved_errno;
 	int rc;
 
 	if (fd == -1)
 		return;
-
-	saved_errno = errno; /* Save the errno from open */
 
 	rc = ioctl(fd, IOF_IOCTL_GAH, &entry.gah);
 	if (rc == 0) {
@@ -422,8 +432,6 @@ static void check_ioctl_on_open(int fd, int flags)
 			IOIL_LOG_INFO("Failed to insert gah in table, rc = %d",
 				     rc);
 	}
-
-	errno = saved_errno; /* Restore the errno from open */
 }
 
 static bool drop_reference_if_disabled(int fd, struct fd_entry *entry)
@@ -463,9 +471,13 @@ IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
 		fd =  __real_open(pathname, flags);
 	}
 
+	SAVE_ERRNO(fd == -1);
+
 	/* Ignore O_APPEND files for now */
 	if (ioil_initialized && ((flags & O_APPEND) == 0))
 		check_ioctl_on_open(fd, flags);
+
+	RESTORE_ERRNO(fd == -1);
 
 	return fd;
 }
@@ -479,8 +491,12 @@ IOIL_PUBLIC int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
 	fd = __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
 
+	SAVE_ERRNO(fd == -1);
+
 	if (ioil_initialized)
 		check_ioctl_on_open(fd, O_CREAT|O_WRONLY|O_TRUNC);
+
+	RESTORE_ERRNO(fd == -1);
 
 	return fd;
 }
@@ -508,7 +524,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 	struct fd_entry *entry;
 	ssize_t bytes_read;
 	off_t oldpos;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -519,13 +534,13 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_read = pread_rpc(entry, buf, len, oldpos, &err);
+	bytes_read = pread_rpc(entry, buf, len, oldpos);
 	if (bytes_read > 0)
 		entry->pos = oldpos + bytes_read;
 	vector_decref(&fd_table, entry);
 
-	if (bytes_read < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_read < 0);
+
 	return bytes_read;
 }
 
@@ -534,7 +549,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -544,12 +558,11 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
 		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
 
-	bytes_read = pread_rpc(entry, buf, len, offset, &err);
+	bytes_read = pread_rpc(entry, buf, len, offset);
 
 	vector_decref(&fd_table, entry);
 
-	if (bytes_read < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_read < 0);
 
 	return bytes_read;
 }
@@ -559,7 +572,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 	struct fd_entry *entry;
 	ssize_t bytes_written;
 	off_t oldpos;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -570,13 +582,12 @@ IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_written = pwrite_rpc(entry, buf, len, entry->pos, &err);
+	bytes_written = pwrite_rpc(entry, buf, len, entry->pos);
 	if (bytes_written > 0)
 		entry->pos = oldpos + bytes_written;
 	vector_decref(&fd_table, entry);
 
-	if (bytes_written < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_written < 0);
 
 	return bytes_written;
 }
@@ -586,7 +597,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -596,12 +606,11 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
 		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
 
-	bytes_written = pwrite_rpc(entry, buf, len, entry->pos, &err);
+	bytes_written = pwrite_rpc(entry, buf, len, entry->pos);
 
 	vector_decref(&fd_table, entry);
 
-	if (bytes_written < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_written < 0);
 
 	return bytes_written;
 }
@@ -640,7 +649,12 @@ IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 		entry->pos = new_offset;
 
 cleanup:
+
+	SAVE_ERRNO(new_offset < 0);
+
 	vector_decref(&fd_table, entry);
+
+	RESTORE_ERRNO(new_offset < 0);
 
 	return new_offset;
 }
@@ -651,7 +665,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 	struct fd_entry *entry;
 	ssize_t bytes_read;
 	off_t oldpos;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -662,13 +675,12 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_read = preadv_rpc(entry, vector, count, entry->pos, &err);
+	bytes_read = preadv_rpc(entry, vector, count, entry->pos);
 	if (bytes_read > 0)
 		entry->pos = oldpos + bytes_read;
 	vector_decref(&fd_table, entry);
 
-	if (bytes_read < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_read < 0);
 
 	return bytes_read;
 }
@@ -678,7 +690,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -688,11 +699,10 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 	IOIL_LOG_INFO("preadv(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
 		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
 
-	bytes_read = preadv_rpc(entry, vector, count, offset, &err);
+	bytes_read = preadv_rpc(entry, vector, count, offset);
 	vector_decref(&fd_table, entry);
 
-	if (bytes_read < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_read < 0);
 
 	return bytes_read;
 }
@@ -703,7 +713,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 	struct fd_entry *entry;
 	ssize_t bytes_written;
 	off_t oldpos;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -714,13 +723,12 @@ IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
 
 	oldpos = entry->pos;
-	bytes_written = pwritev_rpc(entry, vector, count, entry->pos, &err);
+	bytes_written = pwritev_rpc(entry, vector, count, entry->pos);
 	if (bytes_written > 0)
 		entry->pos = oldpos + bytes_written;
 	vector_decref(&fd_table, entry);
 
-	if (bytes_written < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_written < 0);
 
 	return bytes_written;
 }
@@ -730,7 +738,6 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
-	int err;
 	int rc;
 
 	rc = vector_get(&fd_table, fd, &entry);
@@ -740,12 +747,11 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 	IOIL_LOG_INFO("pwritev(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
 		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
 
-	bytes_written = pwritev_rpc(entry, vector, count, entry->pos, &err);
+	bytes_written = pwritev_rpc(entry, vector, count, entry->pos);
 
 	vector_decref(&fd_table, entry);
 
-	if (bytes_written < 0)
-		errno = err;
+	RESTORE_ERRNO(bytes_written < 0);
 
 	return bytes_written;
 }
@@ -755,7 +761,6 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 {
 	struct fd_entry *entry;
 	int rc;
-	void *ret;
 
 	rc = vector_remove(&fd_table, fd, &entry);
 	if (rc == 0) {
@@ -771,10 +776,7 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 		vector_decref(&fd_table, entry);
 	}
 
-	IOIL_LOG_INFO("doing actual mmap");
-	ret = __real_mmap(address, length, protect, flags, fd, offset);
-	IOIL_LOG_INFO("did actual mmap");
-	return ret;
+	return __real_mmap(address, length, protect, flags, fd, offset);
 }
 
 IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
