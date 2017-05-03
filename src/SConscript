@@ -138,8 +138,6 @@ def scons():
 
     Import('env prereqs IOF_VERSION')
 
-    stdatomic = False
-
     # Set options which are used throughout the src.
     tenv = env.Clone()
     tenv.AppendUnique(CFLAGS=['-pthread', '-fvisibility=hidden'])
@@ -147,12 +145,6 @@ def scons():
     tenv.AppendUnique(CPPPATH=['common/include'])
     tenv.AppendUnique(CPPPATH=['include'])
     tenv.AppendUnique(LIBS='pthread')
-
-    if not GetOption('clean'):
-        config = Configure(env)
-        if config.CheckHeader('stdatomic.h'):
-            stdatomic = True
-        config.Finish()
 
     prereqs.require(tenv, 'cart')
 
@@ -199,8 +191,6 @@ def scons():
 
     # Build the IONSS application
     ienv = tenv.Clone()
-    if stdatomic:
-        ienv.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
     ionss_obj = []
     for src in IONSS_SRC:
         ionss_obj += ienv.Object(os.path.join('ionss', src))

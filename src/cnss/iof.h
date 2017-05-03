@@ -40,33 +40,34 @@
 
 #include "cnss_plugin.h"
 #include "ios_gah.h"
+#include "iof_atomic.h"
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
 struct iof_stats {
-	int opendir;
-	int getattr;
-	int closedir;
-	int chmod;
-	int create;
-	int readlink;
-	int rmdir;
-	int mkdir;
-	int unlink;
-	int ioctl;
-	int open;
-	int release;
-	int symlink;
-	int rename;
-	int truncate;
-	int utimens;
+	ATOMIC unsigned int opendir;
+	ATOMIC unsigned int getattr;
+	ATOMIC unsigned int closedir;
+	ATOMIC unsigned int chmod;
+	ATOMIC unsigned int create;
+	ATOMIC unsigned int readlink;
+	ATOMIC unsigned int rmdir;
+	ATOMIC unsigned int mkdir;
+	ATOMIC unsigned int unlink;
+	ATOMIC unsigned int ioctl;
+	ATOMIC unsigned int open;
+	ATOMIC unsigned int release;
+	ATOMIC unsigned int symlink;
+	ATOMIC unsigned int rename;
+	ATOMIC unsigned int truncate;
+	ATOMIC unsigned int utimens;
 #ifdef IOF_USE_FUSE3
-	int ftruncate;
-	int getfattr;
-	int fchmod;
-	int futimens;
+	ATOMIC unsigned int ftruncate;
+	ATOMIC unsigned int getfattr;
+	ATOMIC unsigned int fchmod;
+	ATOMIC unsigned int futimens;
 #endif
-	int il_ioctl;
+	ATOMIC unsigned int il_ioctl;
 };
 
 /*For IOF Plugin*/
@@ -133,7 +134,7 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
  * point we should split this header file up into two.
  */
 
-#define STAT_ADD(STATS, STAT) ((STATS)->STAT++)
+#define STAT_ADD(STATS, STAT) atomic_inc(&STATS->STAT)
 
 /* Helper macros for open() and creat() to log file access modes */
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\

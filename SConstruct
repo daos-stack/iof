@@ -102,6 +102,9 @@ def run_checks(env, platform, check_flags):
     except AttributeError:
         print 'CheckProg not present'
 
+    if config.CheckHeader('stdatomic.h'):
+        env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
+
     # Check for configure flags.
     # Some configure flags are always enabled (-g etc) however check in the
     # compiler supports other ones before using them.  Additional flags

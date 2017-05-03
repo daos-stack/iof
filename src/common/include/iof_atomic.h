@@ -40,6 +40,7 @@
 #ifndef __IOF_ATOMIC_H__
 #define __IOF_ATOMIC_H__
 #if HAVE_STDATOMIC
+
 #include <stdatomic.h>
 #define ATOMIC _Atomic
 /* stdatomic interface for compare_and_exchange doesn't quite align */
@@ -47,7 +48,11 @@
 	atomic_compare_exchange_weak(ptr, &oldvalue, newvalue)
 #define atomic_store_release(ptr, value) \
 	atomic_store_explicit(ptr, value, memory_order_release)
+
+#define atomic_inc(ptr) atomic_fetch_add_explicit(ptr, 1, memory_order_relaxed)
+
 #else
+
 #define atomic_fetch_sub __sync_fetch_and_sub
 #define atomic_fetch_add __sync_fetch_and_add
 #define atomic_compare_exchange __sync_bool_compare_and_swap
@@ -57,6 +62,9 @@
 		*(ptr) = (value);        \
 	} while (0)
 #define ATOMIC
+
+#define atomic_inc(ptr) atomic_fetch_add(ptr, 1)
+
 #endif
 
 #endif /* __IOF_ATOMIC_H__ */

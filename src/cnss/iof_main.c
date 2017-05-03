@@ -235,11 +235,11 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	return ret;
 }
 
-static int iof_int_read(char *buf, size_t buflen, void *arg)
+static int iof_uint_read(char *buf, size_t buflen, void *arg)
 {
-	int *value = (int *)arg;
+	uint *value = (uint *)arg;
 
-	snprintf(buf, buflen, "%d", *value);
+	snprintf(buf, buflen, "%u", *value);
 	return 0;
 }
 
@@ -270,10 +270,10 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->psr_ep.ep_tag = 0;
 
 	cb->register_ctrl_variable(cb->plugin_dir, "psr_rank",
-				   iof_int_read, NULL, NULL,
+				   iof_uint_read, NULL, NULL,
 				   &iof_state->psr_ep.ep_rank);
 	cb->register_ctrl_variable(cb->plugin_dir, "psr_tag",
-				   iof_int_read, NULL, NULL,
+				   iof_uint_read, NULL, NULL,
 				   &iof_state->psr_ep.ep_tag);
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
@@ -323,7 +323,7 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable( \
 		fs_handle->stats_dir,					\
 		#_STAT,							\
-		iof_int_read,						\
+		iof_uint_read,						\
 		NULL, NULL,						\
 		&fs_handle->stats->_STAT)
 #if IOF_USE_FUSE3
