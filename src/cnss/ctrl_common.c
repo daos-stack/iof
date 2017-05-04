@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -103,6 +103,13 @@ int register_cnss_controls(int count_start, void *arg)
 				  NULL /* destroy_cb */, NULL);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not register log_mask ctrl");
+		rc = ret;
+		ctrl_fs_stop();
+	}
+
+	ret = ctrl_register_constant_int64(NULL, "cnss_id", getpid());
+	if (ret != 0) {
+		IOF_LOG_ERROR("Could not register cnss_id");
 		rc = ret;
 		ctrl_fs_stop();
 	}

@@ -65,6 +65,7 @@ static vector_t fd_table;
 static char *ctrl_prefix;
 static char *cnss_prefix;
 static char *cnss_env;
+static int cnss_id;
 static crt_group_t *ionss_grp;
 static crt_context_t context;
 
@@ -139,14 +140,42 @@ int ioil_initialize_fd_table(int max_fds)
 	return rc;
 }
 
+#define MAX_INT_STR 16
+/* This belongs in a library but for now, but that is the topic of another
+ * ticket for future development.
+ */
+static int read_ctrl_int(int ctrl_fd, const char *var, int *val)
+{
+	int fd;
+	char buf[MAX_INT_STR];
+
+	fd = openat(ctrl_fd, var, O_RDONLY);
+	if (fd == -1) {
+		IOF_LOG_INFO("Could not get ctrl var %s: %s", var,
+			     strerror(errno));
+		return 1;
+	}
+
+	read(fd, buf, MAX_INT_STR);
+	buf[MAX_INT_STR - 1] = 0;
+
+	*val = atoi(buf);
+
+	close(fd);
+
+	return 0;
+}
+
 static int check_mnt(struct mntent *entry, void *priv)
 {
 	char *ctrl_dir;
 	char *dir;
 	char *cnss_dir;
 	char *p;
+	int version;
 	struct stat buf;
 	int rc;
+	int fd;
 
 	p = strstr(entry->mnt_dir, "/.ctrl");
 	if (p == NULL || strcmp(entry->mnt_type, "fuse.ctrl") ||
@@ -160,6 +189,31 @@ static int check_mnt(struct mntent *entry, void *priv)
 			     entry->mnt_dir, strerror(errno));
 		return 0;
 	}
+
+	fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
+	if (fd == -1) {
+		IOF_LOG_ERROR("Could not open %s to configure interception",
+			      entry->mnt_dir);
+		return 0;
+	}
+
+	if (read_ctrl_int(fd, "iof/ioctl_version", &version) != 0) {
+		IOF_LOG_ERROR("Could not read ioctl version");
+		return 0;
+	}
+
+	if (version != IOF_IOCTL_VERSION) {
+		IOF_LOG_ERROR("IOCTL version mismatch: %d != %d", version,
+			      IOF_IOCTL_VERSION);
+		return 0;
+	}
+
+	if (read_ctrl_int(fd, "cnss_id", &cnss_id) != 0) {
+		IOF_LOG_ERROR("Could not read cnss id");
+		return 0;
+	}
+
+	close(fd);
 
 	dir = strdup(entry->mnt_dir);
 	if (dir == NULL) {
@@ -386,7 +440,8 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	IOF_LOG_INFO("Using IONSS: ctrl dir at %s", ctrl_prefix);
+	IOF_LOG_INFO("Using IONSS: ctrl dir at %s, cnss_id is %d",
+		     ctrl_prefix, cnss_id);
 
 	__sync_synchronize();
 
@@ -415,15 +470,29 @@ static __attribute__((destructor)) void ioil_fini(void)
 static void check_ioctl_on_open(int fd, int flags)
 {
 	struct fd_entry entry;
+	struct iof_gah_info gah_info;
 	int rc;
 
 	if (fd == -1)
 		return;
 
-	rc = ioctl(fd, IOF_IOCTL_GAH, &entry.gah);
+	rc = ioctl(fd, IOF_IOCTL_GAH, &gah_info);
 	if (rc == 0) {
 		IOIL_LOG_INFO("Opened an IOF file (fd = %d) "
-			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry.gah));
+			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(gah_info.gah));
+		if (gah_info.version != IOF_IOCTL_VERSION) {
+			IOIL_LOG_INFO("IOF ioctl version mismatch: expected %d"
+				      " actual %d", IOF_IOCTL_VERSION,
+				      gah_info.version);
+			return;
+		}
+		if (gah_info.cnss_id != cnss_id) {
+			IOIL_LOG_INFO("IOF ioctl received from another CNSS: "
+				      "expected %d actual %d", cnss_id,
+				      gah_info.cnss_id);
+			return;
+		}
+		entry.gah = gah_info.gah;
 		entry.pos = 0;
 		entry.flags = flags;
 		entry.disabled = false;

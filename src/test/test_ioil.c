@@ -121,7 +121,7 @@ static int clean_suite(void)
 static void gah_test(void)
 {
 	char buf[BUF_SIZE];
-	struct ios_gah gah;
+	struct iof_gah_info gah_info;
 	int fd;
 	int rc;
 
@@ -136,18 +136,19 @@ static void gah_test(void)
 		return;
 	}
 
-	rc = ioctl(fd, IOF_IOCTL_GAH, &gah);
+	rc = ioctl(fd, IOF_IOCTL_GAH, &gah_info);
 
 	CU_ASSERT_EQUAL(rc, 0);
+	CU_ASSERT_EQUAL(gah_info.version, IOF_IOCTL_VERSION);
 	if (rc != 0)
 		printf("ERROR: Failed ioctl test of IOF file: %s : %s\n",
 		       buf, strerror(errno));
 	else
 		printf("ioctl returned " GAH_PRINT_STR "\n",
-		       GAH_PRINT_VAL(gah));
+		       GAH_PRINT_VAL(gah_info.gah));
 
 	/* Run ioctl test on stdout.  Should fail */
-	rc = ioctl(1, IOF_IOCTL_GAH, &gah);
+	rc = ioctl(1, IOF_IOCTL_GAH, &gah_info);
 
 	CU_ASSERT_NOT_EQUAL(rc, 0);
 

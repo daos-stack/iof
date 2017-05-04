@@ -51,6 +51,7 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	      unsigned int flags, void *data)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_gah_info gah_info = {0};
 
 	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
 		     GAH_PRINT_VAL(handle->gah));
@@ -71,9 +72,14 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
 		 * allocated that many bytes in data
 		 */
-		IOF_LOG_INFO("gah requested: " GAH_PRINT_STR,
-			     GAH_PRINT_VAL(handle->gah));
-		memcpy(data, &handle->gah, sizeof(struct ios_gah));
+		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d",
+			     GAH_PRINT_VAL(handle->gah),
+			     handle->fs_handle->fs_id);
+		gah_info.version = IOF_IOCTL_VERSION;
+		gah_info.gah = handle->gah;
+		gah_info.cnss_id = getpid();
+		gah_info.fs_id = handle->fs_handle->fs_id;
+		memcpy(data, &gah_info, sizeof(gah_info));
 		return 0;
 	}
 

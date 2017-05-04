@@ -54,6 +54,7 @@
 #include "iof.h"
 #include "log.h"
 #include "ios_gah.h"
+#include "iof_ioctl.h"
 
 struct query_cb_r {
 	int complete;
@@ -281,6 +282,8 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 					  iof_state->psr_ep.ep_rank);
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "psr_tag",
 					  iof_state->psr_ep.ep_tag);
+	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
+					  IOF_IOCTL_VERSION);
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret)
