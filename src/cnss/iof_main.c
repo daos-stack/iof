@@ -62,57 +62,11 @@ struct query_cb_r {
 	struct iof_psr_query **query;
 };
 
-struct fs_handle *ioc_get_handle(void)
+struct iof_projection_info *ioc_get_handle(void)
 {
 	struct fuse_context *context = fuse_get_context();
 
-	return (struct fs_handle *)context->private_data;
-}
-
-static int iof_check_complete(void *arg)
-{
-	int *complete = (int *)arg;
-	return *complete;
-}
-
-/* on-demand progress */
-static int iof_progress(crt_context_t crt_ctx, int *complete_flag)
-{
-	int		rc;
-
-	do {
-		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
-				  complete_flag);
-
-		if (*complete_flag)
-			return 0;
-
-	} while (rc == 0 || rc == -CER_TIMEDOUT);
-
-	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
-	return -1;
-}
-
-/* Progress, from within FUSE callbacks during normal I/O
- *
- * This will use a default set of values to iof_progress, and do the correct
- * thing on timeout, potentially shutting dowth the filesystem if there is
- * a problem.
- */
-int ioc_cb_progress(struct fs_handle *fs_handle, int *complete_flag)
-{
-	int rc;
-
-	rc = iof_progress(fs_handle->crt_ctx, complete_flag);
-	if (rc) {
-		/* TODO: check is PSR is alive before exiting fuse */
-		IOF_LOG_ERROR("exiting fuse loop rc %d", rc);
-#if 0
-		fuse_session_exit(fuse_get_session(fs_handle->fuse));
-#endif
-		return EINTR;
-	}
-	return 0;
+	return (struct iof_projection_info *)context->private_data;
 }
 
 /*
@@ -189,7 +143,7 @@ static int query_callback(const struct crt_cb_info *cb_info)
 	ret = crt_req_addref(query_rpc);
 	if (ret) {
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
-				ret);
+			      ret);
 		reply->complete = 1;
 		return 0;
 	}
@@ -202,6 +156,7 @@ static int query_callback(const struct crt_cb_info *cb_info)
 
 /*Send RPC to PSR to get information about projected filesystems*/
 static int ioc_get_projection_info(struct iof_state *iof_state,
+				   struct iof_group_info *group,
 				   struct iof_psr_query **query,
 				   crt_rpc_t **query_rpc)
 {
@@ -211,7 +166,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	reply.complete = 0;
 	reply.query = query;
 
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->psr_ep,
+	ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
 			     QUERY_PSR_OP, query_rpc);
 	if (ret || (*query_rpc == NULL)) {
 		IOF_LOG_ERROR("failed to create query rpc request, ret = %d",
@@ -252,33 +207,89 @@ static int iof_uint64_read(char *buf, size_t buflen, void *arg)
 	return 0;
 }
 
-int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
+#define BUFSIZE 64
+static int attach_group(struct iof_state *iof_state,
+			struct iof_group_info *group, int id)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
-	crt_group_t *ionss_group;
-	char *prefix;
+	char buf[BUFSIZE];
 	int ret;
-	DIR *prefix_dir;
-	struct ctrl_dir *ionss_0_dir = NULL;
+	struct cnss_plugin_cb *cb;
+	struct ctrl_dir *ionss_dir = NULL;
 
+	cb = iof_state->cb;
 
-	/* First check for the IONSS process set, and if it does not exist then
-	 * return cleanly to allow the rest of the CNSS code to run
+	/* First check for the IONSS process set, and if it does not
+	 * exist then * return cleanly to allow the rest of the CNSS
+	 * code to run
 	 */
-	ret = crt_group_attach(IOF_DEFAULT_SET, &ionss_group);
+	ret = crt_group_attach(group->grp_name, &group->grp.dest_grp);
 	if (ret) {
-		IOF_LOG_INFO("crt_group_attach failed with ret = %d", ret);
+		IOF_LOG_INFO("crt_group_attach failed with ret = %d",
+			     ret);
 		return ret;
 	}
 
-	/*do a group lookup*/
-	iof_state->dest_group = ionss_group;
+	ret = crt_group_config_save(group->grp.dest_grp);
+	if (ret) {
+		IOF_LOG_ERROR("crt_group_config_save failed for ionss "
+			      "with ret = %d", ret);
+		return ret;
+	}
 
 	/*initialize destination endpoint*/
-	iof_state->psr_ep.ep_grp = 0; /*primary group*/
+	group->grp.psr_ep.ep_grp = 0; /*primary group*/
 	/*TODO: Use exported PSR from cart*/
-	iof_state->psr_ep.ep_rank = 0;
-	iof_state->psr_ep.ep_tag = 0;
+	group->grp.psr_ep.ep_rank = 0;
+	group->grp.psr_ep.ep_tag = 0;
+	group->grp.grp_id = id;
+
+	sprintf(buf, "%d", id);
+	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
+				     &ionss_dir);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create control dir for ionss info "
+			      "(rc = %d)\n", ret);
+		return IOF_ERR_CTRL_FS;
+	}
+	cb->register_ctrl_constant_uint64(ionss_dir, "psr_rank",
+					  group->grp.psr_ep.ep_rank);
+	cb->register_ctrl_constant_uint64(ionss_dir, "psr_tag",
+					  group->grp.psr_ep.ep_tag);
+	/* Fix this when we actually have multiple IONSS apps */
+	cb->register_ctrl_constant(ionss_dir, "name", group->grp_name);
+
+	group->grp.enabled = true;
+
+	return 0;
+}
+
+int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
+{
+	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_group_info *group;
+	char *prefix;
+	int ret;
+	DIR *prefix_dir;
+	int num_attached = 0;
+	int i;
+
+	iof_state->cb = cb;
+
+	/* Hard code only the default group now */
+	iof_state->num_groups = 1;
+	iof_state->groups = calloc(1, sizeof(struct iof_group_info));
+	if (iof_state->groups == NULL) {
+		IOF_LOG_ERROR("No memory available to configure IONSS");
+		return IOF_ERR_NOMEM;
+	}
+
+	group = &iof_state->groups[0];
+	group->grp_name = strdup(IOF_DEFAULT_SET);
+	if (group->grp_name == NULL) {
+		IOF_LOG_ERROR("No memory available to configure IONSS");
+		free(iof_state->groups);
+		return IOF_ERR_NOMEM;
+	}
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ionss_count", 1);
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "ionss",
@@ -289,31 +300,34 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return IOF_ERR_CTRL_FS;
 	}
 
-	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, "0",
-				     &ionss_0_dir);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create control dir for ionss info "
-			      "(rc = %d)\n", ret);
-		return IOF_ERR_CTRL_FS;
+	/* Despite the hard coding above, now we can do attaches in a loop */
+	for (i = 0; i < iof_state->num_groups; i++) {
+		group = &iof_state->groups[i];
+
+		ret = attach_group(iof_state, group, i);
+		if (ret != 0) {
+			IOF_LOG_ERROR("Failed to attach to service group"
+				      " %s (ret = %d)", group->grp_name, ret);
+			free(group->grp_name);
+			group->grp_name = NULL;
+			continue;
+		}
+
+		num_attached++;
 	}
-	cb->register_ctrl_constant_uint64(ionss_0_dir, "psr_rank",
-					  iof_state->psr_ep.ep_rank);
-	cb->register_ctrl_constant_uint64(ionss_0_dir, "psr_tag",
-					  iof_state->psr_ep.ep_tag);
-	cb->register_ctrl_constant(ionss_0_dir, "name", IOF_DEFAULT_SET);
+
+	if (num_attached == 0) {
+		IOF_LOG_ERROR("No IONSS found");
+		free(iof_state->groups);
+		return 1;
+	}
+
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
 					  IOF_IOCTL_VERSION);
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret)
 		IOF_LOG_ERROR("Context not created");
-
-	ret = crt_group_config_save(ionss_group);
-	if (ret) {
-		IOF_LOG_ERROR("crt_group_config_save failed for ionss "
-			      "with ret = %d", ret);
-		return ret;
-	}
 
 	prefix = getenv("CNSS_PREFIX");
 	iof_state->cnss_prefix = realpath(prefix, NULL);
@@ -342,7 +356,6 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	}
 
 	iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
-	iof_state->cb = cb;
 	iof_state->cb_size = cb_size;
 
 	return ret;
@@ -350,14 +363,14 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 static uint64_t online_read_cb(void *arg)
 {
-	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+	struct iof_projection_info *fs_handle = (struct iof_projection_info *)arg;
 
 	return !FS_IS_OFFLINE(fs_handle);
 }
 
 static int online_write_cb(uint64_t value, void *arg)
 {
-	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+	struct iof_projection_info *fs_handle = (struct iof_projection_info *)arg;
 
 	if (value > 1)
 		return EINVAL;
@@ -370,17 +383,17 @@ static int online_write_cb(uint64_t value, void *arg)
 	return 0;
 }
 
-#define REGISTER_STAT(_STAT) cb->register_ctrl_variable( \
-		fs_handle->stats_dir,					\
-		#_STAT,							\
-		iof_uint_read,						\
-		NULL, NULL,						\
+#define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
+		fs_handle->stats_dir,				\
+		#_STAT,						\
+		iof_uint_read,					\
+		NULL, NULL,					\
 		&fs_handle->stats->_STAT)
-#define REGISTER_STAT64(_STAT) cb->register_ctrl_variable( \
-		fs_handle->stats_dir,					\
-		#_STAT,							\
-		iof_uint64_read,					\
-		NULL, NULL,						\
+#define REGISTER_STAT64(_STAT) cb->register_ctrl_variable(	\
+		fs_handle->stats_dir,				\
+		#_STAT,						\
+		iof_uint64_read,				\
+		NULL, NULL,					\
 		&fs_handle->stats->_STAT)
 
 #if IOF_USE_FUSE3
@@ -389,18 +402,18 @@ static int online_write_cb(uint64_t value, void *arg)
 #define REGISTER_STAT3(_STAT) (void)0
 #endif
 
-int iof_post_start(void *arg)
+static int initialize_projection(struct iof_state *iof_state,
+				 struct iof_group_info *group,
+				 struct iof_fs_info *fs_info,
+				 struct iof_psr_query *query,
+				 int id)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
-	struct iof_psr_query *query = NULL;
-	int ret;
-	int i;
-	int fs_num;
+	struct iof_projection_info *fs_handle;
 	struct cnss_plugin_cb *cb;
-
-	struct iof_fs_info *tmp;
-	crt_rpc_t *query_rpc = NULL;
-
+	struct fuse_args args = {0};
+	void *argv;
+	char *base_name;
+	char *read_option = NULL;
 	char const *opts[] = {"-ofsname=IOF",
 			      "-osubtype=pam",
 #if !IOF_USE_FUSE3
@@ -410,15 +423,224 @@ int iof_post_start(void *arg)
 			      "-o", "attr_timeout=0",
 #endif
 	};
+	int ret;
 
 	cb = iof_state->cb;
 
+	/* TODO: This is presumably wrong although it's not
+	 * clear how best to handle it
+	 */
+	if (!iof_is_mode_supported(fs_info->flags))
+		return IOF_NOT_SUPP;
+
+	fs_handle = calloc(1,
+			   sizeof(struct iof_projection_info));
+	if (!fs_handle)
+		return IOF_ERR_NOMEM;
+
+	fs_handle->iof_state = iof_state;
+	fs_handle->flags = fs_info->flags;
+	IOF_LOG_INFO("Filesystem mode: Private");
+
+	fs_handle->max_read = query->max_read;
+	fs_handle->max_write = query->max_write;
+	fs_handle->readdir_size = query->readdir_size;
+
+	base_name = basename(fs_info->mnt);
+
+	ret = asprintf(&fs_handle->mount_point, "%s/%s",
+		       iof_state->cnss_prefix, base_name);
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	IOF_LOG_DEBUG("Projected Mount %s", base_name);
+
+	IOF_LOG_INFO("Mountpoint for this projection: %s",
+		     fs_handle->mount_point);
+
+	fs_handle->fs_id = fs_info->id;
+	fs_handle->proj.cli_fs_id = id;
+
+	fs_handle->stats = calloc(1, sizeof(*fs_handle->stats));
+	if (!fs_handle->stats)
+		return 1;
+
+	ret = asprintf(&fs_handle->base_dir, "%d",
+		       fs_handle->proj.cli_fs_id);
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	cb->create_ctrl_subdir(iof_state->projections_dir,
+			       fs_handle->base_dir,
+			       &fs_handle->fs_dir);
+
+	/* Register the mount point with the control
+	 * filesystem
+	 */
+	cb->register_ctrl_constant(fs_handle->fs_dir,
+				   "mount_point",
+				   fs_handle->mount_point);
+
+	cb->register_ctrl_constant(fs_handle->fs_dir, "mode",
+				   "private");
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+					  "fs_id",
+					  fs_handle->fs_id);
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+					  "group_id", group->grp.grp_id);
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+					  "max_read",
+					  fs_handle->max_read);
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+					  "max_write",
+					  fs_handle->max_write);
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+				  "readdir_size",
+				  fs_handle->readdir_size);
+
+	cb->register_ctrl_uint64_variable(fs_handle->fs_dir, "online",
+					  online_read_cb,
+					  online_write_cb,
+					  fs_handle);
+
+	cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
+			       &fs_handle->stats_dir);
+
+	REGISTER_STAT(opendir);
+	REGISTER_STAT(readdir);
+	REGISTER_STAT(closedir);
+	REGISTER_STAT(getattr);
+	REGISTER_STAT(chmod);
+	REGISTER_STAT(create);
+	REGISTER_STAT(readlink);
+	REGISTER_STAT(rmdir);
+	REGISTER_STAT(mkdir);
+	REGISTER_STAT(statfs);
+	REGISTER_STAT(unlink);
+	REGISTER_STAT(ioctl);
+	REGISTER_STAT(open);
+	REGISTER_STAT(release);
+	REGISTER_STAT(symlink);
+	REGISTER_STAT(rename);
+	REGISTER_STAT(truncate);
+	REGISTER_STAT(utimens);
+	REGISTER_STAT(read);
+	REGISTER_STAT(write);
+
+	REGISTER_STAT64(read_bytes);
+	REGISTER_STAT64(write_bytes);
+
+	REGISTER_STAT3(getfattr);
+	REGISTER_STAT3(ftruncate);
+	REGISTER_STAT3(fchmod);
+	REGISTER_STAT3(futimens);
+
+	REGISTER_STAT(il_ioctl);
+
+	IOF_LOG_INFO("Filesystem ID srv:%d cli:%d",
+		     fs_handle->fs_id,
+		     fs_handle->proj.cli_fs_id);
+
+	fs_handle->proj.grp = &group->grp;
+	fs_handle->dest_ep = group->grp.psr_ep;
+	fs_handle->proj.grp_id = group->grp.grp_id;
+	fs_handle->proj.crt_ctx = iof_state->crt_ctx;
+	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
+
+	args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
+	args.argv = calloc(args.argc, sizeof(char *));
+	argv = args.argv;
+	args.argv[0] = (char *)&"";
+	memcpy(&args.argv[2], opts, sizeof(opts));
+
+	ret = asprintf(&read_option, "-omax_read=%u",
+		       fs_handle->max_read);
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	args.argv[1] = read_option;
+
+	ret = cb->register_fuse_fs(cb->handle,
+				   fs_handle->fuse_ops, &args,
+				   fs_handle->mount_point,
+				   fs_handle);
+	if (ret) {
+		IOF_LOG_ERROR("Unable to register FUSE fs");
+		free(fs_handle);
+		return 1;
+	}
+
+	free(read_option);
+	free(argv);
+
+	IOF_LOG_DEBUG("Fuse mount installed at: %s",
+		      fs_handle->mount_point);
+
+	return 0;
+}
+
+static int query_projections(struct iof_state *iof_state,
+			     struct iof_group_info *group,
+			     int *total, int *active)
+{
+	struct iof_fs_info *tmp;
+	crt_rpc_t *query_rpc = NULL;
+	struct iof_psr_query *query = NULL;
+	int fs_num;
+	int i;
+	int ret;
+
+	*total = *active = 0;
+
 	/*Query PSR*/
-	ret = ioc_get_projection_info(iof_state, &query, &query_rpc);
+	ret = ioc_get_projection_info(iof_state, group, &query,
+				      &query_rpc);
 	if (ret || (query == NULL)) {
 		IOF_LOG_ERROR("Query operation failed");
 		return IOF_ERR_PROJECTION;
 	}
+
+	/*calculate number of projections*/
+	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
+	IOF_LOG_DEBUG("Number of filesystems projected by %s: %d",
+		      group->grp_name, fs_num);
+	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
+
+	for (i = 0; i < fs_num; i++) {
+		ret = initialize_projection(iof_state, group, &tmp[i], query,
+					    (*total)++);
+
+		if (ret != 0) {
+			IOF_LOG_ERROR("Could not initialize projection %s from"
+				      " %s", tmp[i].mnt, group->grp_name);
+			continue;
+		}
+
+		(*active)++;
+	}
+
+	ret = crt_req_decref(query_rpc);
+	if (ret)
+		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
+
+	return 0;
+}
+
+int iof_post_start(void *arg)
+{
+	struct iof_state *iof_state = (struct iof_state *)arg;
+	int ret;
+	int grp_num;
+	int total_projections = 0;
+	int active_projections = 0;
+	struct cnss_plugin_cb *cb;
+
+	cb = iof_state->cb;
 
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "projections",
 				     &iof_state->projections_dir);
@@ -428,165 +650,39 @@ int iof_post_start(void *arg)
 		return IOF_ERR_CTRL_FS;
 	}
 
-	/*calculate number of projections*/
-	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
-	IOF_LOG_DEBUG("Number of filesystems projected: %d", fs_num);
 
-	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
+	for (grp_num = 0; grp_num < iof_state->num_groups; grp_num++) {
+		struct iof_group_info *group = &iof_state->groups[grp_num];
+		int active;
 
-	for (i = 0; i < fs_num; i++) {
-		struct fs_handle *fs_handle;
-		struct fuse_args args = {0};
-		void *argv;
-		char *base_name;
-		char *read_option = NULL;
+		ret = query_projections(iof_state, group, &total_projections,
+					&active);
 
-		/* TODO: This is presumably wrong although it's not clear
-		 * how best to handle it
-		 */
-		if (!iof_is_mode_supported(tmp[i].flags))
-			return IOF_NOT_SUPP;
-
-		fs_handle = calloc(1, sizeof(struct fs_handle));
-		if (!fs_handle)
-			return IOF_ERR_NOMEM;
-		fs_handle->iof_state = iof_state;
-		fs_handle->flags = tmp[i].flags;
-		IOF_LOG_INFO("Filesystem mode: Private");
-
-		fs_handle->max_read = query->max_read;
-		fs_handle->max_write = query->max_write;
-		fs_handle->readdir_size = query->readdir_size;
-
-		base_name = basename(tmp[i].mnt);
-
-		ret = asprintf(&fs_handle->mount_point, "%s/%s",
-			       iof_state->cnss_prefix, base_name);
-		if (ret == -1)
-			return IOF_ERR_NOMEM;
-
-		IOF_LOG_DEBUG("Projected Mount %s", base_name);
-
-		IOF_LOG_INFO("Mountpoint for this projection: %s",
-			     fs_handle->mount_point);
-
-		fs_handle->fs_id = tmp[i].id;
-
-		fs_handle->stats = calloc(1, sizeof(*fs_handle->stats));
-		if (!fs_handle->stats)
-			return 1;
-
-		ret = asprintf(&fs_handle->base_dir, "%d", fs_handle->fs_id);
-		if (ret == -1)
-			return IOF_ERR_NOMEM;
-
-		cb->create_ctrl_subdir(iof_state->projections_dir,
-				       fs_handle->base_dir,
-				       &fs_handle->fs_dir);
-
-		/*Register the mount point with the control filesystem*/
-		cb->register_ctrl_constant(fs_handle->fs_dir, "mount_point",
-					   fs_handle->mount_point);
-
-		cb->register_ctrl_constant(fs_handle->fs_dir, "mode",
-					   "private");
-
-		cb->register_ctrl_constant_uint64(fs_handle->fs_dir, "max_read",
-						  fs_handle->max_read);
-
-		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
-						  "max_write",
-						  fs_handle->max_read);
-
-		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
-						  "readdir_size",
-						  fs_handle->readdir_size);
-
-		cb->register_ctrl_uint64_variable(fs_handle->fs_dir, "online",
-						  online_read_cb,
-						  online_write_cb,
-						  fs_handle);
-
-		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
-				       &fs_handle->stats_dir);
-
-		REGISTER_STAT(opendir);
-		REGISTER_STAT(readdir);
-		REGISTER_STAT(closedir);
-		REGISTER_STAT(getattr);
-		REGISTER_STAT(chmod);
-		REGISTER_STAT(create);
-		REGISTER_STAT(readlink);
-		REGISTER_STAT(rmdir);
-		REGISTER_STAT(mkdir);
-		REGISTER_STAT(statfs);
-		REGISTER_STAT(unlink);
-		REGISTER_STAT(ioctl);
-		REGISTER_STAT(open);
-		REGISTER_STAT(release);
-		REGISTER_STAT(symlink);
-		REGISTER_STAT(rename);
-		REGISTER_STAT(truncate);
-		REGISTER_STAT(utimens);
-		REGISTER_STAT(read);
-		REGISTER_STAT(write);
-
-		REGISTER_STAT64(read_bytes);
-		REGISTER_STAT64(write_bytes);
-
-		REGISTER_STAT3(getfattr);
-		REGISTER_STAT3(ftruncate);
-		REGISTER_STAT3(fchmod);
-		REGISTER_STAT3(futimens);
-
-		REGISTER_STAT(il_ioctl);
-
-		IOF_LOG_INFO("Filesystem ID %d", fs_handle->fs_id);
-
-		fs_handle->dest_ep = iof_state->psr_ep;
-		fs_handle->crt_ctx = iof_state->crt_ctx;
-		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
-
-		args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
-		args.argv = calloc(args.argc, sizeof(char *));
-		argv = args.argv;
-		args.argv[0] = (char *)&"";
-		memcpy(&args.argv[2], opts, sizeof(opts));
-
-		ret = asprintf(&read_option, "-omax_read=%u",
-			       fs_handle->max_read);
-		if (ret == -1)
-			return IOF_ERR_NOMEM;
-
-		args.argv[1] = read_option;
-
-		ret = cb->register_fuse_fs(cb->handle, fs_handle->fuse_ops,
-					   &args, fs_handle->mount_point,
-					   fs_handle);
 		if (ret) {
-			IOF_LOG_ERROR("Unable to register FUSE fs");
-			free(fs_handle);
-			return 1;
+			IOF_LOG_ERROR("Couldn't mount projections from %s",
+				      group->grp_name);
+			continue;
 		}
 
-		free(read_option);
-		free(argv);
-
-		IOF_LOG_DEBUG("Fuse mount installed at: %s",
-			      fs_handle->mount_point);
+		active_projections += active;
 	}
 
-	ret = crt_req_decref(query_rpc);
-	if (ret)
-		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
+	cb->register_ctrl_constant_uint64(cb->plugin_dir,
+					  "projection_count",
+					  total_projections);
 
-	return ret;
+	if (total_projections == 0) {
+		IOF_LOG_ERROR("No projections found");
+		return 1;
+	}
+
+	return 0;
 }
 
 /* Called once per projection, after the FUSE filesystem has been torn down */
 void iof_deregister_fuse(void *arg)
 {
-	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+	struct iof_projection_info *fs_handle = arg;
 
 	free(fs_handle->fuse_ops);
 	free(fs_handle->base_dir);
@@ -616,34 +712,43 @@ static int detach_cb(const struct crt_cb_info *cb_info)
 void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
-	int ret;
+	struct iof_group_info *group;
 	crt_rpc_t *rpc = NULL;
+	int ret;
+	int i;
 	int complete;
 
-	/*send a detach RPC to IONSS*/
-	ret = crt_req_create(iof_state->crt_ctx, iof_state->psr_ep,
-			     DETACH_OP, &rpc);
-	if (ret || !rpc)
-		IOF_LOG_ERROR("Could not create detach request ret = %d",
-				ret);
+	for (i = 0; i < iof_state->num_groups; i++) {
+		group = &iof_state->groups[i];
+		/*send a detach RPC to IONSS*/
+		ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
+				     DETACH_OP, &rpc);
+		if (ret || !rpc)
+			IOF_LOG_ERROR("Could not create detach req ret = %d",
+				      ret);
 
-	complete = 0;
-	ret = crt_req_send(rpc, detach_cb, &complete);
-	if (ret)
-		IOF_LOG_ERROR("Detach RPC not sent");
+		complete = 0;
+		ret = crt_req_send(rpc, detach_cb, &complete);
+		if (ret)
+			IOF_LOG_ERROR("Detach RPC not sent");
 
-	ret = iof_progress(iof_state->crt_ctx, &complete);
-	if (ret)
-		IOF_LOG_ERROR("Could not progress detach RPC");
+		ret = iof_progress(iof_state->crt_ctx, &complete);
+		if (ret)
+			IOF_LOG_ERROR("Could not progress detach RPC");
+
+		ret = crt_group_detach(group->grp.dest_grp);
+		if (ret)
+			IOF_LOG_ERROR("crt_group_detach failed with ret = %d",
+				      ret);
+
+		free(group->grp_name);
+	}
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
 	IOF_LOG_INFO("Called iof_finish with %p", iof_state);
 
-	ret = crt_group_detach(iof_state->dest_group);
-	if (ret)
-		IOF_LOG_ERROR("crt_group_detach failed with ret = %d", ret);
-
+	free(iof_state->groups);
 	free(iof_state->cnss_prefix);
 	free(iof_state);
 }

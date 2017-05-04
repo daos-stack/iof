@@ -48,7 +48,7 @@
 
 int ioc_symlink(const char *dst, const char *src)
 {
-	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_two_string_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -66,7 +66,7 @@ int ioc_symlink(const char *dst, const char *src)
 		return -EROFS;
 	}
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, symlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, ret = %u",
@@ -86,7 +86,8 @@ int ioc_symlink(const char *dst, const char *src)
 		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
+
 	if (rc)
 		return -rc;
 

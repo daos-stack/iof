@@ -196,13 +196,13 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 int ioc_read_direct(char *buff, size_t len, off_t position,
 		    struct iof_file_handle *handle)
 {
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_read_in *in;
 	struct read_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -222,7 +222,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -247,7 +247,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 int ioc_read_bulk(char *buff, size_t len, off_t position,
 		  struct iof_file_handle *handle)
 {
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_read_bulk_in *in;
 	struct read_bulk_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -256,7 +256,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, read_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -274,7 +274,8 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RW, &in->bulk);
+	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
+			     &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		return -EIO;
@@ -289,7 +290,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 

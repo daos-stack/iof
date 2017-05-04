@@ -41,6 +41,7 @@
 #include "cnss_plugin.h"
 #include "ios_gah.h"
 #include "iof_atomic.h"
+#include "iof_fs.h"
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
@@ -78,29 +79,29 @@ struct iof_stats {
 
 /*For IOF Plugin*/
 struct iof_state {
-	struct cnss_plugin_cb *cb;
-	size_t cb_size;
-
-	/* destination group */
-	crt_group_t	*dest_group;
-	crt_endpoint_t	psr_ep;
+	struct cnss_plugin_cb		*cb;
+	size_t				cb_size;
 	/* cart context */
-	crt_context_t	crt_ctx;
+	crt_context_t			crt_ctx;
 	/* CNSS Prefix */
-	char		*cnss_prefix;
-	/* There should really be one per ionss */
-	struct ctrl_dir	*ionss_dir;
-	struct ctrl_dir	*projections_dir;
+	char				*cnss_prefix;
+	struct ctrl_dir			*ionss_dir;
+	struct ctrl_dir			*projections_dir;
+	struct iof_group_info		*groups;
+	uint32_t			num_groups;
 };
 
-/* For each projection */
-struct fs_handle {
+struct iof_group_info {
+	struct iof_service_group	grp;
+	struct ctrl_dir			*group_dir;
+	char				*grp_name;
+};
+
+struct iof_projection_info {
+	struct iof_projection	proj;
 	struct iof_state	*iof_state;
-	/* destination endpoint */
+	/* Cached from psr_ep */
 	crt_endpoint_t		dest_ep;
-	/* cart context */
-	crt_context_t		crt_ctx;
-	int			fs_id;
 	struct ctrl_dir		*fs_dir;
 	struct ctrl_dir		*stats_dir;
 	struct iof_stats	*stats;
@@ -110,6 +111,7 @@ struct fs_handle {
 	struct fuse_operations	*fuse_ops;
 	/* Feature Flags */
 	uint8_t			flags;
+	int			fs_id;
 	uint32_t		max_read;
 	uint32_t		max_write;
 	uint32_t		readdir_size;
@@ -117,26 +119,6 @@ struct fs_handle {
 	int			offline_reason;
 };
 
-/*
- * This will be defined by the calling function to select
- * the correct RPC type from the protocol registry.
- * This is used in the FS_TO_OP Macro below.
- */
-#ifndef IOF_PROTO_CLASS
-#define IOF_PROTO_CLASS DEFAULT
-#endif
-
-/*
- * Helpers for forcing macro expansion.
- */
-#define EVAL_PROTO_CLASS(CLS) DEF_PROTO_CLASS(CLS)
-#define EVAL_RPC_TYPE(CLS, TYPE) DEF_RPC_TYPE(CLS, TYPE)
-/*
- * Returns the correct RPC Type ID from the protocol registry.
- */
-#define FS_TO_OP(HANDLE, FN) \
-		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
-		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
 
@@ -210,35 +192,35 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
 
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {
-	struct fs_handle	*fs_handle;
+	struct iof_projection_info	*fs_handle;
 	/* The handle for accessing the directory on the IONSS */
-	struct ios_gah		gah;
+	struct ios_gah			gah;
 	/* Any RPC reference held across readdir() calls */
-	crt_rpc_t		*rpc;
+	crt_rpc_t			*rpc;
 	/* Pointer to any retreived data from readdir() RPCs */
-	struct iof_readdir_reply *replies;
-	int			reply_count;
-	void			*replies_base;
+	struct iof_readdir_reply	 *replies;
+	int				reply_count;
+	void				*replies_base;
 	/* Set to True if the current batch of replies is the final one */
-	int			last_replies;
+	int				last_replies;
 	/* Set to 1 initially, but 0 if there is a unrecoverable error */
-	int			handle_valid;
+	int				handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
-	int			gah_valid;
+	int				gah_valid;
 	/* The name of the directory */
-	char			name[];
+	char				name[];
 };
 
 /* Data which is stored against an open file handle */
 struct iof_file_handle {
-	struct fs_handle	*fs_handle;
-	struct ios_gah		gah;
-	int			gah_valid;
-	ino_t			inode_no;
-	char			name[];
+	struct iof_projection_info	*fs_handle;
+	struct ios_gah			gah;
+	int				gah_valid;
+	ino_t				inode_no;
+	char				name[];
 };
 
-struct fs_handle *ioc_get_handle(void);
+struct iof_projection_info *ioc_get_handle(void);
 
 struct status_cb_r {
 	int complete; /** Flag to check for operation complete */
@@ -256,8 +238,6 @@ struct status_cb_r {
 #define IOC_STATUS_TO_RC(STATUS) (STATUS.err == 0 ? -STATUS.rc : -STATUS.err)
 
 int ioc_status_cb(const struct crt_cb_info *);
-
-int ioc_cb_progress(struct fs_handle *, int *);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
 

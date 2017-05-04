@@ -48,7 +48,7 @@
 
 int ioc_mkdir(const char *file, mode_t mode)
 {
-	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_create_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -66,7 +66,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 		return -EROFS;
 	}
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, mkdir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -85,7 +85,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 

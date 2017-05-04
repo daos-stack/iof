@@ -48,7 +48,7 @@
 int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_gah_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -77,7 +77,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	else
 		opcode = FS_TO_OP(fs_handle, fsync);
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep, opcode,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep, opcode,
 			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -92,7 +92,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 

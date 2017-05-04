@@ -42,6 +42,7 @@
 #include <sys/uio.h>
 #include "log.h"
 #include "ios_gah.h"
+#include "iof_fs.h"
 
 #define IOIL_PUBLIC __attribute__((visibility("default")))
 
@@ -137,14 +138,12 @@ extern bool ioil_initialized;
 #define IOIL_LOG_DEBUG(...) IOIL_LOG_(DEBUG, __VA_ARGS__)
 
 struct file_info {
-	crt_context_t crt_ctx;
-	crt_endpoint_t dest_ep;
+	struct iof_projection *fs_handle;
 	struct ios_gah gah;
 	bool gah_valid;
 	int errcode;
 };
 
-int ioil_cb_progress(struct file_info *f_info, int *complete_flag);
 ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
 		      struct file_info *f_info);
 ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,

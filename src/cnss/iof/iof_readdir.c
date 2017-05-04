@@ -105,7 +105,7 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
  */
 static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 {
-	struct fs_handle *fs_handle = dir_handle->fs_handle;
+	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
 	struct iof_readdir_in *in;
 	struct readdir_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -115,7 +115,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	int ret = 0;
 	int rc;
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, readdir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",
@@ -137,7 +137,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 
 		sgl.sg_iovs = &iov;
 		sgl.sg_nr.num = 1;
-		rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RW,
+		rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
 				     &in->bulk);
 		if (rc) {
 			IOF_LOG_ERROR("Failed to make local bulk handle %d",
@@ -157,7 +157,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		return EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc) {
 		ret = rc;
 		goto out;

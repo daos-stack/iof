@@ -48,7 +48,7 @@
 
 int ioc_utimens_name(const char *file, const struct timespec tv[2])
 {
-	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_time_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -61,7 +61,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -80,7 +80,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -93,7 +93,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_time_gah_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -111,7 +111,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -128,7 +128,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 

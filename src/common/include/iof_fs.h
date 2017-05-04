@@ -35,60 +35,49 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef __IOF_FS_H__
+#define __IOF_FS_H__
 
-#ifdef IOF_USE_FUSE3
-#include <fuse3/fuse.h>
-#else
-#include <fuse/fuse.h>
+#include <crt_types.h>
+
+struct iof_service_group {
+	crt_group_t		*dest_grp; /* Server group */
+	crt_endpoint_t		psr_ep;    /* Server PSR endpoint */
+	uint32_t		grp_id;    /* CNSS defined ionss id */
+	bool			enabled;   /* Indicates group is available */
+};
+
+/* For each projection */
+struct iof_projection {
+	struct iof_service_group	*grp;      /* Server group info */
+	crt_context_t			*crt_ctx;  /* context to use */
+	uint32_t			grp_id;    /* CNSS defined ionss id */
+	int				cli_fs_id; /* client projection id */
+	bool				enabled;   /* Projection enabled */
+};
+
+/*
+ * This will be defined by the calling function to select
+ * the correct RPC type from the protocol registry.
+ * This is used in the FS_TO_OP Macro below.
+ */
+#ifndef IOF_PROTO_CLASS
+#define IOF_PROTO_CLASS DEFAULT
 #endif
 
-#include "iof_common.h"
-#include "iof.h"
-#include "log.h"
-#include "iof_ioctl.h"
+/*
+ * Helpers for forcing macro expansion.
+ */
+#define EVAL_PROTO_CLASS(CLS) DEF_PROTO_CLASS(CLS)
+#define EVAL_RPC_TYPE(CLS, TYPE) DEF_RPC_TYPE(CLS, TYPE)
+/*
+ * Returns the correct RPC Type ID from the protocol registry.
+ */
+#define FS_TO_OP(HANDLE, FN) \
+		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
+		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
-int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
-	      unsigned int flags, void *data)
-{
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_gah_info gah_info = {0};
+int iof_progress(crt_context_t, int *);
+int iof_fs_progress(struct iof_projection *, int *);
 
-	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		     GAH_PRINT_VAL(handle->gah));
-
-	STAT_ADD(handle->fs_handle->stats, ioctl);
-
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
-
-	if (!handle->gah_valid) {
-		/* If the server has reported that the GAH, nothing to do */
-		return -EIO;
-	}
-
-	if (cmd == IOF_IOCTL_GAH) {
-		if (data == NULL)
-			return -EIO;
-
-		STAT_ADD(handle->fs_handle->stats, il_ioctl);
-
-		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
-		 * allocated that many bytes in data
-		 */
-		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d,"
-			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->gah),
-			     handle->fs_handle->fs_id,
-			     handle->fs_handle->proj.cli_fs_id);
-		gah_info.version = IOF_IOCTL_VERSION;
-		gah_info.gah = handle->gah;
-		gah_info.cnss_id = getpid();
-		gah_info.cli_fs_id = handle->fs_handle->proj.cli_fs_id;
-		memcpy(data, &gah_info, sizeof(gah_info));
-		return 0;
-	}
-
-	IOF_LOG_INFO("Real ioctl support is not implemented");
-
-	return -ENOTSUP;
-}
-
+#endif

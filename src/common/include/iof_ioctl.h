@@ -43,14 +43,13 @@
 
 #define IOF_IOCTL_TYPE 0xA3       /* Arbitrary "unique" type of the IOCTL */
 #define IOF_IOCTL_GAH_NUMBER 0xC1 /* Number of the GAH IOCTL.  Also arbitrary */
-#define IOF_IOCTL_VERSION 2       /* Version of ioctl protocol */
+#define IOF_IOCTL_VERSION 3       /* Version of ioctl protocol */
 
 struct iof_gah_info {
 	int version;
-	int fs_id;
 	struct ios_gah gah;
 	int cnss_id;
-	int ionss_id;
+	int cli_fs_id;
 };
 
 /* Defines the IOCTL command to get the gah for a IOF file */

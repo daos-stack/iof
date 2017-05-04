@@ -98,7 +98,7 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 
 int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
-	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_dir_handle *dir_handle;
 	struct iof_string_in *in;
 	struct opendir_cb_r reply = {0};
@@ -120,7 +120,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	STAT_ADD(fs_handle->stats, opendir);
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, opendir), &rpc);
 
 	if (rc || !rpc) {
@@ -142,7 +142,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc) {
 		free(dir_handle);
 		return -rc;

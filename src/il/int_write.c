@@ -126,13 +126,18 @@ static int write_cb(const struct crt_cb_info *cb_info)
 static int write_direct(const char *buff, size_t len, off_t position,
 			struct file_info *f_info)
 {
+	struct iof_projection *fs_handle;
+	struct iof_service_group *grp;
 	struct iof_write_in *in;
 	struct write_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(f_info->crt_ctx, f_info->dest_ep,
-			    FS_TO_OP(f_info, write_direct), &rpc);
+	fs_handle = f_info->fs_handle;
+	grp = fs_handle->grp;
+
+	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
+			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -153,7 +158,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = ioil_cb_progress(f_info, &reply.complete);
+	rc = iof_fs_progress(fs_handle, &reply.complete);
 	if (rc) {
 		f_info->errcode = EINTR;
 		return -1;
@@ -175,6 +180,8 @@ static int write_direct(const char *buff, size_t len, off_t position,
 static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 			  struct file_info *f_info)
 {
+	struct iof_projection *fs_handle;
+	struct iof_service_group *grp;
 	struct iof_write_bulk *in;
 	struct write_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -183,8 +190,11 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	rc = crt_req_create(f_info->crt_ctx, f_info->dest_ep,
-			    FS_TO_OP(f_info, write_bulk), &rpc);
+	fs_handle = f_info->fs_handle;
+	grp = fs_handle->grp;
+
+	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
+			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -201,7 +211,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(f_info->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
+	rc = crt_bulk_create(fs_handle, &sgl, CRT_BULK_RO, &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		f_info->errcode = EIO;
@@ -220,7 +230,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = ioil_cb_progress(f_info, &reply.complete);
+	rc = iof_fs_progress(fs_handle, &reply.complete);
 	if (rc) {
 		f_info->errcode = EINTR;
 		return -1;

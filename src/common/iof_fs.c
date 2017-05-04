@@ -35,60 +35,43 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifdef IOF_USE_FUSE3
-#include <fuse3/fuse.h>
-#else
-#include <fuse/fuse.h>
-#endif
-
-#include "iof_common.h"
-#include "iof.h"
+#include <crt_api.h>
 #include "log.h"
-#include "iof_ioctl.h"
+#include "iof_fs.h"
 
-int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
-	      unsigned int flags, void *data)
+static int iof_check_complete(void *arg)
 {
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_gah_info gah_info = {0};
-
-	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		     GAH_PRINT_VAL(handle->gah));
-
-	STAT_ADD(handle->fs_handle->stats, ioctl);
-
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
-
-	if (!handle->gah_valid) {
-		/* If the server has reported that the GAH, nothing to do */
-		return -EIO;
-	}
-
-	if (cmd == IOF_IOCTL_GAH) {
-		if (data == NULL)
-			return -EIO;
-
-		STAT_ADD(handle->fs_handle->stats, il_ioctl);
-
-		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
-		 * allocated that many bytes in data
-		 */
-		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d,"
-			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->gah),
-			     handle->fs_handle->fs_id,
-			     handle->fs_handle->proj.cli_fs_id);
-		gah_info.version = IOF_IOCTL_VERSION;
-		gah_info.gah = handle->gah;
-		gah_info.cnss_id = getpid();
-		gah_info.cli_fs_id = handle->fs_handle->proj.cli_fs_id;
-		memcpy(data, &gah_info, sizeof(gah_info));
-		return 0;
-	}
-
-	IOF_LOG_INFO("Real ioctl support is not implemented");
-
-	return -ENOTSUP;
+	int *complete = (int *)arg;
+	return *complete;
 }
 
+/* on-demand progress */
+int iof_progress(crt_context_t crt_ctx, int *complete_flag)
+{
+	int		rc;
+
+	do {
+		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
+				  complete_flag);
+
+		if (*complete_flag)
+			return 0;
+
+	} while (rc == 0 || rc == -CER_TIMEDOUT);
+
+	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+	return -1;
+}
+
+/* Progress, from within ioil entry point during normal I/O */
+int iof_fs_progress(struct iof_projection *fs_handle, int *complete_flag)
+{
+	int rc;
+
+	rc = iof_progress(fs_handle->crt_ctx, complete_flag);
+	if (rc) {
+		IOF_LOG_ERROR("Progress loop exited, rc %d", rc);
+		return -1;
+	}
+	return 0;
+}

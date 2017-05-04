@@ -40,6 +40,7 @@ import os
 HEADERS = ['cnss_plugin.h', 'ctrl_fs_util.h']
 COMMON_SRC = ['version.c',
               'ios_gah.c',
+              'iof_fs.c',
               'log.c',
               'iof_rpc.c',
               'iof_obj_pool.c',

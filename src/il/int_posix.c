@@ -64,10 +64,12 @@ bool ioil_initialized;
 static __thread int saved_errno;
 static vector_t fd_table;
 static const char *cnss_prefix;
+static crt_context_t crt_ctx;
 static int cnss_id;
-static crt_group_t **ionss_grp;
+static struct iof_service_group *ionss_grps;
 static uint32_t ionss_count;
-static crt_context_t context;
+static struct iof_projection *projections;
+static uint32_t projection_count;
 
 #define BLOCK_SIZE 1024
 
@@ -84,50 +86,12 @@ static crt_context_t context;
 	} while (0)
 
 struct fd_entry {
+	struct iof_projection *fs_handle;
 	struct ios_gah gah;
 	off_t pos;
 	int flags;
-	uint32_t ionss_id;
 	bool disabled;
 };
-
-static int iof_check_complete(void *arg)
-{
-	int *complete = (int *)arg;
-	return *complete;
-}
-
-/* on-demand progress */
-static int iof_progress(crt_context_t crt_ctx, int *complete_flag)
-{
-	int		rc;
-
-	do {
-		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
-				  complete_flag);
-
-		if (*complete_flag)
-			return 0;
-
-	} while (rc == 0 || rc == -CER_TIMEDOUT);
-
-	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
-	return -1;
-}
-
-/* Progress, from within ioil entry point during normal I/O */
-int ioil_cb_progress(struct file_info *f_info, int *complete_flag)
-{
-	int rc;
-
-	rc = iof_progress(f_info->crt_ctx, complete_flag);
-	if (rc) {
-		IOF_LOG_ERROR("Progress loop exited, rc %d", rc);
-		return -1;
-	}
-	return 0;
-}
-
 
 int ioil_initialize_fd_table(int max_fds)
 {
@@ -143,13 +107,15 @@ int ioil_initialize_fd_table(int max_fds)
 
 #define BUFSIZE 64
 
-static int attach_to_ionss(void)
+static int find_projections(void)
 {
 	char buf[CTRL_FS_MAX_LEN];
 	char tmp[BUFSIZE];
 	int rc;
 	int i;
 	uint32_t version;
+	crt_rank_t rank;
+	uint32_t tag;
 
 	rc = ctrl_fs_read_uint32(&version, "iof/ioctl_version");
 	if (rc != 0) {
@@ -175,8 +141,10 @@ static int attach_to_ionss(void)
 		return 1;
 	}
 
-	ionss_grp = calloc(ionss_count, sizeof(*ionss_grp));
+	ionss_grps = calloc(ionss_count, sizeof(*ionss_grps));
 	for (i = 0; i < ionss_count; i++) {
+		struct iof_service_group *grp_info = &ionss_grps[i];
+
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/name", i);
 
 		rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, tmp);
@@ -184,14 +152,69 @@ static int attach_to_ionss(void)
 			IOF_LOG_INFO("Could not get ionss name, rc = %d", rc);
 			return 1;
 		}
+
 		/* Ok, now try to attach.  Note, this will change when we
 		 * attach to multiple IONSS processes
 		 */
-		rc = crt_group_attach(buf, &ionss_grp[i]);
+		rc = crt_group_attach(buf, &grp_info->dest_grp);
 		if (rc != 0) {
-			IOF_LOG_INFO("Could not attach to ionss, rc = %d", rc);
+			IOF_LOG_INFO("Could not attach to ionss %s, rc = %d",
+				     buf, rc);
 			return 1;
 		}
+
+		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);
+		rc = ctrl_fs_read_uint32(&rank, tmp);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not read psr_rank, rc = %d", rc);
+			return 1;
+		}
+
+		grp_info->psr_ep.ep_rank = rank;
+		grp_info->grp_id = i;
+
+		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_tag", i);
+		rc = ctrl_fs_read_uint32(&tag, tmp);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not read psr_tag, rc = %d", rc);
+			return 1;
+		}
+		grp_info->psr_ep.ep_tag = tag;
+
+		grp_info->enabled = true;
+	}
+
+	rc = ctrl_fs_read_uint32(&projection_count, "iof/projection_count");
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not read projection count, rc = %d", rc);
+		return 1;
+	}
+
+	projections = calloc(projection_count, sizeof(*projections));
+	if (projections == NULL) {
+		IOF_LOG_ERROR("Could not allocate memory");
+		return 1;
+	}
+
+	for (i = 0; i < projection_count; i++) {
+		struct iof_projection *proj = &projections[i];
+
+		proj->cli_fs_id = i;
+		proj->crt_ctx = crt_ctx;
+		snprintf(tmp, BUFSIZE, "iof/projections/%d/group_id", i);
+		rc = ctrl_fs_read_uint32(&proj->grp_id, tmp);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not read grp_id, rc = %d", rc);
+			return 1;
+		}
+
+		if (proj->grp_id > ionss_count) {
+			IOF_LOG_ERROR("Invalid grp_id for projection");
+			return 1;
+		}
+
+		proj->grp = &ionss_grps[proj->grp_id];
+		proj->enabled = true;
 	}
 
 	return 0;
@@ -204,10 +227,7 @@ static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
 	struct file_info fi;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
-	fi.dest_ep.ep_rank = entry->gah.base;
-	fi.dest_ep.ep_tag = 0;
+	fi.fs_handle = entry->fs_handle;
 	fi.gah = entry->gah;
 	fi.gah_valid = true;
 	fi.errcode = 0;
@@ -226,10 +246,7 @@ static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
 	struct file_info fi;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
-	fi.dest_ep.ep_rank = entry->gah.base;
-	fi.dest_ep.ep_tag = 0;
+	fi.fs_handle = entry->fs_handle;
 	fi.gah = entry->gah;
 	fi.gah_valid = true;
 	fi.errcode = 0;
@@ -247,10 +264,7 @@ static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
 	struct file_info fi;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
-	fi.dest_ep.ep_rank = entry->gah.base;
-	fi.dest_ep.ep_tag = 0;
+	fi.fs_handle = entry->fs_handle;
 	fi.gah = entry->gah;
 	fi.gah_valid = true;
 	fi.errcode = 0;
@@ -270,10 +284,7 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 	struct file_info fi;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
-	fi.dest_ep.ep_rank = entry->gah.base;
-	fi.dest_ep.ep_tag = 0;
+	fi.fs_handle = entry->fs_handle;
 	fi.gah = entry->gah;
 	fi.gah_valid = true;
 	fi.errcode = 0;
@@ -329,7 +340,7 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = crt_context_create(NULL, &context);
+	rc = crt_context_create(NULL, &crt_ctx);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
 			      " disabling interception", rc);
@@ -339,17 +350,17 @@ static __attribute__((constructor)) void ioil_init(void)
 
 	rc = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
 	if (rc != 0) {
-		crt_context_destroy(context, 0);
+		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
 		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
 			      " disabling interception", rc);
 		return;
 	}
 
-	rc = attach_to_ionss();
+	rc = find_projections();
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not use IONSS (rc = %d)."
-			      " Disabling interception", rc);
+		IOF_LOG_ERROR("Could not configure projections. "
+			      "Disabling interception");
 		ctrl_fs_util_finalize();
 		return;
 	}
@@ -368,9 +379,9 @@ static __attribute__((destructor)) void ioil_fini(void)
 
 	if (ioil_initialized) {
 		for (i = 0; i < ionss_count; i++)
-			crt_group_detach(ionss_grp[i]);
-		free(ionss_grp);
-		crt_context_destroy(context, 0);
+			crt_group_detach(ionss_grps[i].dest_grp);
+		free(ionss_grps);
+		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
 		ctrl_fs_util_finalize();
 	}
@@ -409,7 +420,7 @@ static void check_ioctl_on_open(int fd, int flags)
 			return;
 		}
 		entry.gah = gah_info.gah;
-		entry.ionss_id = gah_info.ionss_id;
+		entry.fs_handle = &projections[gah_info.cli_fs_id];
 		entry.pos = 0;
 		entry.flags = flags;
 		entry.disabled = false;

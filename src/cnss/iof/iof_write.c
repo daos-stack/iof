@@ -114,7 +114,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 int ioc_write_direct(const char *buff, size_t len, off_t position,
 		     struct iof_file_handle *handle)
 {
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_write_in *in;
 	struct write_cb_r reply = {0};
 
@@ -123,7 +123,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -144,7 +144,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 
@@ -160,7 +160,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 int ioc_write_bulk(const char *buff, size_t len, off_t position,
 		   struct iof_file_handle *handle)
 {
-	struct fs_handle *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_write_bulk *in;
 	crt_bulk_t bulk;
 	struct write_cb_r reply = {0};
@@ -170,7 +170,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -188,7 +188,8 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
+	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
+			     &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		return -EIO;
@@ -206,7 +207,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc)
 		return -rc;
 

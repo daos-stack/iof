@@ -186,13 +186,14 @@ static void ioc_show_flags(unsigned in)
  */
 static void *ioc_init(struct fuse_conn_info *conn)
 {
-	struct fs_handle *fs_handle;
+	struct iof_projection_info *fs_handle;
 	struct fuse_context *context;
 
 	context = fuse_get_context();
-	fs_handle = (struct fs_handle *)context->private_data;
+	fs_handle = (struct iof_projection_info *)context->private_data;
 
-	IOF_LOG_INFO("Fuse configuration for projection %d", fs_handle->fs_id);
+	IOF_LOG_INFO("Fuse configuration for projection srv:%d cli:%d",
+		     fs_handle->fs_id, fs_handle->proj.cli_fs_id);
 
 	IOF_LOG_INFO("Proto %d %d", conn->proto_major, conn->proto_minor);
 #if IOF_USE_FUSE3

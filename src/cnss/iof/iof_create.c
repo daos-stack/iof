@@ -49,7 +49,7 @@
 
 int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 {
-	struct fs_handle *fs_handle = ioc_get_handle();
+	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_file_handle *handle;
 	struct iof_create_in *in;
 	struct open_cb_r reply = {0};
@@ -107,7 +107,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
 		     mode, handle);
 
-	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, create), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -131,7 +131,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	LOG_FLAGS(handle, fi->flags);
 	LOG_MODES(handle, mode);
 
-	rc = ioc_cb_progress(fs_handle, &reply.complete);
+	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
 	if (rc) {
 		free(handle);
 		return -rc;
