@@ -140,6 +140,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         cmd.extend(valgrind)
         cmd.extend(['ionss', self.export_dir, '/usr'])
 
+        # cmd.append('--poll-interval=1')
+
         self.proc = self.common_launch_process('', ' '.join(cmd))
 
         elapsed_time = 0

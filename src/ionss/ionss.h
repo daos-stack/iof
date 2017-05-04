@@ -53,6 +53,8 @@ struct ios_base {
 	crt_group_t		*primary_group;
 	crt_rank_t		my_rank;
 	uint32_t		num_ranks;
+	uint			poll_interval;
+	crt_context_t		crt_ctx;
 };
 
 LIST_HEAD(active_files, ionss_file_handle);

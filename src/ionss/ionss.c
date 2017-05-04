@@ -40,6 +40,7 @@
 #include <errno.h>
 #include <string.h>
 #include <mntent.h>
+#include <getopt.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -1824,13 +1825,12 @@ static int check_shutdown(void *arg)
 static void *progress_thread(void *arg)
 {
 	int			rc;
-	crt_context_t		crt_ctx;
+	struct ios_base *b = (struct ios_base *)arg;
 
-	crt_ctx = (crt_context_t) arg;
 	/* progress loop */
 	do {
-		rc = crt_progress(crt_ctx, 1000 * 1000, check_shutdown,
-				  &shutdown);
+		rc = crt_progress(b->crt_ctx, base.poll_interval,
+				  check_shutdown, &shutdown);
 		if (rc != 0 && rc != -CER_TIMEDOUT) {
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 			break;
@@ -1933,21 +1933,55 @@ cleanup:
 int main(int argc, char **argv)
 {
 	char *ionss_grp = "IONSS";
-	crt_context_t crt_ctx;
 	int i;
 	int ret;
 	pthread_t progress_tid;
 	int err;
+	int c;
 
 	char *version = iof_get_version();
 
 	iof_log_init("ION", "IONSS");
 	IOF_LOG_INFO("IONSS version: %s", version);
-	if (argc < 2) {
+
+	base.poll_interval = 1000 * 1000;
+
+	while (1) {
+		static struct option long_options[] = {
+			{"group-name", optional_argument, 0, 1},
+			{"poll-interval", optional_argument, 0, 2},
+			{0, 0, 0, 0}
+		};
+
+		c = getopt_long(argc, argv, "", long_options, NULL);
+
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 1:
+			ionss_grp = optarg;
+			break;
+		case 2:
+			ret = sscanf(optarg, "%u", &base.poll_interval);
+			if (ret != 1) {
+				printf("Unable to set poll interval to %s\n",
+				       optarg);
+			}
+			break;
+
+		case '?':
+			break;
+		}
+	}
+
+	base.projection_count = argc - optind;
+
+	if (base.projection_count < 1) {
 		IOF_LOG_ERROR("Expected at least one directory as command line option");
 		return IOF_BAD_DATA;
 	}
-	base.projection_count = argc - 1;
+
 	/*hardcoding the number and path for projected filesystems*/
 	base.fs_list = calloc(base.projection_count,
 			      sizeof(struct iof_fs_info));
@@ -1980,7 +2014,7 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
-		char *full_path = realpath(argv[i + 1], NULL);
+		char *full_path = realpath(argv[i + optind], NULL);
 		int rc;
 
 		projection->active = 0;
@@ -1989,7 +2023,7 @@ int main(int argc, char **argv)
 
 		if (!full_path) {
 			IOF_LOG_ERROR("Export path does not exist: %s",
-				      argv[i + 1]);
+				      argv[i + optind]);
 			err = 1;
 			free(full_path);
 			continue;
@@ -2080,7 +2114,7 @@ int main(int argc, char **argv)
 	crt_group_rank(base.primary_group, &base.my_rank);
 	crt_group_size(base.primary_group, &base.num_ranks);
 
-	ret = crt_context_create(NULL, &crt_ctx);
+	ret = crt_context_create(NULL, &base.crt_ctx);
 	if (ret) {
 		IOF_LOG_ERROR("Could not create context");
 		goto cleanup;
@@ -2090,7 +2124,7 @@ int main(int argc, char **argv)
 	base.gs = ios_gah_init();
 
 	shutdown = 0;
-	ret = pthread_create(&progress_tid, NULL, progress_thread, crt_ctx);
+	ret = pthread_create(&progress_tid, NULL, progress_thread, &base);
 
 	ret = pthread_join(progress_tid, NULL);
 	if (ret)
@@ -2098,7 +2132,7 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
 
-	ret = crt_context_destroy(crt_ctx, 0);
+	ret = crt_context_destroy(base.crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
 
