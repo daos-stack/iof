@@ -200,9 +200,10 @@ static void *ioc_init(struct fuse_conn_info *conn)
 	 * register_fuse().  Fuse always sets this value to zero so
 	 * set it before reporting the value.
 	 */
-	conn->max_read = (1024 * 1024);
-	IOF_LOG_INFO("max read 0x%x", conn->max_read);
+	conn->max_read = fs_handle->max_read;
+	conn->max_write = fs_handle->max_write;
 
+	IOF_LOG_INFO("max read 0x%x", conn->max_read);
 #endif
 	IOF_LOG_INFO("max write 0x%x", conn->max_write);
 	IOF_LOG_INFO("readahead 0x%x", conn->max_readahead);

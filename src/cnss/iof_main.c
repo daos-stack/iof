@@ -269,12 +269,10 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->psr_ep.ep_rank = 0;
 	iof_state->psr_ep.ep_tag = 0;
 
-	cb->register_ctrl_variable(cb->plugin_dir, "psr_rank",
-				   iof_uint_read, NULL, NULL,
-				   &iof_state->psr_ep.ep_rank);
-	cb->register_ctrl_variable(cb->plugin_dir, "psr_tag",
-				   iof_uint_read, NULL, NULL,
-				   &iof_state->psr_ep.ep_tag);
+	cb->register_ctrl_constant_uint64(cb->plugin_dir, "psr_rank",
+					  iof_state->psr_ep.ep_rank);
+	cb->register_ctrl_constant_uint64(cb->plugin_dir, "psr_tag",
+					  iof_state->psr_ep.ep_tag);
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret)
@@ -344,6 +342,16 @@ int iof_post_start(void *arg)
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
 
+	char const *opts[] = {"-ofsname=IOF",
+			      "-osubtype=pam",
+#if !IOF_USE_FUSE3
+			      "-o", "use_ino",
+			      "-o", "entry_timeout=0",
+			      "-o", "negative_timeout=0",
+			      "-o", "attr_timeout=0",
+#endif
+	};
+
 	cb = iof_state->cb;
 
 	/*Query PSR*/
@@ -369,36 +377,32 @@ int iof_post_start(void *arg)
 
 	for (i = 0; i < fs_num; i++) {
 		struct fs_handle *fs_handle;
-		static char const *opts[] = {"", "-omax_read=1048576",
-#if !IOF_USE_FUSE3
-					     "-o", "use_ino",
-					     "-o", "entry_timeout=0",
-					     "-o", "negative_timeout=0",
-					     "-o", "attr_timeout=0",
-#endif
-					     "-ofsname=IOF",
-					     "-osubtype=pam"};
 		struct fuse_args args = {0};
 		char *base_name;
+		char *read_option = NULL;
 
-		args.argc = sizeof(opts) / sizeof(*opts);
-		args.argv = (char **)opts;
-
-		if (iof_is_mode_supported(tmp[i].flags)) {
-			fs_handle = calloc(1, sizeof(struct fs_handle));
-			if (!fs_handle)
-				return IOF_ERR_NOMEM;
-			fs_handle->iof_state = iof_state;
-			fs_handle->flags = tmp[i].flags;
-			IOF_LOG_INFO("Filesystem mode: Private");
-
-		} else
+		/* TODO: This is presumably wrong although it's not clear
+		 * how best to handle it
+		 */
+		if (!iof_is_mode_supported(tmp[i].flags))
 			return IOF_NOT_SUPP;
+
+		fs_handle = calloc(1, sizeof(struct fs_handle));
+		if (!fs_handle)
+			return IOF_ERR_NOMEM;
+		fs_handle->iof_state = iof_state;
+		fs_handle->flags = tmp[i].flags;
+		IOF_LOG_INFO("Filesystem mode: Private");
+
+		fs_handle->max_read = query->max_read;
+		fs_handle->max_write = query->max_write;
 
 		base_name = basename(tmp[i].mnt);
 
-		asprintf(&fs_handle->mount_point, "%s/%s",
-			 iof_state->cnss_prefix, base_name);
+		ret = asprintf(&fs_handle->mount_point, "%s/%s",
+			       iof_state->cnss_prefix, base_name);
+		if (ret == -1)
+			return IOF_ERR_NOMEM;
 
 		IOF_LOG_DEBUG("Projected Mount %s", base_name);
 
@@ -411,7 +415,9 @@ int iof_post_start(void *arg)
 		if (!fs_handle->stats)
 			return 1;
 
-		asprintf(&fs_handle->base_dir, "%d", fs_handle->fs_id);
+		ret = asprintf(&fs_handle->base_dir, "%d", fs_handle->fs_id);
+		if (ret == -1)
+			return IOF_ERR_NOMEM;
 
 		cb->create_ctrl_subdir(iof_state->projections_dir,
 				       fs_handle->base_dir,
@@ -423,6 +429,13 @@ int iof_post_start(void *arg)
 
 		cb->register_ctrl_constant(fs_handle->fs_dir, "mode",
 					   "private");
+
+		cb->register_ctrl_constant_uint64(fs_handle->fs_dir, "max_read",
+						  fs_handle->max_read);
+
+		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+						  "max_write",
+						  fs_handle->max_read);
 
 		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
 				       &fs_handle->stats_dir);
@@ -455,6 +468,18 @@ int iof_post_start(void *arg)
 
 		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
 
+		args.argc = (sizeof(opts) / sizeof(*opts) + 2);
+		args.argv = calloc(args.argc, sizeof(char *));
+		args.argv[0] = (char *)&"";
+		memcpy(&args.argv[2], opts, sizeof(opts));
+
+		ret = asprintf(&read_option, "-omax_read=%u",
+			       fs_handle->max_read);
+		if (ret == -1)
+			return IOF_ERR_NOMEM;
+
+		args.argv[1] = read_option;
+
 		ret = cb->register_fuse_fs(cb->handle, fs_handle->fuse_ops,
 					   &args, fs_handle->mount_point,
 					   fs_handle);
@@ -463,6 +488,10 @@ int iof_post_start(void *arg)
 			free(fs_handle);
 			return 1;
 		}
+
+		free(read_option);
+		free(args.argv);
+
 		IOF_LOG_DEBUG("Fuse mount installed at: %s",
 			      fs_handle->mount_point);
 		fs_handle->dest_ep = iof_state->psr_ep;

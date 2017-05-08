@@ -125,6 +125,8 @@ struct iof_fs_info {
 };
 
 struct iof_psr_query {
+	uint32_t max_read;
+	uint32_t max_write;
 	crt_iov_t query_list;
 };
 

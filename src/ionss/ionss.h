@@ -55,6 +55,8 @@ struct ios_base {
 	uint32_t		num_ranks;
 	uint			poll_interval;
 	crt_context_t		crt_ctx;
+	uint32_t		max_read;
+	uint32_t		max_write;
 };
 
 LIST_HEAD(active_files, ionss_file_handle);

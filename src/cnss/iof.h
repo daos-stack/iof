@@ -102,6 +102,8 @@ struct fs_handle {
 	struct fuse_operations	*fuse_ops;
 	/* Feature Flags */
 	uint8_t			flags;
+	uint32_t		max_read;
+	uint32_t		max_write;
 };
 
 /*

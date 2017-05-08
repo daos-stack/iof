@@ -1767,6 +1767,9 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 		return IOF_ERR_CART;
 	}
 
+	query->max_read = base.max_read;
+	query->max_write = base.max_write;
+
 	crt_iov_set(&query->query_list, base.fs_list,
 		    base.projection_count * sizeof(struct iof_fs_info));
 
@@ -1930,6 +1933,36 @@ cleanup:
 	return rc;
 }
 
+/*
+ * Parse a uint32_t from a command line option and allow either k or m
+ * suffixes.  Updates the value if str contains a valid value or returns
+ * -1 on failure.
+ */
+static int parse_size(uint32_t *value, const char *str)
+{
+	uint32_t new_value = *value;
+	int ret;
+
+	/* Read the first size */
+	ret = sscanf(str, "%u", &new_value);
+	if (ret != 1)
+		return -1;
+
+	/* Advance pch to the next non-numeric character */
+	while (isdigit(*str))
+		str++;
+
+	if (*str == 'k')
+		new_value *= 1024;
+	else if (*str == 'm')
+		new_value *= (1024 * 1024);
+	else if (*str != '\0')
+		return -1;
+
+	*value = new_value;
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 	char *ionss_grp = "IONSS";
@@ -1945,11 +1978,15 @@ int main(int argc, char **argv)
 	IOF_LOG_INFO("IONSS version: %s", version);
 
 	base.poll_interval = 1000 * 1000;
+	base.max_read = 1024 * 1024;
+	base.max_write = 1024 * 1024;
 
 	while (1) {
 		static struct option long_options[] = {
 			{"group-name", optional_argument, 0, 1},
 			{"poll-interval", optional_argument, 0, 2},
+			{"max-read", optional_argument, 0, 3},
+			{"max-write", optional_argument, 0, 4},
 			{0, 0, 0, 0}
 		};
 
@@ -1966,6 +2003,20 @@ int main(int argc, char **argv)
 			ret = sscanf(optarg, "%u", &base.poll_interval);
 			if (ret != 1) {
 				printf("Unable to set poll interval to %s\n",
+				       optarg);
+			}
+			break;
+		case 3:
+			ret = parse_size(&base.max_read, optarg);
+			if (ret != 0) {
+				printf("Unable to set max read to %s\n",
+				       optarg);
+			}
+			break;
+		case 4:
+			ret = parse_size(&base.max_write, optarg);
+			if (ret != 0) {
+				printf("Unable to set max write to %s\n",
 				       optarg);
 			}
 			break;
