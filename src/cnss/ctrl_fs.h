@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,6 +91,22 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
  */
 int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 			   const char *value);
+
+/* Register a 64-bit integer control constant.
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
+ * \param[in] value Contents of the file
+ */
+int ctrl_register_constant_int64(struct ctrl_dir *dir, const char *name,
+				 int64_t value);
+
+/* Register a 64-bit unsigned integer control constant.
+ * \param[in] dir Parent directory (NULL means root)
+ * \param[in] name Name of the subdirectory
+ * \param[in] value Contents of the file
+ */
+int ctrl_register_constant_uint64(struct ctrl_dir *dir, const char *name,
+				  uint64_t value);
 
 /* Register a control tracker
  * \param[in] dir Parent directory (NULL means root)

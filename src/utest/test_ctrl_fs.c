@@ -230,6 +230,9 @@ static int run_tests(const char *ctrl_prefix)
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "2\n");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "3\n");
 	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "4\n");
+	num_failures += CHECK_FILE_READ(ctrl_prefix, "/int", "-1\n");
+	num_failures += CHECK_FILE_READ(ctrl_prefix, "/uint",
+					"18446744073709551615\n");
 
 	return num_failures;
 }
@@ -321,6 +324,8 @@ int main(int argc, char **argv)
 
 	ctrl_register_tracker(NULL, "client", track_open, track_close,
 			      check_destroy_foo, &tracker_value);
+	ctrl_register_constant_int64(NULL, "int", -1);
+	ctrl_register_constant_uint64(NULL, "uint", (uint64_t)-1);
 
 	num_failures = run_tests(buf);
 	if (!interactive) { /* Invoke shutdown */

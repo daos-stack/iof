@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * a forward compatible plugin
  */
 #include <unistd.h>
+#include <inttypes.h>
 
 #ifndef __CNSS_PLUGIN_H__
 #define __CNSS_PLUGIN_H__
@@ -128,6 +129,16 @@ struct cnss_plugin_cb {
 	/* Control fs subdir creation */
 	int (*create_ctrl_subdir)(struct ctrl_dir *dir, const char *name,
 				  struct ctrl_dir **newdir);
+	/* Wraps ctrl_register_constant for convenience of registering an
+	 * integer constant
+	 */
+	int (*register_ctrl_constant_int64)(struct ctrl_dir *dir,
+					    const char *name, int64_t value);
+	/* Wraps ctrl_register_constant for convenience of registering an
+	 * unsigned integer constant
+	 */
+	int (*register_ctrl_constant_uint64)(struct ctrl_dir *dir,
+					     const char *name, uint64_t value);
 
 	/* CPPR needs to be able to access the "global file system" so needs
 	 * to enumerate over projection to be able to pick a destination and
@@ -178,7 +189,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f007
+#define CNSS_PLUGIN_VERSION 0x10f008
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

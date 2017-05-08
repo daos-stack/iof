@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -247,6 +247,10 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 	entry->self_fns.register_ctrl_event = ctrl_register_event;
 	entry->self_fns.register_ctrl_tracker = ctrl_register_tracker;
 	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
+	entry->self_fns.register_ctrl_constant_int64 =
+		ctrl_register_constant_int64;
+	entry->self_fns.register_ctrl_constant_uint64 =
+		ctrl_register_constant_uint64;
 	entry->self_fns.register_fuse_fs = register_fuse;
 	entry->self_fns.handle = entry;
 

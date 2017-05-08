@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -670,6 +670,28 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	IOF_LOG_INFO("Registered %s as ctrl constant.  Value is %s",
 		     name, value);
 	return rc;
+}
+
+#define MAX_INT_STR 32
+
+int ctrl_register_constant_int64(struct ctrl_dir *dir, const char *name,
+				 int64_t value)
+{
+	char buf[MAX_INT_STR];
+
+	snprintf(buf, MAX_INT_STR, "%" PRId64, value);
+
+	return ctrl_register_constant(dir, name, buf);
+}
+
+int ctrl_register_constant_uint64(struct ctrl_dir *dir, const char *name,
+				  uint64_t value)
+{
+	char buf[MAX_INT_STR];
+
+	snprintf(buf, MAX_INT_STR, "%" PRIu64, value);
+
+	return ctrl_register_constant(dir, name, buf);
 }
 
 int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
