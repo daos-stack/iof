@@ -62,6 +62,7 @@
 #define DEF_LOG_HANDLE ctrl_log_handle
 #include "log.h"
 #include "ctrl_fs.h"
+#include "ctrl_fs_util.h"
 
 static int ctrl_log_handle;
 
@@ -74,8 +75,6 @@ enum {
 	NUM_CTRL_TYPES,
 };
 
-#define CTRL_DATA_MAX 4096
-#define CTRL_INT_MAX  11
 #define CTRL_NAME_MAX 256
 
 struct ctrl_variable {
@@ -92,7 +91,7 @@ struct ctrl_event {
 };
 
 struct ctrl_constant {
-	char buf[CTRL_DATA_MAX];
+	char buf[CTRL_FS_MAX_LEN];
 };
 
 struct ctrl_tracker {
@@ -201,7 +200,7 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 {
 	struct ctrl_node *newnode = NULL;
 	int rc;
-	size_t size = CTRL_DATA_MAX;
+	size_t size = CTRL_FS_MAX_LEN;
 	size_t dsize = 0;
 
 	*node = NULL;
@@ -650,7 +649,8 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	if (rc != 0)
 		IOF_LOG_ERROR("Bad file %s specified", name);
 
-	strncpy(GET_DATA(node, con, buf), value, CTRL_DATA_MAX);
+	strncpy(GET_DATA(node, con, buf), value, CTRL_FS_MAX_LEN);
+	GET_DATA(node, con, buf)[CTRL_FS_MAX_LEN - 1] = 0;
 	__sync_synchronize();
 	node->initialized = 1;
 
@@ -957,7 +957,7 @@ static int ctrl_read(const char *fname,
 		     off_t offset,
 		     struct fuse_file_info *finfo)
 {
-	char mybuf[CTRL_DATA_MAX];
+	char mybuf[CTRL_FS_MAX_LEN];
 	struct ctrl_node *node;
 	const char *payload;
 	size_t len;
@@ -984,7 +984,7 @@ static int ctrl_read(const char *fname,
 		read_cb = GET_DATA(node, var, read_cb);
 
 		if (read_cb != NULL) {
-			rc = read_cb(mybuf, CTRL_DATA_MAX, cb_arg);
+			rc = read_cb(mybuf, CTRL_FS_MAX_LEN, cb_arg);
 			if (rc != 0) {
 				IOF_LOG_ERROR("Error reading ctrl variable");
 				return -ENOENT;
@@ -1038,7 +1038,7 @@ static int ctrl_write(const char *fname,
 		      off_t offset,
 		      struct fuse_file_info *finfo)
 {
-	char mybuf[CTRL_DATA_MAX];
+	char mybuf[CTRL_FS_MAX_LEN];
 	struct ctrl_node *node;
 	int rc;
 
@@ -1074,8 +1074,8 @@ static int ctrl_write(const char *fname,
 		if (write_cb != NULL) {
 			size_t mylen = len;
 
-			if (len > (CTRL_DATA_MAX - 1))
-				mylen = CTRL_DATA_MAX - 1;
+			if (len > (CTRL_FS_MAX_LEN - 1))
+				mylen = CTRL_FS_MAX_LEN - 1;
 
 			memcpy(mybuf, buf, mylen);
 			mybuf[mylen] = 0;

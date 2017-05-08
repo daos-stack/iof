@@ -56,15 +56,14 @@
 #include "iof_ioctl.h"
 #include "iof_vector.h"
 #include "iof_common.h"
+#include "ctrl_fs_util.h"
 
 FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
 bool ioil_initialized;
 static __thread int saved_errno;
 static vector_t fd_table;
-static char *ctrl_prefix;
-static char *cnss_prefix;
-static char *cnss_env;
+static const char *cnss_prefix;
 static int cnss_id;
 static crt_group_t *ionss_grp;
 static crt_context_t context;
@@ -140,117 +139,27 @@ int ioil_initialize_fd_table(int max_fds)
 	return rc;
 }
 
-#define MAX_INT_STR 16
-/* This belongs in a library but for now, but that is the topic of another
- * ticket for future development.
- */
-static int read_ctrl_int(int ctrl_fd, const char *var, int *val)
+static int attach_to_ionss(void)
 {
-	int fd;
-	char buf[MAX_INT_STR];
-
-	fd = openat(ctrl_fd, var, O_RDONLY);
-	if (fd == -1) {
-		IOF_LOG_INFO("Could not get ctrl var %s: %s", var,
-			     strerror(errno));
-		return 1;
-	}
-
-	read(fd, buf, MAX_INT_STR);
-	buf[MAX_INT_STR - 1] = 0;
-
-	*val = atoi(buf);
-
-	close(fd);
-
-	return 0;
-}
-
-static int check_mnt(struct mntent *entry, void *priv)
-{
-	char *ctrl_dir;
-	char *dir;
-	char *cnss_dir;
-	char *p;
-	int version;
-	struct stat buf;
 	int rc;
-	int fd;
+	uint32_t version;
 
-	p = strstr(entry->mnt_dir, "/.ctrl");
-	if (p == NULL || strcmp(entry->mnt_type, "fuse.ctrl") ||
-	    strcmp(entry->mnt_fsname, "CNSS"))
-		return 0;
-
-	IOF_LOG_INFO("Checking possible IONSS: ctrl dir at %s", entry->mnt_dir);
-	rc = stat(entry->mnt_dir, &buf);
+	rc = ctrl_fs_read_uint32(&version, "iof/ioctl_version");
 	if (rc != 0) {
-		IOF_LOG_INFO("Skipping IONSS: ctrl dir is %s: %s",
-			     entry->mnt_dir, strerror(errno));
-		return 0;
-	}
-
-	fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
-	if (fd == -1) {
-		IOF_LOG_ERROR("Could not open %s to configure interception",
-			      entry->mnt_dir);
-		return 0;
-	}
-
-	if (read_ctrl_int(fd, "iof/ioctl_version", &version) != 0) {
-		IOF_LOG_ERROR("Could not read ioctl version");
-		return 0;
+		IOF_LOG_ERROR("Could not read ioctl version, rc = %d", rc);
+		return 1;
 	}
 
 	if (version != IOF_IOCTL_VERSION) {
 		IOF_LOG_ERROR("IOCTL version mismatch: %d != %d", version,
 			      IOF_IOCTL_VERSION);
-		return 0;
+		return 1;
 	}
 
-	if (read_ctrl_int(fd, "cnss_id", &cnss_id) != 0) {
-		IOF_LOG_ERROR("Could not read cnss id");
-		return 0;
-	}
-
-	close(fd);
-
-	dir = strdup(entry->mnt_dir);
-	if (dir == NULL) {
-		IOF_LOG_ERROR("Insufficient memory to configure interception");
-		return 0;
-	}
-
-	ctrl_dir = strdup(entry->mnt_dir);
-	if (ctrl_dir == NULL) {
-		IOF_LOG_ERROR("Insufficient memory to configure interception");
-		free(dir);
-		return 0;
-	}
-
-	cnss_dir = strdup(dirname(dir));
-	if (cnss_dir == NULL) {
-		IOF_LOG_ERROR("Insufficient memory to configure interception");
-		free(dir);
-		free(ctrl_dir);
-		return 0;
-	}
-
-	free(dir);
-
-	if (cnss_env != NULL && strcmp(cnss_dir, cnss_env)) {
-		IOF_LOG_INFO("Skipping IONSS: CNSS_PREFIX doesn't match");
-		free(ctrl_dir);
-		free(cnss_dir);
-		return 0;
-	}
-
-	rc = crt_group_config_path_set(cnss_dir);
+	rc = crt_group_config_path_set(cnss_prefix);
 	if (rc != 0) {
 		IOF_LOG_INFO("Could not set group config path, rc = %d", rc);
-		free(cnss_dir);
-		free(ctrl_dir);
-		return 0;
+		return 1;
 	}
 
 	/* Ok, now try to attach.  Note, this will change when we
@@ -259,31 +168,7 @@ static int check_mnt(struct mntent *entry, void *priv)
 	rc = crt_group_attach("IONSS", &ionss_grp);
 	if (rc != 0) {
 		IOF_LOG_INFO("Could not attach to ionss, rc = %d", rc);
-		free(cnss_dir);
-		free(ctrl_dir);
-		return 0;
-	}
-
-	if (ctrl_prefix != NULL) {
-		IOF_LOG_ERROR("Multiple viable IOF options not supported");
-		goto handle_error;
-	}
-
-	cnss_prefix = cnss_dir;
-	ctrl_prefix = ctrl_dir;
-
-	return 0;
-handle_error:
-	crt_group_detach(ionss_grp);
-	free(ctrl_dir);
-	free(cnss_dir);
-	if (ctrl_prefix != NULL &&  ctrl_dir != ctrl_prefix) {
-		free(ctrl_prefix);
-		ctrl_prefix = NULL;
-	}
-	if (cnss_prefix != NULL &&  cnss_dir != cnss_prefix) {
-		free(cnss_prefix);
-		cnss_prefix = NULL;
+		return 1;
 	}
 
 	return 0;
@@ -425,23 +310,24 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	cnss_env = getenv("CNSS_PREFIX");
+	rc = ctrl_fs_util_init(&cnss_prefix, &cnss_id);
 
-	iof_mntent_foreach(check_mnt, NULL);
-
-	if (cnss_prefix == NULL) {
-		if (cnss_env != NULL)
-			IOF_LOG_ERROR("CNSS_PREFIX is set but indicates"
-				      " invalid IOF session. Is it set by "
-				      "mistake?  Disabling interception");
-		else
-			IOF_LOG_ERROR("Could not detect active IOF session"
-				      ", disabling interception");
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not find CNSS (rc = %d)."
+			      " Disabling interception", rc);
 		return;
 	}
 
-	IOF_LOG_INFO("Using IONSS: ctrl dir at %s, cnss_id is %d",
-		     ctrl_prefix, cnss_id);
+	rc = attach_to_ionss();
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not use IONSS (rc = %d)."
+			      " Disabling interception", rc);
+		ctrl_fs_util_finalize();
+		return;
+	}
+
+	IOF_LOG_INFO("Using IONSS: cnss_prefix at %s, cnss_id is %d",
+		     cnss_prefix, cnss_id);
 
 	__sync_synchronize();
 
@@ -454,15 +340,13 @@ static __attribute__((destructor)) void ioil_fini(void)
 		crt_group_detach(ionss_grp);
 		crt_context_destroy(context, 0);
 		crt_finalize();
+		ctrl_fs_util_finalize();
 	}
 	ioil_initialized = false;
 
 	__sync_synchronize();
 
 	iof_log_close();
-
-	free(cnss_prefix);
-	free(ctrl_prefix);
 
 	vector_destroy(&fd_table);
 }

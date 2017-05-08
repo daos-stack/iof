@@ -35,6 +35,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +48,7 @@
 #include <fcntl.h>
 #include "log.h"
 #include "ctrl_common.h"
+#include "ctrl_fs_util_test.h"
 
 int cnss_shutdown(void *arg)
 {
@@ -94,50 +96,22 @@ static int check_destroy_foo(void *arg)
 	return 0;
 }
 
-
-static int check_file_read(const char *prefix, const char *fname,
-			   const char *expected, const char *source,
-			   int line)
+static int check_file_read(const char *fname, const char *expected,
+			   const char *source, int line)
 {
-	char buf[256]; /* all of our values are less than 256 */
-	int bytes;
-	int fd;
+	char buf[CTRL_FS_MAX_LEN];
+	int rc;
 
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);
 
-	sprintf(buf, "%s%s", prefix, fname);
+	rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, fname);
 
-	fd = open(buf, O_RDONLY);
-
-	if (fd == -1) {
-		if (expected == NULL)
-			return 0; /* Expected a failure */
-		printf("Could not open %s.  Test %s:%d failed\n", fname,
-		       source, line);
+	if (rc != 0) {
+		printf("Error reading %s at %s:%d.  (rc = %d, errno = %s)\n",
+		       fname, source, line, rc, strerror(errno));
 		return 1;
+
 	}
-
-	if (expected == NULL) {
-		close(fd);
-		printf("Should not be able to open %s.  Test %s:%d failed\n",
-		       fname, source, line);
-		return 1;
-	}
-
-	bytes = read(fd, buf, 256);
-
-	close(fd);
-
-	if (bytes == -1) {
-		printf("Error reading %s.  Test %s:%d failed\n", fname, source,
-		       line);
-		return 1;
-	}
-
-	buf[bytes] = 0;
-
-	IOF_LOG_INFO("Finished reading %s", buf);
-	IOF_LOG_INFO("Comparing to %s", expected);
 
 	if (strncmp(buf, expected, 256) != 0) {
 		printf("Value unexpected in %s: (%s != %s).  Test"
@@ -150,89 +124,114 @@ static int check_file_read(const char *prefix, const char *fname,
 	return 0;
 }
 
-static int check_file_write(const char *prefix, const char *fname,
-			    const char *value, const char *source,
-			    int line)
+static int check_file_write(const char *fname, const char *value,
+			    const char *source, int line)
 {
-	char buf[256]; /* all of our values are less than 256 */
-	int bytes;
-	int fd;
+	int rc;
 
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);
 
-	sprintf(buf, "%s%s", prefix, fname);
+	rc = ctrl_fs_write_str(value, fname);
 
-	fd = open(buf, O_WRONLY|O_TRUNC);
-
-	if (fd == -1) {
-		if (value == NULL)
-			return 0; /* Expected a failure */
-		printf("Could not open %s.  Test %s:%d failed\n", fname,
-		       source, line);
+	if (rc != 0) {
+		printf("Error writing %s at %s:%d.  (rc = %d, errno = %s)\n",
+		       fname, source, line, rc, strerror(errno));
 		return 1;
+
 	}
-
-	if (value == NULL) {
-		close(fd);
-		printf("Should not be able to open %s.  Test %s:%d failed\n",
-		       fname, source, line);
-		return 1;
-	}
-
-	bytes = write(fd, value, strlen(value));
-
-	close(fd);
-
-	if (bytes == -1) {
-		printf("Error writing %s.  Test %s:%d failed\n", fname, source,
-		       line);
-		return 1;
-	}
-
-	if (bytes != strlen(value)) {
-		printf("Error writing %s to %s.  Test %s:%d failed\n", value,
-		       fname, source, line);
-		return 1;
-	}
-
-	IOF_LOG_INFO("Done with check at %s:%d\n", source, line);
 
 	return 0;
 }
 
-#define CHECK_FILE_READ(prefix, name, expected) \
-	check_file_read(prefix, name, expected, __FILE__, __LINE__)
+#define DECLARE_READ_FUNC(ext, type, fmt) \
+static int check_file_read_##ext(const char *fname, type expected, \
+				 const char *source, int line)     \
+{                                                                             \
+	type value;                                                           \
+	int rc;                                                               \
+	IOF_LOG_INFO("Run check at %s:%d\n", source, line);                   \
+	rc = ctrl_fs_read_##ext(&value, fname);                               \
+	if (rc != 0) {                                                        \
+		printf("Error reading %s at %s:%d.  (rc = %d, errno = %s)\n", \
+		       fname, source, line, rc, strerror(errno));             \
+		return 1;                                                     \
+	}                                                                     \
+	if (value != expected) {                                              \
+		printf("Value unexpected in %s: (" fmt " != " fmt ").  Test"  \
+		       " %s:%d failed\n", fname, value, expected, source,     \
+		       line);                                                 \
+		return 1;                                                     \
+	}                                                                     \
+	IOF_LOG_INFO("Done with check at %s:%d\n", source, line);             \
+	return 0;                                                             \
+}
 
-#define CHECK_FILE_WRITE(prefix, name, value) \
-	check_file_write(prefix, name, value, __FILE__, __LINE__)
+DECLARE_READ_FUNC(int32, int32_t, "%" PRId32)
+DECLARE_READ_FUNC(uint32, uint32_t, "%" PRIu32)
+DECLARE_READ_FUNC(int64, int64_t, "%" PRId64)
+DECLARE_READ_FUNC(uint64, uint64_t, "%" PRIu64)
+
+#define DECLARE_WRITE_FUNC(ext, type, fmt) \
+static int check_file_write_##ext(const char *fname, type value,              \
+			    const char *source, int line)                     \
+{                                                                             \
+	int rc;                                                               \
+	IOF_LOG_INFO("Run check at %s:%d\n", source, line);                   \
+	rc = ctrl_fs_write_##ext(value, fname);                               \
+	if (rc != 0) {                                                        \
+		printf("Error writing %s at %s:%d.  (rc = %d, errno = %s)\n", \
+		       fname, source, line, rc, strerror(errno));             \
+		return 1;                                                     \
+	}                                                                     \
+	return 0;                                                             \
+}
+
+DECLARE_WRITE_FUNC(int64, int64_t, "%" PRId64)
+DECLARE_WRITE_FUNC(uint64, uint64_t, "%" PRIu64)
+
+#define CHECK_FILE_READ(name, expected) \
+	check_file_read(name, expected, __FILE__, __LINE__)
+
+#define CHECK_FILE_WRITE(name, value) \
+	check_file_write(name, value, __FILE__, __LINE__)
+
+#define CHECK_FILE_READ_VAL(name, expected, ext) \
+	check_file_read_##ext(name, expected, __FILE__, __LINE__)
+
+#define CHECK_FILE_WRITE_VAL(name, value, ext) \
+	check_file_write_##ext(name, value, __FILE__, __LINE__)
 
 /* Test that large values get truncated properly */
 #define TOO_LARGE 8192
 static char large_constant[TOO_LARGE];
 
-static int run_tests(const char *ctrl_prefix)
+static int run_tests(void)
 {
 	int num_failures = 0;
+	int id;
+	int rc;
 
 	/* Only checks the first 256 bytes so this check will work */
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/large",
-					large_constant);
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/hello",
-					"Hello World\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "0\n");
-	num_failures += CHECK_FILE_WRITE(ctrl_prefix, "/class/bar/foo", "10");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "10\n");
-	num_failures += CHECK_FILE_WRITE(ctrl_prefix, "/class/bar/foo", "55");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "65\n");
-	num_failures += CHECK_FILE_WRITE(ctrl_prefix, "/class/bar/foo", "-12");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/class/bar/foo", "53\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "1\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "2\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "3\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/client", "4\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/int", "-1\n");
-	num_failures += CHECK_FILE_READ(ctrl_prefix, "/uint",
-					"18446744073709551615\n");
+	num_failures += CHECK_FILE_READ("large", large_constant);
+	num_failures += CHECK_FILE_READ("class/bar/hello", "Hello World");
+	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 0, int32);
+	num_failures += CHECK_FILE_WRITE("class/bar/foo", "10");
+	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 10, uint32);
+	num_failures += CHECK_FILE_WRITE_VAL("class/bar/foo", 55, uint64);
+	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 65, int64);
+	num_failures += CHECK_FILE_WRITE_VAL("class/bar/foo", -12, int64);
+	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 53, uint32);
+	num_failures += CHECK_FILE_READ_VAL("client", 1, int32);
+	num_failures += CHECK_FILE_READ_VAL("client", 2, int32);
+	num_failures += CHECK_FILE_READ_VAL("client", 3, int32);
+	num_failures += CHECK_FILE_READ_VAL("client", 4, int32);
+	num_failures += CHECK_FILE_READ_VAL("int", -1, int64);
+	num_failures += CHECK_FILE_READ_VAL("uint", (uint64_t)-1, uint64);
+	rc = ctrl_fs_get_tracker_id(&id, "client");
+	if (rc != 0 || id != 5) {
+		printf("Expected 5 from client file\n");
+		num_failures++;
+	}
 
 	return num_failures;
 }
@@ -266,6 +265,7 @@ int main(int argc, char **argv)
 	char buf[32];
 	char cmd_buf[32];
 	char *end;
+	int rc;
 	int foo = 0;
 	int opt;
 	int tracker_value = 0;
@@ -327,13 +327,20 @@ int main(int argc, char **argv)
 	ctrl_register_constant_int64(NULL, "int", -1);
 	ctrl_register_constant_uint64(NULL, "uint", (uint64_t)-1);
 
-	num_failures = run_tests(buf);
+	ctrl_fs_util_test_init(buf);
+
+	num_failures = run_tests();
 	if (!interactive) { /* Invoke shutdown */
-		strcpy(end, "/.ctrl/shutdown");
-		utime(buf, NULL);
+		rc = ctrl_fs_trigger("shutdown");
+		if (rc != 0) {
+			num_failures++;
+			printf("shutdown trigger failed: rc = %d\n", rc);
+		}
 	}
 
 	ctrl_fs_wait();
+
+	ctrl_fs_util_test_finalize();
 
 	if (foo != -1) {
 		num_failures++;

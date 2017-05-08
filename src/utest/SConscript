@@ -45,6 +45,8 @@ OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
                           '../common/iof_vector$OBJSUFFIX'],
         'test_ctrl_fs.c':['../cnss/ctrl_fs$OBJSUFFIX',
                           '../cnss/ctrl_common$OBJSUFFIX',
+                          '../common/ctrl_fs_util$OBJSUFFIX',
+                          '../common/iof_mntent$OBJSUFFIX',
                           '../common/log$OBJSUFFIX']
        }
 DEPS = {'test_ctrl_fs.c':['cart'],

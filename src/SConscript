@@ -45,6 +45,7 @@ COMMON_SRC = ['version.c',
               'iof_obj_pool.c',
               'iof_vector.c',
               'iof_mntent.c']
+LIBIOF_SRC = ['ctrl_fs_util.c']
 CNSS_SRC = ['cnss.c',
             'iof_main.c',
             'ctrl_common.c',
@@ -74,11 +75,11 @@ RPC_SRC = ['chmod',
            'write']
 IOFIL_SRC = ['int_posix.c', 'int_read.c', 'int_write.c']
 
-def build_common(env, is_shared):
+def build_common(env, files, is_shared):
     """Build the common objects as shared or static"""
     common = []
 
-    for src in COMMON_SRC:
+    for src in files:
         src_file = os.path.join('common', src)
         if is_shared:
             common += env.SharedObject(src_file, SHOBJPREFIX='s_')
@@ -87,9 +88,9 @@ def build_common(env, is_shared):
 
     return common
 
-def build_libioil_shared(env, version):
+def build_client_libs_shared(env, version):
     """build the shared interception library"""
-    to_build = env.get('libioil')
+    to_build = env.get('client_libs')
     if to_build == 'none' or to_build == 'static':
         return []
 
@@ -103,18 +104,24 @@ def build_libioil_shared(env, version):
     for src in IOFIL_SRC:
         il_obj += ilenv.SharedObject(os.path.join('il', src),
                                      SHOBJPREFIX='s_')
-    common = build_common(penv, True)
+    common = build_common(penv, COMMON_SRC, True)
+    common += build_common(penv, LIBIOF_SRC, True)
 
     # Now build the interception library
     il_lib = ilenv.SharedLibrary('il/libioil', il_obj + common,
                                  SHLIBVERSION=version)
     env.InstallVersionedLib(os.path.join("$PREFIX", 'lib'), il_lib,
                             SHLIBVERSION=version)
-    return il_lib
 
-def build_libioil_static(env, common):
+    iof_lib = ilenv.SharedLibrary('common/libiof', common,
+                                  SHLIBVERSION=version)
+    env.InstallVersionedLib(os.path.join("$PREFIX", 'lib'), iof_lib,
+                            SHLIBVERSION=version)
+    return iof_lib + il_lib
+
+def build_client_libs_static(env, common):
     """build the static interception library"""
-    to_build = env.get('libioil')
+    to_build = env.get('client_libs')
     if to_build == 'none' or to_build == 'shared':
         return []
 
@@ -131,7 +138,13 @@ def build_libioil_static(env, common):
     env.Install('$PREFIX/lib', il_lib)
     env.Install('$PREFIX/share/ld-opts', 'il/ioil-ld-opts')
 
-    return il_lib
+    # Now build the interception library
+    iof_lib_src = ilenv.Library('common/libiof_source', common)
+    iof_lib = ilenv.Command('common/libiof.a', iof_lib_src,
+                            'objcopy --localize-hidden $SOURCE $TARGET')
+    env.Install('$PREFIX/lib', iof_lib)
+
+    return il_lib + iof_lib
 
 #pylint: disable=too-many-statements
 def scons():
@@ -149,7 +162,7 @@ def scons():
 
     prereqs.require(tenv, 'cart')
 
-    il_lib = build_libioil_shared(tenv, IOF_VERSION)
+    libs = build_client_libs_shared(tenv, IOF_VERSION)
 
     static_env = tenv.Clone()
 
@@ -158,9 +171,10 @@ def scons():
     tenv.AppendUnique(CPPDEFINES=['_FILE_OFFSET_BITS=64'])
 
     # Build a static library of the common parts.
-    common = build_common(tenv, False)
+    common = build_common(tenv, COMMON_SRC, False)
+    client_common = common + build_common(tenv, LIBIOF_SRC, False)
 
-    il_lib += build_libioil_static(static_env, common)
+    libs += build_client_libs_static(static_env, client_common)
 
     # Now build the CNSS application
     cenv = tenv.Clone()
@@ -197,7 +211,7 @@ def scons():
         ionss_obj += ienv.Object(os.path.join('ionss', src))
     progs += ienv.Program('ionss/ionss', common + ionss_obj)
 
-    Default(progs + il_lib)
+    Default(progs + libs)
 
     tenv.Install(os.path.join("$PREFIX", 'bin'), progs)
 
