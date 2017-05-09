@@ -1963,6 +1963,21 @@ static int parse_size(uint32_t *value, const char *str)
 	return 0;
 }
 
+void show_help(const char *prog)
+{
+	printf("I/O Forwarding I/O Node System Services\n");
+	printf("\n");
+	printf("Usage: %s [OPTION]... [PATH]...\n", prog);
+	printf("Projects filesystem access to PATHs from remote I/O Forwarding instances\n");
+	printf("\n");
+	printf("\t\t--group-name\tName of CaRT group to form\n");
+	printf("\t\t--poll-interval\tCaRT Poll interval to use on IONSS\n");
+	printf("\t\t--max-read\tMaximum size of read requests\n");
+	printf("\t\t--max-write\tMaximum size of write requests\n");
+	printf("\t-h\t--help\t\tThis help text\n");
+	printf("\n");
+}
+
 int main(int argc, char **argv)
 {
 	char *ionss_grp = "IONSS";
@@ -1987,10 +2002,11 @@ int main(int argc, char **argv)
 			{"poll-interval", optional_argument, 0, 2},
 			{"max-read", optional_argument, 0, 3},
 			{"max-write", optional_argument, 0, 4},
+			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(argc, argv, "", long_options, NULL);
+		c = getopt_long(argc, argv, "h", long_options, NULL);
 
 		if (c == -1)
 			break;
@@ -2021,7 +2037,12 @@ int main(int argc, char **argv)
 			}
 			break;
 
+		case 'h':
+			show_help(argv[0]);
+			exit(0);
+			break;
 		case '?':
+			exit(1);
 			break;
 		}
 	}
