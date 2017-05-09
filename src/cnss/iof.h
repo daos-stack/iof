@@ -61,6 +61,10 @@ struct iof_stats {
 	ATOMIC unsigned int rename;
 	ATOMIC unsigned int truncate;
 	ATOMIC unsigned int utimens;
+	ATOMIC unsigned int read;
+	ATOMIC unsigned int write;
+	ATOMIC uint64_t read_bytes;
+	ATOMIC uint64_t write_bytes;
 #ifdef IOF_USE_FUSE3
 	ATOMIC unsigned int ftruncate;
 	ATOMIC unsigned int getfattr;
@@ -137,6 +141,7 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
  */
 
 #define STAT_ADD(STATS, STAT) atomic_inc(&STATS->STAT)
+#define STAT_ADD_COUNT(STATS, STAT, COUNT) atomic_add(&STATS->STAT, COUNT)
 
 /* Helper macros for open() and creat() to log file access modes */
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\

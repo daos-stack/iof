@@ -325,9 +325,12 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 	     struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(handle->gah));
+
+	STAT_ADD(handle->fs_handle->stats, read);
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
@@ -337,7 +340,12 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 	}
 
 	if (len >= BULK_THRESHOLD)
-		return ioc_read_bulk(buff, len, position, handle);
+		rc = ioc_read_bulk(buff, len, position, handle);
 	else
-		return ioc_read_direct(buff, len, position, handle);
+		rc = ioc_read_direct(buff, len, position, handle);
+
+	if (rc > 0)
+		STAT_ADD_COUNT(handle->fs_handle->stats, read_bytes, rc);
+
+	return rc;
 }

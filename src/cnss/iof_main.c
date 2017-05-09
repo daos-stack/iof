@@ -243,6 +243,14 @@ static int iof_uint_read(char *buf, size_t buflen, void *arg)
 	return 0;
 }
 
+static int iof_uint64_read(char *buf, size_t buflen, void *arg)
+{
+	uint64_t *value = (uint64_t *)arg;
+
+	snprintf(buf, buflen, "%lu", *value);
+	return 0;
+}
+
 int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
@@ -324,6 +332,13 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		iof_uint_read,						\
 		NULL, NULL,						\
 		&fs_handle->stats->_STAT)
+#define REGISTER_STAT64(_STAT) cb->register_ctrl_variable( \
+		fs_handle->stats_dir,					\
+		#_STAT,							\
+		iof_uint64_read,					\
+		NULL, NULL,						\
+		&fs_handle->stats->_STAT)
+
 #if IOF_USE_FUSE3
 #define REGISTER_STAT3(_STAT) REGISTER_STAT(_STAT)
 #else
@@ -456,6 +471,11 @@ int iof_post_start(void *arg)
 		REGISTER_STAT(rename);
 		REGISTER_STAT(truncate);
 		REGISTER_STAT(utimens);
+		REGISTER_STAT(read);
+		REGISTER_STAT(write);
+
+		REGISTER_STAT64(read_bytes);
+		REGISTER_STAT64(write_bytes);
 
 		REGISTER_STAT3(getfattr);
 		REGISTER_STAT3(ftruncate);
@@ -468,7 +488,7 @@ int iof_post_start(void *arg)
 
 		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
 
-		args.argc = (sizeof(opts) / sizeof(*opts) + 2);
+		args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
 		args.argv = calloc(args.argc, sizeof(char *));
 		args.argv[0] = (char *)&"";
 		memcpy(&args.argv[2], opts, sizeof(opts));

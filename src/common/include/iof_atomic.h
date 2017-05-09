@@ -49,7 +49,9 @@
 #define atomic_store_release(ptr, value) \
 	atomic_store_explicit(ptr, value, memory_order_release)
 
-#define atomic_inc(ptr) atomic_fetch_add_explicit(ptr, 1, memory_order_relaxed)
+#define atomic_add(ptr, value) atomic_fetch_add_explicit(ptr,		\
+							 value,		\
+							 memory_order_relaxed)
 
 #else
 
@@ -63,8 +65,10 @@
 	} while (0)
 #define ATOMIC
 
-#define atomic_inc(ptr) atomic_fetch_add(ptr, 1)
+#define atomic_add(ptr, value) atomic_fetch_add(ptr, value)
 
 #endif
+
+#define atomic_inc(ptr) atomic_add(ptr, 1)
 
 #endif /* __IOF_ATOMIC_H__ */

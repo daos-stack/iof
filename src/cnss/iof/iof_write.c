@@ -227,9 +227,12 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	      struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(handle->gah));
+
+	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
@@ -244,7 +247,12 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	}
 
 	if (len >= BULK_THRESHOLD)
-		return ioc_write_bulk(buff, len, position, handle);
+		rc = ioc_write_bulk(buff, len, position, handle);
 	else
-		return ioc_write_direct(buff, len, position, handle);
+		rc = ioc_write_direct(buff, len, position, handle);
+
+	if (rc > 0)
+		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
+
+	return rc;
 }
