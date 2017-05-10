@@ -44,6 +44,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 
 #ifdef __APPLE__
 #include <sys/syslimits.h>
@@ -1716,6 +1717,45 @@ out:
 	return 0;
 }
 
+int iof_statfs_handler(crt_rpc_t *rpc)
+{
+	struct iof_string_in *in;
+	struct iof_data_out *out;
+	struct statvfs buf;
+	int rc;
+
+	VALIDATE_ARGS_STR(rpc, in, out);
+
+	if (!out)
+		goto out_no_log;
+	if (out->err)
+		goto out;
+
+	errno = 0;
+	rc = fstatvfs(base.projection_array[in->fs_id].dir_fd,
+		      &buf);
+
+	if (rc) {
+		out->rc = errno;
+		goto out;
+	}
+
+	/* Fuse ignores these three values on the client so zero them
+	 * out here first
+	 */
+	buf.f_favail = 0;
+	buf.f_fsid = 0;
+	buf.f_flag = 0;
+	crt_iov_set(&out->data, &buf, sizeof(buf));
+
+out:
+out_no_log:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	return 0;
+}
 
 static void iof_register_default_handlers(void)
 {
@@ -1748,6 +1788,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),
 		DECL_RPC_HANDLER(utimens, iof_utimens_handler),
 		DECL_RPC_HANDLER(utimens_gah, iof_utimens_gah_handler),
+		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
 	};
 	iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
 }

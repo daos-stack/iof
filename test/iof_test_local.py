@@ -235,6 +235,14 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         else:
             self.fail("Not a directory or a link")
 
+    # pylint: disable=no-self-use
+    def test_statfs(self):
+        """Invoke statfs"""
+
+        for test_dir in common_methods.import_list():
+            cmd = ['df', test_dir]
+            os.system(' '.join(cmd))
+
     def test_ionss_self_listdir(self):
         """Perform a simple listdir operation"""
 

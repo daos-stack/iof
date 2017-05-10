@@ -466,6 +466,7 @@ int iof_post_start(void *arg)
 		REGISTER_STAT(readlink);
 		REGISTER_STAT(rmdir);
 		REGISTER_STAT(mkdir);
+		REGISTER_STAT(statfs);
 		REGISTER_STAT(unlink);
 		REGISTER_STAT(ioctl);
 		REGISTER_STAT(open);

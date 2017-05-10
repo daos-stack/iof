@@ -322,6 +322,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, chmod_gah),
 	DEF_RPC_TYPE(DEFAULT, utimens),
 	DEF_RPC_TYPE(DEFAULT, utimens_gah),
+	DEF_RPC_TYPE(DEFAULT, statfs),
 	IOF_DEFAULT_RPC_TYPES,
 };
 

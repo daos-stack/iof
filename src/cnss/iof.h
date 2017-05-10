@@ -53,6 +53,7 @@ struct iof_stats {
 	ATOMIC unsigned int readlink;
 	ATOMIC unsigned int rmdir;
 	ATOMIC unsigned int mkdir;
+	ATOMIC unsigned int statfs;
 	ATOMIC unsigned int unlink;
 	ATOMIC unsigned int ioctl;
 	ATOMIC unsigned int open;
@@ -315,6 +316,8 @@ int ioc_rmdir(const char *);
 int ioc_unlink(const char *);
 
 int ioc_readlink(const char *, char *, size_t);
+
+int ioc_statfs(const char *, struct statvfs *);
 
 int ioc_ioctl(const char *, int, void *, struct fuse_file_info *,
 	      unsigned int, void *);

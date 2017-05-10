@@ -77,6 +77,7 @@ enum op_type {
 	DEF_FUSE_OP(unlink),
 	DEF_FUSE_OP(readlink),
 	DEF_FUSE_OP(ioctl),
+	DEF_FUSE_OP(statfs),
 	OP_TYPES
 };
 
@@ -355,6 +356,7 @@ static struct operation default_ops[] = {
 	DECL_FUSE_OP(unlink, ioc_unlink),
 	DECL_FUSE_OP(readlink, ioc_readlink),
 	DECL_FUSE_OP(ioctl, ioc_ioctl),
+	DECL_FUSE_OP(statfs, ioc_statfs),
 };
 
 /* Ignore the first two bits (writeable and failover) */
@@ -418,6 +420,7 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, unlink);
 	SET_FUSE_OP(fuse_ops, client_ops, readlink);
 	SET_FUSE_OP(fuse_ops, client_ops, ioctl);
+	SET_FUSE_OP(fuse_ops, client_ops, statfs);
 #ifndef IOF_USE_FUSE3
 #ifndef __APPLE__
 	fuse_ops->flag_nullpath_ok = 1;
