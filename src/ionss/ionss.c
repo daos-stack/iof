@@ -1873,7 +1873,7 @@ static void *progress_thread(void *arg)
 
 	/* progress loop */
 	do {
-		rc = crt_progress(b->crt_ctx, base.poll_interval,
+		rc = crt_progress(b->crt_ctx, b->poll_interval,
 				  check_shutdown, &shutdown);
 		if (rc != 0 && rc != -CER_TIMEDOUT) {
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
@@ -2024,7 +2024,7 @@ int main(int argc, char **argv)
 	char *ionss_grp = "IONSS";
 	int i;
 	int ret;
-	pthread_t progress_tid;
+	unsigned int thread_count = 2;
 	int err;
 	int c;
 
@@ -2043,6 +2043,7 @@ int main(int argc, char **argv)
 			{"poll-interval", optional_argument, 0, 2},
 			{"max-read", optional_argument, 0, 3},
 			{"max-write", optional_argument, 0, 4},
+			{"thread-count", optional_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
@@ -2074,6 +2075,13 @@ int main(int argc, char **argv)
 			ret = parse_size(&base.max_write, optarg);
 			if (ret != 0) {
 				printf("Unable to set max write to %s\n",
+				       optarg);
+			}
+			break;
+		case 't':
+			ret = sscanf(optarg, "%d", &thread_count);
+			if (ret != 1 || thread_count < 1) {
+				printf("Unable to set thread count to %s\n",
 				       optarg);
 			}
 			break;
@@ -2237,11 +2245,42 @@ int main(int argc, char **argv)
 	base.gs = ios_gah_init();
 
 	shutdown = 0;
-	ret = pthread_create(&progress_tid, NULL, progress_thread, &base);
 
-	ret = pthread_join(progress_tid, NULL);
-	if (ret)
-		IOF_LOG_ERROR("Could not join progress thread");
+	if (thread_count == 1) {
+		int rc;
+		/* progress loop */
+		do {
+			rc = crt_progress(base.crt_ctx, base.poll_interval,
+					  check_shutdown, &shutdown);
+			if (rc != 0 && rc != -CER_TIMEDOUT) {
+				IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+				break;
+			}
+		} while (!shutdown);
+
+	} else {
+		pthread_t *progress_tids;
+		int thread;
+
+		progress_tids = calloc(thread_count, sizeof(*progress_tids));
+		if (!progress_tids) {
+			ret = 1;
+			goto cleanup;
+		}
+		for (thread = 0; thread < thread_count ; thread++) {
+			IOF_LOG_INFO("Starting thread %d", thread);
+			ret = pthread_create(&progress_tids[thread], NULL,
+					     progress_thread, &base);
+		}
+
+		for (thread = 0; thread < thread_count ; thread++) {
+			ret = pthread_join(progress_tids[thread], NULL);
+
+			if (ret)
+				IOF_LOG_ERROR("Could not join progress thread %d",
+					      thread);
+		}
+	}
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
 
