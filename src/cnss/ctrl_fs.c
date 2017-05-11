@@ -921,7 +921,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 	finfo->fh = 0;
 
 	if (node->ctrl_type == CTRL_TRACKER) {
-		int value;
+		int value = 0;
 		ctrl_fs_open_cb_t open_cb;
 		void *cb_arg = GET_DATA(node, tckr, cb_arg);
 

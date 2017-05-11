@@ -51,7 +51,7 @@
 int iof_mntent_foreach(iof_mntent_func_t func, void *priv)
 {
 	int rc = 0;
-	FILE *fp_mounts;
+	FILE *fp_mounts = NULL;
 	struct mntent entry;
 	char *filename, text[IOF_MAX_MNTENT_LEN];
 
