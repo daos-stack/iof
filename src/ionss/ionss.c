@@ -117,18 +117,6 @@ static struct ios_base base;
 
 #define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) \
 	do {\
-		out = crt_reply_get(rpc); \
-		if (!out) { \
-			IOF_LOG_ERROR("Could not retrieve output args"); \
-			break; \
-		} \
-		out->err = 0; \
-		in = crt_req_get(rpc); \
-		if (!in) { \
-			IOF_LOG_ERROR("Could not retrieve input args"); \
-			out->err = IOF_ERR_CART; \
-			break; \
-		} \
 		IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah)); \
 		handle = ios_##handle_type##_find(&base, &in->gah); \
 		if (!handle) { \
@@ -325,14 +313,14 @@ out:
  */
 int iof_getattr_gah_handler(crt_rpc_t *rpc)
 {
-	struct ionss_file_handle *handle = NULL;
-	struct iof_gah_in *in;
-	struct iof_getattr_out *out;
+	struct iof_gah_in *in = crt_req_get(rpc);
+	struct iof_getattr_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	struct stat stbuf = {0};
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	errno = 0;
@@ -426,18 +414,15 @@ out:
  */
 int iof_readdir_handler(crt_rpc_t *rpc)
 {
-	struct iof_readdir_in *in;
-	struct iof_readdir_out *out;
-	struct ionss_dir_handle *handle = NULL;
+	struct iof_readdir_in *in = crt_req_get(rpc);
+	struct iof_readdir_out *out = crt_reply_get(rpc);
+	struct ionss_dir_handle *handle;
 	struct dirent *dir_entry;
 	struct iof_readdir_reply replies[IONSS_READDIR_ENTRIES_PER_RPC] = {0};
 	int reply_idx = 0;
 	int rc;
 
 	VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle);
-	if (!in || !out)
-		return 0;
-
 	if (out->err)
 		goto out;
 
@@ -834,13 +819,13 @@ out:
 
 int iof_fsync_handler(crt_rpc_t *rpc)
 {
-	struct iof_gah_in *in;
-	struct iof_status_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_gah_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
@@ -868,14 +853,15 @@ out:
 
 int iof_fdatasync_handler(crt_rpc_t *rpc)
 {
-	struct iof_gah_in *in;
-	struct iof_status_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_gah_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -902,15 +888,15 @@ out:
 
 int iof_read_handler(crt_rpc_t *rpc)
 {
-	struct iof_read_in *in;
-	struct iof_data_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_read_in *in = crt_req_get(rpc);
+	struct iof_data_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	void *data = NULL;
 	size_t bytes_read;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
@@ -1007,9 +993,9 @@ out:
  */
 int iof_read_bulk_handler(crt_rpc_t *rpc)
 {
-	struct iof_read_bulk_in *in;
-	struct iof_read_bulk_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_read_bulk_in *in = crt_req_get(rpc);
+	struct iof_read_bulk_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	void *data = NULL;
 	size_t bytes_read;
 	struct crt_bulk_desc bulk_desc = {0};
@@ -1020,7 +1006,7 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
@@ -1262,14 +1248,15 @@ out:
 
 int iof_ftruncate_handler(crt_rpc_t *rpc)
 {
-	struct iof_ftruncate_in *in;
-	struct iof_status_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_ftruncate_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1328,13 +1315,13 @@ out:
 
 int iof_chmod_gah_handler(crt_rpc_t *rpc)
 {
-	struct iof_chmod_gah_in *in;
-	struct iof_status_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_chmod_gah_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
@@ -1417,15 +1404,16 @@ out:
 
 int iof_write_direct_handler(crt_rpc_t *rpc)
 {
-	struct iof_write_in *in;
-	struct iof_write_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_write_in *in = crt_req_get(rpc);
+	struct iof_write_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	size_t bytes_written;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1529,9 +1517,9 @@ out:
 
 int iof_write_bulk_handler(crt_rpc_t *rpc)
 {
-	struct iof_write_bulk *in;
-	struct iof_write_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_write_bulk *in = crt_req_get(rpc);
+	struct iof_write_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	struct crt_bulk_desc bulk_desc = {0};
 	crt_bulk_t local_bulk_hdl = {0};
 	crt_sg_list_t sgl = {0};
@@ -1541,7 +1529,7 @@ int iof_write_bulk_handler(crt_rpc_t *rpc)
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
@@ -1647,13 +1635,13 @@ out:
 
 int iof_utimens_gah_handler(crt_rpc_t *rpc)
 {
-	struct iof_time_gah_in *in;
-	struct iof_status_out *out;
-	struct ionss_file_handle *handle = NULL;
+	struct iof_time_gah_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	if (!in->time.iov_buf) {
