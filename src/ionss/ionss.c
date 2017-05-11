@@ -87,18 +87,6 @@ static struct ios_base base;
 
 #define VALIDATE_ARGS_STR(rpc, in, out) \
 	do {\
-		out = crt_reply_get(rpc); \
-		if (!out) { \
-			IOF_LOG_ERROR("Could not retrieve output args"); \
-			break; \
-		} \
-		out->err = 0; \
-		in = crt_req_get(rpc); \
-		if (!in) { \
-			IOF_LOG_ERROR("Could not retrieve input args"); \
-			out->err = IOF_ERR_CART; \
-			break; \
-		} \
 		if (in->fs_id >= base.projection_count) { \
 			IOF_LOG_ERROR("Invalid Projection: " \
 				      "[ID=%d]", in->fs_id); \
@@ -303,15 +291,15 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 
 int iof_getattr_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
-	struct iof_getattr_out *out;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_getattr_out *out = crt_reply_get(rpc);
 	struct stat stbuf = {0};
 	int rc;
+
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out)
-		goto out_no_log;
 	if (out->err)
 		goto out;
+
 	errno = 0;
 	rc = fstatat(base.projection_array[in->fs_id].dir_fd,
 		     iof_get_rel_path(in->path), &stbuf,
@@ -329,7 +317,6 @@ out:
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
-out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
@@ -384,15 +371,13 @@ out:
 
 int iof_opendir_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
-	struct iof_opendir_out *out;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_opendir_out *out = crt_reply_get(rpc);
 	struct ionss_dir_handle *local_handle;
 	int rc;
 	int fd;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || !in)
-		goto out_no_log;
 	if (out->err)
 		goto out;
 
@@ -436,7 +421,6 @@ out:
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
 		      in->path, out->err, out->rc);
 
-out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
@@ -622,8 +606,8 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 
 int iof_open_handler(crt_rpc_t *rpc)
 {
-	struct iof_open_in *in;
-	struct iof_open_out *out;
+	struct iof_open_in *in = crt_req_get(rpc);
+	struct iof_open_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
 	struct ionss_file_handle *tmp_handle = NULL;
 	struct ios_projection *projection;
@@ -632,9 +616,6 @@ int iof_open_handler(crt_rpc_t *rpc)
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!in || !out)
-		goto out_no_log;
-
 	if (out->err)
 		goto out;
 
@@ -724,8 +705,6 @@ out:
 	IOF_LOG_INFO("%p path %s result err %d rc %d",
 		     handle, in->path, out->err, out->rc);
 
-out_no_log:
-
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
@@ -734,8 +713,8 @@ out_no_log:
 
 int iof_create_handler(crt_rpc_t *rpc)
 {
-	struct iof_create_in *in;
-	struct iof_open_out *out;
+	struct iof_create_in *in = crt_req_get(rpc);
+	struct iof_open_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
 	struct ionss_file_handle *tmp_handle = NULL;
 	struct ios_projection *projection;
@@ -744,9 +723,6 @@ int iof_create_handler(crt_rpc_t *rpc)
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!in || !out)
-		goto out_no_log;
-
 	if (out->err)
 		goto out;
 
@@ -836,8 +812,6 @@ out:
 
 	IOF_LOG_INFO("%p path %s result err %d rc %d",
 		     handle, in->path, out->err, out->rc);
-
-out_no_log:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1203,12 +1177,12 @@ out_no_log:
 
 int iof_mkdir_handler(crt_rpc_t *rpc)
 {
-	struct iof_create_in *in;
-	struct iof_status_out *out;
+	struct iof_create_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
@@ -1236,13 +1210,13 @@ out:
  */
 int iof_readlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
-	struct iof_string_out *out;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_string_out *out = crt_reply_get(rpc);
 	char reply[IOF_MAX_PATH_LEN] = {0};
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	errno = 0;
@@ -1264,15 +1238,15 @@ out:
 
 int iof_truncate_handler(crt_rpc_t *rpc)
 {
-	struct iof_truncate_in *in = NULL;
-	struct iof_status_out *out = NULL;
+	struct iof_truncate_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	char new_path[IOF_MAX_PATH_LEN];
-
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1332,13 +1306,14 @@ out:
 
 int iof_chmod_handler(crt_rpc_t *rpc)
 {
-	struct iof_chmod_in *in;
-	struct iof_status_out *out;
+	struct iof_chmod_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1398,13 +1373,14 @@ out:
 
 int iof_rmdir_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = NULL;
-	struct iof_status_out *out = NULL;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1426,13 +1402,14 @@ out:
 
 int iof_unlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
-	struct iof_status_out *out;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1650,12 +1627,12 @@ out:
 
 int iof_utimens_handler(crt_rpc_t *rpc)
 {
-	struct iof_time_in *in;
-	struct iof_status_out *out;
+	struct iof_time_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
 
 	if (!in->time.iov_buf) {
@@ -1719,15 +1696,12 @@ out:
 
 int iof_statfs_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in;
-	struct iof_data_out *out;
+	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_data_out *out = crt_reply_get(rpc);
 	struct statvfs buf;
 	int rc;
 
 	VALIDATE_ARGS_STR(rpc, in, out);
-
-	if (!out)
-		goto out_no_log;
 	if (out->err)
 		goto out;
 
@@ -1749,7 +1723,6 @@ int iof_statfs_handler(crt_rpc_t *rpc)
 	crt_iov_set(&out->data, &buf, sizeof(buf));
 
 out:
-out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
