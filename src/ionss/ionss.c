@@ -102,18 +102,6 @@ static struct ios_base base;
 
 #define VALIDATE_ARGS_STR2(rpc, in, out) \
 	do {\
-		out = crt_reply_get(rpc); \
-		if (!out) { \
-			IOF_LOG_ERROR("Could not retrieve output args"); \
-			break; \
-		} \
-		out->err = 0; \
-		in = crt_req_get(rpc); \
-		if (!in) { \
-			IOF_LOG_ERROR("Could not retrieve input args"); \
-			out->err = IOF_ERR_CART; \
-			break; \
-		} \
 		if (in->fs_id >= base.projection_count) { \
 			IOF_LOG_ERROR("Invalid Projection: " \
 				      "[ID=%d]", in->fs_id); \
@@ -1114,13 +1102,14 @@ out:
 
 int iof_rename_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in *in;
-	struct iof_status_out *out;
+	struct iof_two_string_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR2(rpc, in, out);
-	if (!out || out->err)
+	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1144,15 +1133,14 @@ out:
 
 int iof_symlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in *in;
-	struct iof_status_out *out;
+	struct iof_two_string_in *in = crt_req_get(rpc);
+	struct iof_status_out *out = crt_reply_get(rpc);
 	int rc;
 
 	VALIDATE_ARGS_STR2(rpc, in, out);
-	if (!out)
-		goto out_no_log;
 	if (out->err)
 		goto out;
+
 	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
 	if (out->err || out->rc)
 		goto out;
@@ -1167,7 +1155,6 @@ out:
 	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
 		      in->src, in->dst, out->err, out->rc);
 
-out_no_log:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
