@@ -1610,6 +1610,10 @@ int iof_utimens_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
+	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (out->err || out->rc)
+		goto out;
+
 	if (!in->time.iov_buf) {
 		IOF_LOG_ERROR("No input times");
 		out->err = IOF_ERR_CART;
@@ -1642,6 +1646,10 @@ int iof_utimens_gah_handler(crt_rpc_t *rpc)
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
 	if (out->err)
+		goto out;
+
+	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	if (out->err || out->rc)
 		goto out;
 
 	if (!in->time.iov_buf) {
