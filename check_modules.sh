@@ -40,12 +40,6 @@
 FLIST="-s SConstruct -s src/SConscript -s src/utest/SConscript "
 FLIST+="-s src/test/SConscript"
 
-FILE=`ls -1 proto/*/SConscript`
-for FNAME in $FILE
-do
-  FLIST+=" -s $FNAME"
-done
-
 FILE=`ls -1 test/*.py`
 for FNAME in $FILE
 do
