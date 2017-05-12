@@ -49,6 +49,7 @@ python3 -m unittest -c iof_test_local.Testlocal.test_ionss_link
 """
 
 #pylint: disable=too-many-public-methods
+#pylint: disable=too-many-statements
 
 import os
 import sys
@@ -121,8 +122,14 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         log_path = os.path.join(log_path, self.logdir_name())
 
         log_mask = os.getenv("CRT_LOG_MASK", "INFO")
+        crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
+        ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
 
         valgrind = iofcommontestsuite.valgrind_suffix(log_path)
+        ionss_args = ['ionss']
+        if len(valgrind):
+            #ionss_args.append('--poll-interval=1')
+            log_mask = "DEBUG,MEM=ERR"
 
         cmd = [orterun,
                '--output-filename', log_path]
@@ -131,24 +138,33 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             cmd.append('--allow-run-as-root')
         cmd.extend(['-n', '1',
                     '-x', 'CRT_LOG_MASK=%s' % log_mask,
+                    '-x', 'CRT_PHY_ADDR_STR=%s' % crt_phy_addr,
+                    '-x', 'OFI_INTERFACE=%s' % ofi_interface,
                     '-x', 'CNSS_PREFIX=%s' % self.import_dir])
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
                     '-n', '1',
+                    '-x', 'CRT_PHY_ADDR_STR=%s' % crt_phy_addr,
+                    '-x', 'OFI_INTERFACE=%s' % ofi_interface,
                     '-x', 'CRT_LOG_MASK=%s' % log_mask])
         cmd.extend(valgrind)
-        cmd.extend(['ionss', self.export_dir, '/usr'])
+        cmd.extend(ionss_args)
+        cmd.extend([self.export_dir, '/usr'])
 
         # cmd.append('--poll-interval=1')
 
         self.proc = self.common_launch_process('', ' '.join(cmd))
 
+        if not valgrind:
+            waittime = 30
+        else:
+            waittime = 120
         elapsed_time = 0
         while not self.is_running():
             elapsed_time += 1
-            if elapsed_time > 30:
-                self.fail("Could not detect startup in 30 seconds")
+            if elapsed_time > waittime:
+                self.fail("Could not detect startup in %s seconds" % waittime)
             if not self.check_process(self.proc):
                 procrtn = self.common_stop_process(self.proc)
                 self.fail("orterun process did not start %d" % procrtn)
@@ -430,6 +446,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             os.environ["CNSS_PREFIX"] = self.import_dir
             procrtn = subprocess.call([testname, self.import_dir], timeout=180)
             os.environ.pop("CNSS_PREFIX")
+
             if procrtn != 0:
                 self.fail("IO interception test failed: %s" % procrtn)
 

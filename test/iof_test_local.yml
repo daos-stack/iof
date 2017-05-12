@@ -5,6 +5,8 @@ defaultENV:
     TR_REDIRECT_OUTPUT: "yes"
     CRT_LOG_MASK: "INFO"
     MULTI_INSTANCE_TESTS: "no"
+    CRT_PHY_ADDR_STR: "ofi+sockets"
+    OFI_INTERFACE: "eth0"
 
 module:
     name: "iof_test_local"

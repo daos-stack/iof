@@ -1,12 +1,15 @@
 description: "multi test module"
 
+defaultENV:
+    CRT_PHY_ADDR_STR: "ofi+sockets"
+    OFI_INTERFACE: "eth0"
+
 module:
     name: "multi_test_nss"
     setKeyFromHost: ["IOF_TEST_ION", "IOF_TEST_CN"]
     setKeyFromInfo:
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
-        - [CCI_CONFIG, CART_PREFIX, "/etc/cci.ini"]
 
 directives:
     renameTestRun: "no"

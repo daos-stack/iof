@@ -80,8 +80,11 @@ class Checknss(iofcommontestsuite.CommonTestSuite):
             if procrtn != 0:
                 self.fail("Stopping job returned %d" % procrtn)
 
-        self.logger.info("Checknss: tearDown end\n\n")
         self.commonTearDownModule()
+        os.environ.pop("CRT_PHY_ADDR_STR", "")
+        os.environ.pop("OFI_INTERFACE", "")
+        os.environ.pop("CRT_LOG_MASK", "")
+        self.logger.info("Checknss: tearDown end\n\n")
 
     def test_ionss_simple_test(self):
         """Simple test"""
@@ -89,22 +92,27 @@ class Checknss(iofcommontestsuite.CommonTestSuite):
         (cmd, prefix) = self.common_add_prefix_logdir()
         (cnss, ionss) = self.common_add_server_client()
         fs = ' '.join(self.fs_list)
-        log_mask = os.getenv('CRT_LOG_MASK', 'INFO')
+        log_mask = os.getenv("CRT_LOG_MASK", "INFO")
+        crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
+        ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
         test_path = os.getenv('IOF_TEST_BIN', '')
-        pass_env = ' -x CRT_LOG_MASK=%s -x CNSS_PREFIX' % log_mask
-        local_server = "%s%s %s %sionss %s" % \
-                       (pass_env, ionss, prefix, test_path, fs)
-        local_client = "%s%s %s %scnss :" % \
-                       (pass_env, cnss, prefix, test_path)
+        pass_env = ' -x CRT_LOG_MASK={!s} -x CRT_PHY_ADDR_STR={!s}' \
+                   ' -x OFI_INTERFACE={!s} -x CNSS_PREFIX'.format(
+                       log_mask, crt_phy_addr, ofi_interface)
+
+        local_server = "{!s}{!s} {!s} {!s}ionss {!s}".format(
+            pass_env, ionss, prefix, test_path, fs)
+        local_client = "{!s}{!s} {!s} {!s}cnss :".format(
+            pass_env, cnss, prefix, test_path)
         cmdstr = cmd + local_client + local_server
         self.proc = self.common_launch_process(testmsg, cmdstr)
         if self.proc is None:
             self.fail("Unable to launch (c|io)nss")
         allnode_cmd = self.common_get_all_cn_cmd()
         cnss_prefix = os.environ["CNSS_PREFIX"]
-        cmdstr = "%s python3 %s/checkiof.py %s" % \
-                 (allnode_cmd, os.path.dirname(os.path.abspath(__file__)), \
-                  cnss_prefix)
+        cmdstr = "{!s} python3 {!s}/checkiof.py {!s}".format(
+            allnode_cmd, os.path.dirname(os.path.abspath(__file__)),
+            cnss_prefix)
         rc = self.common_launch_cmd(testmsg, cmdstr)
         self.logger.info("Proc is %d", rc)
         if rc != 0:
