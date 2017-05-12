@@ -35,11 +35,13 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <pthread.h>
 #include "log.h"
 
 int iof_log_handle;
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-int iof_log_allocfacility(const char *shortname, const char *longname)
+static int iof_log_allocfacility(const char *shortname, const char *longname)
 {
 	int handle;
 
@@ -49,11 +51,25 @@ int iof_log_allocfacility(const char *shortname, const char *longname)
 	return handle;
 }
 
-void iof_log_init(const char *shortname, const char *longname)
+void iof_log_init(const char *shortname, const char *longname, int *handle)
 {
+	int new_handle;
 
 	crt_log_init();
-	iof_log_handle = iof_log_allocfacility(shortname, longname);
+	new_handle = iof_log_allocfacility(shortname, longname);
+
+	pthread_mutex_lock(&lock);
+	if (handle == NULL) {
+		iof_log_handle = new_handle;
+	} else {
+		*handle = new_handle;
+		/* Ensure default log handle is initialized.  If user
+		 * explicitely initializes it, it will get overwritten
+		 */
+		if (iof_log_handle == -1)
+			iof_log_handle = new_handle;
+	}
+	pthread_mutex_unlock(&lock);
 }
 
 void iof_log_close(void)

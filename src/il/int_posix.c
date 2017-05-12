@@ -384,7 +384,7 @@ static __attribute__((constructor)) void ioil_init(void)
 
 	FOREACH_INTERCEPT(IOIL_FORWARD_MAP_OR_FAIL);
 
-	iof_log_init("IL", "IOIL");
+	iof_log_init("IL", "IOIL", NULL);
 
 	/* Get maximum number of file desciptors */
 	rc = getrlimit(RLIMIT_NOFILE, &rlimit);

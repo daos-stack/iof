@@ -44,6 +44,13 @@
 #include <inttypes.h>
 #include <crt_util/clog.h>
 
+/* Allow changing the default so these macros can be
+ * used by files that don't log to the default facility
+ */
+#ifndef DEF_LOG_HANDLE
+#define DEF_LOG_HANDLE iof_log_handle
+#endif
+
 #define IOF_LOG_FAC(fac, type, fmt, ...)				\
 	do {								\
 		crt_log(fac | CLOG_##type, "%s:%d %s() " fmt "\n",	\
@@ -52,16 +59,16 @@
 	} while (0)
 
 #define IOF_LOG_WARNING(...)	\
-	IOF_LOG_FAC(iof_log_handle, WARN, __VA_ARGS__)
+	IOF_LOG_FAC(DEF_LOG_HANDLE, WARN, __VA_ARGS__)
 
 #define IOF_LOG_ERROR(...)	\
-	IOF_LOG_FAC(iof_log_handle, ERR, __VA_ARGS__)
+	IOF_LOG_FAC(DEF_LOG_HANDLE, ERR, __VA_ARGS__)
 
 #define IOF_LOG_DEBUG(...)	\
-	IOF_LOG_FAC(iof_log_handle, DBG, __VA_ARGS__)
+	IOF_LOG_FAC(DEF_LOG_HANDLE, DBG, __VA_ARGS__)
 
 #define IOF_LOG_INFO(...)	\
-	IOF_LOG_FAC(iof_log_handle, INFO, __VA_ARGS__)
+	IOF_LOG_FAC(DEF_LOG_HANDLE, INFO, __VA_ARGS__)
 
 
 #if defined(__cplusplus)
@@ -70,9 +77,14 @@ extern "C" {
 
 extern int iof_log_handle;
 
-void iof_log_init(const char *shortname, const char *longname);
+/* Initialize a log facility.   Pass NULL as log handle to initialize
+ * the default facilility.  If the user never initializes the default
+ * facility, it will be set to whatever is passed in first.
+ */
+void iof_log_init(const char *shortname, const char *longname,
+		  int *log_handle);
+/* Close a the log for a log facility */
 void iof_log_close(void);
-int iof_log_allocfacility(const char *shortname, const char *longname);
 
 #if defined(__cplusplus)
 }

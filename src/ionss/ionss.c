@@ -2030,7 +2030,7 @@ int main(int argc, char **argv)
 
 	char *version = iof_get_version();
 
-	iof_log_init("ION", "IONSS");
+	iof_log_init("ION", "IONSS", NULL);
 	IOF_LOG_INFO("IONSS version: %s", version);
 
 	base.poll_interval = 1000 * 1000;

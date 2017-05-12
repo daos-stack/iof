@@ -526,7 +526,7 @@ int main(void)
 	int service_process_set = 0;
 	char *ctrl_prefix;
 
-	iof_log_init("CN", "CNSS");
+	iof_log_init("CN", "CNSS", NULL);
 
 	IOF_LOG_INFO("CNSS version: %s", version);
 
