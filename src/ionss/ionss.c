@@ -136,11 +136,10 @@ static void (*register_handlers
 	iof_register_default_handlers
 };
 
-int shutdown_impl(void)
+void shutdown_impl(void)
 {
 	IOF_LOG_DEBUG("Shutting Down");
 	shutdown = 1;
-	return 0;
 }
 
 /*
@@ -150,8 +149,11 @@ int shutdown_impl(void)
 static int shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 {
 	int rc;
-	if (cb_info->cci_rc == 0)
-		return shutdown_impl();
+
+	if (cb_info->cci_rc == 0) {
+		shutdown_impl();
+		return 0;
+	}
 	IOF_LOG_ERROR("Broadcast failed, rc = %u", cb_info->cci_rc);
 	/* Retry in case of failure */
 	rc = crt_req_send(cb_info->cci_rpc, shutdown_bcast_cb, NULL);
@@ -172,7 +174,8 @@ static int shutdown_handler(crt_rpc_t *rpc)
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-	return shutdown_impl();
+	shutdown_impl();
+	return 0;
 }
 
 /*
@@ -200,8 +203,10 @@ static int cnss_detach_handler(crt_rpc_t *rpc)
 			base.my_rank);
 
 	/* Call shutdown directly if this is the only IONSS running */
-	if (base.num_ranks == 1)
-		return shutdown_impl();
+	if (base.num_ranks == 1) {
+		shutdown_impl();
+		return 0;
+	}
 
 	IOF_LOG_DEBUG("Broadcasting shutdown to %d IONSS",
 			(base.num_ranks - 1));
@@ -214,12 +219,12 @@ static int cnss_detach_handler(crt_rpc_t *rpc)
 	if (rc || !rpc_bcast) {
 		IOF_LOG_ERROR("Could not create broadcast"
 			      " shutdown request ret = %d", rc);
-		return rc;
+		return 0;
 	}
 	rc = crt_req_send(rpc_bcast, shutdown_bcast_cb, NULL);
 	if (rc) {
 		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
-		return rc;
+		return 0;
 	}
 	return 0;
 }
@@ -1883,14 +1888,8 @@ static void iof_register_default_handlers(void)
  */
 int iof_query_handler(crt_rpc_t *query_rpc)
 {
-	struct iof_psr_query *query = NULL;
+	struct iof_psr_query *query = crt_reply_get(query_rpc);
 	int ret;
-
-	query = crt_reply_get(query_rpc);
-	if (query == NULL) {
-		IOF_LOG_ERROR("could not get reply buffer");
-		return IOF_ERR_CART;
-	}
 
 	query->max_read = base.max_read;
 	query->max_write = base.max_write;
@@ -1904,7 +1903,7 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 		IOF_LOG_ERROR("query rpc response not sent, ret = %d", ret);
 
 	cnss_count++;
-	return ret;
+	return 0;
 }
 
 int ionss_register(void)
