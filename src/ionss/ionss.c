@@ -917,28 +917,25 @@ out:
 	return 0;
 }
 
+/* Handle a close from a client.
+ * For close RPCs there is no reply so simply ack the RPC first
+ * and then do the work off the critical path.
+ */
 int iof_close_handler(crt_rpc_t *rpc)
 {
-	struct ionss_file_handle *handle = NULL;
-	struct iof_gah_in *in;
+	struct iof_gah_in *in = crt_req_get(rpc);
+	struct ionss_file_handle *handle;
 	int rc;
 
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		goto out;
-	}
-
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle)
-		goto out;
-
-	ios_fh_decref(&base, handle, 2);
-
-out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	handle = ios_fh_find(&base, &in->gah);
+
+	if (handle)
+		ios_fh_decref(&base, handle, 2);
+
 	return 0;
 }
 
