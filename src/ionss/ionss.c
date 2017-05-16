@@ -343,7 +343,7 @@ out:
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -719,7 +719,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	struct iof_open_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
 	struct ionss_file_handle *tmp_handle = NULL;
-	struct ios_projection *projection;
+	struct ios_projection *projection = NULL;
 	struct stat stbuf = {0};
 	int fd;
 	int rc;
@@ -786,7 +786,7 @@ int iof_open_handler(crt_rpc_t *rpc)
 	}
 
 	if (!handle) {
-		rc = ios_fh_alloc(&base, &handle);
+		rc = ios_fh_alloc(projection, &handle);
 		if (rc || !handle) {
 			out->err = IOF_ERR_NOMEM;
 			close(fd);
@@ -817,6 +817,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (projection)
+		ios_fh_prealloc(projection);
 	return 0;
 }
 
@@ -826,7 +829,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 	struct iof_open_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
 	struct ionss_file_handle *tmp_handle = NULL;
-	struct ios_projection *projection;
+	struct ios_projection *projection = NULL;
 	struct stat stbuf = {0};
 	int fd;
 	int rc;
@@ -892,7 +895,7 @@ int iof_create_handler(crt_rpc_t *rpc)
 	}
 
 	if (!handle) {
-		rc = ios_fh_alloc(&base, &handle);
+		rc = ios_fh_alloc(projection, &handle);
 		if (rc || !handle) {
 			out->err = IOF_ERR_NOMEM;
 			close(fd);
@@ -925,6 +928,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (projection)
+		ios_fh_prealloc(projection);
 	return 0;
 }
 
@@ -945,7 +951,7 @@ int iof_close_handler(crt_rpc_t *rpc)
 	handle = ios_fh_find(&base, &in->gah);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 2);
+		ios_fh_decref(handle, 2);
 
 	return 0;
 }
@@ -979,7 +985,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1014,7 +1020,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1057,7 +1063,7 @@ out:
 		free(data);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1200,7 +1206,7 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	 * has completed at this point.
 	 */
 
-	ios_fh_decref(&base, handle, 1);
+	ios_fh_decref(handle, 1);
 
 	return 0;
 
@@ -1214,7 +1220,7 @@ out:
 		free(data);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1406,7 +1412,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1473,7 +1479,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1564,7 +1570,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1643,7 +1649,7 @@ out:
 	 * function, but a second one from iof_bulk_write_handler() itself
 	 */
 	if (handle)
-		ios_fh_decref(&base, handle, 2);
+		ios_fh_decref(handle, 2);
 
 	return 0;
 }
@@ -1728,7 +1734,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1805,7 +1811,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (handle)
-		ios_fh_decref(&base, handle, 1);
+		ios_fh_decref(handle, 1);
 
 	return 0;
 }
@@ -1984,7 +1990,7 @@ static void release_projection_resources(struct ios_projection *projection)
 		IOF_LOG_INFO("Closing handle %p fd %d " GAH_PRINT_STR,
 			     handle, handle->fd, GAH_PRINT_VAL(handle->gah));
 
-		ios_fh_decref(&base, handle, handle->ref);
+		ios_fh_decref(handle, handle->ref);
 	}
 }
 
@@ -2233,7 +2239,9 @@ int main(int argc, char **argv)
 		int rc;
 
 		projection->active = 0;
+		projection->base = &base;
 		LIST_INIT(&projection->files);
+		LIST_INIT(&projection->inactive_files);
 		pthread_mutex_init(&projection->lock, NULL);
 
 		if (!full_path) {
@@ -2399,6 +2407,17 @@ int main(int argc, char **argv)
 		release_projection_resources(projection);
 
 		pthread_mutex_destroy(&projection->lock);
+
+		/* After closing all files free all remaining pre-allocated file
+		 * handles
+		 */
+		while (!LIST_EMPTY(&projection->inactive_files)) {
+			struct ionss_file_handle *handle;
+
+			handle = LIST_FIRST(&projection->inactive_files);
+			LIST_REMOVE(handle, list);
+			free(handle);
+		}
 	}
 
 	/* TODO:

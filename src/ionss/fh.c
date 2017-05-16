@@ -40,18 +40,28 @@
 #include "ionss.h"
 #include "log.h"
 
-int ios_fh_alloc(struct ios_base *base, struct ionss_file_handle **fhp)
+int ios_fh_alloc(struct ios_projection *projection,
+		 struct ionss_file_handle **fhp)
 {
+	struct ios_base *base;
 	struct ionss_file_handle *fh;
 	int rc;
 
 	*fhp = NULL;
 
-	fh = calloc(1, sizeof(*fh));
-	if (!fh) {
-		IOF_LOG_ERROR("Failed to allocate memory");
-		return IOF_ERR_NOMEM;
+	if (LIST_EMPTY(&projection->inactive_files)) {
+		fh = calloc(1, sizeof(*fh));
+		if (!fh) {
+			IOF_LOG_ERROR("Failed to allocate memory");
+			return IOF_ERR_NOMEM;
+		}
+		fh->projection = projection;
+	} else {
+		fh = LIST_FIRST(&projection->inactive_files);
+		LIST_REMOVE(fh, list);
 	}
+
+	base = projection->base;
 
 	rc = ios_gah_allocate(base->gs, &fh->gah, 0, 0, fh);
 	if (rc) {
@@ -69,9 +79,10 @@ int ios_fh_alloc(struct ios_base *base, struct ionss_file_handle **fhp)
 	return IOS_SUCCESS;
 }
 
-void ios_fh_decref(struct ios_base *base, struct ionss_file_handle *fh,
-		   int count)
+void ios_fh_decref(struct ionss_file_handle *fh, int count)
 {
+	struct ios_projection *projection;
+	struct ios_base *base;
 	uint oldref;
 	int rc;
 
@@ -88,13 +99,44 @@ void ios_fh_decref(struct ios_base *base, struct ionss_file_handle *fh,
 	if (rc != 0)
 		IOF_LOG_ERROR("Failed to close file %d", fh->fd);
 
+	projection = fh->projection;
+	base = projection->base;
+
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
 		IOF_LOG_ERROR("Failed to deallocate GAH %d", rc);
 
 	LIST_REMOVE(fh, list);
 
-	free(fh);
+	if (LIST_EMPTY(&projection->inactive_files))
+		LIST_INSERT_HEAD(&projection->inactive_files, fh, list);
+	else
+		free(fh);
+}
+
+/* Try to ensure that there is at least one pre-allocated file_handle
+ * available on the free list.
+ * Called without the projection lock held.
+ */
+void ios_fh_prealloc(struct ios_projection *projection)
+{
+	struct ionss_file_handle *fh;
+
+	if (!LIST_EMPTY(&projection->inactive_files))
+		return;
+
+	fh = calloc(1, sizeof(*fh));
+	if (!fh) {
+		IOF_LOG_ERROR("Failed to allocate memory");
+		return;
+	}
+
+	fh->projection = projection;
+
+	pthread_mutex_lock(&projection->lock);
+	LIST_INSERT_HEAD(&projection->inactive_files, fh, list);
+	pthread_mutex_unlock(&projection->lock);
+
 }
 
 struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
