@@ -396,6 +396,7 @@ int iof_post_start(void *arg)
 	for (i = 0; i < fs_num; i++) {
 		struct fs_handle *fs_handle;
 		struct fuse_args args = {0};
+		void *argv;
 		char *base_name;
 		char *read_option = NULL;
 
@@ -494,6 +495,7 @@ int iof_post_start(void *arg)
 
 		args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
 		args.argv = calloc(args.argc, sizeof(char *));
+		argv = args.argv;
 		args.argv[0] = (char *)&"";
 		memcpy(&args.argv[2], opts, sizeof(opts));
 
@@ -514,7 +516,7 @@ int iof_post_start(void *arg)
 		}
 
 		free(read_option);
-		free(args.argv);
+		free(argv);
 
 		IOF_LOG_DEBUG("Fuse mount installed at: %s",
 			      fs_handle->mount_point);

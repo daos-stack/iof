@@ -2240,6 +2240,7 @@ int main(int argc, char **argv)
 				IOF_LOG_ERROR("Could not join progress thread %d",
 					      thread);
 		}
+		free(progress_tids);
 	}
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
