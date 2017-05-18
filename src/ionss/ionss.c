@@ -1977,7 +1977,7 @@ void show_help(const char *prog)
 
 int main(int argc, char **argv)
 {
-	char *ionss_grp = "IONSS";
+	char *ionss_grp = IOF_DEFAULT_SET;
 	int i;
 	int ret;
 	unsigned int thread_count = 2;

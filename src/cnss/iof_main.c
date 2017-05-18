@@ -259,11 +259,13 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	char *prefix;
 	int ret;
 	DIR *prefix_dir;
+	struct ctrl_dir *ionss_0_dir = NULL;
+
 
 	/* First check for the IONSS process set, and if it does not exist then
 	 * return cleanly to allow the rest of the CNSS code to run
 	 */
-	ret = crt_group_attach("IONSS", &ionss_group);
+	ret = crt_group_attach(IOF_DEFAULT_SET, &ionss_group);
 	if (ret) {
 		IOF_LOG_INFO("crt_group_attach failed with ret = %d", ret);
 		return ret;
@@ -278,10 +280,27 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->psr_ep.ep_rank = 0;
 	iof_state->psr_ep.ep_tag = 0;
 
-	cb->register_ctrl_constant_uint64(cb->plugin_dir, "psr_rank",
+	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ionss_count", 1);
+	ret = cb->create_ctrl_subdir(cb->plugin_dir, "ionss",
+				     &iof_state->ionss_dir);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create control dir for ionss info"
+			      "(rc = %d)\n", ret);
+		return IOF_ERR_CTRL_FS;
+	}
+
+	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, "0",
+				     &ionss_0_dir);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create control dir for ionss info "
+			      "(rc = %d)\n", ret);
+		return IOF_ERR_CTRL_FS;
+	}
+	cb->register_ctrl_constant_uint64(ionss_0_dir, "psr_rank",
 					  iof_state->psr_ep.ep_rank);
-	cb->register_ctrl_constant_uint64(cb->plugin_dir, "psr_tag",
+	cb->register_ctrl_constant_uint64(ionss_0_dir, "psr_tag",
 					  iof_state->psr_ep.ep_tag);
+	cb->register_ctrl_constant(ionss_0_dir, "name", IOF_DEFAULT_SET);
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
 					  IOF_IOCTL_VERSION);
 

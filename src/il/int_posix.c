@@ -65,7 +65,8 @@ static __thread int saved_errno;
 static vector_t fd_table;
 static const char *cnss_prefix;
 static int cnss_id;
-static crt_group_t *ionss_grp;
+static crt_group_t **ionss_grp;
+static uint32_t ionss_count;
 static crt_context_t context;
 
 #define BLOCK_SIZE 1024
@@ -86,6 +87,7 @@ struct fd_entry {
 	struct ios_gah gah;
 	off_t pos;
 	int flags;
+	uint32_t ionss_id;
 	bool disabled;
 };
 
@@ -139,9 +141,14 @@ int ioil_initialize_fd_table(int max_fds)
 	return rc;
 }
 
+#define BUFSIZE 64
+
 static int attach_to_ionss(void)
 {
+	char buf[CTRL_FS_MAX_LEN];
+	char tmp[BUFSIZE];
 	int rc;
+	int i;
 	uint32_t version;
 
 	rc = ctrl_fs_read_uint32(&version, "iof/ioctl_version");
@@ -162,13 +169,29 @@ static int attach_to_ionss(void)
 		return 1;
 	}
 
-	/* Ok, now try to attach.  Note, this will change when we
-	 * attach to multiple IONSS processes
-	 */
-	rc = crt_group_attach("IONSS", &ionss_grp);
+	rc = ctrl_fs_read_uint32(&ionss_count, "iof/ionss_count");
 	if (rc != 0) {
-		IOF_LOG_INFO("Could not attach to ionss, rc = %d", rc);
+		IOF_LOG_INFO("Could not get ionss count, rc = %d", rc);
 		return 1;
+	}
+
+	ionss_grp = calloc(ionss_count, sizeof(*ionss_grp));
+	for (i = 0; i < ionss_count; i++) {
+		snprintf(tmp, BUFSIZE, "iof/ionss/%d/name", i);
+
+		rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, tmp);
+		if (rc != 0) {
+			IOF_LOG_INFO("Could not get ionss name, rc = %d", rc);
+			return 1;
+		}
+		/* Ok, now try to attach.  Note, this will change when we
+		 * attach to multiple IONSS processes
+		 */
+		rc = crt_group_attach(buf, &ionss_grp[i]);
+		if (rc != 0) {
+			IOF_LOG_INFO("Could not attach to ionss, rc = %d", rc);
+			return 1;
+		}
 	}
 
 	return 0;
@@ -182,7 +205,7 @@ static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
 
 	/* Just get rpc working then work out how to really do this */
 	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
 	fi.dest_ep.ep_rank = entry->gah.base;
 	fi.dest_ep.ep_tag = 0;
 	fi.gah = entry->gah;
@@ -204,7 +227,7 @@ static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 	/* Just get rpc working then work out how to really do this */
 	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
 	fi.dest_ep.ep_rank = entry->gah.base;
 	fi.dest_ep.ep_tag = 0;
 	fi.gah = entry->gah;
@@ -225,7 +248,7 @@ static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
 
 	/* Just get rpc working then work out how to really do this */
 	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
 	fi.dest_ep.ep_rank = entry->gah.base;
 	fi.dest_ep.ep_tag = 0;
 	fi.gah = entry->gah;
@@ -248,7 +271,7 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 	/* Just get rpc working then work out how to really do this */
 	fi.crt_ctx = context;
-	fi.dest_ep.ep_grp = ionss_grp;
+	fi.dest_ep.ep_grp = ionss_grp[entry->ionss_id];
 	fi.dest_ep.ep_rank = entry->gah.base;
 	fi.dest_ep.ep_tag = 0;
 	fi.gah = entry->gah;
@@ -264,6 +287,7 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 static __attribute__((constructor)) void ioil_init(void)
 {
+	char buf[CTRL_FS_MAX_LEN];
 	struct rlimit rlimit;
 	int rc;
 
@@ -285,6 +309,18 @@ static __attribute__((constructor)) void ioil_init(void)
 			      ", disabling interception", rc);
 		return;
 	}
+
+	rc = ctrl_fs_util_init(&cnss_prefix, &cnss_id);
+
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not find CNSS (rc = %d)."
+			      " Disabling interception", rc);
+		return;
+	}
+
+	rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, "crt_protocol");
+	if (rc == 0)
+		setenv("CRT_PHY_ADDR_STR", buf, 1);
 
 	rc = crt_init(NULL, CRT_FLAG_BIT_SINGLETON);
 	if (rc != 0) {
@@ -310,14 +346,6 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = ctrl_fs_util_init(&cnss_prefix, &cnss_id);
-
-	if (rc != 0) {
-		IOF_LOG_ERROR("Could not find CNSS (rc = %d)."
-			      " Disabling interception", rc);
-		return;
-	}
-
 	rc = attach_to_ionss();
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not use IONSS (rc = %d)."
@@ -336,8 +364,12 @@ static __attribute__((constructor)) void ioil_init(void)
 
 static __attribute__((destructor)) void ioil_fini(void)
 {
+	int i;
+
 	if (ioil_initialized) {
-		crt_group_detach(ionss_grp);
+		for (i = 0; i < ionss_count; i++)
+			crt_group_detach(ionss_grp[i]);
+		free(ionss_grp);
 		crt_context_destroy(context, 0);
 		crt_finalize();
 		ctrl_fs_util_finalize();
@@ -377,6 +409,7 @@ static void check_ioctl_on_open(int fd, int flags)
 			return;
 		}
 		entry.gah = gah_info.gah;
+		entry.ionss_id = gah_info.ionss_id;
 		entry.pos = 0;
 		entry.flags = flags;
 		entry.disabled = false;

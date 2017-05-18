@@ -93,6 +93,7 @@ static int log_mask_cb(const char *mask,  void *cb_arg)
 
 int register_cnss_controls(struct cnss_info *cnss_info)
 {
+	char *crt_protocol;
 	int ret;
 	int rc = 0;
 
@@ -126,6 +127,10 @@ int register_cnss_controls(struct cnss_info *cnss_info)
 		rc = ret;
 		ctrl_fs_stop();
 	}
+
+	crt_protocol = getenv("CRT_PHY_ADDR_STR");
+	if (crt_protocol) /* Only register if set */
+		ctrl_register_constant(NULL, "crt_protocol", crt_protocol);
 
 	return rc;
 }

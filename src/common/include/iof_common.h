@@ -63,6 +63,8 @@
 #define QUERY_PSR_OP	(0x201)
 #define DETACH_OP	(0x202)
 
+#define IOF_DEFAULT_SET "IONSS"
+
 /*
  * IOF features are represented by an 8-bit unsigned bit vector
  * \ref iof_fs_info.flags and are used turn various features on or off.

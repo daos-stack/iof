@@ -78,6 +78,7 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		gah_info.version = IOF_IOCTL_VERSION;
 		gah_info.gah = handle->gah;
 		gah_info.cnss_id = getpid();
+		gah_info.ionss_id = 0;
 		gah_info.fs_id = handle->fs_handle->fs_id;
 		memcpy(data, &gah_info, sizeof(gah_info));
 		return 0;

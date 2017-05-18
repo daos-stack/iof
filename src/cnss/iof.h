@@ -87,6 +87,8 @@ struct iof_state {
 	crt_context_t	crt_ctx;
 	/* CNSS Prefix */
 	char		*cnss_prefix;
+	/* There should really be one per ionss */
+	struct ctrl_dir	*ionss_dir;
 	struct ctrl_dir	*projections_dir;
 };
 
