@@ -35,6 +35,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <inttypes.h>
@@ -514,6 +517,7 @@ int cnss_shutdown(void *arg)
 
 int main(void)
 {
+	struct stat buf;
 	char *cnss = "CNSS";
 	char *plugin_file = NULL;
 	const char *prefix;
@@ -559,14 +563,15 @@ int main(void)
 		IOF_LOG_ERROR("Could not start ctrl fs");
 		return CNSS_ERR_CTRL_FS;
 	}
-	free(ctrl_prefix);
 
 	LIST_INIT(&cnss_info->plugins);
 
 	/* Load the build-in iof "plugin" */
 	ret = add_plugin(cnss_info, iof_plugin_init, NULL);
-	if (ret != 0)
-		return CNSS_ERR_PLUGIN;
+	if (ret != 0) {
+		ret = CNSS_ERR_PLUGIN;
+		goto shutdown_ctrl_fs;
+	}
 
 	/* Check to see if an additional plugin file has been requested and
 	 * attempt to load it
@@ -591,8 +596,10 @@ int main(void)
 			     FN_TO_PVOID(fn));
 		if (fn) {
 			ret = add_plugin(cnss_info, fn, dl_handle);
-			if (ret != 0)
-				return CNSS_ERR_PLUGIN;
+			if (ret != 0) {
+				ret = CNSS_ERR_PLUGIN;
+				goto shutdown_ctrl_fs;
+			}
 		}
 	}
 
@@ -613,7 +620,8 @@ int main(void)
 	ret = crt_init(cnss, service_process_set);
 	if (ret) {
 		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
-		return CNSS_ERR_CART;
+		ret = CNSS_ERR_CART;
+		goto shutdown_ctrl_fs;
 	}
 
 	if (service_process_set) {
@@ -623,8 +631,8 @@ int main(void)
 		ret = crt_group_config_save(NULL);
 		if (ret != 0) {
 			IOF_LOG_ERROR("Could not save attach info for CNSS");
-
-			return CNSS_ERR_CART;
+			ret = CNSS_ERR_CART;
+			goto shutdown_ctrl_fs;
 		}
 	}
 
@@ -651,8 +659,8 @@ int main(void)
 	/* TODO: How to handle this case? */
 	if (!active_plugins) {
 		IOF_LOG_ERROR("No active plugins");
-		ctrl_fs_stop();
-		return 1;
+		ret = 1;
+		goto shutdown_ctrl_fs;
 	}
 
 	launch_fs(cnss_info);
@@ -678,7 +686,17 @@ int main(void)
 		free(entry);
 	}
 
+	free(ctrl_prefix);
 	iof_log_close();
 	free(cnss_info);
+	return ret;
+
+shutdown_ctrl_fs:
+	ctrl_fs_stop();
+	/* Need to trigger an operation on ctrl fs to actually shutdown */
+	stat(ctrl_prefix, &buf);
+	ctrl_fs_wait();
+	free(ctrl_prefix);
+
 	return ret;
 }
