@@ -65,6 +65,7 @@ import iofcommontestsuite
 import common_methods
 
 
+#pylint: disable=too-many-instance-attributes
 class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     """Local test"""
 
@@ -73,6 +74,9 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     export_dir = None
     shutdown_file = None
     e_dir = None
+    log_mask = ""
+    crt_phy_addr = ""
+    ofi_interface = ""
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -121,15 +125,15 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         log_path = os.path.join(log_path, self.logdir_name())
 
-        log_mask = os.getenv("CRT_LOG_MASK", "INFO")
-        crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
-        ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
+        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO")
+        self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
+        self.ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
 
         valgrind = iofcommontestsuite.valgrind_suffix(log_path)
         ionss_args = ['ionss']
         if len(valgrind):
             #ionss_args.append('--poll-interval=1')
-            log_mask = "DEBUG,MEM=ERR"
+            self.log_mask = "DEBUG,MEM=ERR"
 
         cmd = [orterun,
                '--output-filename', log_path]
@@ -137,17 +141,17 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
         cmd.extend(['-n', '1',
-                    '-x', 'CRT_LOG_MASK=%s' % log_mask,
-                    '-x', 'CRT_PHY_ADDR_STR=%s' % crt_phy_addr,
-                    '-x', 'OFI_INTERFACE=%s' % ofi_interface,
+                    '-x', 'CRT_LOG_MASK=%s' % self.log_mask,
+                    '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
+                    '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'CNSS_PREFIX=%s' % self.import_dir])
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
                     '-n', '1',
-                    '-x', 'CRT_PHY_ADDR_STR=%s' % crt_phy_addr,
-                    '-x', 'OFI_INTERFACE=%s' % ofi_interface,
-                    '-x', 'CRT_LOG_MASK=%s' % log_mask])
+                    '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
+                    '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
+                    '-x', 'CRT_LOG_MASK=%s' % self.log_mask])
         cmd.extend(valgrind)
         cmd.extend(ionss_args)
         cmd.extend([self.export_dir, '/usr'])
@@ -436,6 +440,11 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             test_path = os.path.join(dirname, '..', 'install', os.uname()[0],
                                      'TESTING', 'tests')
 
+        environ = os.environ
+        environ['CNSS_PREFIX'] = self.import_dir
+        environ['CRT_LOG_MASK'] = self.log_mask
+        environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
+        environ['OFI_INTERFACE'] = self.ofi_interface
         for tname in ['s_test_ioil', 'lf_s_test_ioil']:
             testname = os.path.join(test_path, tname)
             if not os.path.exists(testname):
@@ -443,9 +452,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
             self.logger.info("libioil test - input string:\n %s\n", testname)
             # set this to match value used by this job
-            os.environ["CNSS_PREFIX"] = self.import_dir
-            procrtn = subprocess.call([testname, self.import_dir], timeout=180)
-            os.environ.pop("CNSS_PREFIX")
+            procrtn = subprocess.call([testname, self.import_dir], timeout=180,
+                                      env=environ)
 
             if procrtn != 0:
                 self.fail("IO interception test failed: %s" % procrtn)
