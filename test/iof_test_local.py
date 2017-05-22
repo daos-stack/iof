@@ -443,6 +443,22 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
     def test_ioil(self):
         """Run the interception library test"""
+        # Check the value of il_ioctl before execution
+        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
+                                 'projections', '0', 'stats')
+
+        if not os.path.exists(stats_dir):
+            self.fail("Stats dir missing.")
+
+        if not os.path.isfile(os.path.join(stats_dir, 'il_ioctl')):
+            self.fail("il_ioctl missing in stats.")
+        else:
+            stat_file = os.path.join(stats_dir, 'il_ioctl')
+            f = open(stat_file, 'r')
+            data = f.read()
+            f.close()
+            initial_il_ioctl = data.rstrip("\n")
+            self.logger.info("initial il_ioctl: %s", initial_il_ioctl)
 
         dirname = os.path.dirname(os.path.realpath(__file__))
         test_path = os.path.join(dirname, '..', 'tests')
@@ -468,6 +484,18 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
             if procrtn != 0:
                 self.fail("IO interception test failed: %s" % procrtn)
+
+        # Check the value of il_ioctl after execution
+        f = open(stat_file, 'r')
+        data = f.read()
+        f.close()
+        final_il_ioctl = data.rstrip("\n")
+        self.logger.info("Final il_ioctl: %s", final_il_ioctl)
+        # Compare il_ioctl value after the test run with initial value or
+        # if il_ioctl value is less than 12 (expected value is atleast 12)
+        if final_il_ioctl <= initial_il_ioctl or int(final_il_ioctl) < 12:
+            self.fail("IO interception library failed to attach," + \
+                " il_ioctl: %s" % final_il_ioctl)
 
     @unittest.skip("Fails on FUSE2")
     def test_file_read_rename(self):
