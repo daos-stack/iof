@@ -35,6 +35,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#include <pthread.h>
 #include <stdio.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -45,6 +46,7 @@
 #include <errno.h>
 #include <libgen.h>
 #define DEF_LOG_FAC log_handle
+#include "iof_atomic.h"
 #include "log.h"
 #include "iof_mntent.h"
 #include "ctrl_fs_util.h"
@@ -53,6 +55,9 @@ static char *cnss_prefix;
 static int ctrl_fd = -1;
 static int cnss_id = -1;
 static int log_handle;
+static ATOMIC int init_count;
+static int init_rc;
+static pthread_once_t initialize_flag = PTHREAD_ONCE_INIT;
 
 static int open_for_read(int *fd, const char *path)
 {
@@ -293,17 +298,11 @@ cleanup:
 	return rc;
 }
 
-int ctrl_fs_util_init(const char **prefix, int *id)
+static void init_fs_util(void)
 {
 	char *cnss_env;
 
-	if (prefix == NULL || id == NULL)
-		return -CTRL_FS_INVALID_ARG;
-
 	iof_log_init("CLI", "CLIENT", &log_handle);
-
-	*prefix = NULL;
-	*id = -1;
 
 	cnss_env = getenv("CNSS_PREFIX");
 
@@ -316,8 +315,34 @@ int ctrl_fs_util_init(const char **prefix, int *id)
 		else
 			IOF_LOG_ERROR("Could not detect active CNSS");
 
-		return -CTRL_FS_NOT_FOUND;
+		init_rc = -CTRL_FS_NOT_FOUND;
+		return;
+		/* If multiple users call init, we need to ensure
+		 * we only initialize once
+		 */
 	}
+
+	init_rc = 0;
+}
+
+int ctrl_fs_util_init(const char **prefix, int *id)
+{
+	if (prefix == NULL || id == NULL)
+		return -CTRL_FS_INVALID_ARG;
+
+	/* If multiple users call init, we need to ensure
+	 * we only initialize once but keep track of callers
+	 * so we also only finalize once
+	 */
+	atomic_inc(&init_count);
+
+	pthread_once(&initialize_flag, init_fs_util);
+
+	*prefix = NULL;
+	*id = -1;
+
+	if (init_rc != 0)
+		return init_rc;
 
 	*prefix = cnss_prefix;
 	*id = cnss_id;
@@ -327,10 +352,18 @@ int ctrl_fs_util_init(const char **prefix, int *id)
 
 int ctrl_fs_util_finalize(void)
 {
+	int count;
+
+	count = atomic_fetch_sub(&init_count, 1);
+	if (count != 1)
+		return 0;
+
 	if (cnss_prefix != NULL) {
 		free(cnss_prefix);
 		close(ctrl_fd);
 	}
+	ctrl_fd = -1;
+	cnss_prefix = NULL;
 
 	iof_log_close();
 	return 0;

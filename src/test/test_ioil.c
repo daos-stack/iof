@@ -48,65 +48,54 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <CUnit/Basic.h>
+#include "ctrl_fs_util.h"
 #include "iof_ioctl.h"
-
-#define BUF_SIZE 4096
 
 static const char *cnss_prefix;
 static char *mount_dir;
 
+#define BUF_SIZE 4096
+
 static int init_suite(void)
 {
-	char buf[BUF_SIZE];
-	char *pos;
+	char buf1[CTRL_FS_MAX_LEN];
+	char buf2[CTRL_FS_MAX_LEN];
 	FILE *fp;
-	ssize_t last;
 	int mnt_num = 0;
 	int rc = CUE_SUCCESS;
+	int id;
+
+	rc = ctrl_fs_util_init(&cnss_prefix, &id);
+	if (rc != 0) {
+		printf("ERROR: Could not find cnss\n");
+		return -1;
+	}
 
 	for (;;) {
-		snprintf(buf, BUF_SIZE,
-			 "%s/.ctrl/iof/projections/%d/mount_point",
-			 cnss_prefix, mnt_num++);
-		buf[BUF_SIZE - 1] = 0;
+		sprintf(buf1, "iof/projections/%d/mount_point", mnt_num++);
+		rc = ctrl_fs_read_str(buf2, CTRL_FS_MAX_LEN, buf1);
 
-		fp = fopen(buf, "r");
-		if (fp == NULL) {
+		if (rc != 0) {
 			printf("ERROR: No writeable mount found\n");
-			rc = CUE_FOPEN_FAILED;
-			goto cleanup;
+			return CUE_FOPEN_FAILED;
 		}
-		fread(buf, BUF_SIZE, 1, fp);
-		last = ftell(fp);
-		fclose(fp);
 
-		buf[last] = 0;
-		pos = strchr(buf, '\n');
-		if (pos != NULL)
-			last = (uintptr_t)pos - (uintptr_t)buf;
-		else
-			pos = buf + last;
-		last += snprintf(pos, BUF_SIZE - last, "/ioil_test_file");
-
-		fp = fopen(buf, "w");
+		sprintf(buf1, "%s/ioil_test_file", buf2);
+		fp = fopen(buf1, "w");
 		if (fp == NULL) {
 			printf("Skipping PA mount.  Can't write %s\n",
-			       buf);
+			       buf1);
 			continue;
 		}
 
 		fclose(fp);
 
-		*pos = 0;
-
-		mount_dir = strdup(buf);
+		mount_dir = strdup(buf2);
 		if (mount_dir == NULL)
 			rc = CUE_NOMEMORY;
 
 		break;
 	}
-
-cleanup:
 
 	return rc;
 }
@@ -114,6 +103,8 @@ cleanup:
 static int clean_suite(void)
 {
 	free(mount_dir);
+
+	ctrl_fs_util_finalize();
 
 	return CUE_SUCCESS;
 }
@@ -402,13 +393,6 @@ int main(int argc, char **argv)
 {
 	int failures;
 	CU_pSuite pSuite = NULL;
-
-	if (argc != 2) {
-		printf("Usage: %s <cnss_prefix>\n", argv[0]);
-		return 1;
-	}
-
-	cnss_prefix = argv[1];
 
 	if (CU_initialize_registry() != CUE_SUCCESS) {
 		printf("CU_initialize_registry() failed\n");

@@ -466,7 +466,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
             self.logger.info("libioil test - input string:\n %s\n", testname)
             # set this to match value used by this job
-            procrtn = subprocess.call([testname, self.import_dir], timeout=180,
+            procrtn = subprocess.call([testname], timeout=180,
                                       env=environ)
 
             if procrtn != 0:
