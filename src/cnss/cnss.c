@@ -51,7 +51,6 @@
 #include <fuse/fuse_lowlevel.h>
 #endif
 #include <sys/xattr.h>
-#include <sys/queue.h>
 #include <crt_api.h>
 #include <crt_util/common.h>
 
@@ -61,8 +60,7 @@
 #include "iof.h"
 #include "ctrl_common.h"
 
-/* struct cnss_plugin_list is a list of plugin_entries */
-LIST_HEAD(cnss_plugin_list, plugin_entry);
+#include "cnss.h"
 
 /* struct fs_list is a list of fs_infos */
 LIST_HEAD(fs_list, fs_info);
@@ -89,11 +87,6 @@ struct plugin_entry {
 	struct cnss_plugin_cb self_fns;
 
 	struct fs_list fuse_list;
-};
-
-struct cnss_info {
-	struct cnss_plugin_list plugins;
-
 };
 
 struct fs_info {
@@ -308,6 +301,30 @@ static void iof_fuse_umount(struct fs_info *info)
 #endif
 }
 
+static void *loop_fn(void *args)
+{
+	int ret;
+	struct fs_info *info = (struct fs_info *)args;
+
+	pthread_mutex_lock(&info->lock);
+	info->running = 1;
+	pthread_mutex_unlock(&info->lock);
+
+	/*Blocking*/
+	ret = fuse_loop(info->fuse);
+
+	if (ret != 0)
+		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
+
+	pthread_mutex_lock(&info->lock);
+	iof_fuse_umount(info);
+	fuse_destroy(info->fuse);
+	info->fuse = NULL;
+	info->running = 0;
+	pthread_mutex_unlock(&info->lock);
+	return NULL;
+}
+
 /*
  * Creates a fuse filesystem for any plugin that needs one.
  *
@@ -323,6 +340,7 @@ static int register_fuse(void *arg,
 {
 	struct plugin_entry *plugin = (struct plugin_entry *)arg;
 	struct fs_info *info;
+	int rc;
 
 	if (!mnt) {
 		IOF_LOG_ERROR("Invalid Mount point");
@@ -392,6 +410,15 @@ static int register_fuse(void *arg,
 
 	fuse_opt_free_args(args);
 
+	rc = pthread_create(&info->thread, NULL,
+			    loop_fn, info);
+	if (rc) {
+		IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
+			      info->mnt);
+		iof_fuse_umount(info);
+		goto cleanup;
+	}
+
 	LIST_INSERT_HEAD(&plugin->fuse_list, info, entries);
 
 	return 0;
@@ -443,53 +470,6 @@ static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		plugin->fns->deregister_fuse(info->private_data);
 	free(info);
 	return CNSS_SUCCESS;
-}
-
-static void *loop_fn(void *args)
-{
-	int ret;
-	struct fs_info *info = (struct fs_info *)args;
-
-	pthread_mutex_lock(&info->lock);
-	info->running = 1;
-	pthread_mutex_unlock(&info->lock);
-
-	/*Blocking*/
-	ret = fuse_loop(info->fuse);
-
-	if (ret != 0)
-		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
-
-	pthread_mutex_lock(&info->lock);
-	iof_fuse_umount(info);
-	fuse_destroy(info->fuse);
-	info->fuse = NULL;
-	info->running = 0;
-	pthread_mutex_unlock(&info->lock);
-	return NULL;
-}
-
-static void launch_fs(struct cnss_info *cnss_info)
-{
-	struct plugin_entry *plugin;
-	struct fs_info *info;
-	int rc;
-
-	LIST_FOREACH(plugin, &cnss_info->plugins, list) {
-		LIST_FOREACH(info, &plugin->fuse_list, entries) {
-			IOF_LOG_INFO("Starting a FUSE filesystem at %s",
-				     info->mnt);
-			rc = pthread_create(&info->thread, NULL,
-					    loop_fn, info);
-			if (rc) {
-				IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
-					      info->mnt);
-				iof_fuse_umount(info);
-				fuse_destroy(info->fuse);
-				return;
-			}
-		}
-	}
 }
 
 void shutdown_fs(struct cnss_info *cnss_info)
@@ -563,6 +543,8 @@ int main(void)
 		IOF_LOG_ERROR("Could not start ctrl fs");
 		return CNSS_ERR_CTRL_FS;
 	}
+
+	register_cnss_controls(cnss_info);
 
 	LIST_INIT(&cnss_info->plugins);
 
@@ -663,8 +645,8 @@ int main(void)
 		goto shutdown_ctrl_fs;
 	}
 
-	launch_fs(cnss_info);
-	register_cnss_controls(1, cnss_info);
+	cnss_info->active = 1;
+
 	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
 
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush);

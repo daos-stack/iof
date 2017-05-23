@@ -491,6 +491,8 @@ int iof_post_start(void *arg)
 
 		IOF_LOG_INFO("Filesystem ID %d", fs_handle->fs_id);
 
+		fs_handle->dest_ep = iof_state->psr_ep;
+		fs_handle->crt_ctx = iof_state->crt_ctx;
 		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
 
 		args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
@@ -520,13 +522,12 @@ int iof_post_start(void *arg)
 
 		IOF_LOG_DEBUG("Fuse mount installed at: %s",
 			      fs_handle->mount_point);
-		fs_handle->dest_ep = iof_state->psr_ep;
-		fs_handle->crt_ctx = iof_state->crt_ctx;
 	}
 
 	ret = crt_req_decref(query_rpc);
 	if (ret)
 		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
+
 	return ret;
 }
 

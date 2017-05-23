@@ -73,6 +73,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     import_dir = None
     export_dir = None
     shutdown_file = None
+    active_file = None
     e_dir = None
     log_mask = ""
     crt_phy_addr = ""
@@ -80,7 +81,19 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
     def is_running(self):
         """Check if the cnss is running"""
-        return os.path.exists(self.shutdown_file)
+
+        data = "0"
+
+        try:
+            fd = open(self.active_file, 'r')
+            data = fd.read()
+            fd.close()
+        except FileNotFoundError:
+            return False
+
+        if data.rstrip() == '1':
+            return True
+        return False
 
     def setUp(self):
         """set up the test"""
@@ -101,6 +114,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         self.base_dir = os.path.join(self.import_dir, 'exp')
         common_methods.CTRL_DIR = os.path.join(self.import_dir, '.ctrl')
         self.shutdown_file = os.path.join(common_methods.CTRL_DIR, 'shutdown')
+        self.active_file = os.path.join(common_methods.CTRL_DIR, 'active')
         self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
                                       dir=export_tmp_dir)
 

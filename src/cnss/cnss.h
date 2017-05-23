@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,97 +35,20 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include <inttypes.h>
-#include <string.h>
-#include <crt_util/clog.h>
-#include "ctrl_common.h"
+#ifndef __CNSS_H__
+#define __CNSS_H__
 
-static int iof_uint_read(char *buf, size_t buflen, void *arg)
-{
-	uint *value = (uint *)arg;
+#include <sys/queue.h>
 
-	snprintf(buf, buflen, "%u", *value);
-	return 0;
-}
+#include "log.h"
+#include "ctrl_fs.h"
 
-static int shutdown_cb(void *arg)
-{
-	IOF_LOG_INFO("Stopping ctrl fs");
-	ctrl_fs_stop();
+/* struct cnss_plugin_list is a list of plugin_entries */
+LIST_HEAD(cnss_plugin_list, plugin_entry);
 
-	IOF_LOG_INFO("Invoking client shutdown");
+struct cnss_info {
+	struct cnss_plugin_list plugins;
+	int			active;
+};
 
-	return cnss_shutdown(arg);
-}
-
-#define MAX_MASK_LEN 256
-static int log_mask_cb(const char *mask,  void *cb_arg)
-{
-	char newmask[MAX_MASK_LEN];
-	char *pos;
-	size_t len;
-
-	if (strcmp(mask, "\n") == 0 || strlen(mask) == 0) {
-		IOF_LOG_INFO("No log mask specified, resetting to ERR");
-		strcpy(newmask, "ERR");
-	} else {
-		/* strip '\n' */
-		pos = strchr(mask, '\n');
-		if (pos != NULL)
-			len = ((uintptr_t)pos - (uintptr_t)mask);
-		else
-			len = strlen(mask);
-
-		if (len > MAX_MASK_LEN - 1)
-			len = MAX_MASK_LEN - 1;
-
-		strncpy(newmask, mask, len);
-		newmask[len] = 0;
-
-		IOF_LOG_INFO("Setting log mask to %s", newmask);
-	}
-
-	crt_log_setmasks(newmask, strlen(newmask));
-
-	return 0;
-}
-
-
-int register_cnss_controls(struct cnss_info *cnss_info)
-{
-	int ret;
-	int rc = 0;
-
-	ctrl_register_variable(NULL, "active",
-			       iof_uint_read,
-			       NULL, NULL,
-			       &cnss_info->active);
-
-	ret = ctrl_register_event(NULL, "shutdown",
-				  shutdown_cb /* trigger_cb */,
-				  NULL /* destroy_cb */, (void *)cnss_info);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register shutdown ctrl");
-		rc = ret;
-		ctrl_fs_stop();
-	}
-
-	ret = ctrl_register_variable(NULL, "log_mask",
-				  NULL /* read_cb */,
-				  log_mask_cb /* write_cb */,
-				  NULL /* destroy_cb */, NULL);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register log_mask ctrl");
-		rc = ret;
-		ctrl_fs_stop();
-	}
-
-	ret = ctrl_register_constant_int64(NULL, "cnss_id", getpid());
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register cnss_id");
-		rc = ret;
-		ctrl_fs_stop();
-	}
-
-	return rc;
-}
+#endif /* __CNSS_H__ */

@@ -313,7 +313,7 @@ int main(int argc, char **argv)
 
 	ctrl_fs_start(buf);
 
-	register_cnss_controls(3, NULL);
+	register_cnss_controls(NULL);
 
 	ctrl_create_subdir(NULL, "class", &class_dir);
 	ctrl_create_subdir(class_dir, "bar", &bar_dir);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016 Intel Corporation
+/* Copyright (C) 2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 
 #include "log.h"
 #include "ctrl_fs.h"
+#include "cnss.h"
 
 /* The function registered with the /shutdown event */
 int cnss_shutdown(void *arg);
@@ -48,6 +49,6 @@ int cnss_client_attach(int client_id, void *arg);
 /* The close function registered with the /client counter */
 int cnss_client_detach(int client_id, void *arg);
 /* A function to register the /shutdown and /client controls */
-int register_cnss_controls(int count_start, void *arg);
+int register_cnss_controls(struct cnss_info *cnss_info);
 
 #endif /* __CTRL_COMMON_H__ */

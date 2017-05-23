@@ -47,6 +47,7 @@ class CheckIof():
     def __init__(self, cnss_prefix):
         self.start_dir = cnss_prefix
         self.ctrl_dir = os.path.join(self.start_dir, ".ctrl")
+        self.active_file = os.path.join(self.ctrl_dir, "active")
 
     def iof_fs_test(self):
         """Test private access mount points"""
@@ -61,18 +62,32 @@ class CheckIof():
             print(stat_obj)
         return True
 
+    def is_running(self):
+        """Check if the cnss is running"""
+
+        data = "0"
+
+        try:
+            fd = open(self.active_file, 'r')
+            data = fd.read()
+            fd.close()
+        except FileNotFoundError:
+            return False
+
+        if data.rstrip() == '1':
+            return True
+        return False
+
     def iofstarted(self):
         """Wait for ctrl fs to start"""
         if not os.path.isdir(self.start_dir):
             print("prefix is not a directory %s" % self.start_dir)
             return False
-        filename = os.path.join(self.ctrl_dir, 'shutdown')
         i = 30
         while i > 0:
             i = i - 1
             time.sleep(1)
-            if os.path.exists(filename) is True:
-                print(os.stat(filename))
+            if self.is_running():
                 return True
         print("Unable to detect filesystem")
         return False
