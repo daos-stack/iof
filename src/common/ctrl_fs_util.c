@@ -36,6 +36,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdio.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
@@ -49,7 +50,6 @@
 #include "ctrl_fs_util.h"
 
 static char *cnss_prefix;
-static const char *cnss_env;
 static int ctrl_fd = -1;
 static int cnss_id = -1;
 static int log_handle;
@@ -221,6 +221,7 @@ static int check_mnt(struct mntent *entry, void *priv)
 	char *p;
 	int rc;
 	int saved_ctrl_fd;
+	const char *cnss_env = (const char *)priv;
 
 	p = strstr(entry->mnt_dir, "/.ctrl");
 	if (p == NULL || strcmp(entry->mnt_type, "fuse.ctrl") ||
@@ -228,35 +229,18 @@ static int check_mnt(struct mntent *entry, void *priv)
 		return 0;
 
 	IOF_LOG_INFO("Checking possible CNSS: ctrl dir at %s", entry->mnt_dir);
-
-	saved_ctrl_fd = ctrl_fd;
-
-	ctrl_fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
-	if (ctrl_fd == -1) {
-		IOF_LOG_ERROR("Could not open %s to find CNSS",
-			      entry->mnt_dir);
-		ctrl_fd = saved_ctrl_fd;
-		return 0;
-	}
-
-	rc = ctrl_fs_read_int32(&cnss_id, "cnss_id");
-	if (rc != 0) {
-		IOF_LOG_ERROR("Could not read cnss id: rc = %d, errno = %s",
-			      rc, strerror(errno));
-		goto restore_ctrl_fd;
-	}
-
 	dir = strdup(entry->mnt_dir);
 	if (dir == NULL) {
 		IOF_LOG_ERROR("Insufficient memory to find CNSS");
-		goto restore_ctrl_fd;
+		return 0;
 	}
 
 	cnss_dir = strdup(dirname(dir));
 	if (cnss_dir == NULL) {
 		IOF_LOG_ERROR("Insufficient memory to find CNSS");
 		free(dir);
-		goto restore_ctrl_fd;
+		free(cnss_dir);
+		return 0;
 	}
 
 	free(dir);
@@ -264,7 +248,25 @@ static int check_mnt(struct mntent *entry, void *priv)
 	if (cnss_env != NULL && strcmp(cnss_dir, cnss_env)) {
 		IOF_LOG_INFO("Skipping CNSS: CNSS_PREFIX doesn't match");
 		free(cnss_dir);
-		goto restore_ctrl_fd;
+		return 0;
+	}
+
+	saved_ctrl_fd = ctrl_fd;
+
+	ctrl_fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
+	if (ctrl_fd == -1) {
+		IOF_LOG_ERROR("Could not open %s to find CNSS",
+			      entry->mnt_dir);
+		rc = 0;
+		goto cleanup;
+	}
+
+	rc = ctrl_fs_read_int32(&cnss_id, "cnss_id");
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not read cnss id: rc = %d, errno = %s",
+			      rc, strerror(errno));
+		rc = 0;
+		goto cleanup;
 	}
 
 	if (cnss_prefix != NULL) {
@@ -276,20 +278,25 @@ static int check_mnt(struct mntent *entry, void *priv)
 
 	return 0;
 handle_error:
-	free(cnss_dir);
+	rc = 1; /* No need to keep searching */
 	if (cnss_prefix != NULL &&  cnss_dir != cnss_prefix) {
 		free(cnss_prefix);
 		cnss_prefix = NULL;
 	}
-restore_ctrl_fd:
-	close(ctrl_fd);
+cleanup:
+	if (cnss_dir != NULL)
+		free(cnss_dir);
+	if (ctrl_fd != -1)
+		close(ctrl_fd);
 	ctrl_fd = saved_ctrl_fd;
 
-	return 0;
+	return rc;
 }
 
 int ctrl_fs_util_init(const char **prefix, int *id)
 {
+	char *cnss_env;
+
 	if (prefix == NULL || id == NULL)
 		return -CTRL_FS_INVALID_ARG;
 
@@ -297,9 +304,10 @@ int ctrl_fs_util_init(const char **prefix, int *id)
 
 	*prefix = NULL;
 	*id = -1;
+
 	cnss_env = getenv("CNSS_PREFIX");
 
-	iof_mntent_foreach(check_mnt, NULL);
+	iof_mntent_foreach(check_mnt, cnss_env);
 
 	if (cnss_prefix == NULL) {
 		if (cnss_env != NULL)
