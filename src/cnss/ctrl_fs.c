@@ -1012,26 +1012,6 @@ static int ctrl_read(const char *fname,
 	return len;
 }
 
-static int ctrl_mknod(const char *path,
-		      mode_t mode,
-		      dev_t rdev)
-{
-	struct ctrl_node *node;
-	int rc;
-
-	if (!ctrl_fs.started)
-		return 0;
-
-	IOF_LOG_INFO("ctrl fs mknod called for %s", path);
-
-	rc = find_path_node(path, &node);
-
-	if (rc != 0 || node == NULL || node->initialized == 0)
-		return -ENOENT;
-
-	return 0;
-}
-
 static int ctrl_write(const char *fname,
 		      const char *buf,
 		      size_t len,
@@ -1199,7 +1179,6 @@ static struct fuse_operations fuse_ops = {
 	.read = ctrl_read,
 	.write = ctrl_write,
 	.release = ctrl_release,
-	.mknod = ctrl_mknod,
 	.readdir = ctrl_readdir,
 };
 
