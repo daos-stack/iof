@@ -38,12 +38,12 @@
 #ifndef __CTRL_COMMON_H__
 #define __CTRL_COMMON_H__
 
+#include <errno.h>
+
 #include "log.h"
 #include "ctrl_fs.h"
 #include "cnss.h"
 
-/* The function registered with the /shutdown event */
-int cnss_shutdown(void *arg);
 /* The open function registered with the /client counter */
 int cnss_client_attach(int client_id, void *arg);
 /* The close function registered with the /client counter */

@@ -49,6 +49,7 @@ LIST_HEAD(cnss_plugin_list, plugin_entry);
 struct cnss_info {
 	struct cnss_plugin_list plugins;
 	int			active;
+	int			shutting_down;
 };
 
 #endif /* __CNSS_H__ */

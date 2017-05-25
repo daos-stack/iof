@@ -145,6 +145,12 @@ struct ctrl_fs_data {
 	bool started;
 };
 
+struct value_data {
+	ctrl_fs_uint64_read_cb_t read;
+	ctrl_fs_uint64_write_cb_t write;
+	void *arg;
+};
+
 static pthread_once_t once_init = PTHREAD_ONCE_INIT;
 static struct ctrl_fs_data ctrl_fs;
 
@@ -727,6 +733,65 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 	return rc;
 }
 
+static int ctrl_uint64_read(char *buf, size_t buflen, void *arg)
+{
+	struct value_data *data = (struct value_data *)arg;
+	uint64_t value = data->read(data->arg);
+
+	snprintf(buf, buflen, "%lu", value);
+	return 0;
+}
+
+static int ctrl_uint64_write(const char *str, void *arg)
+{
+	struct value_data *data = (struct value_data *)arg;
+	uint64_t value = 0;
+	int rc;
+
+	rc = sscanf(str, "%lu", &value);
+	if (rc != 1)
+		return EINVAL;
+
+	rc = data->write(value, data->arg);
+
+	if (rc)
+		return rc;
+
+	return 0;
+}
+
+static int ctrl_uint64_destroy(void *arg)
+{
+	free(arg);
+	return 0;
+}
+
+int ctrl_register_uint64_variable(struct ctrl_dir *dir,
+				  const char *name,
+				  ctrl_fs_uint64_read_cb_t read_cb,
+				  ctrl_fs_uint64_write_cb_t write_cb,
+				  void *cb_arg)
+{
+	struct value_data *data = calloc(1, sizeof(*data));
+	int rc;
+
+	if (!data)
+		return -ENOMEM;
+
+	data->read = read_cb;
+	data->write = write_cb;
+	data->arg = cb_arg;
+
+	rc = ctrl_register_variable(dir, name,
+				    ctrl_uint64_read,
+				    write_cb ? ctrl_uint64_write : NULL,
+				    ctrl_uint64_destroy,
+				    data);
+	if (rc)
+		free(data);
+	return rc;
+}
+
 static void *ctrl_thread_func(void *arg)
 {
 	int rc;
@@ -1062,7 +1127,7 @@ static int ctrl_write(const char *fname,
 			rc = write_cb(mybuf, cb_arg);
 			if (rc != 0) {
 				IOF_LOG_ERROR("Error writing ctrl variable");
-				return -ENOENT;
+				return -rc;
 			}
 		}
 	}

@@ -82,6 +82,9 @@ typedef int (*ctrl_fs_destroy_cb_t)(void *cb_arg);
  */
 typedef int (*ctrl_fs_trigger_cb_t)(void *cb_arg);
 
+typedef uint64_t (*ctrl_fs_uint64_read_cb_t)(void *cb_arg);
+typedef int (*ctrl_fs_uint64_write_cb_t)(uint64_t value, void *cb_arg);
+
 /* Function lookup table provided by CNSS to plugin */
 struct cnss_plugin_cb {
 	void *handle;
@@ -140,6 +143,14 @@ struct cnss_plugin_cb {
 	int (*register_ctrl_constant_uint64)(struct ctrl_dir *dir,
 					     const char *name, uint64_t value);
 
+	/* Wraps register_ctrl_variable for convenience of registering a file
+	 * which can read and return integer values
+	 */
+	int (*register_ctrl_uint64_variable)(struct ctrl_dir *dir,
+					     const char *name,
+					     ctrl_fs_uint64_read_cb_t read_cb,
+					     ctrl_fs_uint64_write_cb_t write_cb,
+					     void *cb_arg);
 	/* CPPR needs to be able to access the "global file system" so needs
 	 * to enumerate over projection to be able to pick a destination and
 	 * then access the struct fs_ops structure to be able to write to it
@@ -189,7 +200,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f008
+#define CNSS_PLUGIN_VERSION 0x10f009
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

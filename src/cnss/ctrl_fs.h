@@ -121,6 +121,12 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 			  ctrl_fs_close_cb_t close_cb,
 			  ctrl_fs_destroy_cb_t destroy_cb, void *cb_arg);
 
+int ctrl_register_uint64_variable(struct ctrl_dir *dir,
+				  const char *name,
+				  ctrl_fs_uint64_read_cb_t read_cb,
+				  ctrl_fs_uint64_write_cb_t write_cb,
+				  void *cb_arg);
+
 #if defined(__cplusplus)
 extern "C" }
 #endif

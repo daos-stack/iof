@@ -48,14 +48,43 @@ static int iof_uint_read(char *buf, size_t buflen, void *arg)
 	return 0;
 }
 
-static int shutdown_cb(void *arg)
+static uint64_t shutdown_read_cb(void *arg)
 {
-	IOF_LOG_INFO("Stopping ctrl fs");
-	ctrl_fs_stop();
+	struct cnss_info *cnss_info = (struct cnss_info *)arg;
 
-	IOF_LOG_INFO("Invoking client shutdown");
+	if (!cnss_info)
+		return 0;
 
-	return cnss_shutdown(arg);
+	return cnss_info->shutting_down;
+}
+
+static int shutdown_write_cb(uint64_t value, void *arg)
+{
+	struct cnss_info *cnss_info = (struct cnss_info *)arg;
+
+	if (value > 1)
+		return EINVAL;
+
+	/* This should only happen from when invoked from utest code */
+	if (!cnss_info) {
+		IOF_LOG_INFO("Stopping ctrl fs");
+		ctrl_fs_stop();
+		return 0;
+	}
+
+	/* If a shutdown has already been triggered then reject future
+	 * requests
+	 */
+	if (cnss_info->shutting_down && value != 1)
+		return EINVAL;
+
+	if (!cnss_info->shutting_down && value == 1) {
+		cnss_info->shutting_down = 1;
+		IOF_LOG_INFO("Stopping ctrl fs");
+		ctrl_fs_stop();
+	}
+
+	return 0;
 }
 
 #define MAX_MASK_LEN 256
@@ -102,9 +131,10 @@ int register_cnss_controls(struct cnss_info *cnss_info)
 			       NULL, NULL,
 			       &cnss_info->active);
 
-	ret = ctrl_register_event(NULL, "shutdown",
-				  shutdown_cb /* trigger_cb */,
-				  NULL /* destroy_cb */, (void *)cnss_info);
+	ret = ctrl_register_uint64_variable(NULL, "shutdown",
+					    shutdown_read_cb,
+					    shutdown_write_cb,
+					    (void *)cnss_info);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not register shutdown ctrl");
 		rc = ret;

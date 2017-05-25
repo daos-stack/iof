@@ -209,10 +209,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if self.is_running():
             f = open(self.shutdown_file, 'w')
             f.write('1')
-            try:
-                f.close()
-            except OSError:
-                pass
+            f.close()
 
         procrtn = 0
         # Now try to kill the orterun process

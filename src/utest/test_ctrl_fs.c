@@ -50,12 +50,6 @@
 #include "ctrl_common.h"
 #include "ctrl_fs_util_test.h"
 
-int cnss_shutdown(void *arg)
-{
-	IOF_LOG_INFO("shutdown");
-	return 0;
-}
-
 int cnss_client_attach(int client_id, void *arg)
 {
 	IOF_LOG_INFO("attached %d", client_id);
@@ -331,7 +325,7 @@ int main(int argc, char **argv)
 
 	num_failures = run_tests();
 	if (!interactive) { /* Invoke shutdown */
-		rc = ctrl_fs_trigger("shutdown");
+		rc = ctrl_fs_write_int64(1, "shutdown");
 		if (rc != 0) {
 			num_failures++;
 			printf("shutdown trigger failed: rc = %d\n", rc);

@@ -95,8 +95,9 @@ class CheckIof():
     def iofshutdown(self):
         """Shutdown iof"""
         filename = os.path.join(self.ctrl_dir, 'shutdown')
-        with open(filename, 'a'):
-            os.utime(filename, None)
+        f = open(filename, 'w')
+        f.write('1')
+        f.close()
 
         return True
 

@@ -94,7 +94,9 @@ class TestCleanUpIof(unittest.TestCase):
         """Shutdown iof"""
         shutdown_file = os.path.join(self.ctrl_dir, "shutdown")
         self.logger.info("Check for shutdown file: %s", shutdown_file)
-        os.utime(shutdown_file, None)
+        f = open(shutdown_file, 'w')
+        f.write('1')
+        f.close()
         cnssrtn = self.has_terminated("cnss")
         ionssrtn = self.has_terminated("ionss")
         self.logger.info("CNSS %d and IONSS %d", cnssrtn, ionssrtn)

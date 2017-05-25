@@ -488,13 +488,6 @@ void shutdown_fs(struct cnss_info *cnss_info)
 	}
 }
 
-int cnss_shutdown(void *arg)
-{
-	/* TODO: broadcast the shutdown to other CNSS nodes */
-
-	return 0;
-}
-
 int main(void)
 {
 	struct stat buf;
