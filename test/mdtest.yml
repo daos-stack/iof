@@ -24,3 +24,4 @@ execStrategy:
       exe: $HOME/bin/mdtest
       type: exe
       parameters: "-i 5 -I 1000 -d {CNSS_PREFIX}/FS_2/{nodename}"
+      skipIf: "hasVMs"
