@@ -67,8 +67,6 @@ static uint32_t	cnss_count;
 
 static struct ios_base base;
 
-#define IONSS_READDIR_ENTRIES_PER_RPC (2)
-
 #define VALIDATE_WRITE(fs_handle, out) \
 	do {\
 		if (!out) \

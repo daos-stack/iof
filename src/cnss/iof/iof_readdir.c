@@ -68,6 +68,7 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		 * is any error then we have to disable the local dir_handle
 		 *
 		 */
+		IOF_LOG_ERROR("Error from RPC %d", cb_info->cci_rc);
 		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
