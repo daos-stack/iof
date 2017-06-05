@@ -111,15 +111,8 @@ struct fs_handle {
 	uint8_t			flags;
 	uint32_t		max_read;
 	uint32_t		max_write;
+	uint32_t		readdir_size;
 };
-
-/* The size of bulk request to use for readdir from the cnss.
- *
- * The CNSS is free to choose the size, and the IONSS will attempt
- * to allocate matching amounts of memory, but may choose to return
- * smaller amounts of data.
- */
-#define IOF_READDIR_BULK_SIZE (1024 * 64)
 
 /*
  * This will be defined by the calling function to select

@@ -126,10 +126,15 @@ struct iof_fs_info {
 	uint8_t flags;
 };
 
+/* The responce to the initial query RPC.
+ * Note that readdir_size comes after the IOV in order to avoid
+ * the compiler automatically padding the struct.
+ */
 struct iof_psr_query {
 	uint32_t max_read;
 	uint32_t max_write;
 	crt_iov_t query_list;
+	uint32_t readdir_size;
 };
 
 struct iof_string_in {

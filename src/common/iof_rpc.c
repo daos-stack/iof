@@ -106,7 +106,8 @@ struct crt_msg_field *readdir_out[] = {
 struct crt_msg_field *psr_out[] = {
 	&CMF_UINT32,
 	&CMF_UINT32,
-	&CMF_IOVEC
+	&CMF_IOVEC,
+	&CMF_UINT32,
 };
 
 struct crt_msg_field *read_in[] = {

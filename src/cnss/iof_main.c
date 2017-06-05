@@ -434,6 +434,7 @@ int iof_post_start(void *arg)
 
 		fs_handle->max_read = query->max_read;
 		fs_handle->max_write = query->max_write;
+		fs_handle->readdir_size = query->readdir_size;
 
 		base_name = basename(tmp[i].mnt);
 
@@ -474,6 +475,10 @@ int iof_post_start(void *arg)
 		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 						  "max_write",
 						  fs_handle->max_read);
+
+		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+						  "readdir_size",
+						  fs_handle->readdir_size);
 
 		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
 				       &fs_handle->stats_dir);

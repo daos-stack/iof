@@ -111,7 +111,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk = 0;
 	crt_iov_t iov = {0};
-	size_t len = IOF_READDIR_BULK_SIZE;
+	size_t len = fs_handle->readdir_size;
 	int ret = 0;
 	int rc;
 

@@ -57,6 +57,7 @@ struct ios_base {
 	crt_context_t		crt_ctx;
 	uint32_t		max_read;
 	uint32_t		max_write;
+	uint32_t		max_readdir;
 };
 
 LIST_HEAD(active_files, ionss_file_handle);

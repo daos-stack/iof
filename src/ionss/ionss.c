@@ -493,6 +493,12 @@ int iof_readdir_handler(crt_rpc_t *rpc)
 			out->err = IOF_ERR_CART;
 			goto out;
 		}
+
+		if (len > base.max_readdir) {
+			IOF_LOG_WARNING("invalid readdir size %zi", len);
+			len = base.max_readdir;
+		}
+
 		max_reply_count = len / sizeof(struct iof_readdir_reply);
 	} else {
 		IOF_LOG_INFO("No bulk descriptor, replying inline");
@@ -1888,6 +1894,7 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 
 	query->max_read = base.max_read;
 	query->max_write = base.max_write;
+	query->readdir_size = base.max_readdir;
 
 	crt_iov_set(&query->query_list, base.fs_list,
 		    base.projection_count * sizeof(struct iof_fs_info));
@@ -2114,6 +2121,7 @@ int main(int argc, char **argv)
 	base.poll_interval = 1000 * 1000;
 	base.max_read = 1024 * 1024;
 	base.max_write = 1024 * 1024;
+	base.max_readdir = 1024 * 64;
 
 	while (1) {
 		static struct option long_options[] = {
@@ -2121,6 +2129,7 @@ int main(int argc, char **argv)
 			{"poll-interval", optional_argument, 0, 2},
 			{"max-read", optional_argument, 0, 3},
 			{"max-write", optional_argument, 0, 4},
+			{"readdir-size", optional_argument, 0, 5},
 			{"thread-count", optional_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -2156,6 +2165,14 @@ int main(int argc, char **argv)
 				       optarg);
 			}
 			break;
+		case 5:
+			ret = parse_size(&base.max_readdir, optarg);
+			if (ret != 0) {
+				printf("Unable to set readdir size to %s\n",
+				       optarg);
+			}
+			break;
+
 		case 't':
 			ret = sscanf(optarg, "%d", &thread_count);
 			if (ret != 1 || thread_count < 1) {
