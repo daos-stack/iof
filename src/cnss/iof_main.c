@@ -484,6 +484,7 @@ int iof_post_start(void *arg)
 				       &fs_handle->stats_dir);
 
 		REGISTER_STAT(opendir);
+		REGISTER_STAT(readdir);
 		REGISTER_STAT(closedir);
 		REGISTER_STAT(getattr);
 		REGISTER_STAT(chmod);

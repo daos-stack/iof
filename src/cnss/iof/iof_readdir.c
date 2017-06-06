@@ -314,6 +314,7 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
 		     GAH_PRINT_VAL(dir_handle->gah), offset);
 
+	STAT_ADD(dir_handle->fs_handle->stats, readdir);
 
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.

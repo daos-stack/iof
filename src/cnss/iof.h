@@ -46,8 +46,9 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
 
 struct iof_stats {
 	ATOMIC unsigned int opendir;
-	ATOMIC unsigned int getattr;
+	ATOMIC unsigned int readdir;
 	ATOMIC unsigned int closedir;
+	ATOMIC unsigned int getattr;
 	ATOMIC unsigned int chmod;
 	ATOMIC unsigned int create;
 	ATOMIC unsigned int readlink;
