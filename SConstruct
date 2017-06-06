@@ -164,13 +164,10 @@ def scons():
     opts.Add(BoolVariable('fuse3',
                           'Use libfuse3 from github',
                           False))
-    #DCO-6641: EnumVariable isn't defined in the mock SCons for pylint
-    #pylint: disable=undefined-variable
     opts.Add(EnumVariable('client_libs',
                           'Build the client libraries', 'shared',
                           allowed_values=('none', 'shared', 'static', 'all'),
                           ignorecase=2))
-    #pylint: enable=undefined-variable
 
     opts.Update(env)
 
