@@ -361,7 +361,7 @@ static struct operation default_ops[] = {
 };
 
 /* Ignore the first two bits (writeable and failover) */
-#define FLAGS_TO_MODE_INDEX(X) ((X >> 2) & 0x3F)
+#define FLAGS_TO_MODE_INDEX(X) (((X) & 0x3F) >> 2)
 
 #define DEF_FUSE_IMPL(X) \
 	{ .count = (sizeof(X)/sizeof(*X)), .ops = X }

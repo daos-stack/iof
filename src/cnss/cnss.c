@@ -99,6 +99,7 @@ struct fs_info {
 	void *private_data;
 	LIST_ENTRY(fs_info) entries;
 	int running:1;
+	int mt:1;
 };
 
 
@@ -205,6 +206,7 @@ static int register_fuse(void *arg,
 			 struct fuse_operations *ops,
 			 struct fuse_args *args,
 			 const char *mnt,
+			 int threaded,
 			 void *private_data);
 
 /* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
@@ -312,7 +314,14 @@ static void *loop_fn(void *args)
 	pthread_mutex_unlock(&info->lock);
 
 	/*Blocking*/
-	ret = fuse_loop(info->fuse);
+	if (info->mt) {
+#if IOF_USE_FUSE3
+		ret = fuse_loop_mt(info->fuse, 0);
+#else
+		ret = fuse_loop_mt(info->fuse);
+#endif
+	} else
+		ret = fuse_loop(info->fuse);
 
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
@@ -337,6 +346,7 @@ static int register_fuse(void *arg,
 			 struct fuse_operations *ops,
 			 struct fuse_args *args,
 			 const char *mnt,
+			 int threaded,
 			 void *private_data)
 {
 	struct plugin_entry *plugin = (struct plugin_entry *)arg;
@@ -358,6 +368,8 @@ static int register_fuse(void *arg,
 		IOF_LOG_ERROR("Could not allocate fuse info");
 		return 1;
 	}
+
+	info->mt = threaded;
 
 	info->mnt = strdup(mnt);
 	if (!info->mnt) {
@@ -408,6 +420,7 @@ static int register_fuse(void *arg,
 #endif
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
+	IOF_LOG_DEBUG("Private data %p threaded %d", private_data, threaded);
 
 	fuse_opt_free_args(args);
 

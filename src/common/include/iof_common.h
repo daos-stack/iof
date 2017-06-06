@@ -94,6 +94,8 @@
 
 #define IOF_IS_WRITEABLE(FLAGS) ((FLAGS) & IOF_WRITEABLE)
 
+#define IOF_CNSS_MT			0x80
+
 enum iof_projection_mode {
 	/* Private Access Mode */
 	IOF_DEFAULT_PRIVATE,

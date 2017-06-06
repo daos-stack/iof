@@ -583,6 +583,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	ret = cb->register_fuse_fs(cb->handle,
 				   fs_handle->fuse_ops, &args,
 				   fs_handle->mount_point,
+				   fs_handle->flags & IOF_CNSS_MT,
 				   fs_handle);
 	if (ret) {
 		IOF_LOG_ERROR("Unable to register FUSE fs");

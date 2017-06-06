@@ -2123,6 +2123,7 @@ int main(int argc, char **argv)
 	unsigned int thread_count = 2;
 	int err;
 	int c;
+	int cnss_threads = 0;
 
 	char *version = iof_get_version();
 
@@ -2143,6 +2144,7 @@ int main(int argc, char **argv)
 			{"max-write", optional_argument, 0, 4},
 			{"readdir-size", optional_argument, 0, 5},
 			{"max-direct-read", optional_argument, 0, 6},
+			{"cnss-threads", no_argument, 0, 7},
 			{"thread-count", optional_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -2192,7 +2194,9 @@ int main(int argc, char **argv)
 				       optarg);
 			}
 			break;
-
+		case 7:
+			cnss_threads = 1;
+			break;
 		case 't':
 			ret = sscanf(optarg, "%d", &thread_count);
 			if (ret != 1 || thread_count < 1) {
@@ -2305,11 +2309,15 @@ int main(int argc, char **argv)
 		}
 
 		/* Set feature flags. These will be sent to the client */
-		base.projection_array[i].flags = IOF_FS_DEFAULT;
+		projection->flags = IOF_FS_DEFAULT;
 		if (access(full_path, W_OK) == 0)
-			base.projection_array[i].flags |= IOF_WRITEABLE;
+			projection->flags |= IOF_WRITEABLE;
 
-		IOF_LOG_INFO("Projecting %s", full_path);
+		if (cnss_threads)
+			projection->flags |= IOF_CNSS_MT;
+
+		IOF_LOG_INFO("Projecting %s %#x", full_path,
+			     (int)projection->flags);
 
 		projection->active = 1;
 		projection->full_path = full_path;
