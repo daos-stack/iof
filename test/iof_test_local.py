@@ -139,15 +139,15 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         log_path = os.path.join(log_path, self.logdir_name())
 
-        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO")
+        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO,CTRL=WARN")
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
-        self.ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
+        self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
         valgrind = iofcommontestsuite.valgrind_suffix(log_path)
         ionss_args = ['ionss']
-        if len(valgrind):
+        if valgrind:
             #ionss_args.append('--poll-interval=1')
-            self.log_mask = "DEBUG,MEM=ERR"
+            self.log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
 
         cmd = [orterun,
                '--output-filename', log_path]
@@ -319,7 +319,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                 self.logger.error("Keys are differnet")
                 diffs.append(key)
 
-        if len(diffs):
+        if diffs:
             self.fail("Stat attributes are different %s" % diffs)
 
     def test_many_files(self):
@@ -592,7 +592,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                     elif os.path.isdir(ep):
                         shutil.rmtree(ep)
                 files = os.listdir(idir)
-                if len(files):
+                if files:
                     self.fail('Test left some files %s' % files)
 
         print("Ran %d subtests" % (subtest_count))
@@ -637,7 +637,7 @@ if __name__ == '__main__':
 
     tests_to_run = []
     launch = False
-    if len(iargs):
+    if iargs:
 
         tests = []
         for a_test in dir(Testlocal):
@@ -683,7 +683,7 @@ Test methods can be specified directly on the command line""")
         rc = local_launch()
         sys.exit(rc)
 
-    if len(tests_to_run) == 0:
+    if not tests_to_run:
         tests_to_run.append('Testlocal.go')
 
     unittest.main(defaultTest=tests_to_run, argv=uargs)

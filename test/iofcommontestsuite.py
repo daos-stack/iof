@@ -354,7 +354,7 @@ class CommonTestSuite(unittest.TestCase):
         testmsg = "remove %s on all CNs" % cnss_prefix
         cmdstr = "%srm -rf %s " % (allnode_cmd, cnss_prefix)
         self.common_launch_cmd(testmsg, cmdstr)
-        if len(self.fs_list):
+        if self.fs_list:
             iondir = os.path.dirname(self.fs_list[0])
             testmsg = "remove %s on all IONs" % iondir
             cmdstr = "%srm -rf %s " % (allnode_cmd, iondir)
