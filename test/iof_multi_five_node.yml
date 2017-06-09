@@ -37,10 +37,14 @@ execStrategy:
       setConfigKeys:
     - name: "iof_ionss_verify"
       nodeType: "IOF_TEST_ION"
+      useNodes: "0"
       setConfigKeys:
     - name: "mdtest"
       nodeType: "IOF_TEST_CN"
       setConfigKeys:
+    - name: "iof_ompi_mdtest"
+      nodeType: "IOF_TEST_CN"
+      useNodes: "0"
     - name: "cleanup_iof"
       type: cleanup
       nodeType: "IOF_TEST_CN"

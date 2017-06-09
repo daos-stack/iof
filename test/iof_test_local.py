@@ -526,14 +526,16 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         """Run mdtest"""
         topdir = os.path.join(self.import_dir, 'exp')
 
-        mdtest = ['mdtest', '-d', topdir]
+        mdtest_cmdstr = "/testbin/mdtest/bin/mdtest"
+        if not os.path.exists(mdtest_cmdstr):
+            mdtest_cmdstr = "mdtest"
         try:
-            rtn = self.common_launch_cmd('mdtest', 'mdtest -h')
+            rtn = self.common_launch_cmd(mdtest_cmdstr, 'mdtest -h')
             if rtn != 0:
                 self.skipTest('mdtest not installed')
         except FileNotFoundError:
             self.skipTest('mdtest not installed')
-        mdtest = ['mdtest', '-d', topdir]
+        mdtest = [mdtest_cmdstr, '-d', topdir]
         short_run = list(mdtest)
         short_run.extend(['-i', '3', '-I', '10'])
         start_time = time.time()
@@ -547,7 +549,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         long_run = list(mdtest)
         long_run.extend(['-i', '5', '-I', '1000'])
         start_time = time.time()
-        rtn = self.common_launch_cmd('mdtest', ' '.join(long_run))
+        rtn = self.common_launch_cmd(mdtest_cmdstr, ' '.join(long_run))
         elapsed = time.time() - start_time
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:

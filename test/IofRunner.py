@@ -37,7 +37,7 @@ import getpass
 import tempfile
 
 #pylint: disable=broad-except
-#pylint: disable=too-many-instance-attributes
+#pylint: disable=too-many-locals
 
 class IofRunner():
     """Simple test runner"""
@@ -49,8 +49,6 @@ class IofRunner():
         self.node_control = node_control
         self.logger = logging.getLogger("TestRunnerLogger")
         self.proc = None
-        self.logfileout = ""
-        self.logfileerr = ""
 
     def create_cnss_dir(self):
         """Create the CNSS dir on all CNs"""
@@ -167,11 +165,14 @@ class IofRunner():
                         (pass_env, cnss, test_path)
         cmdstr = cmd + local_client + local_server
         self.logger.info("Testionss: %s", cmdstr)
-        self.logfileout = os.path.join(self.dir_path, "iofRunner.out")
-        self.logfileerr = os.path.join(self.dir_path, "iofRunner.err")
+        logfileout = os.path.join(self.dir_path, "iofRunner.out")
+        logfileerr = os.path.join(self.dir_path, "iofRunner.err")
         cmdarg = shlex.split(cmdstr)
-        with open(self.logfileout, mode='w+b', buffering=0) as outfile, \
-            open(self.logfileerr, mode='w+b', buffering=0) as errfile:
+        with open(logfileout, mode='w') as outfile, \
+            open(logfileerr, mode='w') as errfile:
+            outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
+                ("=" * 40), cmdstr, ("=" * 40)))
+            outfile.flush()
             self.proc = subprocess.Popen(cmdarg,
                                          stdin=subprocess.DEVNULL,
                                          stdout=outfile,

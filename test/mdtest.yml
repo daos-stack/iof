@@ -14,14 +14,15 @@ directives:
 
 subList:
     nodename: node
+    mdtest_path: "/testbin/mdtest/bin"
 
 execStrategy:
     - name: "iof_mdtest_short"
-      exe: $HOME/bin/mdtest
+      exe: "{mdtest_path}/mdtest"
       type: exe
       parameters: "-i 3 -I 100 -d {CNSS_PREFIX}/FS_2/{nodename}"
     - name: "iof_mdtest_long"
-      exe: $HOME/bin/mdtest
+      exe: "{mdtest_path}/mdtest"
       type: exe
       parameters: "-i 15 -I 5000 -d {CNSS_PREFIX}/FS_2/{nodename}"
       skipIf: "hasVMs"
