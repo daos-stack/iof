@@ -23,5 +23,5 @@ execStrategy:
     - name: "iof_mdtest_long"
       exe: $HOME/bin/mdtest
       type: exe
-      parameters: "-i 5 -I 1000 -d {CNSS_PREFIX}/FS_2/{nodename}"
+      parameters: "-i 15 -I 5000 -d {CNSS_PREFIX}/FS_2/{nodename}"
       skipIf: "hasVMs"
