@@ -58,6 +58,9 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 
 	STAT_ADD(handle->fs_handle->stats, ioctl);
 
+	if (FS_IS_OFFLINE(handle->fs_handle))
+		return -handle->fs_handle->offline_reason;
+
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH, nothing to do */
 		return -EIO;

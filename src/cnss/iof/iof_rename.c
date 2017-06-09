@@ -58,6 +58,9 @@ int ioc_rename(const char *src, const char *dst)
 
 	STAT_ADD(fs_handle->stats, rename);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;

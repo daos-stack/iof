@@ -106,6 +106,9 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	dir_handle = calloc(1, dir_len + sizeof(*dir_handle));
 	if (!dir_handle)
 		return -ENOMEM;

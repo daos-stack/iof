@@ -87,6 +87,9 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 
 	STAT_ADD(fs_handle->stats, getattr);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, getattr), &rpc);
 	if (rc || !rpc) {
@@ -129,6 +132,9 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
 	STAT_ADD(fs_handle->stats, getfattr);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

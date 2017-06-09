@@ -332,6 +332,9 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 
 	STAT_ADD(handle->fs_handle->stats, read);
 
+	if (FS_IS_OFFLINE(handle->fs_handle))
+		return -handle->fs_handle->offline_reason;
+
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it

@@ -234,6 +234,9 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 
 	STAT_ADD(handle->fs_handle->stats, write);
 
+	if (FS_IS_OFFLINE(handle->fs_handle))
+		return -handle->fs_handle->offline_reason;
+
 	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;

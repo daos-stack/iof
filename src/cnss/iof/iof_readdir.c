@@ -316,6 +316,9 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 	STAT_ADD(dir_handle->fs_handle->stats, readdir);
 
+	if (FS_IS_OFFLINE(dir_handle->fs_handle))
+		return -dir_handle->fs_handle->offline_reason;
+
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.
 	 */

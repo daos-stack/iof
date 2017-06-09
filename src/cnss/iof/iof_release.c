@@ -83,6 +83,16 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 
 	STAT_ADD(fs_handle->stats, release);
 
+	/* If the projection is off-line then drop the local handle.
+	 *
+	 * This means a resource leak on the IONSS should the projection
+	 * be offline for reasons other than IONSS failure.
+	 */
+	if (FS_IS_OFFLINE(fs_handle)) {
+		free(handle);
+		return -fs_handle->offline_reason;
+	}
+
 	if (!handle->gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",
 			     handle);

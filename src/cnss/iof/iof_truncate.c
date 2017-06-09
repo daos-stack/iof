@@ -59,6 +59,9 @@ int ioc_truncate_name(const char *file, off_t len)
 
 	STAT_ADD(fs_handle->stats, truncate);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -113,6 +116,9 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 		     GAH_PRINT_VAL(handle->gah));
 
 	STAT_ADD(fs_handle->stats, ftruncate);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");

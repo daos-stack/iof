@@ -247,6 +247,8 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 		ctrl_register_constant_int64;
 	entry->self_fns.register_ctrl_constant_uint64 =
 		ctrl_register_constant_uint64;
+	entry->self_fns.register_ctrl_uint64_variable =
+		ctrl_register_uint64_variable;
 	entry->self_fns.register_fuse_fs = register_fuse;
 	entry->self_fns.handle = entry;
 

@@ -58,6 +58,9 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	STAT_ADD(fs_handle->stats, create);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so check that LARGEFILE is set and reject the open
 	 * if not.

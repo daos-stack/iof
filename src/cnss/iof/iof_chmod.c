@@ -64,6 +64,9 @@ int ioc_chmod_name(const char *file, mode_t mode)
 		return -EROFS;
 	}
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, chmod), &rpc);
 	if (rc || !rpc) {
@@ -116,6 +119,9 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

@@ -58,6 +58,9 @@ int ioc_unlink(const char *path)
 
 	STAT_ADD(fs_handle->stats, unlink);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;

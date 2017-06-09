@@ -58,6 +58,9 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 
 	STAT_ADD(fs_handle->stats, utimens);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
@@ -97,6 +100,9 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 	int rc;
 
 	STAT_ADD(fs_handle->stats, futimens);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!handle->gah_valid) {
 		/* If the server has reported that the GAH is invalid

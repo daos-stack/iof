@@ -113,6 +113,8 @@ struct fs_handle {
 	uint32_t		max_read;
 	uint32_t		max_write;
 	uint32_t		readdir_size;
+	/* If set to True then projection is off-line */
+	int			offline_reason;
 };
 
 /*
@@ -135,6 +137,8 @@ struct fs_handle {
 #define FS_TO_OP(HANDLE, FN) \
 		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
 		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
+
+#define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
 
 int iof_is_mode_supported(uint8_t flags);
 

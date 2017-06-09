@@ -348,6 +348,28 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	return ret;
 }
 
+static uint64_t online_read_cb(void *arg)
+{
+	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+
+	return !FS_IS_OFFLINE(fs_handle);
+}
+
+static int online_write_cb(uint64_t value, void *arg)
+{
+	struct fs_handle *fs_handle = (struct fs_handle *)arg;
+
+	if (value > 1)
+		return EINVAL;
+
+	if (value)
+		fs_handle->offline_reason = 0;
+	else
+		fs_handle->offline_reason = EHOSTDOWN;
+
+	return 0;
+}
+
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable( \
 		fs_handle->stats_dir,					\
 		#_STAT,							\
@@ -479,6 +501,11 @@ int iof_post_start(void *arg)
 		cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 						  "readdir_size",
 						  fs_handle->readdir_size);
+
+		cb->register_ctrl_uint64_variable(fs_handle->fs_dir, "online",
+						  online_read_cb,
+						  online_write_cb,
+						  fs_handle);
 
 		cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
 				       &fs_handle->stats_dir);

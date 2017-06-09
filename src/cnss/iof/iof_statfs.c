@@ -126,6 +126,9 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 
 	STAT_ADD(fs_handle->stats, statfs);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	rc = crt_req_create(fs_handle->crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, statfs), &rpc);
 	if (rc || !rpc) {

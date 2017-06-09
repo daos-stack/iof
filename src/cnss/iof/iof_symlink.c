@@ -58,6 +58,9 @@ int ioc_symlink(const char *dst, const char *src)
 
 	STAT_ADD(fs_handle->stats, symlink);
 
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -84,7 +87,6 @@ int ioc_symlink(const char *dst, const char *src)
 		return -EIO;
 	}
 	rc = ioc_cb_progress(fs_handle, &reply.complete);
-
 	if (rc)
 		return -rc;
 
