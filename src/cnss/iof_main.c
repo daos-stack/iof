@@ -57,9 +57,9 @@
 #include "iof_ioctl.h"
 
 struct query_cb_r {
-	int complete;
-	int err;
+	struct iof_tracker tracker;
 	struct iof_psr_query **query;
+	int err;
 };
 
 struct iof_projection_info *ioc_get_handle(void)
@@ -86,7 +86,7 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -95,7 +95,7 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 		reply->err = EIO;
 	}
 	reply->rc = out->rc;
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -114,7 +114,7 @@ static int query_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = cb_info->cci_rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -122,13 +122,13 @@ static int query_cb(const struct crt_cb_info *cb_info)
 	if (ret) {
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 			      ret);
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	*reply->query = query;
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -141,7 +141,8 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	int ret;
 	struct query_cb_r reply = {0};
 
-	reply.complete = 0;
+	iof_tracker_init(&reply.tracker, 1);
+
 	reply.query = query;
 
 	ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
@@ -159,9 +160,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	}
 
 	/*make on-demand progress*/
-	ret = iof_progress(iof_state->crt_ctx, &reply.complete);
-	if (ret)
-		IOF_LOG_ERROR("Could not complete PSR query");
+	iof_wait(iof_state->crt_ctx, &reply.tracker);
 
 	if (reply.err)
 		return reply.err;
@@ -678,11 +677,9 @@ void iof_flush(void *arg)
 
 static int detach_cb(const struct crt_cb_info *cb_info)
 {
-	int *complete;
+	struct iof_tracker *tracker = cb_info->cci_arg;
 
-	complete = cb_info->cci_arg;
-
-	*complete = 1;
+	iof_tracker_signal(tracker);
 
 	return IOF_SUCCESS;
 }
@@ -691,36 +688,49 @@ void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	struct iof_group_info *group;
-	crt_rpc_t *rpc = NULL;
+	crt_rpc_t *rpc;
 	int ret;
 	int i;
-	int complete;
+	struct iof_tracker tracker;
+
+	iof_tracker_init(&tracker, iof_state->num_groups);
 
 	for (i = 0; i < iof_state->num_groups; i++) {
+		rpc = NULL;
 		group = &iof_state->groups[i];
 		/*send a detach RPC to IONSS*/
 		ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
 				     DETACH_OP, &rpc);
-		if (ret || !rpc)
+		if (ret || !rpc) {
 			IOF_LOG_ERROR("Could not create detach req ret = %d",
 				      ret);
+			iof_tracker_signal(&tracker);
+			continue;
+		}
 
-		complete = 0;
-		ret = crt_req_send(rpc, detach_cb, &complete);
-		if (ret)
+		ret = crt_req_send(rpc, detach_cb, &tracker);
+		if (ret) {
 			IOF_LOG_ERROR("Detach RPC not sent");
+			iof_tracker_signal(&tracker);
+		}
+	}
 
-		ret = iof_progress(iof_state->crt_ctx, &complete);
-		if (ret)
-			IOF_LOG_ERROR("Could not progress detach RPC");
+	/* If an error occurred above, there will be no need to call
+	 * progress
+	 */
+	if (!iof_tracker_test(&tracker))
+		iof_wait(iof_state->crt_ctx, &tracker);
+
+	for (i = 0; i < iof_state->num_groups; i++) {
+		group = &iof_state->groups[i];
 
 		ret = crt_group_detach(group->grp.dest_grp);
 		if (ret)
 			IOF_LOG_ERROR("crt_group_detach failed with ret = %d",
 				      ret);
-
 		free(group->grp_name);
 	}
+
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");

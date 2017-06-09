@@ -50,7 +50,7 @@
 struct write_cb_r {
 	struct iof_file_handle *handle;
 	size_t len;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -74,7 +74,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -91,13 +91,13 @@ static int write_cb(const struct crt_cb_info *cb_info)
 		if (out->err == IOF_ERR_NOMEM)
 			reply->err = EAGAIN;
 
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	reply->len = out->len;
 	reply->rc = out->rc;
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -121,6 +121,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->gah;
 	crt_iov_set(&in->data, (void *)buff, len);
@@ -134,9 +135,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err != 0)
 		return -reply.err;
@@ -185,6 +184,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in->base = position;
 
 	bulk = in->bulk;
@@ -197,9 +197,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	rc = crt_bulk_free(bulk);
 	if (rc)

@@ -69,6 +69,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
 	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
@@ -80,9 +81,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 		return -EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
 
@@ -119,6 +118,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->gah;
 	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
@@ -128,9 +128,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(reply));
 

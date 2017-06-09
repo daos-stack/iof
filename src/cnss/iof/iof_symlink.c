@@ -79,17 +79,14 @@ int ioc_symlink(const char *dst, const char *src)
 	in->dst = (crt_string_t)dst;
 	in->fs_id = (uint64_t)fs_handle->fs_id;
 
-	reply.complete = 0;
+	iof_tracker_init(&reply.tracker, 1);
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(reply));
 

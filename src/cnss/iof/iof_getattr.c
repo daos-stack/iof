@@ -46,7 +46,7 @@
 #include "log.h"
 
 struct getattr_cb_r {
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 	struct stat *stat;
@@ -62,7 +62,7 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 			reply->err = ETIMEDOUT;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -70,7 +70,7 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
 	reply->err = out->err;
 	reply->rc = out->rc;
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -100,7 +100,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 	in->path = (crt_string_t)path;
 	in->fs_id = fs_handle->fs_id;
 
-	reply.complete = 0;
+	iof_tracker_init(&reply.tracker, 1);
 	reply.stat = stbuf;
 
 	rc = crt_req_send(rpc, getattr_cb, &reply);
@@ -108,9 +108,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_DEBUG("path %s rc %d",
 		      path, reply.err == 0 ? -reply.rc : -EIO);
@@ -152,7 +150,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	in = crt_req_get(rpc);
 	in->gah = handle->gah;
 
-	reply.complete = 0;
+	iof_tracker_init(&reply.tracker, 1);
 	reply.stat = stbuf;
 
 	rc = crt_req_send(rpc, getattr_cb, &reply);
@@ -160,9 +158,7 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	/* Cache the inode number */
 	handle->inode_no = stbuf->st_ino;

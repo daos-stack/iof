@@ -48,8 +48,8 @@
 #include "ios_gah.h"
 
 struct readdir_cb_r {
-	int complete;
 	crt_rpc_t *rpc;
+	struct iof_tracker tracker;
 	int err;
 	struct iof_readdir_out *out;
 };
@@ -70,7 +70,7 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_LOG_ERROR("Error from RPC %d", cb_info->cci_rc);
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -79,13 +79,13 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		reply->err = EIO;
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 			      ret);
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	reply->out = crt_reply_get(cb_info->cci_rpc);
 	reply->rpc = cb_info->cci_rpc;
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -144,17 +144,14 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		IOF_LOG_INFO("Failed to allocate memory for bulk");
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	rc = crt_req_send(rpc, readdir_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
 		return EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc) {
-		ret = rc;
-		goto out;
-	}
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err != 0) {
 		ret = reply.err;

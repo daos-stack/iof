@@ -49,7 +49,7 @@
 struct statfs_cb_r {
 	struct iof_data_out *out;
 	crt_rpc_t *rpc;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -72,7 +72,7 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -80,13 +80,13 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -100,7 +100,7 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 		reply->rpc = cb_info->cci_rpc;
 	}
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -127,6 +127,7 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)path;
 	in->fs_id = fs_handle->fs_id;
@@ -137,9 +138,7 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 		return -EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_INFO("path %s rc %d", path, IOC_STATUS_TO_RC(reply));
 

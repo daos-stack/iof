@@ -64,7 +64,7 @@
 struct write_cb_r {
 	struct file_info *f_info;
 	ssize_t len;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -90,7 +90,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -98,7 +98,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 	if (!out) {
 		IOF_LOG_ERROR("Could not get reply");
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -113,13 +113,13 @@ static int write_cb(const struct crt_cb_info *cb_info)
 		if (out->err == IOF_ERR_NOMEM)
 			reply->err = EAGAIN;
 
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	reply->len = out->len;
 	reply->rc = out->rc;
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -145,6 +145,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 		return -1;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = f_info->gah;
 	crt_iov_set(&in->data, (void *)buff, len);
@@ -158,11 +159,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = iof_fs_progress(fs_handle, &reply.complete);
-	if (rc) {
-		f_info->errcode = EINTR;
-		return -1;
-	}
+	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
 		f_info->errcode = reply.err;
@@ -218,6 +215,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 		return -1;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in->base = position;
 
 	bulk = in->bulk;
@@ -230,11 +228,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = iof_fs_progress(fs_handle, &reply.complete);
-	if (rc) {
-		f_info->errcode = EINTR;
-		return -1;
-	}
+	iof_fs_wait(fs_handle, &reply.tracker);
 
 	rc = crt_bulk_free(bulk);
 	if (rc) {

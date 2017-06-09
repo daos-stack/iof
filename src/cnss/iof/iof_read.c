@@ -51,7 +51,7 @@ struct read_cb_r {
 	struct iof_data_out *out;
 	struct iof_file_handle *handle;
 	crt_rpc_t *rpc;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -60,7 +60,7 @@ struct read_bulk_cb_r {
 	struct iof_read_bulk_out *out;
 	struct iof_file_handle *handle;
 	crt_rpc_t *rpc;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -85,7 +85,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -96,13 +96,13 @@ static int read_cb(const struct crt_cb_info *cb_info)
 			reply->handle->gah_valid = 0;
 
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -116,7 +116,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 		reply->rpc = cb_info->cci_rpc;
 	}
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -138,7 +138,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -149,13 +149,13 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 			reply->handle->gah_valid = 0;
 
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -169,7 +169,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 		reply->rpc = cb_info->cci_rpc;
 	}
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -190,6 +190,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->gah;
 	in->base = position;
@@ -202,9 +203,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err)
 		return -reply.err;
@@ -263,6 +262,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 
 	bulk = in->bulk;
 
+	iof_tracker_init(&reply.tracker, 1);
 	reply.handle = handle;
 
 	rc = crt_req_send(rpc, read_bulk_cb, &reply);
@@ -270,9 +270,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err)
 		return -reply.err;

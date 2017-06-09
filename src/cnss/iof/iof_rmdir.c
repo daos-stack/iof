@@ -74,6 +74,7 @@ int ioc_rmdir(const char *file)
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
 	in->fs_id = fs_handle->fs_id;
@@ -84,9 +85,7 @@ int ioc_rmdir(const char *file)
 		return -EIO;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc)
-		return -rc;
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
 

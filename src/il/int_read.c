@@ -65,7 +65,7 @@ struct read_cb_r {
 	struct iof_data_out *out;
 	struct file_info *f_info;
 	crt_rpc_t *rpc;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -74,7 +74,7 @@ struct read_bulk_cb_r {
 	struct iof_read_bulk_out *out;
 	struct file_info *f_info;
 	crt_rpc_t *rpc;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
@@ -101,7 +101,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -109,7 +109,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 	if (!out) {
 		IOF_LOG_ERROR("Could not get reply");
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -120,13 +120,13 @@ static int read_cb(const struct crt_cb_info *cb_info)
 			reply->f_info->gah_valid = 0;
 
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -140,7 +140,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 		reply->rpc = cb_info->cci_rpc;
 	}
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -164,7 +164,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -172,7 +172,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 	if (!out) {
 		IOF_LOG_ERROR("Could not get reply");
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -183,13 +183,13 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 			reply->f_info->gah_valid = 0;
 
 		reply->err = EIO;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
-		reply->complete = 1;
+		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
@@ -203,7 +203,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 		reply->rpc = cb_info->cci_rpc;
 	}
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -229,6 +229,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 		return -1;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = f_info->gah;
 	in->base = position;
@@ -242,11 +243,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = iof_fs_progress(fs_handle, &reply.complete);
-	if (rc) {
-		f_info->errcode = EINTR;
-		return -1;
-	}
+	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
 		f_info->errcode = reply.err;
@@ -313,6 +310,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 		return -1;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	bulk = in->bulk;
 
 	reply.f_info = f_info;
@@ -323,11 +321,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 		f_info->errcode = EIO;
 		return -1;
 	}
-	rc = iof_fs_progress(fs_handle, &reply.complete);
-	if (rc) {
-		f_info->errcode = EINTR;
-		return -1;
-	}
+	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
 		f_info->errcode = reply.err;

@@ -48,7 +48,7 @@
 #include "ios_gah.h"
 
 struct closedir_cb_r {
-	int complete;
+	struct iof_tracker tracker;
 };
 
 static int closedir_cb(const struct crt_cb_info *cb_info)
@@ -59,7 +59,7 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 	 * destroyed on return anyway.
 	 */
 
-	reply->complete = 1;
+	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
 
@@ -101,6 +101,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 
 	in = crt_req_get(rpc);
 	in->gah = dir_handle->gah;
+	iof_tracker_init(&reply.tracker, 1);
 
 	rc = crt_req_send(rpc, closedir_cb, &reply);
 	if (rc) {
@@ -109,7 +110,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		goto out;
 	}
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 out:
 	/* If there has been an error on the local handle, or readdir() is not

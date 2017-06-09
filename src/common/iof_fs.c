@@ -41,37 +41,28 @@
 
 static int iof_check_complete(void *arg)
 {
-	int *complete = (int *)arg;
-	return *complete;
+	struct iof_tracker *tracker = arg;
+
+	return iof_tracker_test(tracker);
 }
 
-/* on-demand progress */
-int iof_progress(crt_context_t crt_ctx, int *complete_flag)
+/* Progress until all callbacks are invoked */
+void iof_wait(crt_context_t crt_ctx, struct iof_tracker *tracker)
 {
-	int		rc;
+	int			rc;
 
-	do {
+	for (;;) {
 		rc = crt_progress(crt_ctx, 1000 * 1000, iof_check_complete,
-				  complete_flag);
+				  tracker);
 
-		if (*complete_flag)
-			return 0;
+		if (iof_tracker_test(tracker))
+			return;
 
-	} while (rc == 0 || rc == -CER_TIMEDOUT);
-
-	IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
-	return -1;
-}
-
-/* Progress, from within ioil entry point during normal I/O */
-int iof_fs_progress(struct iof_projection *fs_handle, int *complete_flag)
-{
-	int rc;
-
-	rc = iof_progress(fs_handle->crt_ctx, complete_flag);
-	if (rc) {
-		IOF_LOG_ERROR("Progress loop exited, rc %d", rc);
-		return -1;
+		/* TODO: Determine the best course of action on error.  In an
+		 * audit of cart code, it seems like this would only happen
+		 * under somewhat catostrophic circumstances.
+		 */
+		if (rc != 0 && rc != -CER_TIMEDOUT)
+			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 	}
-	return 0;
 }

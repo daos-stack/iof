@@ -39,6 +39,7 @@
 #define __IOF_FS_H__
 
 #include <crt_types.h>
+#include <iof_atomic.h>
 
 struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */
@@ -77,7 +78,38 @@ struct iof_projection {
 		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
 		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
-int iof_progress(crt_context_t, int *);
-int iof_fs_progress(struct iof_projection *, int *);
+/* Tracks remaining events for completion */
+struct iof_tracker {
+	ATOMIC int remaining;
+};
+
+/* Initialize number of events to track */
+static inline void iof_tracker_init(struct iof_tracker *tracker,
+				    int expected_count)
+{
+	atomic_store_release(&tracker->remaining, expected_count);
+}
+
+/* Signal an event */
+static inline void iof_tracker_signal(struct iof_tracker *tracker)
+{
+	atomic_dec_release(&tracker->remaining);
+}
+
+/* Test if all events have signaled */
+static inline bool iof_tracker_test(struct iof_tracker *tracker)
+{
+	if (atomic_load_consume(&tracker->remaining) == 0)
+		return true;
+
+	return false;
+}
+
+/* Progress until all events have signaled */
+void iof_wait(crt_context_t, struct iof_tracker *);
+
+/* Progress until all events have signaled */
+#define iof_fs_wait(fs_handle, event) \
+	iof_wait((fs_handle)->crt_ctx, event)
 
 #endif

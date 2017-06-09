@@ -223,9 +223,9 @@ struct iof_file_handle {
 struct iof_projection_info *ioc_get_handle(void);
 
 struct status_cb_r {
-	int complete; /** Flag to check for operation complete */
-	int err;      /** errno of any internal error */
-	int rc;       /** errno reported by remote POSIX operation */
+	struct iof_tracker tracker; /** Completion event tracker */
+	int err; /** errno of any internal error */
+	int rc;  /** errno reported by remote POSIX operation */
 };
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.
@@ -247,7 +247,7 @@ int ioc_open(const char *, struct fuse_file_info *);
 
 struct open_cb_r {
 	struct iof_file_handle *fh;
-	int complete;
+	struct iof_tracker tracker;
 	int err;
 	int rc;
 };

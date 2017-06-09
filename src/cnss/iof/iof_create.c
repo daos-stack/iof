@@ -115,6 +115,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->path = (crt_string_t)file;
 	in->mode = mode;
@@ -132,11 +133,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	LOG_FLAGS(handle, fi->flags);
 	LOG_MODES(handle, mode);
 
-	rc = iof_fs_progress(&fs_handle->proj, &reply.complete);
-	if (rc) {
-		free(handle);
-		return -rc;
-	}
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err == 0 && reply.rc == 0)
 		IOF_LOG_INFO("Handle %p " GAH_PRINT_STR, handle,

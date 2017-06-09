@@ -52,6 +52,11 @@
 #define atomic_add(ptr, value) atomic_fetch_add_explicit(ptr,		\
 							 value,		\
 							 memory_order_relaxed)
+#define atomic_load_consume(ptr) \
+	atomic_load_explicit(ptr, memory_order_consume)
+
+#define atomic_dec_release(ptr) \
+	atomic_fetch_sub_explicit(ptr, 1, memory_order_release)
 
 #else
 
@@ -63,6 +68,14 @@
 		__sync_synchronize();    \
 		*(ptr) = (value);        \
 	} while (0)
+/* There doesn't seem to be a great option here to mimic just
+ * consume.  Adding 0 should suffice for the load side.  If
+ * the compiler is smart, it could potentially avoid the
+ * actual synchronization after the store as the store isn't
+ * required.
+ */
+#define atomic_load_consume(ptr) atomic_fetch_add(ptr, 0)
+#define atomic_dec_release(ptr) __sync_fetch_and_sub(ptr, 1)
 #define ATOMIC
 
 #define atomic_add(ptr, value) atomic_fetch_add(ptr, value)
