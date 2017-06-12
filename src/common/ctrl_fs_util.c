@@ -260,16 +260,16 @@ static int check_mnt(struct mntent *entry, void *priv)
 
 	ctrl_fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
 	if (ctrl_fd == -1) {
-		IOF_LOG_ERROR("Could not open %s to find CNSS",
-			      entry->mnt_dir);
+		IOF_LOG_INFO("Could not open %s to find CNSS",
+			     entry->mnt_dir);
 		rc = 0;
 		goto cleanup;
 	}
 
 	rc = ctrl_fs_read_int32(&cnss_id, "cnss_id");
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not read cnss id: rc = %d, errno = %s",
-			      rc, strerror(errno));
+		IOF_LOG_INFO("Could not read cnss id: rc = %d, errno = %s",
+			     rc, strerror(errno));
 		rc = 0;
 		goto cleanup;
 	}
