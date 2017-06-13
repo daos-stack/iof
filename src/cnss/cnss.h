@@ -52,4 +52,6 @@ struct cnss_info {
 	int			shutting_down;
 };
 
+int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
+
 #endif /* __CNSS_H__ */

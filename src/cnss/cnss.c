@@ -57,7 +57,6 @@
 #include "cnss_plugin.h"
 #include "version.h"
 #include "log.h"
-#include "iof.h"
 #include "ctrl_common.h"
 
 #include "cnss.h"

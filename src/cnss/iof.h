@@ -43,8 +43,6 @@
 #include "iof_atomic.h"
 #include "iof_fs.h"
 
-int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
-
 struct iof_stats {
 	ATOMIC unsigned int opendir;
 	ATOMIC unsigned int readdir;
