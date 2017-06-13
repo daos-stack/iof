@@ -68,17 +68,24 @@ class TestSetUpIof(unittest.TestCase):
         ctrl_dir = os.path.join(start_dir, ".ctrl")
         self.assertTrue(os.path.isdir(start_dir), \
             "prefix is not a directory %s" % start_dir)
-        filename = os.path.join(ctrl_dir, 'shutdown')
+        filename = os.path.join(ctrl_dir, 'active')
         i = 10
         while i > 0:
             i = i - 1
             time.sleep(1)
-            if os.path.exists(filename) is True:
-                self.logger.info("Found shutdown file: %s", filename)
-                stat_obj = os.stat(filename)
-                self.assertTrue(S_ISREG(stat_obj.st_mode), "File type is \
-                    not a regular file")
-                self.logger.info(stat_obj)
+            if not os.path.exists(filename):
+                continue
+            self.logger.info("Found active file: %s", filename)
+
+            stat_obj = os.stat(filename)
+            self.assertTrue(S_ISREG(stat_obj.st_mode),
+                            "File type is not a regular file")
+            self.logger.info(stat_obj)
+
+            fd = open(filename)
+            data = fd.read()
+            fd.close()
+            if data.strip() == '1':
                 return 0
 
         self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
