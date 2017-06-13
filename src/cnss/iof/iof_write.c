@@ -59,10 +59,8 @@ struct write_cb_r {
 
 static int write_cb(const struct crt_cb_info *cb_info)
 {
-	struct write_cb_r *reply;
+	struct write_cb_r *reply = (struct write_cb_r *)cb_info->cci_arg;
 	struct iof_write_out *out;
-
-	reply = (struct write_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*

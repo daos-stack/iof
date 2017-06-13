@@ -56,12 +56,9 @@ struct readlink_cb_r {
 
 int ioc_readlink_cb(const struct crt_cb_info *cb_info)
 {
-	struct readlink_cb_r *reply;
+	struct readlink_cb_r *reply = (struct readlink_cb_r *)cb_info->cci_arg;
 	struct iof_string_out *out;
-	crt_rpc_t *rpc = cb_info->cci_rpc;
 	int rc;
-
-	reply = (struct readlink_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -73,7 +70,7 @@ int ioc_readlink_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	out = crt_reply_get(rpc);
+	out = crt_reply_get(cb_info->cci_rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not get output");
 		reply->err = EIO;

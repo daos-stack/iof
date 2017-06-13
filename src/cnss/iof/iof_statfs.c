@@ -56,11 +56,9 @@ struct statfs_cb_r {
 
 static int statfs_cb(const struct crt_cb_info *cb_info)
 {
-	struct statfs_cb_r *reply = NULL;
+	struct statfs_cb_r *reply = (struct statfs_cb_r *)cb_info->cci_arg;
 	struct iof_data_out *out;
 	int rc;
-
-	reply = (struct statfs_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*

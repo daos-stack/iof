@@ -54,25 +54,31 @@ struct getattr_cb_r {
 
 static int getattr_cb(const struct crt_cb_info *cb_info)
 {
-	struct getattr_cb_r *reply = NULL;
-	crt_rpc_t *getattr_rpc;
-	struct iof_getattr_out *out = NULL;
+	struct getattr_cb_r *reply = (struct getattr_cb_r *)cb_info->cci_arg;
+	struct iof_getattr_out *out;
 
-	getattr_rpc = cb_info->cci_rpc;
-	reply = (struct getattr_cb_r *)cb_info->cci_arg;
+	if (cb_info->cci_rc != 0) {
+		if (cb_info->cci_rc == -CER_TIMEDOUT)
+			reply->err = ETIMEDOUT;
+		else
+			reply->err = EIO;
+		reply->complete = 1;
+		return 0;
+	}
 
-	out = crt_reply_get(getattr_rpc);
+	out = crt_reply_get(cb_info->cci_rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not get output");
+		reply->err = EIO;
 		reply->complete = 1;
-		return IOF_ERR_CART;
+		return 0;
 	}
 	if (out->err == 0 && out->rc == 0)
 		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
 	reply->err = out->err;
 	reply->rc = out->rc;
 	reply->complete = 1;
-	return IOF_SUCCESS;
+	return 0;
 }
 
 int ioc_getattr_name(const char *path, struct stat *stbuf)

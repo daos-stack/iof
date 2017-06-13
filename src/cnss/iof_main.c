@@ -77,11 +77,8 @@ struct iof_projection_info *ioc_get_handle(void)
  */
 int ioc_status_cb(const struct crt_cb_info *cb_info)
 {
-	struct status_cb_r *reply = NULL;
-	struct iof_status_out *out = NULL;
-	crt_rpc_t *rpc = cb_info->cci_rpc;
-
-	reply = (struct status_cb_r *)cb_info->cci_arg;
+	struct status_cb_r *reply = (struct status_cb_r *)cb_info->cci_arg;
+	struct iof_status_out *out;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -93,7 +90,7 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	out = crt_reply_get(rpc);
+	out = crt_reply_get(cb_info->cci_rpc);
 	if (!out) {
 		IOF_LOG_ERROR("Could not get output");
 		reply->err = EIO;

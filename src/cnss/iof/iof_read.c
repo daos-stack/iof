@@ -69,11 +69,9 @@ struct read_bulk_cb_r {
 
 static int read_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_cb_r *reply = NULL;
+	struct read_cb_r *reply = (struct read_cb_r *)cb_info->cci_arg;
 	struct iof_data_out *out;
 	int rc;
-
-	reply = (struct read_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -132,11 +130,9 @@ static int read_cb(const struct crt_cb_info *cb_info)
 
 static int read_bulk_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_bulk_cb_r *reply = NULL;
+	struct read_bulk_cb_r *reply = (struct read_bulk_cb_r *)cb_info->cci_arg;
 	struct iof_read_bulk_out *out;
 	int rc;
-
-	reply = (struct read_bulk_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
