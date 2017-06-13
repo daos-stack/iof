@@ -535,7 +535,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             self.skipTest('mdtest not installed')
         mdtest = ['mdtest', '-d', topdir]
         short_run = list(mdtest)
-        short_run.extend(['-i', '3', '-I', '100'])
+        short_run.extend(['-i', '3', '-I', '10'])
         start_time = time.time()
         rtn = self.common_launch_cmd('mdtest', ' '.join(short_run))
         elapsed = time.time() - start_time
