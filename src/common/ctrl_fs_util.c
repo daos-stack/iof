@@ -260,8 +260,8 @@ static int check_mnt(struct mntent *entry, void *priv)
 
 	ctrl_fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
 	if (ctrl_fd == -1) {
-		IOF_LOG_INFO("Could not open %s to find CNSS",
-			     entry->mnt_dir);
+		IOF_LOG_INFO("Could not open %s to find CNSS: %s",
+			     entry->mnt_dir, strerror(errno));
 		rc = 0;
 		goto cleanup;
 	}
