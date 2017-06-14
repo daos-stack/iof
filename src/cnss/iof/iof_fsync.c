@@ -95,8 +95,8 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 

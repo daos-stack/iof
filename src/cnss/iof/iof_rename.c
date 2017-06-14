@@ -87,9 +87,9 @@ int ioc_rename(const char *src, const char *dst)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 #if IOF_USE_FUSE3

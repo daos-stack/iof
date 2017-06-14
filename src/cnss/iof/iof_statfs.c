@@ -140,14 +140,14 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_INFO("path %s rc %d", path, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_INFO("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
 
-	if (!reply.err && !reply.rc)
+	if (IOC_STATUS_TO_RC(&reply) == 0)
 		memcpy(stat, reply.out->data.iov_buf, sizeof(*stat));
 
 	rc = crt_req_decref(reply.rpc);
 	if (rc)
 		IOF_LOG_ERROR("decref returned %d", rc);
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }

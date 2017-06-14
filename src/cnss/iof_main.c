@@ -99,6 +99,43 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 	return 0;
 }
 
+/* Mark an endpoint as off-line, most likely because a process has been
+ * evicted from the process set.
+ *
+ * Although this takes a endpoint_t option it's effectively only checking
+ * the rank as each projection is only served from a single group and all
+ * tags in a rank will be evicted simultanously.
+ *
+ * This is called after a RPC reply is recieved so it might be invoked
+ * multiple times for the same failure, and the dest_ep might have been
+ * updated after the RPC was sent but before the RPC was rejected.
+ */
+void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
+			 crt_endpoint_t *ep)
+{
+	/* If the projection is off-line then there is nothing to do */
+	if (FS_IS_OFFLINE(fs_handle)) {
+		IOF_LOG_INFO("FS %d already offline", fs_handle->fs_id);
+		return;
+	}
+
+	/* If the projection has already migrated to another rank then
+	 * there is nothing to do
+	 */
+	if (ep->ep_rank != fs_handle->dest_ep.ep_rank) {
+		IOF_LOG_INFO("EP %d already offline for %d",
+			     ep->ep_rank, fs_handle->fs_id);
+		return;
+	}
+
+	/* Insert code to fail over to secondary EP here. */
+
+	IOF_LOG_WARNING("Marking %d (%s) OFFLINE", fs_handle->fs_id,
+			fs_handle->mount_point);
+
+	fs_handle->offline_reason = EHOSTDOWN;
+}
+
 static int query_cb(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply = cb_info->cci_arg;

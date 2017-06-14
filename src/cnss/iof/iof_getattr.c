@@ -57,19 +57,26 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 	struct getattr_cb_r *reply = cb_info->cci_arg;
 	struct iof_getattr_out *out = crt_reply_get(cb_info->cci_rpc);
 
-	if (cb_info->cci_rc != 0) {
-		if (cb_info->cci_rc == -CER_TIMEDOUT)
-			reply->err = ETIMEDOUT;
-		else
-			reply->err = EIO;
+	if (IOC_HOST_IS_DOWN(cb_info)) {
+		reply->err = EHOSTDOWN;
 		iof_tracker_signal(&reply->tracker);
 		return 0;
 	}
 
-	if (out->err == 0 && out->rc == 0)
-		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
-	reply->err = out->err;
+	if (cb_info->cci_rc != 0) {
+		reply->err = EIO;
+		iof_tracker_signal(&reply->tracker);
+		return 0;
+	}
+
 	reply->rc = out->rc;
+
+	if (out->err)
+		reply->err = EIO;
+
+	if (IOC_STATUS_TO_RC(reply) == 0)
+		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
+
 	iof_tracker_signal(&reply->tracker);
 	return 0;
 }
@@ -110,10 +117,12 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d",
-		      path, reply.err == 0 ? -reply.rc : -EIO);
+	if (reply.err == EHOSTDOWN)
+		ioc_mark_ep_offline(fs_handle, &rpc->cr_ep);
 
-	return reply.err == 0 ? -reply.rc : -EIO;
+	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
+
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 #if IOF_USE_FUSE3
@@ -160,12 +169,17 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
+	if (reply.err == EHOSTDOWN)
+		ioc_mark_ep_offline(fs_handle, &rpc->cr_ep);
+
 	/* Cache the inode number */
-	handle->inode_no = stbuf->st_ino;
+	if (IOC_STATUS_TO_RC(&reply) == 0)
+		handle->inode_no = stbuf->st_ino;
 
-	IOF_LOG_DEBUG("rc %d", reply.err == 0 ? -reply.rc : -EIO);
+	IOF_LOG_DEBUG(GAH_PRINT_STR " rc %d", GAH_PRINT_VAL(handle->common.gah),
+		      IOC_STATUS_TO_RC(&reply));
 
-	return reply.err == 0 ? -reply.rc : -EIO;
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 int ioc_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)

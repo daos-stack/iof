@@ -150,8 +150,8 @@ int ioc_readlink(const char *link, char *target, size_t len)
 	if (rc)
 		IOF_LOG_ERROR("decref returned %d", rc);
 
-	IOF_LOG_DEBUG("link %s rc %d", link, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("link %s rc %d", link, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 

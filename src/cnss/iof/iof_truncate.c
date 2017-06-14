@@ -88,9 +88,9 @@ int ioc_truncate_name(const char *file, off_t len)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 #ifdef IOF_USE_FUSE3
@@ -149,9 +149,9 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 int ioc_truncate(const char *file, off_t len, struct fuse_file_info *fi)

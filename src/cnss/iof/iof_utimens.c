@@ -83,9 +83,9 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 #ifdef IOF_USE_FUSE3
@@ -130,9 +130,9 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
 int ioc_utimens(const char *file, const struct timespec tv[2],

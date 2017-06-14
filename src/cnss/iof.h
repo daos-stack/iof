@@ -233,7 +233,16 @@ struct status_cb_r {
  * This macro could also with with other *cb_r structs which use the same
  * conventions for err/rc
  */
-#define IOC_STATUS_TO_RC(STATUS) (STATUS.err == 0 ? -STATUS.rc : -STATUS.err)
+#define IOC_STATUS_TO_RC(STATUS) \
+	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
+
+/* Check if a remote host is down.  Used in RPC callback to check the cb_info
+ * for permanent failure of the remote ep.
+ */
+#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -CER_TIMEDOUT) || \
+					((CB_INFO)->cci_rc == -CER_OOG))
+
+void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 
 int ioc_status_cb(const struct crt_cb_info *);
 

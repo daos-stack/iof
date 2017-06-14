@@ -87,8 +87,8 @@ int ioc_rmdir(const char *file)
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(reply));
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
 
-	return IOC_STATUS_TO_RC(reply);
+	return IOC_STATUS_TO_RC(&reply);
 }
 
