@@ -43,20 +43,21 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
+#include "ios_gah.h"
 
-int ioc_symlink(const char *dst, const char *src)
+int ioc_truncate_name(const char *file, off_t len)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_two_string_in *in;
+	struct iof_truncate_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
+	IOF_LOG_INFO("Truncate %s %#zx", file, len);
 
-	STAT_ADD(fs_handle->stats, symlink);
+	STAT_ADD(fs_handle->stats, truncate);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
@@ -67,29 +68,97 @@ int ioc_symlink(const char *dst, const char *src)
 	}
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, symlink), &rpc);
+			    FS_TO_OP(fs_handle, truncate), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
 		return -EIO;
 	}
 
-	in = crt_req_get(rpc);
-	in->src = (crt_string_t)src;
-	in->dst = (crt_string_t)dst;
-	in->fs_id = (uint64_t)fs_handle->fs_id;
-
 	iof_tracker_init(&reply.tracker, 1);
+	in = crt_req_get(rpc);
+	in->path = (crt_string_t)file;
+	in->len = len;
+	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }
 
+#ifdef IOF_USE_FUSE3
+/*
+ * Send a RPC to call ftruncate.
+ *
+ * Currently there is no way for the server to reply with IOF_GAH_INVALID so an
+ * an opportunity to invalidate a local GAH could be missed here.
+ */
+int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
+{
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_ftruncate_in *in;
+	struct status_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	IOF_LOG_INFO("Position %#zx " GAH_PRINT_STR, len,
+		     GAH_PRINT_VAL(handle->common.gah));
+
+	STAT_ADD(fs_handle->stats, ftruncate);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
+	if (!handle->common.gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
+			    FS_TO_OP(fs_handle, ftruncate), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
+	}
+
+	iof_tracker_init(&reply.tracker, 1);
+	in = crt_req_get(rpc);
+	in->gah = handle->common.gah;
+	in->len = len;
+
+	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		return -EIO;
+	}
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
+
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
+
+	return IOC_STATUS_TO_RC(&reply);
+}
+
+int ioc_truncate(const char *file, off_t len, struct fuse_file_info *fi)
+{
+	if (fi)
+		return ioc_ftruncate(len, fi);
+	else
+		return ioc_truncate_name(file, len);
+}
+#endif

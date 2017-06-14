@@ -41,21 +41,69 @@
 #else
 #include <fuse/fuse.h>
 #endif
+
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 
-int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
+int ioc_utimens_name(const char *file, const struct timespec tv[2])
+{
+	struct iof_projection_info *fs_handle = ioc_get_handle();
+	struct iof_time_in *in;
+	struct status_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	IOF_LOG_INFO("file %s", file);
+
+	STAT_ADD(fs_handle->stats, utimens);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+			    FS_TO_OP(fs_handle, utimens), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
+	}
+
+	iof_tracker_init(&reply.tracker, 1);
+	in = crt_req_get(rpc);
+	in->path = (crt_string_t)file;
+	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
+	in->fs_id = fs_handle->fs_id;
+
+	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		return -EIO;
+	}
+
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
+
+	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
+
+	return IOC_STATUS_TO_RC(&reply);
+}
+
+#ifdef IOF_USE_FUSE3
+int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_gah_in *in;
+	struct iof_time_gah_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
-	crt_opcode_t opcode;
 	int rc;
 
-	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
+	STAT_ADD(fs_handle->stats, futimens);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
@@ -72,21 +120,18 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	if (data)
-		opcode = FS_TO_OP(fs_handle, fdatasync);
-	else
-		opcode = FS_TO_OP(fs_handle, fsync);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep, opcode,
-			    &rpc);
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
+			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
 		return -EIO;
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
+	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -95,8 +140,17 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }
 
+int ioc_utimens(const char *file, const struct timespec tv[2],
+		struct fuse_file_info *fi)
+{
+	if (fi)
+		return ioc_utimens_gah(tv, fi);
+	else
+		return ioc_utimens_name(file, tv);
+}
+#endif

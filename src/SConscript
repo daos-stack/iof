@@ -49,10 +49,10 @@ COMMON_SRC = ['version.c',
               'iof_mntent.c']
 LIBIOF_SRC = ['ctrl_fs_util.c']
 CNSS_SRC = ['cnss.c',
-            'iof_main.c',
             'ctrl_common.c',
-            'ctrl_fs.c',
-            'iof_fuseops.c']
+            'ctrl_fs.c']
+IOC_SRC = ['ioc_main.c',
+           'ioc_fuseops.c']
 IONSS_SRC = ['ionss.c', 'fh.c']
 RPC_SRC = ['chmod',
            'closedir',
@@ -185,6 +185,7 @@ def scons():
     # check which will verify fuse3/fuse.h can be loaded.
     cenv.AppendUnique(CPPDEFINES=['-DFUSE_USE_VERSION=30'])
     cenv.AppendUnique(CPPPATH=['cnss'])
+    cenv.AppendUnique(CPPPATH=['ioc'])
 
     if env.get('PLATFORM') != 'darwin':
         cenv.AppendUnique(LIBS='dl')
@@ -202,8 +203,10 @@ def scons():
     cnss_obj = []
     for src in CNSS_SRC:
         cnss_obj += cenv.Object(os.path.join('cnss', src))
+    for src in IOC_SRC:
+        cnss_obj += cenv.Object(os.path.join('ioc', src))
     for src in RPC_SRC:
-        cnss_obj += cenv.Object(os.path.join('cnss', 'iof', 'iof_%s.c' % src))
+        cnss_obj += cenv.Object(os.path.join('ioc', 'ops', '%s.c' % src))
     progs = cenv.Program('cnss/cnss', common + cnss_obj)
 
     # Build the IONSS application

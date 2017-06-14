@@ -43,7 +43,7 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 #include "ios_gah.h"
 
@@ -397,4 +397,3 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	IOF_LOG_INFO("Returning zero");
 	return 0;
 }
-

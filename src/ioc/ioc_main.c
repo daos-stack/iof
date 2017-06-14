@@ -51,7 +51,7 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 #include "ios_gah.h"
 #include "iof_ioctl.h"
@@ -208,7 +208,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 
 static int iof_uint_read(char *buf, size_t buflen, void *arg)
 {
-	uint *value = (uint *)arg;
+	uint *value = arg;
 
 	snprintf(buf, buflen, "%u", *value);
 	return 0;
@@ -216,7 +216,7 @@ static int iof_uint_read(char *buf, size_t buflen, void *arg)
 
 static int iof_uint64_read(char *buf, size_t buflen, void *arg)
 {
-	uint64_t *value = (uint64_t *)arg;
+	uint64_t *value = arg;
 
 	snprintf(buf, buflen, "%lu", *value);
 	return 0;
@@ -375,7 +375,7 @@ gh_release(void *arg)
 
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
 	char *prefix;
 	int ret;
@@ -481,14 +481,14 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 static uint64_t online_read_cb(void *arg)
 {
-	struct iof_projection_info *fs_handle = (struct iof_projection_info *)arg;
+	struct iof_projection_info *fs_handle = arg;
 
 	return !FS_IS_OFFLINE(fs_handle);
 }
 
 static int online_write_cb(uint64_t value, void *arg)
 {
-	struct iof_projection_info *fs_handle = (struct iof_projection_info *)arg;
+	struct iof_projection_info *fs_handle = arg;
 
 	if (value > 1)
 		return EINVAL;
@@ -782,7 +782,7 @@ static int query_projections(struct iof_state *iof_state,
 
 static int iof_post_start(void *arg)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_state *iof_state = arg;
 	int ret;
 	int grp_num;
 	int total_projections = 0;
@@ -843,7 +843,7 @@ static void iof_deregister_fuse(void *arg)
 
 static void iof_stop(void *arg)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_state *iof_state = arg;
 	struct iof_projection_info *fs_handle;
 
 	IOF_LOG_INFO("Called iof_stop");
@@ -873,7 +873,7 @@ detach_cb(const struct crt_cb_info *cb_info)
 
 static void iof_finish(void *arg)
 {
-	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
 	crt_rpc_t *rpc;
 	int ret;
@@ -947,4 +947,3 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 	*fns = &self;
 	return IOF_SUCCESS;
 }
-

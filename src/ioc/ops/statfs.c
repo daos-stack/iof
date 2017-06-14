@@ -43,74 +43,111 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
-#include "ios_gah.h"
 
-struct closedir_cb_r {
+struct statfs_cb_r {
+	struct iof_data_out *out;
+	crt_rpc_t *rpc;
 	struct iof_tracker tracker;
+	int err;
+	int rc;
 };
 
 static void
-closedir_cb(const struct crt_cb_info *cb_info)
+statfs_cb(const struct crt_cb_info *cb_info)
 {
-	struct closedir_cb_r *reply = cb_info->cci_arg;
+	struct statfs_cb_r *reply = cb_info->cci_arg;
+	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
+	int rc;
 
-	/* There is no error handling needed here, as all client state will be
-	 * destroyed on return anyway.
-	 */
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  On timeout return EAGAIN, all other errors
+		 * return EIO.
+		 *
+		 * TODO: Handle target eviction here
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		if (cb_info->cci_rc == -CER_TIMEDOUT)
+			reply->err = EAGAIN;
+		else
+			reply->err = EIO;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	if (out->err) {
+		IOF_LOG_ERROR("Error from target %d", out->err);
+
+		reply->err = EIO;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	if (out->rc) {
+		reply->rc = out->rc;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	rc = crt_req_addref(cb_info->cci_rpc);
+	if (rc) {
+		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
+			      rc);
+		reply->err = EIO;
+	} else {
+		reply->out = out;
+		reply->rpc = cb_info->cci_rpc;
+	}
 
 	iof_tracker_signal(&reply->tracker);
 }
 
-int ioc_closedir(const char *dir, struct fuse_file_info *fi)
+int ioc_statfs(const char *path, struct statvfs *stat)
 {
-	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
-	struct iof_gah_in *in;
-	struct closedir_cb_r reply = {0};
+	struct iof_projection_info *fs_handle = ioc_get_handle();
+	struct iof_string_in *in;
+	struct statfs_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	STAT_ADD(fs_handle->stats, closedir);
+	IOF_LOG_INFO("path %s", path);
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
+	STAT_ADD(fs_handle->stats, statfs);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	/* If the GAH has been reported as invalid by the server in the past
-	 * then do not attempt to do anything with it.
-	 *
-	 * However, even if the local handle has been reported invalid then
-	 * still continue to release the GAH on the server side.
-	 */
-	if (!dir_handle->gah_valid) {
-		rc = EIO;
-		goto out;
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+			    FS_TO_OP(fs_handle, statfs), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		return -EIO;
 	}
 
-	in = crt_req_get(dir_handle->close_rpc);
-	in->gah = dir_handle->gah;
 	iof_tracker_init(&reply.tracker, 1);
+	in = crt_req_get(rpc);
+	in->path = (crt_string_t)path;
+	in->fs_id = fs_handle->fs_id;
 
-	rc = crt_req_send(dir_handle->close_rpc, closedir_cb, &reply);
+	rc = crt_req_send(rpc, statfs_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		rc = EIO;
-		goto out;
+		return -EIO;
 	}
-
-	dir_handle->close_rpc = NULL;
-
-	iof_pool_release(fs_handle->dh, dir_handle);
-	iof_pool_restock(fs_handle->dh);
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	return 0;
-out:
+	IOF_LOG_INFO("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
 
-	iof_pool_release(fs_handle->dh, dir_handle);
+	if (IOC_STATUS_TO_RC(&reply) == 0)
+		memcpy(stat, reply.out->data.iov_buf, sizeof(*stat));
 
-	return -rc;
+	rc = crt_req_decref(reply.rpc);
+	if (rc)
+		IOF_LOG_ERROR("decref returned %d", rc);
+
+	return IOC_STATUS_TO_RC(&reply);
 }

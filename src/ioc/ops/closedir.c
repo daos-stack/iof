@@ -43,62 +43,74 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
+#include "ios_gah.h"
 
-int ioc_rename(const char *src, const char *dst)
+struct closedir_cb_r {
+	struct iof_tracker tracker;
+};
+
+static void
+closedir_cb(const struct crt_cb_info *cb_info)
 {
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_two_string_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
+	struct closedir_cb_r *reply = cb_info->cci_arg;
+
+	/* There is no error handling needed here, as all client state will be
+	 * destroyed on return anyway.
+	 */
+
+	iof_tracker_signal(&reply->tracker);
+}
+
+int ioc_closedir(const char *dir, struct fuse_file_info *fi)
+{
+	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
+	struct iof_gah_in *in;
+	struct closedir_cb_r reply = {0};
 	int rc;
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
+	STAT_ADD(fs_handle->stats, closedir);
 
-	STAT_ADD(fs_handle->stats, rename);
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
+	/* If the GAH has been reported as invalid by the server in the past
+	 * then do not attempt to do anything with it.
+	 *
+	 * However, even if the local handle has been reported invalid then
+	 * still continue to release the GAH on the server side.
+	 */
+	if (!dir_handle->gah_valid) {
+		rc = EIO;
+		goto out;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, rename), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
+	in = crt_req_get(dir_handle->close_rpc);
+	in->gah = dir_handle->gah;
 	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->src = (crt_string_t)src;
-	in->dst = (crt_string_t)dst;
-	in->fs_id = fs_handle->fs_id;
 
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	rc = crt_req_send(dir_handle->close_rpc, closedir_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		return -EIO;
+		rc = EIO;
+		goto out;
 	}
+
+	dir_handle->close_rpc = NULL;
+
+	iof_pool_release(fs_handle->dh, dir_handle);
+	iof_pool_restock(fs_handle->dh);
+
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
+	return 0;
+out:
 
-	return IOC_STATUS_TO_RC(&reply);
-}
+	iof_pool_release(fs_handle->dh, dir_handle);
 
-#if IOF_USE_FUSE3
-int ioc_rename3(const char *src, const char *dst, unsigned int flags)
-{
-	if (flags) {
-		IOF_LOG_INFO("Unsupported rename flags %x", flags);
-		return -ENOTSUP;
-	}
-	return ioc_rename(src, dst);
+	return -rc;
 }
-#endif

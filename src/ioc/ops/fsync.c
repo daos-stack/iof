@@ -41,76 +41,44 @@
 #else
 #include <fuse/fuse.h>
 #endif
-
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
-#include "ios_gah.h"
 
-int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
+int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 {
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_file_handle *handle;
-	struct iof_create_in *in;
-	struct open_cb_r reply = {0};
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_gah_in *in;
+	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
+	crt_opcode_t opcode;
 	int rc;
 
-	STAT_ADD(fs_handle->stats, create);
+	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
-
-	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
-	 * defined to 0 so check that LARGEFILE is set and reject the open
-	 * if not.
-	 */
-	if (!(fi->flags & LARGEFILE)) {
-		IOF_LOG_INFO("%p O_LARGEFILE required 0%o", fs_handle,
-			     fi->flags);
-		return -ENOTSUP;
-	}
-
-	/* Check that a regular file is requested */
-	if (!(mode & S_IFREG)) {
-		IOF_LOG_INFO("%p S_IFREG required 0%o", fs_handle,
-			     fi->flags);
-		return -ENOTSUP;
-	}
-
-	/* Check for flags that do not make sense in this context.
-	 */
-	if (fi->flags & IOF_UNSUPPORTED_CREATE_FLAGS) {
-		IOF_LOG_INFO("%p unsupported flag requested 0%o", fs_handle,
-			     fi->flags);
-		return -ENOTSUP;
-	}
-
-	/* Check that only the flag for a regular file is specified */
-	if ((mode & S_IFMT) != S_IFREG) {
-		IOF_LOG_INFO("%p unsupported mode requested 0%o", fs_handle,
-			     mode);
-		return -ENOTSUP;
-	}
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
 
-	handle = ioc_fh_new(file);
-	if (!handle)
-		return -ENOMEM;
+	if (!handle->common.gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
 
-	handle->fs_handle = fs_handle;
-	handle->common.ep = fs_handle->dest_ep;
-	handle->common.projection = &fs_handle->proj;
+	if (data)
+		opcode = FS_TO_OP(fs_handle, fdatasync);
+	else
+		opcode = FS_TO_OP(fs_handle, fsync);
 
-	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
-		     mode, handle);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, create), &rpc);
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep, opcode,
+			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -EIO;
@@ -118,40 +86,16 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
-	in->mode = mode;
-	in->fs_id = fs_handle->fs_id;
-	in->flags = fi->flags;
+	in->gah = handle->common.gah;
 
-	reply.fh = handle;
-
-	rc = crt_req_send(rpc, ioc_open_cb, &reply);
+	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-
-	LOG_FLAGS(handle, fi->flags);
-	LOG_MODES(handle, mode);
-
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	if (reply.err == 0 && reply.rc == 0)
-		IOF_LOG_INFO("Handle %p " GAH_PRINT_STR, handle,
-			     GAH_PRINT_VAL(handle->common.gah));
+	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
 
-	rc = reply.err == 0 ? -reply.rc : -EIO;
-
-	IOF_LOG_DEBUG("path %s handle %p rc %d",
-		      handle->name, rc == 0 ? handle : NULL, rc);
-
-	if (rc == 0) {
-		fi->fh = (uint64_t)handle;
-		handle->common.gah_valid = 1;
-	} else {
-		free(handle);
-	}
-
-	return rc;
+	return IOC_STATUS_TO_RC(&reply);
 }
-

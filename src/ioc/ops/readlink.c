@@ -43,31 +43,75 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 
-int ioc_utimens_name(const char *file, const struct timespec tv[2])
+struct readlink_cb_r {
+	struct iof_string_out *out;
+	crt_rpc_t *rpc;
+	struct iof_tracker tracker;
+	int err;
+	int rc;
+};
+
+static void
+ioc_readlink_cb(const struct crt_cb_info *cb_info)
+{
+	struct readlink_cb_r *reply = cb_info->cci_arg;
+	struct iof_string_out *out = crt_reply_get(cb_info->cci_rpc);
+	int rc;
+
+	if (cb_info->cci_rc != 0) {
+		/*
+		 * Error handling.  Return EIO on any error
+		 */
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = EIO;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	if (out->err) {
+		IOF_LOG_ERROR("Error from target %d", out->err);
+
+		reply->err = EIO;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	if (out->rc) {
+		reply->rc = out->rc;
+		iof_tracker_signal(&reply->tracker);
+		return;
+	}
+
+	rc = crt_req_addref(cb_info->cci_rpc);
+	if (rc) {
+		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
+			      rc);
+		reply->err = EIO;
+	} else {
+		reply->out = out;
+		reply->rpc = cb_info->cci_rpc;
+	}
+
+	iof_tracker_signal(&reply->tracker);
+}
+
+int ioc_readlink(const char *link, char *target, size_t len)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_time_in *in;
-	struct status_cb_r reply = {0};
+	struct iof_string_in *in;
+	struct readlink_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("file %s", file);
+	IOF_LOG_INFO("link %s", link);
 
-	STAT_ADD(fs_handle->stats, utimens);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
+	STAT_ADD(fs_handle->stats, readlink);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, utimens), &rpc);
+			    FS_TO_OP(fs_handle, readlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -76,81 +120,37 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
-	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
+	in->path = (crt_string_t)link;
 	in->fs_id = fs_handle->fs_id;
 
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		return -EIO;
-	}
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
-
-	return IOC_STATUS_TO_RC(&reply);
-}
-
-#ifdef IOF_USE_FUSE3
-int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
-{
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_time_gah_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, futimens);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
-
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
-		 */
-		return -EIO;
-	}
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
-			    FS_TO_OP(fs_handle, ftruncate), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->gah = handle->common.gah;
-	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
-
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	rc = crt_req_send(rpc, ioc_readlink_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
+	if (!reply.rpc)
+		return -EIO;
+
+	IOF_LOG_DEBUG("%d %d %p %s",
+		      reply.err,
+		      reply.rc,
+		      reply.out->path,
+		      reply.out->path);
+
+	if (reply.out->path) {
+		IOF_LOG_DEBUG("Path is %s", reply.out->path);
+		strncpy(target, reply.out->path, len);
+	} else {
+		reply.err = EIO;
+	}
+
+	rc = crt_req_decref(reply.rpc);
+	if (rc)
+		IOF_LOG_ERROR("decref returned %d", rc);
+
+	IOF_LOG_DEBUG("link %s rc %d", link, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }
-
-int ioc_utimens(const char *file, const struct timespec tv[2],
-		struct fuse_file_info *fi)
-{
-	if (fi)
-		return ioc_utimens_gah(tv, fi);
-	else
-		return ioc_utimens_name(file, tv);
-}
-#endif

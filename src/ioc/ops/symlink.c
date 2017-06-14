@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2016-2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,52 +43,52 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
-#include "iof_ioctl.h"
 
-int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
-	      unsigned int flags, void *data)
+int ioc_symlink(const char *dst, const char *src)
 {
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_gah_info gah_info = {0};
+	struct iof_projection_info *fs_handle = ioc_get_handle();
+	struct iof_two_string_in *in;
+	struct status_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
+	int rc;
 
-	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		     GAH_PRINT_VAL(handle->common.gah));
+	IOF_LOG_INFO("src %s dst %s", src, dst);
 
-	STAT_ADD(handle->fs_handle->stats, ioctl);
+	STAT_ADD(fs_handle->stats, symlink);
 
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH, nothing to do */
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+			    FS_TO_OP(fs_handle, symlink), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, ret = %u",
+			      rc);
 		return -EIO;
 	}
 
-	if (cmd == IOF_IOCTL_GAH) {
-		if (data == NULL)
-			return -EIO;
+	in = crt_req_get(rpc);
+	in->src = (crt_string_t)src;
+	in->dst = (crt_string_t)dst;
+	in->fs_id = (uint64_t)fs_handle->fs_id;
 
-		STAT_ADD(handle->fs_handle->stats, il_ioctl);
+	iof_tracker_init(&reply.tracker, 1);
 
-		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
-		 * allocated that many bytes in data
-		 */
-		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d,"
-			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->common.gah),
-			     handle->fs_handle->fs_id,
-			     handle->fs_handle->proj.cli_fs_id);
-		gah_info.version = IOF_IOCTL_VERSION;
-		gah_info.gah = handle->common.gah;
-		gah_info.cnss_id = getpid();
-		gah_info.cli_fs_id = handle->fs_handle->proj.cli_fs_id;
-		memcpy(data, &gah_info, sizeof(gah_info));
-		return 0;
+	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
+		return -EIO;
 	}
+	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_INFO("Real ioctl support is not implemented");
+	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
 
-	return -ENOTSUP;
+	return IOC_STATUS_TO_RC(&reply);
 }
-

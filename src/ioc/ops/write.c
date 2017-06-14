@@ -43,34 +43,25 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 #include "ios_gah.h"
 
-struct read_cb_r {
-	struct iof_data_out *out;
+struct write_cb_r {
 	struct iof_file_handle *handle;
-	crt_rpc_t *rpc;
+	size_t len;
 	struct iof_tracker tracker;
 	int err;
 	int rc;
 };
 
-struct read_bulk_cb_r {
-	struct iof_read_bulk_out *out;
-	struct iof_file_handle *handle;
-	crt_rpc_t *rpc;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
+#define BULK_THRESHOLD 64
 
 static void
-read_cb(const struct crt_cb_info *cb_info)
+write_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_cb_r *reply = cb_info->cci_arg;
-	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
+	struct write_cb_r *reply = cb_info->cci_arg;
+	struct iof_write_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -89,102 +80,41 @@ read_cb(const struct crt_cb_info *cb_info)
 	}
 
 	if (out->err) {
-		IOF_LOG_ERROR("Error from target %d", out->err);
-
-		if (out->err == IOF_GAH_INVALID)
-			reply->handle->common.gah_valid = 0;
-
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->rc) {
-		reply->rc = out->rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
-
-	iof_tracker_signal(&reply->tracker);
-}
-
-static void
-read_bulk_cb(const struct crt_cb_info *cb_info)
-{
-	struct read_bulk_cb_r *reply = cb_info->cci_arg;
-	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
+		/* Convert the error types, out->err is a IOF error code
+		 * so translate it to a errno we can pass back to FUSE.
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		if (cb_info->cci_rc == -CER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->err) {
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
+		reply->err = EIO;
 		if (out->err == IOF_GAH_INVALID)
 			reply->handle->common.gah_valid = 0;
 
 		if (out->err == IOF_ERR_NOMEM)
-			reply->err = ENOMEM;
-		else
-			reply->err = EIO;
+			reply->err = EAGAIN;
+
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
 
-	if (out->rc) {
-		reply->rc = out->rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
-
+	reply->len = out->len;
+	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
 }
 
-int ioc_read_direct(char *buff, size_t len, off_t position,
-		    struct iof_file_handle *handle)
+int ioc_write_direct(const char *buff, size_t len, off_t position,
+		     struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_read_in *in;
-	struct read_cb_r reply = {0};
+	struct iof_write_in *in;
+	struct write_cb_r reply = {0};
+
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
+	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
+
 	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
-			    FS_TO_OP(fs_handle, read), &rpc);
+			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -194,50 +124,43 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
+	crt_iov_set(&in->data, (void *)buff, len);
 	in->base = position;
-	in->len = len;
 
 	reply.handle = handle;
 
-	rc = crt_req_send(rpc, read_cb, &reply);
+	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
+
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	if (reply.err)
+	if (reply.err != 0)
 		return -reply.err;
 
 	if (reply.rc != 0)
 		return -reply.rc;
 
-	len = reply.out->data.iov_len;
-
-	if (len > 0)
-		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
-
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
-
-	return len;
+	return reply.len;
 }
 
-int ioc_read_bulk(char *buff, size_t len, off_t position,
-		  struct iof_file_handle *handle)
+int ioc_write_bulk(const char *buff, size_t len, off_t position,
+		   struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_read_bulk_in *in;
-	struct read_bulk_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
+	struct iof_write_bulk *in;
 	crt_bulk_t bulk;
+	struct write_cb_r reply = {0};
+
 	crt_sg_list_t sgl = {0};
 	crt_iov_t iov = {0};
+	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
-			    FS_TO_OP(fs_handle, read_bulk), &rpc);
+			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -245,9 +168,8 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	}
 
 	in = crt_req_get(rpc);
+
 	in->gah = handle->common.gah;
-	in->base = position;
-	in->len = len;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
@@ -255,74 +177,59 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
+	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
 			     &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		return -EIO;
 	}
 
+	iof_tracker_init(&reply.tracker, 1);
+	in->base = position;
+
 	bulk = in->bulk;
 
-	iof_tracker_init(&reply.tracker, 1);
 	reply.handle = handle;
 
-	rc = crt_req_send(rpc, read_bulk_cb, &reply);
+	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
+
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (reply.err) {
-		crt_bulk_free(bulk);
-		return -reply.err;
-	}
-
-	if (reply.rc != 0) {
-		crt_bulk_free(bulk);
-		return -reply.rc;
-	}
-
-	if (reply.out->iov_len > 0) {
-		if (reply.out->data.iov_len != reply.out->iov_len) {
-			IOF_LOG_ERROR("Missing IOV %d", reply.out->iov_len);
-			return -EIO;
-		}
-		len = reply.out->data.iov_len;
-		memcpy(buff, reply.out->data.iov_buf, len);
-	} else {
-		len = reply.out->bulk_len;
-		IOF_LOG_INFO("Received %#zx via bulk", len);
-	}
-
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
 
 	rc = crt_bulk_free(bulk);
 	if (rc)
 		return -EIO;
 
-	IOF_LOG_INFO("Read complete %#zx", len);
+	if (reply.err != 0)
+		return -reply.err;
 
-	return len;
+	if (reply.rc != 0)
+		return -reply.rc;
+
+	return reply.len;
 }
 
-int ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
-		 off_t position, struct fuse_file_info *fi)
+int ioc_write(const char *file, const char *buff, size_t len, off_t position,
+	      struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct fuse_bufvec *buf;
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(handle->common.gah));
 
-	STAT_ADD(handle->fs_handle->stats, read);
+	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		return -handle->fs_handle->offline_reason;
+
+	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
@@ -331,32 +238,13 @@ int ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 		return -EIO;
 	}
 
-	buf = calloc(1, sizeof(*buf));
-	if (!buf)
-		return -ENOMEM;
-
-	buf->buf[0].mem = malloc(len);
-	if (!buf->buf[0].mem) {
-		free(buf);
-		return -ENOMEM;
-	}
-	buf->count = 1;
-	buf->buf[0].fd = -1;
-	*bufp = buf;
-
-	IOF_LOG_DEBUG("Using buffer at %p", buf->buf[0].mem);
-
-	if (len > handle->fs_handle->max_iov_read)
-		rc = ioc_read_bulk(buf->buf[0].mem, len, position, handle);
+	if (len >= BULK_THRESHOLD)
+		rc = ioc_write_bulk(buff, len, position, handle);
 	else
-		rc = ioc_read_direct(buf->buf[0].mem, len, position, handle);
+		rc = ioc_write_direct(buff, len, position, handle);
 
-	if (rc > 0) {
-		STAT_ADD_COUNT(handle->fs_handle->stats, read_bytes, rc);
-		buf->buf[0].size = rc;
-	}
-
-	IOF_LOG_INFO("Read complete %i", rc);
+	if (rc > 0)
+		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
 
 	return rc;
 }

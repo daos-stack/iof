@@ -47,7 +47,7 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 
 /* Try to make the function pointer type as generic as possible */

@@ -43,20 +43,20 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 
-int ioc_rmdir(const char *file)
+int ioc_rename(const char *src, const char *dst)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_string_in *in;
+	struct iof_two_string_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("file %s", file);
+	IOF_LOG_INFO("src %s dst %s", src, dst);
 
-	STAT_ADD(fs_handle->stats, rmdir);
+	STAT_ADD(fs_handle->stats, rename);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
@@ -67,7 +67,7 @@ int ioc_rmdir(const char *file)
 	}
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, rmdir), &rpc);
+			    FS_TO_OP(fs_handle, rename), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -76,7 +76,8 @@ int ioc_rmdir(const char *file)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
+	in->src = (crt_string_t)src;
+	in->dst = (crt_string_t)dst;
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
@@ -84,11 +85,20 @@ int ioc_rmdir(const char *file)
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		return -EIO;
 	}
-
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }
 
+#if IOF_USE_FUSE3
+int ioc_rename3(const char *src, const char *dst, unsigned int flags)
+{
+	if (flags) {
+		IOF_LOG_INFO("Unsupported rename flags %x", flags);
+		return -ENOTSUP;
+	}
+	return ioc_rename(src, dst);
+}
+#endif

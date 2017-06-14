@@ -43,7 +43,7 @@
 #endif
 
 #include "iof_common.h"
-#include "iof.h"
+#include "ioc.h"
 #include "log.h"
 #include "ios_gah.h"
 
@@ -142,4 +142,3 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	return reply.err == 0 ? -reply.rc : -EIO;
 }
-
