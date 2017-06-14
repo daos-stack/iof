@@ -131,7 +131,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	}
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    fs_handle->dest_ep,
+			    handle->ep,
 			    FS_TO_OP(fs_handle, chmod_gah), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

@@ -113,7 +113,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -160,7 +160,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

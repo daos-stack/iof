@@ -103,6 +103,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
+	handle->ep = fs_handle->dest_ep;
 
 	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
 		     mode, handle);

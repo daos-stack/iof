@@ -104,7 +104,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, close), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

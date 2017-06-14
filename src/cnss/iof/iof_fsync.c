@@ -77,7 +77,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	else
 		opcode = FS_TO_OP(fs_handle, fsync);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep, opcode,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep, opcode,
 			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);

@@ -205,6 +205,7 @@ struct iof_dir_handle {
 	int				handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
 	int				gah_valid;
+	crt_endpoint_t			ep;
 	/* The name of the directory */
 	char				name[];
 };
@@ -215,6 +216,7 @@ struct iof_file_handle {
 	struct ios_gah			gah;
 	int				gah_valid;
 	ino_t				inode_no;
+	crt_endpoint_t			ep;
 	char				name[];
 };
 

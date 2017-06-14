@@ -90,7 +90,7 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 		goto out;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, dir_handle->ep,
 			    FS_TO_OP(fs_handle, closedir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

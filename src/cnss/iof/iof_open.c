@@ -134,10 +134,11 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
+	handle->ep = fs_handle->dest_ep;
 
 	IOF_LOG_INFO("file %s flags 0%o handle %p", file, fi->flags, handle);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, open), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);

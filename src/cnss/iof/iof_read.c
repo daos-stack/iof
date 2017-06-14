@@ -182,7 +182,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -236,7 +236,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
 			    FS_TO_OP(fs_handle, read_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

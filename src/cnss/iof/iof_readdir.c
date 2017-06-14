@@ -108,7 +108,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	int ret = 0;
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, dir_handle->ep,
 			    FS_TO_OP(fs_handle, readdir), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",
