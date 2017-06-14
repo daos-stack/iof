@@ -90,8 +90,18 @@ def commonSetUpModule():
 def valgrind_suffix(log_path):
     """Return the commands required to launch valgrind"""
     use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
-    suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
-                                "etc", "memcheck-cart.supp")
+    crt_suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
+                                    "etc", "memcheck-cart.supp")
+
+    iof_test_bin = os.getenv('IOF_TEST_BIN')
+    if iof_test_bin:
+        iof_suppressfile = os.path.join(iof_test_bin, '..', 'etc',
+                                        'memcheck-iof.supp')
+    else:
+        iof_suppressfile = os.path.join(
+            os.path.dirname(os.path.realpath(__file__)),
+            '..', 'utils', 'memcheck-iof.supp')
+    iof_suppressfile = os.path.realpath(iof_suppressfile)
     if use_valgrind == 'memcheck':
         return ['valgrind', '--xml=yes',
                 '--xml-file=%s' %
@@ -100,7 +110,8 @@ def valgrind_suffix(log_path):
                 '--leak-check=full', '--gen-suppressions=all',
                 '--fullpath-after=',
                 '--partial-loads-ok=yes',
-                '--suppressions=%s' % suppressfile,
+                '--suppressions=%s' % crt_suppressfile,
+                '--suppressions=%s' % iof_suppressfile,
                 '--show-reachable=yes']
     elif use_valgrind == "callgrind":
         return ['valgrind', '--tool=callgrind',
@@ -116,9 +127,10 @@ def valgrind_suffix(log_path):
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
                '--partial-loads-ok=yes',
+               '--suppressions=%s' % iof_suppressfile,
                '--show-reachable=yes']
-        if os.path.exists(suppressfile):
-            cmd.append('--suppressions=%s' % suppressfile)
+        if os.path.exists(crt_suppressfile):
+            cmd.append('--suppressions=%s' % crt_suppressfile)
         return cmd
     return []
 

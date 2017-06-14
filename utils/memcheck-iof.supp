@@ -1,0 +1,42 @@
+{
+   fuse3-0
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:strdup
+   fun:fuse_register_module
+   fun:fuse_new
+   fun:ctrl_fs_start
+   fun:main
+}
+{
+   fuse3-1
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:strdup
+   fun:fuse_register_module
+   fun:fuse_new
+   fun:ctrl_fs_start
+   fun:main
+}
+{
+   fuse3-2
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:fuse_register_module
+   fun:fuse_new
+   fun:ctrl_fs_start
+   fun:main
+}
+{
+   fuse3-3
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:fuse_register_module
+   fun:fuse_new
+   fun:ctrl_fs_start
+   fun:main
+}

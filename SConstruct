@@ -186,6 +186,7 @@ def scons():
     SConscript('%s/test/SConscript' % arch_dir)
     SConscript('%s/scons_local/test_runner/SConscript' % arch_dir)
 
+    env.Install('$PREFIX/etc', ['utils/memcheck-iof.supp'])
 
     # Put this after all SConscript calls so that any imports they require can
     # be included.
