@@ -77,22 +77,14 @@ struct iof_projection_info *ioc_get_handle(void)
  */
 int ioc_status_cb(const struct crt_cb_info *cb_info)
 {
-	struct status_cb_r *reply = (struct status_cb_r *)cb_info->cci_arg;
-	struct iof_status_out *out;
+	struct status_cb_r *reply = cb_info->cci_arg;
+	struct iof_status_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
 		 * Error handling.  Return EIO on any error
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		reply->err = EIO;
-		reply->complete = 1;
-		return 0;
-	}
-
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get output");
 		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
@@ -107,15 +99,11 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 	return 0;
 }
 
-static int query_callback(const struct crt_cb_info *cb_info)
+static int query_cb(const struct crt_cb_info *cb_info)
 {
-	struct query_cb_r *reply;
+	struct query_cb_r *reply = cb_info->cci_arg;
+	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
 	int ret;
-	struct iof_psr_query *query;
-	crt_rpc_t *query_rpc;
-
-	query_rpc = cb_info->cci_rpc;
-	reply = (struct query_cb_r *) cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -130,14 +118,7 @@ static int query_callback(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	query = crt_reply_get(query_rpc);
-	if (!query) {
-		IOF_LOG_ERROR("Could not get query reply");
-		reply->complete = 1;
-		return 0;
-	}
-
-	ret = crt_req_addref(query_rpc);
+	ret = crt_req_addref(cb_info->cci_rpc);
 	if (ret) {
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 			      ret);
@@ -171,7 +152,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 		return ret;
 	}
 
-	ret = crt_req_send(*query_rpc, query_callback, &reply);
+	ret = crt_req_send(*query_rpc, query_cb, &reply);
 	if (ret) {
 		IOF_LOG_ERROR("Could not send query RPC, ret = %d", ret);
 		return ret;
@@ -699,7 +680,7 @@ static int detach_cb(const struct crt_cb_info *cb_info)
 {
 	int *complete;
 
-	complete = (int *)cb_info->cci_arg;
+	complete = cb_info->cci_arg;
 
 	*complete = 1;
 

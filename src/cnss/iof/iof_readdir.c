@@ -74,14 +74,6 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	reply->out = crt_reply_get(cb_info->cci_rpc);
-	if (!reply->out) {
-		reply->err = EIO;
-		IOF_LOG_ERROR("Could not get query reply");
-		reply->complete = 1;
-		return 0;
-	}
-
 	ret = crt_req_addref(cb_info->cci_rpc);
 	if (ret) {
 		reply->err = EIO;
@@ -91,6 +83,7 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
+	reply->out = crt_reply_get(cb_info->cci_rpc);
 	reply->rpc = cb_info->cci_rpc;
 	reply->complete = 1;
 	return 0;

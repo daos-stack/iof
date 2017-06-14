@@ -62,8 +62,8 @@ struct iof_file_handle *ioc_fh_new(const char *name)
 
 int ioc_open_cb(const struct crt_cb_info *cb_info)
 {
-	struct open_cb_r *reply = (struct open_cb_r *)cb_info->cci_arg;
-	struct iof_open_out *out;
+	struct open_cb_r *reply = cb_info->cci_arg;
+	struct iof_open_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -81,13 +81,6 @@ int ioc_open_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get output");
-		reply->err = EIO;
-		reply->complete = 1;
-		return 0;
-	}
 	if (out->err == 0 && out->rc == 0)
 		reply->fh->gah = out->gah;
 	reply->err = out->err;

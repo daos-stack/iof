@@ -56,8 +56,8 @@ struct opendir_cb_r {
 
 static int opendir_cb(const struct crt_cb_info *cb_info)
 {
-	struct opendir_cb_r *reply = (struct opendir_cb_r *)cb_info->cci_arg;
-	struct iof_opendir_out *out;
+	struct opendir_cb_r *reply = cb_info->cci_arg;
+	struct iof_opendir_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -75,13 +75,6 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 		return 0;
 	}
 
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get output");
-		reply->rc = EIO;
-		reply->complete = 1;
-		return 0;
-	}
 	if (out->err == 0 && out->rc == 0) {
 		reply->dh->gah = out->gah;
 		reply->dh->gah_valid = 1;

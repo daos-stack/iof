@@ -54,7 +54,7 @@ struct release_cb_r {
 
 static int release_cb(const struct crt_cb_info *cb_info)
 {
-	struct release_cb_r *reply = (struct release_cb_r *)cb_info->cci_arg;
+	struct release_cb_r *reply = cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*

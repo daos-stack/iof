@@ -53,7 +53,7 @@ struct closedir_cb_r {
 
 static int closedir_cb(const struct crt_cb_info *cb_info)
 {
-	struct closedir_cb_r *reply = (struct closedir_cb_r *)cb_info->cci_arg;
+	struct closedir_cb_r *reply = cb_info->cci_arg;
 
 	/* There is no error handling needed here, as all client state will be
 	 * destroyed on return anyway.

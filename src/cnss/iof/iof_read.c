@@ -69,8 +69,8 @@ struct read_bulk_cb_r {
 
 static int read_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_cb_r *reply = (struct read_cb_r *)cb_info->cci_arg;
-	struct iof_data_out *out;
+	struct read_cb_r *reply = cb_info->cci_arg;
+	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
 
 	if (cb_info->cci_rc != 0) {
@@ -85,14 +85,6 @@ static int read_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
-		return 0;
-	}
-
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get reply");
-		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
@@ -130,8 +122,8 @@ static int read_cb(const struct crt_cb_info *cb_info)
 
 static int read_bulk_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_bulk_cb_r *reply = (struct read_bulk_cb_r *)cb_info->cci_arg;
-	struct iof_read_bulk_out *out;
+	struct read_bulk_cb_r *reply = cb_info->cci_arg;
+	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
 
 	if (cb_info->cci_rc != 0) {
@@ -146,14 +138,6 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		reply->complete = 1;
-		return 0;
-	}
-
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get reply");
-		reply->err = EIO;
 		reply->complete = 1;
 		return 0;
 	}
