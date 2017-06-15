@@ -103,7 +103,8 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
-	handle->ep = fs_handle->dest_ep;
+	handle->common.ep = fs_handle->dest_ep;
+	handle->common.projection = &fs_handle->proj;
 
 	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
 		     mode, handle);
@@ -137,7 +138,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	if (reply.err == 0 && reply.rc == 0)
 		IOF_LOG_INFO("Handle %p " GAH_PRINT_STR, handle,
-			     GAH_PRINT_VAL(handle->gah));
+			     GAH_PRINT_VAL(handle->common.gah));
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
@@ -146,7 +147,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	if (rc == 0) {
 		fi->fh = (uint64_t)handle;
-		handle->gah_valid = 1;
+		handle->common.gah_valid = 1;
 	} else {
 		free(handle);
 	}

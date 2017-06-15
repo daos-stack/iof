@@ -213,10 +213,8 @@ struct iof_dir_handle {
 /* Data which is stored against an open file handle */
 struct iof_file_handle {
 	struct iof_projection_info	*fs_handle;
-	struct ios_gah			gah;
-	int				gah_valid;
+	struct iof_file_common		common;
 	ino_t				inode_no;
-	crt_endpoint_t			ep;
 	char				name[];
 };
 

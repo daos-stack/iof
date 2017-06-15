@@ -54,14 +54,14 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	struct iof_gah_info gah_info = {0};
 
 	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		     GAH_PRINT_VAL(handle->gah));
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(handle->fs_handle->stats, ioctl);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		return -handle->fs_handle->offline_reason;
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH, nothing to do */
 		return -EIO;
 	}
@@ -76,11 +76,11 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		 * allocated that many bytes in data
 		 */
 		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d,"
-			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->gah),
+			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->common.gah),
 			     handle->fs_handle->fs_id,
 			     handle->fs_handle->proj.cli_fs_id);
 		gah_info.version = IOF_IOCTL_VERSION;
-		gah_info.gah = handle->gah;
+		gah_info.gah = handle->common.gah;
 		gah_info.cnss_id = getpid();
 		gah_info.cli_fs_id = handle->fs_handle->proj.cli_fs_id;
 		memcpy(data, &gah_info, sizeof(gah_info));

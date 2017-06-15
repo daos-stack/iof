@@ -110,7 +110,7 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 	int rc;
 
 	IOF_LOG_INFO("Position %#zx " GAH_PRINT_STR, len,
-		     GAH_PRINT_VAL(handle->gah));
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(fs_handle->stats, ftruncate);
 
@@ -122,14 +122,14 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 		return -EROFS;
 	}
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -139,7 +139,7 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	in->len = len;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

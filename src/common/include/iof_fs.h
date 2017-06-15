@@ -40,6 +40,7 @@
 
 #include <crt_types.h>
 #include <iof_atomic.h>
+#include <ios_gah.h>
 
 struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */
@@ -55,6 +56,14 @@ struct iof_projection {
 	uint32_t			grp_id;    /* CNSS defined ionss id */
 	int				cli_fs_id; /* client projection id */
 	bool				enabled;   /* Projection enabled */
+};
+
+/* Common data stored on open file handles */
+struct iof_file_common {
+	struct iof_projection	*projection;
+	struct ios_gah		gah;
+	crt_endpoint_t		ep;
+	int			gah_valid;
 };
 
 /*

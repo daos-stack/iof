@@ -63,7 +63,7 @@
 
 struct read_cb_r {
 	struct iof_data_out *out;
-	struct file_info *f_info;
+	struct iof_file_common *f_info;
 	crt_rpc_t *rpc;
 	struct iof_tracker tracker;
 	int err;
@@ -72,7 +72,7 @@ struct read_cb_r {
 
 struct read_bulk_cb_r {
 	struct iof_read_bulk_out *out;
-	struct file_info *f_info;
+	struct iof_file_common *f_info;
 	crt_rpc_t *rpc;
 	struct iof_tracker tracker;
 	int err;
@@ -208,7 +208,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 }
 
 static int read_direct(char *buff, size_t len, off_t position,
-		     struct file_info *f_info)
+		     struct iof_file_common *f_info, int *errcode)
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
@@ -217,7 +217,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	fs_handle = f_info->fs_handle;
+	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
@@ -225,7 +225,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -240,18 +240,18 @@ static int read_direct(char *buff, size_t len, off_t position,
 	rc = crt_req_send(rpc, read_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
-		f_info->errcode = reply.err;
+		*errcode = reply.err;
 		return -1;
 	}
 
 	if (reply.rc != 0) {
-		f_info->errcode = reply.rc;
+		*errcode = reply.rc;
 		return -1;
 	}
 
@@ -268,7 +268,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 }
 
 static ssize_t read_bulk(char *buff, size_t len, off_t position,
-			 struct file_info *f_info)
+			 struct iof_file_common *f_info, int *errcode)
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
@@ -280,7 +280,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	fs_handle = f_info->fs_handle;
+	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
@@ -288,7 +288,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -306,7 +306,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 			     &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -318,18 +318,18 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	rc = crt_req_send(rpc, read_bulk_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
-		f_info->errcode = reply.err;
+		*errcode = reply.err;
 		return -1;
 	}
 
 	if (reply.rc != 0) {
-		f_info->errcode = reply.rc;
+		*errcode = reply.rc;
 		return -1;
 	}
 
@@ -348,7 +348,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 
 	rc = crt_bulk_free(bulk);
 	if (rc) {
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -358,22 +358,22 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 }
 
 ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
-		      struct file_info *f_info)
+		      struct iof_file_common *f_info, int *errcode)
 {
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(f_info->gah));
 
 	if (len >= BULK_THRESHOLD)
-		return read_bulk(buff, len, position, f_info);
+		return read_bulk(buff, len, position, f_info, errcode);
 	else
-		return read_direct(buff, len, position, f_info);
+		return read_direct(buff, len, position, f_info, errcode);
 }
 
 /* TODO: This could be optimized to send multiple RPCs at once rather than
  * sending them serially.   Get it working first.
  */
 ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
-		       struct file_info *f_info)
+		       struct iof_file_common *f_info, int *errcode)
 {
 	ssize_t bytes_read;
 	ssize_t total_read = 0;
@@ -382,11 +382,11 @@ ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
 	for (i = 0; i < count; i++) {
 		if (iov[i].iov_len >= BULK_THRESHOLD)
 			bytes_read = read_bulk(iov[i].iov_base, iov[i].iov_len,
-					 position, f_info);
+					 position, f_info, errcode);
 		else
 			bytes_read = read_direct(iov[i].iov_base,
 						 iov[i].iov_len,
-						 position, f_info);
+						 position, f_info, errcode);
 
 		if (bytes_read == -1)
 			return (ssize_t)-1;

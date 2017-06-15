@@ -86,7 +86,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 		if (out->err == IOF_GAH_INVALID)
-			reply->handle->gah_valid = 0;
+			reply->handle->common.gah_valid = 0;
 
 		if (out->err == IOF_ERR_NOMEM)
 			reply->err = EAGAIN;
@@ -113,7 +113,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -123,7 +123,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	crt_iov_set(&in->data, (void *)buff, len);
 	in->base = position;
 
@@ -159,7 +159,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -169,7 +169,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 
 	in = crt_req_get(rpc);
 
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
@@ -219,7 +219,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->gah));
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(handle->fs_handle->stats, write);
 
@@ -231,7 +231,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 		return -EROFS;
 	}
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */

@@ -93,7 +93,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
 		if (out->err == IOF_GAH_INVALID)
-			reply->handle->gah_valid = 0;
+			reply->handle->common.gah_valid = 0;
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
@@ -146,7 +146,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
 		if (out->err == IOF_GAH_INVALID)
-			reply->handle->gah_valid = 0;
+			reply->handle->common.gah_valid = 0;
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
@@ -182,7 +182,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -192,7 +192,7 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	in->base = position;
 	in->len = len;
 
@@ -235,7 +235,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, read_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -244,7 +244,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	}
 
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	in->base = position;
 
 	iov.iov_len = len;
@@ -307,14 +307,14 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->gah));
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(handle->fs_handle->stats, read);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		return -handle->fs_handle->offline_reason;
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */

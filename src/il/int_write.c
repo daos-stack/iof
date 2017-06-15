@@ -62,7 +62,7 @@
 		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
 struct write_cb_r {
-	struct file_info *f_info;
+	struct iof_file_common *f_info;
 	ssize_t len;
 	struct iof_tracker tracker;
 	int err;
@@ -124,7 +124,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 }
 
 static int write_direct(const char *buff, size_t len, off_t position,
-			struct file_info *f_info)
+			struct iof_file_common *f_info, int *errcode)
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
@@ -133,7 +133,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	fs_handle = f_info->fs_handle;
+	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
@@ -141,7 +141,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -156,18 +156,18 @@ static int write_direct(const char *buff, size_t len, off_t position,
 	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 	iof_fs_wait(fs_handle, &reply.tracker);
 
 	if (reply.err) {
-		f_info->errcode = reply.err;
+		*errcode = reply.err;
 		return -1;
 	}
 
 	if (reply.rc != 0) {
-		f_info->errcode = reply.rc;
+		*errcode = reply.rc;
 		return -1;
 	}
 
@@ -175,7 +175,7 @@ static int write_direct(const char *buff, size_t len, off_t position,
 }
 
 static ssize_t write_bulk(const char *buff, size_t len, off_t position,
-			  struct file_info *f_info)
+			  struct iof_file_common *f_info, int *errcode)
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
@@ -187,7 +187,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	crt_iov_t iov = {0};
 	int rc;
 
-	fs_handle = f_info->fs_handle;
+	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
@@ -195,7 +195,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -211,7 +211,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	rc = crt_bulk_create(fs_handle, &sgl, CRT_BULK_RO, &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
@@ -225,24 +225,24 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 	iof_fs_wait(fs_handle, &reply.tracker);
 
 	rc = crt_bulk_free(bulk);
 	if (rc) {
-		f_info->errcode = EIO;
+		*errcode = EIO;
 		return -1;
 	}
 
 	if (reply.err) {
-		f_info->errcode = reply.err;
+		*errcode = reply.err;
 		return -1;
 	}
 
 	if (reply.rc != 0) {
-		f_info->errcode = reply.rc;
+		*errcode = reply.rc;
 		return -1;
 	}
 
@@ -250,22 +250,22 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 }
 
 ssize_t ioil_do_pwrite(const char *buff, size_t len, off_t position,
-		       struct file_info *f_info)
+		       struct iof_file_common *f_info, int *errcode)
 {
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(f_info->gah));
 
 	if (len >= BULK_THRESHOLD)
-		return write_bulk(buff, len, position, f_info);
+		return write_bulk(buff, len, position, f_info, errcode);
 	else
-		return write_direct(buff, len, position, f_info);
+		return write_direct(buff, len, position, f_info, errcode);
 }
 
 /* TODO: This could be optimized to send multiple RPCs at once rather than
  * sending them serially.   Get it working first.
  */
 ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
-			struct file_info *f_info)
+			struct iof_file_common *f_info, int *errcode)
 {
 	ssize_t bytes_written;
 	ssize_t total_write = 0;
@@ -275,11 +275,11 @@ ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
 		if (iov[i].iov_len >= BULK_THRESHOLD)
 			bytes_written = write_bulk(iov[i].iov_base,
 						   iov[i].iov_len,
-						   position, f_info);
+						   position, f_info, errcode);
 		else
 			bytes_written = write_direct(iov[i].iov_base,
 						     iov[i].iov_len,
-						     position, f_info);
+						     position, f_info, errcode);
 
 		if (bytes_written == -1)
 			return (ssize_t)-1;

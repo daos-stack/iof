@@ -137,20 +137,13 @@ extern bool ioil_initialized;
 #define IOIL_LOG_INFO(...) IOIL_LOG_(INFO, __VA_ARGS__)
 #define IOIL_LOG_DEBUG(...) IOIL_LOG_(DEBUG, __VA_ARGS__)
 
-struct file_info {
-	struct iof_projection *fs_handle;
-	struct ios_gah gah;
-	bool gah_valid;
-	int errcode;
-};
-
 ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
-		      struct file_info *f_info);
+		      struct iof_file_common *f_info, int *errcode);
 ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
-		       struct file_info *f_info);
+		       struct iof_file_common *f_info, int *errcode);
 ssize_t ioil_do_pwrite(const char *buff, size_t len, off_t position,
-		       struct file_info *f_info);
+		       struct iof_file_common *f_info, int *errcode);
 ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
-			struct file_info *f_info);
+			struct iof_file_common *f_info, int *errcode);
 
 #endif /* __INTERCEPT_H__ */

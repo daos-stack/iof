@@ -79,7 +79,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(fs_handle->stats, release);
 
@@ -93,7 +93,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -fs_handle->offline_reason;
 	}
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",
 			     handle);
 
@@ -104,7 +104,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, close), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -114,7 +114,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 
 	rc = crt_req_send(rpc, release_cb, &reply);
 	if (rc) {

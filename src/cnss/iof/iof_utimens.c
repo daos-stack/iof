@@ -103,14 +103,14 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -120,7 +120,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

@@ -110,7 +110,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	int rc;
 
 	IOF_LOG_INFO("mode 0%o " GAH_PRINT_STR, mode,
-		     GAH_PRINT_VAL(handle->gah));
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(fs_handle->stats, fchmod);
 
@@ -122,7 +122,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	if (!handle->gah_valid) {
+	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
@@ -130,7 +130,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	}
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    handle->ep,
+			    handle->common.ep,
 			    FS_TO_OP(fs_handle, chmod_gah), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -140,7 +140,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->gah = handle->gah;
+	in->gah = handle->common.gah;
 	in->mode = mode;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

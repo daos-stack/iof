@@ -82,7 +82,7 @@ int ioc_open_cb(const struct crt_cb_info *cb_info)
 	}
 
 	if (out->err == 0 && out->rc == 0)
-		reply->fh->gah = out->gah;
+		reply->fh->common.gah = out->gah;
 	reply->err = out->err;
 	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
@@ -134,11 +134,12 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		return -ENOMEM;
 
 	handle->fs_handle = fs_handle;
-	handle->ep = fs_handle->dest_ep;
+	handle->common.ep = fs_handle->dest_ep;
+	handle->common.projection = &fs_handle->proj;
 
 	IOF_LOG_INFO("file %s flags 0%o handle %p", file, fi->flags, handle);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
 			    FS_TO_OP(fs_handle, open), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -166,7 +167,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	if (reply.err == 0 && reply.rc == 0)
 		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, handle,
-			     GAH_PRINT_FULL_VAL(handle->gah));
+			     GAH_PRINT_FULL_VAL(handle->common.gah));
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
@@ -175,7 +176,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	if (rc == 0) {
 		fi->fh = (uint64_t)handle;
-		handle->gah_valid = 1;
+		handle->common.gah_valid = 1;
 	} else {
 		free(handle);
 	}

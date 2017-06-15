@@ -86,8 +86,7 @@ static uint32_t projection_count;
 	} while (0)
 
 struct fd_entry {
-	struct iof_projection *fs_handle;
-	struct ios_gah gah;
+	struct iof_file_common common;
 	off_t pos;
 	int flags;
 	bool disabled;
@@ -224,17 +223,12 @@ static ssize_t pread_rpc(struct fd_entry *entry, char *buff, size_t len,
 			 off_t offset)
 {
 	ssize_t bytes_read;
-	struct file_info fi;
+	int errcode;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.fs_handle = entry->fs_handle;
-	fi.gah = entry->gah;
-	fi.gah_valid = true;
-	fi.errcode = 0;
-
-	bytes_read = ioil_do_pread(buff, len, offset, &fi);
+	bytes_read = ioil_do_pread(buff, len, offset, &entry->common, &errcode);
 	if (bytes_read < 0)
-		saved_errno = fi.errcode;
+		saved_errno = errcode;
 	return bytes_read;
 }
 
@@ -243,17 +237,13 @@ static ssize_t preadv_rpc(struct fd_entry *entry, const struct iovec *iov,
 			  int count, off_t offset)
 {
 	ssize_t bytes_read;
-	struct file_info fi;
+	int errcode;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.fs_handle = entry->fs_handle;
-	fi.gah = entry->gah;
-	fi.gah_valid = true;
-	fi.errcode = 0;
-
-	bytes_read = ioil_do_preadv(iov, count, offset, &fi);
+	bytes_read = ioil_do_preadv(iov, count, offset, &entry->common,
+				    &errcode);
 	if (bytes_read < 0)
-		saved_errno = fi.errcode;
+		saved_errno = errcode;
 	return bytes_read;
 }
 
@@ -261,17 +251,13 @@ static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
 			  off_t offset)
 {
 	ssize_t bytes_written;
-	struct file_info fi;
+	int errcode;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.fs_handle = entry->fs_handle;
-	fi.gah = entry->gah;
-	fi.gah_valid = true;
-	fi.errcode = 0;
-
-	bytes_written = ioil_do_pwrite(buff, len, offset, &fi);
+	bytes_written = ioil_do_pwrite(buff, len, offset, &entry->common,
+				       &errcode);
 	if (bytes_written < 0)
-		saved_errno = fi.errcode;
+		saved_errno = errcode;
 
 	return bytes_written;
 }
@@ -281,17 +267,13 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 			   int count, off_t offset)
 {
 	ssize_t bytes_written;
-	struct file_info fi;
+	int errcode;
 
 	/* Just get rpc working then work out how to really do this */
-	fi.fs_handle = entry->fs_handle;
-	fi.gah = entry->gah;
-	fi.gah_valid = true;
-	fi.errcode = 0;
-
-	bytes_written = ioil_do_pwritev(iov, count, offset, &fi);
+	bytes_written = ioil_do_pwritev(iov, count, offset, &entry->common,
+					&errcode);
 	if (bytes_written < 0)
-		saved_errno = fi.errcode;
+		saved_errno = errcode;
 
 	return bytes_written;
 }
@@ -419,8 +401,10 @@ static void check_ioctl_on_open(int fd, int flags)
 				      gah_info.cnss_id);
 			return;
 		}
-		entry.gah = gah_info.gah;
-		entry.fs_handle = &projections[gah_info.cli_fs_id];
+		entry.common.gah = gah_info.gah;
+		entry.common.projection = &projections[gah_info.cli_fs_id];
+		entry.common.gah_valid = true;
+		entry.common.ep = entry.common.projection->grp->psr_ep;
 		entry.pos = 0;
 		entry.flags = flags;
 		entry.disabled = false;
@@ -437,7 +421,7 @@ static bool drop_reference_if_disabled(int fd, struct fd_entry *entry)
 		return false;
 
 	IOIL_LOG_INFO("Dropped reference to disabled file " GAH_PRINT_STR,
-		     GAH_PRINT_VAL(entry->gah));
+		     GAH_PRINT_VAL(entry->common.gah));
 	vector_remove(&fd_table, fd, NULL);
 	vector_decref(&fd_table, entry);
 
@@ -509,7 +493,8 @@ IOIL_PUBLIC int IOIL_DECL(close)(int fd)
 
 	if (rc == 0) {
 		IOIL_LOG_INFO("Removed IOF entry for fd=%d "
-			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry->gah));
+			      GAH_PRINT_STR, fd,
+			      GAH_PRINT_VAL(entry->common.gah));
 		vector_decref(&fd_table, entry);
 	}
 
@@ -528,7 +513,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 		return __real_read(fd, buf, len);
 
 	IOIL_LOG_INFO("read(%d, %p, %zu) intercepted " GAH_PRINT_STR,
-		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
+		      fd, buf, len, GAH_PRINT_VAL(entry->common.gah));
 
 	oldpos = entry->pos;
 	bytes_read = pread_rpc(entry, buf, len, oldpos);
@@ -553,7 +538,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 		return __real_pread(fd, buf, len, offset);
 
 	IOIL_LOG_INFO("pread(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
-		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
+		      buf, len, offset, GAH_PRINT_VAL(entry->common.gah));
 
 	bytes_read = pread_rpc(entry, buf, len, offset);
 
@@ -576,7 +561,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 		return __real_write(fd, buf, len);
 
 	IOIL_LOG_INFO("write(%d, %p, %zu) intercepted " GAH_PRINT_STR,
-		      fd, buf, len, GAH_PRINT_VAL(entry->gah));
+		      fd, buf, len, GAH_PRINT_VAL(entry->common.gah));
 
 	oldpos = entry->pos;
 	bytes_written = pwrite_rpc(entry, buf, len, entry->pos);
@@ -601,7 +586,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 		return __real_pwrite(fd, buf, len, offset);
 
 	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
-		      buf, len, offset, GAH_PRINT_VAL(entry->gah));
+		      buf, len, offset, GAH_PRINT_VAL(entry->common.gah));
 
 	bytes_written = pwrite_rpc(entry, buf, len, entry->pos);
 
@@ -623,7 +608,7 @@ IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
 		return __real_lseek(fd, offset, whence);
 
 	IOIL_LOG_INFO("lseek(%d, %zd, %d) intercepted " GAH_PRINT_STR, fd,
-		      offset, whence, GAH_PRINT_VAL(entry->gah));
+		      offset, whence, GAH_PRINT_VAL(entry->common.gah));
 
 	if (whence == SEEK_SET)
 		new_offset = offset;
@@ -669,7 +654,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 		return __real_readv(fd, vector, count);
 
 	IOIL_LOG_INFO("readv(%d, %p, %d) intercepted " GAH_PRINT_STR,
-		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
+		      fd, vector, count, GAH_PRINT_VAL(entry->common.gah));
 
 	oldpos = entry->pos;
 	bytes_read = preadv_rpc(entry, vector, count, entry->pos);
@@ -694,7 +679,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 		return __real_preadv(fd, vector, count, offset);
 
 	IOIL_LOG_INFO("preadv(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
-		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
+		      vector, count, offset, GAH_PRINT_VAL(entry->common.gah));
 
 	bytes_read = preadv_rpc(entry, vector, count, offset);
 	vector_decref(&fd_table, entry);
@@ -717,7 +702,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 		return __real_writev(fd, vector, count);
 
 	IOIL_LOG_INFO("writev(%d, %p, %d) intercepted " GAH_PRINT_STR,
-		      fd, vector, count, GAH_PRINT_VAL(entry->gah));
+		      fd, vector, count, GAH_PRINT_VAL(entry->common.gah));
 
 	oldpos = entry->pos;
 	bytes_written = pwritev_rpc(entry, vector, count, entry->pos);
@@ -742,7 +727,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 		return __real_pwritev(fd, vector, count, offset);
 
 	IOIL_LOG_INFO("pwritev(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
-		      vector, count, offset, GAH_PRINT_VAL(entry->gah));
+		      vector, count, offset, GAH_PRINT_VAL(entry->common.gah));
 
 	bytes_written = pwritev_rpc(entry, vector, count, entry->pos);
 
@@ -764,7 +749,7 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 		IOIL_LOG_INFO("mmap(%p, %zu, %d, %d, %d, %zd) intercepted, "
 			      "stopping interception " GAH_PRINT_STR, address,
 			      length, protect, flags, fd, offset,
-			      GAH_PRINT_VAL(entry->gah));
+			      GAH_PRINT_VAL(entry->common.gah));
 
 		if (entry->pos != 0)
 			__real_lseek(fd, entry->pos, SEEK_SET);
@@ -786,7 +771,7 @@ IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
 		return __real_fsync(fd);
 
 	IOIL_LOG_INFO("fsync(%d) intercepted " GAH_PRINT_STR, fd,
-		      GAH_PRINT_VAL(entry->gah));
+		      GAH_PRINT_VAL(entry->common.gah));
 	vector_decref(&fd_table, entry);
 
 	return __real_fsync(fd);
@@ -802,7 +787,7 @@ IOIL_PUBLIC int IOIL_DECL(fdatasync)(int fd)
 		return __real_fdatasync(fd);
 
 	IOIL_LOG_INFO("fdatasync(%d) intercepted " GAH_PRINT_STR,
-		      fd, GAH_PRINT_VAL(entry->gah));
+		      fd, GAH_PRINT_VAL(entry->common.gah));
 	vector_decref(&fd_table, entry);
 
 	return __real_fdatasync(fd);
@@ -820,7 +805,7 @@ IOIL_PUBLIC int IOIL_DECL(dup)(int fd)
 	rc = vector_dup(&fd_table, fd, newfd, &entry);
 	if (rc == 0 && entry != NULL) {
 		IOIL_LOG_INFO("dup(%d) intercepted " GAH_PRINT_STR,
-			      fd, GAH_PRINT_VAL(entry->gah));
+			      fd, GAH_PRINT_VAL(entry->common.gah));
 		if (drop_reference_if_disabled(newfd, entry)) {
 			/* If the file was disabled, get the duplicated
 			 * entry and if it hasn't changed, drop its
@@ -850,7 +835,7 @@ IOIL_PUBLIC int IOIL_DECL(dup2)(int old, int new)
 	rc = vector_dup(&fd_table, old, newfd, &entry);
 	if (rc == 0 && entry != NULL) {
 		IOIL_LOG_INFO("dup2(%d, %d) intercepted " GAH_PRINT_STR,
-			      old, new, GAH_PRINT_VAL(entry->gah));
+			      old, new, GAH_PRINT_VAL(entry->common.gah));
 		if (drop_reference_if_disabled(new, entry)) {
 			/* If the file was disabled, get the duplicated
 			 * entry and if it hasn't changed, drop its
@@ -878,7 +863,8 @@ IOIL_PUBLIC FILE * IOIL_DECL(fdopen)(int fd, const char *mode)
 	rc = vector_remove(&fd_table, fd, &entry);
 	if (rc == 0) {
 		IOIL_LOG_INFO("Removed IOF entry for fd=%d "
-			      GAH_PRINT_STR, fd, GAH_PRINT_VAL(entry->gah));
+			      GAH_PRINT_STR, fd,
+			      GAH_PRINT_VAL(entry->common.gah));
 
 		if (entry->pos != 0)
 			__real_lseek(fd, entry->pos, SEEK_SET);
@@ -910,7 +896,7 @@ IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
 		entry->disabled = true;
 		IOIL_LOG_INFO("Removed IOF entry for fd=%d " GAH_PRINT_STR ": "
 			      "F_SETFL not supported for interception",
-			      fd, GAH_PRINT_VAL(entry->gah));
+			      fd, GAH_PRINT_VAL(entry->common.gah));
 		vector_remove(&fd_table, fd, NULL);
 		vector_decref(&fd_table, entry);
 		return __real_fcntl(fd, cmd, arg);
@@ -934,7 +920,7 @@ IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
 	if (rc == 0 && entry != NULL) {
 		IOIL_LOG_INFO("fcntl(%d, %d /* F_DUPFD* */, %d) intercepted "
 			      GAH_PRINT_STR, fd, cmd, fdarg,
-			      GAH_PRINT_VAL(entry->gah));
+			      GAH_PRINT_VAL(entry->common.gah));
 		if (drop_reference_if_disabled(newfd, entry)) {
 			/* If the file was disabled, get the duplicated
 			 * entry and if it hasn't changed, drop its
