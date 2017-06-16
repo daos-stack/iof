@@ -47,6 +47,8 @@ extern "C" {
 /* Maximum length of a CTRL string with NULL character */
 #define CTRL_FS_MAX_LEN 4096
 
+#define CTRL_FS_MAX_CONSTANT_LEN 128
+
 #define CTRL_PUBLIC __attribute__((visibility("default")))
 
 enum ctrl_fs_error {

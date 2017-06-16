@@ -40,3 +40,11 @@
    fun:ctrl_fs_start
    fun:main
 }
+{
+   IOF-542: shutdown file leak.
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:calloc
+   fun:ctrl_open
+   fun:fuse_fs_open
+}

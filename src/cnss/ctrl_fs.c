@@ -91,7 +91,7 @@ struct ctrl_event {
 };
 
 struct ctrl_constant {
-	char buf[CTRL_FS_MAX_LEN];
+	char buf[CTRL_FS_MAX_CONSTANT_LEN];
 };
 
 struct ctrl_tracker {
@@ -119,6 +119,15 @@ struct ctrl_node {
 	struct stat stat_info;
 	int ctrl_type;
 	int initialized;
+};
+
+/* Handle created when a file is opened.  A pointer to this is saved
+ * in finfo->fh to avoid lookups on further file access
+ */
+struct open_handle {
+	struct ctrl_node *node;
+	int st_size;
+	int value;
 };
 
 struct data_node {
@@ -624,6 +633,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 {
 	struct ctrl_node *node;
 	int rc = 0;
+	int len;
 
 	pthread_once(&once_init, init_root_node);
 
@@ -645,6 +655,15 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 		return -EINVAL;
 	}
 
+	/* Length handling.  Find the length of the string including the
+	 * terminating NULL character
+	 */
+	len = strlen(value) + 1;
+	if (len >= CTRL_FS_MAX_CONSTANT_LEN) {
+		IOF_LOG_ERROR("value too long for ctrl constant");
+		return -EINVAL;
+	}
+
 	if (dir == NULL)
 		dir = (struct ctrl_dir *)&ctrl_fs.root;
 
@@ -655,13 +674,15 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	if (rc != 0)
 		IOF_LOG_ERROR("Bad file %s specified", name);
 
-	strncpy(GET_DATA(node, con, buf), value, CTRL_FS_MAX_LEN);
-	GET_DATA(node, con, buf)[CTRL_FS_MAX_LEN - 1] = 0;
+	memcpy(GET_DATA(node, con, buf), value, len);
+
+	node->stat_info.st_size = len;
+
 	__sync_synchronize();
 	node->initialized = 1;
 
-	IOF_LOG_INFO("Registered %s as ctrl constant.  Value is %s",
-		     name, value);
+	IOF_LOG_INFO("Registered %s as ctrl constant.  Value is %s (%d)",
+		     name, value, len);
 	return rc;
 }
 
@@ -928,15 +949,32 @@ static int ctrl_getattr(const char *fname, struct stat *stat)
 
 #ifdef IOF_USE_FUSE3
 static int ctrl_getattr3(const char *fname, struct stat *stat,
-			 struct fuse_file_info *fi)
+			 struct fuse_file_info *finfo)
 {
-	return ctrl_getattr(fname, stat);
+	struct open_handle *handle;
+	struct ctrl_node *node;
+
+	if (!finfo)
+		return ctrl_getattr(fname, stat);
+
+	handle = (struct open_handle *)finfo->fh;
+	node = handle->node;
+
+	IOF_LOG_INFO("Returning getfattr for '%s' mode = 0%o", node->name,
+		     node->stat_info.st_mode & ~(S_IFMT));
+	memcpy(stat, &node->stat_info, sizeof(struct stat));
+	if (handle->st_size != 0)
+		stat->st_size = handle->st_size;
+
+	return 0;
+
 }
 #endif
 
 static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 {
 	struct ctrl_node *node;
+	struct open_handle *handle;
 	int rc;
 	bool read_access = false;
 	bool write_access = false;
@@ -970,7 +1008,12 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 		return -EPERM;
 	}
 
-	finfo->fh = 0;
+	handle = calloc(1, sizeof(*handle));
+	if (!handle)
+		return -ENOMEM;
+
+	handle->node = node;
+	finfo->fh = (uint64_t)handle;
 
 	if (node->ctrl_type == CTRL_TRACKER) {
 		int value = 0;
@@ -982,7 +1025,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 		if (open_cb != NULL)
 			open_cb(&value, cb_arg);
 
-		finfo->fh = value;
+		handle->value = value;
 	}
 
 	/* Nothing to do for EVENT, VARIABLE, or CONSTANT on open */
@@ -1022,23 +1065,19 @@ static int ctrl_read(const char *fname,
 		     off_t offset,
 		     struct fuse_file_info *finfo)
 {
+	struct open_handle *handle = (struct open_handle *)finfo->fh;
+	struct ctrl_node *node = handle->node;
 	char mybuf[CTRL_FS_MAX_LEN];
-	struct ctrl_node *node;
 	const char *payload;
 	size_t len;
 	int rc;
 
-	if (!ctrl_fs.started)
-		return 0;
-
 	IOF_LOG_INFO("ctrl fs read called for %s", fname);
 
-	rc = find_path_node(fname, &node);
-
-	if (rc != 0 || node == NULL || node->initialized == 0)
-		return -ENOENT;
-
-	memset(buf, 0, size);
+	if (offset != 0) {
+		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset, fname);
+		return -EINVAL;
+	}
 
 	if (node->ctrl_type == CTRL_CONSTANT)
 		payload = GET_DATA(node, con, buf);
@@ -1048,16 +1087,18 @@ static int ctrl_read(const char *fname,
 
 		read_cb = GET_DATA(node, var, read_cb);
 
-		if (read_cb != NULL) {
-			rc = read_cb(mybuf, CTRL_FS_MAX_LEN, cb_arg);
-			if (rc != 0) {
-				IOF_LOG_ERROR("Error reading ctrl variable");
-				return -ENOENT;
-			}
+		if (!read_cb) {
+			IOF_LOG_ERROR("No callback reading ctrl variable");
+			return -EIO;
+		}
+		rc = read_cb(mybuf, CTRL_FS_MAX_LEN, cb_arg);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Error reading ctrl variable");
+			return -ENOENT;
 		}
 		payload = mybuf;
 	} else if (node->ctrl_type == CTRL_TRACKER) {
-		sprintf(mybuf, "%d", (int)finfo->fh);
+		sprintf(mybuf, "%d", handle->value);
 		payload = mybuf;
 	} else {
 		IOF_LOG_WARNING("Read not supported for ctrl node %s", fname);
@@ -1071,8 +1112,13 @@ static int ctrl_read(const char *fname,
 		buf[size - 1] = '\n';
 	}
 
-	IOF_LOG_INFO("Done copying contents to output buffer %s len is %ld",
-		     fname, len);
+	IOF_LOG_INFO("Done copying contents to output buffer %s %zi len is %ld",
+		     fname, size, len);
+
+	if (len > 0) {
+		node->stat_info.st_size = len;
+		handle->st_size = len;
+	}
 
 	return len;
 }
@@ -1083,19 +1129,17 @@ static int ctrl_write(const char *fname,
 		      off_t offset,
 		      struct fuse_file_info *finfo)
 {
+	struct open_handle *handle = (struct open_handle *)finfo->fh;
+	struct ctrl_node *node = handle->node;
 	char mybuf[CTRL_FS_MAX_LEN];
-	struct ctrl_node *node;
 	int rc;
-
-	if (!ctrl_fs.started)
-		return 0;
 
 	IOF_LOG_INFO("ctrl fs write called for %s", fname);
 
-	rc = find_path_node(fname, &node);
-
-	if (rc != 0 || node == NULL || node->initialized == 0)
-		return -ENOENT;
+	if (offset != 0) {
+		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset, fname);
+		return -EINVAL;
+	}
 
 	if (node->ctrl_type == CTRL_EVENT) {
 		ctrl_fs_trigger_cb_t trigger_cb;
@@ -1104,7 +1148,7 @@ static int ctrl_write(const char *fname,
 		trigger_cb = GET_DATA(node, evnt, trigger_cb);
 
 		if (trigger_cb != NULL) {
-			trigger_cb(cb_arg);
+			rc = trigger_cb(cb_arg);
 			if (rc != 0) {
 				IOF_LOG_ERROR("Error triggering ctrl event");
 				return -ENOENT;
@@ -1138,34 +1182,28 @@ static int ctrl_write(const char *fname,
 static int ctrl_release(const char *fname,
 			struct fuse_file_info *finfo)
 {
-	struct ctrl_node *node;
+	struct open_handle *handle = (struct open_handle *)finfo->fh;
+	struct ctrl_node *node = handle->node;
 	int rc;
-
-	if (!ctrl_fs.started)
-		return 0;
 
 	IOF_LOG_INFO("ctrl fs release called for %s", fname);
 
-	rc = find_path_node(fname, &node);
-
-	if (rc != 0 || node == NULL || node->initialized == 0)
-		return -ENOENT;
-
 	if (node->ctrl_type == CTRL_TRACKER) {
-		int value = (int)finfo->fh;
 		ctrl_fs_close_cb_t close_cb;
 		void *cb_arg = GET_DATA(node, tckr, cb_arg);
 
 		close_cb = GET_DATA(node, tckr, close_cb);
 
 		if (close_cb != NULL) {
-			rc = close_cb(value, cb_arg);
+			rc = close_cb(handle->value, cb_arg);
 			if (rc != 0) {
 				IOF_LOG_ERROR("Error closing ctrl tracker");
 				return -ENOENT;
 			}
 		}
 	}
+
+	free(handle);
 
 	return 0;
 }
