@@ -878,23 +878,16 @@ static int find_path_node(const char *path, struct ctrl_node **node)
 	return 0;
 }
 
-#ifdef IOF_USE_FUSE3
-static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-		off_t offset, struct fuse_file_info *fi,
-		enum fuse_readdir_flags flags)
-#else
-static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-			off_t offset, struct fuse_file_info *fi)
-#endif
+int ctrl_opendir(const char *path, struct fuse_file_info *finfo)
 {
+	struct open_handle *handle;
 	struct ctrl_node *node;
-	struct ctrl_node *item;
 	int rc;
 
 	if (!ctrl_fs.started)
 		return -ENOENT;
 
-	IOF_LOG_INFO("ctrl_fs readdir called for %s", path);
+	IOF_LOG_INFO("ctrl_fs opendir called for %s", path);
 
 	rc = find_path_node(path, &node);
 
@@ -903,6 +896,31 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	if (node->ctrl_type != CTRL_DIR)
 		return -ENOTDIR;
+
+	handle = calloc(1, sizeof(*handle));
+	if (!handle)
+		return -ENOMEM;
+
+	handle->node = node;
+	finfo->fh = (uint64_t)handle;
+
+	return 0;
+}
+
+#ifdef IOF_USE_FUSE3
+static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+			off_t offset, struct fuse_file_info *finfo,
+			enum fuse_readdir_flags flags)
+#else
+static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+			off_t offset, struct fuse_file_info *finfo)
+#endif
+{
+	struct open_handle *handle = (struct open_handle *)finfo->fh;
+	struct ctrl_node *node = handle->node;
+	struct ctrl_node *item;
+
+	IOF_LOG_INFO("ctrl_fs readdir called for %s", node->name);
 
 	pthread_rwlock_rdlock(&node->lock);
 	/* There doesn't seem to be an appropriate readdir error code if this
@@ -923,6 +941,14 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	pthread_rwlock_unlock(&node->lock);
 
+	return 0;
+}
+
+int ctrl_releasedir(const char *dir, struct fuse_file_info *finfo)
+{
+	struct open_handle *handle = (struct open_handle *)finfo->fh;
+
+	free(handle);
 	return 0;
 }
 
@@ -1055,6 +1081,9 @@ static int ctrl_truncate(const char *fname, off_t size)
 static int ctrl_truncate3(const char *fname, off_t size,
 			  struct fuse_file_info *fi)
 {
+	if (fi)
+		return 0;
+
 	return ctrl_truncate(fname, size);
 }
 #endif
@@ -1072,10 +1101,11 @@ static int ctrl_read(const char *fname,
 	size_t len;
 	int rc;
 
-	IOF_LOG_INFO("ctrl fs read called for %s", fname);
+	IOF_LOG_INFO("ctrl fs read called for %s", node->name);
 
 	if (offset != 0) {
-		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset, fname);
+		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset,
+				node->name);
 		return -EINVAL;
 	}
 
@@ -1101,19 +1131,20 @@ static int ctrl_read(const char *fname,
 		sprintf(mybuf, "%d", handle->value);
 		payload = mybuf;
 	} else {
-		IOF_LOG_WARNING("Read not supported for ctrl node %s", fname);
+		IOF_LOG_WARNING("Read not supported for ctrl node %s",
+				node->name);
 		return -EINVAL;
 	}
 
 	len = snprintf(buf, size, "%s\n", payload);
 	if (len >= size) {
 		len = size;
-		IOF_LOG_WARNING("Truncated value for %s", fname);
+		IOF_LOG_WARNING("Truncated value for %s", node->name);
 		buf[size - 1] = '\n';
 	}
 
 	IOF_LOG_INFO("Done copying contents to output buffer %s %zi len is %ld",
-		     fname, size, len);
+		     node->name, size, len);
 
 	if (len > 0) {
 		node->stat_info.st_size = len;
@@ -1134,10 +1165,11 @@ static int ctrl_write(const char *fname,
 	char mybuf[CTRL_FS_MAX_LEN];
 	int rc;
 
-	IOF_LOG_INFO("ctrl fs write called for %s", fname);
+	IOF_LOG_INFO("ctrl fs write called for %s", node->name);
 
 	if (offset != 0) {
-		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset, fname);
+		IOF_LOG_WARNING("Invalid offset %ld for %s\n", offset,
+				node->name);
 		return -EINVAL;
 	}
 
@@ -1176,6 +1208,11 @@ static int ctrl_write(const char *fname,
 		}
 	}
 
+	if (len > 0) {
+		node->stat_info.st_size = len;
+		handle->st_size = len;
+	}
+
 	return len;
 }
 
@@ -1186,7 +1223,7 @@ static int ctrl_release(const char *fname,
 	struct ctrl_node *node = handle->node;
 	int rc;
 
-	IOF_LOG_INFO("ctrl fs release called for %s", fname);
+	IOF_LOG_INFO("ctrl fs release called for %s", node->name);
 
 	if (node->ctrl_type == CTRL_TRACKER) {
 		ctrl_fs_close_cb_t close_cb;
@@ -1203,50 +1240,13 @@ static int ctrl_release(const char *fname,
 		}
 	}
 
+	IOF_LOG_INFO("releasing memory %p", handle);
 	free(handle);
 
 	return 0;
 }
 
-static int ctrl_utimens(const char *fname, const struct timespec tv[2])
-{
-	struct ctrl_node *node;
-	int rc;
-
-	if (!ctrl_fs.started)
-		return 0;
-
-	IOF_LOG_INFO("ctrl fs utimens called for %s", fname);
-
-	rc = find_path_node(fname, &node);
-
-	if (rc != 0 || node == NULL || node->initialized == 0)
-		return -ENOENT;
-
-	if (node->ctrl_type == CTRL_EVENT) {
-		ctrl_fs_trigger_cb_t trigger_cb;
-		void *cb_arg = GET_DATA(node, evnt, cb_arg);
-
-		trigger_cb = GET_DATA(node, evnt, trigger_cb);
-		if (trigger_cb != NULL) {
-			trigger_cb(cb_arg);
-			if (rc != 0) {
-				IOF_LOG_ERROR("Error triggering ctrl event");
-				return -ENOENT;
-			}
-		}
-	}
-
-	return 0;
-}
-
 #if IOF_USE_FUSE3
-static int ctrl_utimens3(const char *fname, const struct timespec tv[2],
-			 struct fuse_file_info *fi)
-{
-	return ctrl_utimens(fname, tv);
-}
-
 static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
 	struct fuse_context *context = fuse_get_context();
@@ -1258,6 +1258,7 @@ static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	cfg->negative_timeout = 0;
 	cfg->attr_timeout = 0;
 	cfg->remember = -1;
+	cfg->nullpath_ok = 1;
 
 	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
 		     cfg->entry_timeout, cfg->negative_timeout,
@@ -1272,17 +1273,17 @@ static struct fuse_operations fuse_ops = {
 	.init = ctrl_init,
 	.getattr = ctrl_getattr3,
 	.truncate = ctrl_truncate3,
-	.utimens = ctrl_utimens3,
 #else
 	.getattr = ctrl_getattr,
 	.truncate = ctrl_truncate,
-	.utimens = ctrl_utimens,
 #endif
 	.open = ctrl_open,
 	.read = ctrl_read,
 	.write = ctrl_write,
 	.release = ctrl_release,
+	.opendir = ctrl_opendir,
 	.readdir = ctrl_readdir,
+	.releasedir = ctrl_releasedir,
 };
 
 
