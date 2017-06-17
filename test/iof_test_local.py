@@ -66,6 +66,16 @@ from distutils.spawn import find_executable
 import iofcommontestsuite
 import common_methods
 
+sys.path.append('install/Linux/TESTING/scripts')
+try:
+    #Python/C Shim
+    #pylint: disable=import-error
+    import iofmod
+    have_iofmod = True
+    #pylint: enable=import-error
+except ImportError:
+    have_iofmod = False
+
 #pylint: disable=too-many-public-methods
 #pylint: disable=too-many-statements
 #pylint: disable=too-many-instance-attributes
@@ -521,6 +531,58 @@ class Testlocal(unittest.TestCase,
         if rtn != 0:
             self.skipTest("Mdtest exited badly")
 
+    @unittest.skipUnless(have_iofmod, "needs iofmod")
+    def test_iofmod(self):
+        """Calls all C tests present in C/Python shim"""
+
+        if not have_iofmod:
+            self.skipTest("iofmod not loadable")
+
+        subtest_count = 0
+        for possible in sorted(dir(iofmod)):
+            if not possible.startswith('test_'):
+                continue
+
+            obj = getattr(iofmod, possible)
+            if not callable(obj):
+                continue
+
+            subtest_count += 1
+            with self.subTest(possible):
+                self.mark_log('Starting test iofmod.%s' % possible)
+                fd = iofmod.open_test_file(self.import_dir)
+                if fd is None:
+                    self.fail('File descriptor returned null on open')
+
+                ret = obj(fd)
+                self.logger.info("%s returned %s", possible, ret)
+                if ret is None:
+                    self.fail('%s returned null' % possible)
+
+                ret = iofmod.close_test_file(fd)
+                if ret is None:
+                    self.fail('File not closed successfully')
+                self.mark_log('Finished test iofmod.%s, cleaning up' % possible)
+
+                self.clean_export_dir()
+
+        return subtest_count
+
+    def clean_export_dir(self):
+        """Clean up files created in backend fs"""
+        idir = os.path.join(self.export_dir)
+        files = os.listdir(idir)
+        for e in files:
+            ep = os.path.join(idir, e)
+            print('Cleaning up %s' % ep)
+            if os.path.isfile(ep) or os.path.islink(ep):
+                os.unlink(ep)
+            elif os.path.isdir(ep):
+                shutil.rmtree(ep)
+        files = os.listdir(idir)
+        if files:
+            self.fail('Test left some files %s' % files)
+
     def go(self):
         """A wrapper method to invoke all methods as subTests"""
 
@@ -545,6 +607,10 @@ class Testlocal(unittest.TestCase,
             if not possible.startswith('test_'):
                 continue
 
+            # Skip the iofmod methods as these are called directly later.
+            if 'iofmod' in possible:
+                continue
+
             obj = getattr(self, possible)
             if not callable(obj):
                 continue
@@ -554,18 +620,10 @@ class Testlocal(unittest.TestCase,
                 self.mark_log('Starting test %s' % possible)
                 obj()
                 self.mark_log('Finished test %s, cleaning up' % possible)
-                idir = os.path.join(self.export_dir)
-                files = os.listdir(idir)
-                for e in files:
-                    ep = os.path.join(idir, e)
-                    print("Cleaning up %s" % ep)
-                    if os.path.isfile(ep) or os.path.islink(ep):
-                        os.unlink(ep)
-                    elif os.path.isdir(ep):
-                        shutil.rmtree(ep)
-                files = os.listdir(idir)
-                if files:
-                    self.fail('Test left some files %s' % files)
+                self.clean_export_dir()
+
+        if have_iofmod:
+            subtest_count += self.test_iofmod()
 
         print("Ran %d subtests" % (subtest_count))
 
@@ -644,7 +702,7 @@ if __name__ == '__main__':
 
     tests_to_run = []
     uargs = []
-    print(args.tests)
+
     for test in args.tests:
         if test in tests:
             tests_to_run.append('Testlocal.test_%s' % test)

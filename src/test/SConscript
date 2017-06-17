@@ -36,6 +36,8 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """Build ping test"""
 
+import distutils.sysconfig
+
 IOIL_TEST_SRC = ['test_ioil.c']
 IOIL_BUILD_STATIC = False
 
@@ -66,6 +68,27 @@ def build_static_tests(env):
 
     return []
 
+def build_shim(env):
+    """build the python/C shim"""
+    # Python wrapper
+    svars = {}
+    for item in ['CC', 'OPT', 'BASECFLAGS', 'LDSHARED', 'SO']:
+        svars[item] = distutils.sysconfig.get_config_var(item)
+        if svars[item] is None:
+            svars[item] = ""
+
+    lib = env.SharedLibrary(target='iofmod', source=['iof_module.c'],
+                            CC=svars["CC"], SHLINK=svars["LDSHARED"],
+                            SHLINKFLAGS=[], SHLIBPREFIX="",
+                            SHLIBSUFFIX=svars["SO"],
+                            CPPPATH=["$CPPPATH",
+                                     distutils.sysconfig.get_python_inc()],
+                            CPPFLAGS=svars["BASECFLAGS"] + " " + \
+                            svars["OPT"], CFLAGS=[])
+    env.Install('$PREFIX/TESTING/scripts', lib)
+    Default(lib)
+
+#pylint: disable=too-many-statements
 def scons():
     """Scons function"""
 
@@ -124,6 +147,17 @@ def scons():
     Default(il_test)
 
     tenv.Install('$PREFIX/TESTING/tests', il_test)
+
+    shim_config = Configure(env)
+    if not shim_config.CheckHeader('python3.4m/Python.h'):
+        print "\n*************************************"
+        print "Python/C Shim not enabled - needs python3.4m/Python.h"
+        print "**************************************\n"
+    else:
+        menv = env.Clone()
+        build_shim(menv)
+    shim_config.Finish()
+#pylint: enable=too-many-statements
 
 if __name__ == "SCons.Script":
     scons()
