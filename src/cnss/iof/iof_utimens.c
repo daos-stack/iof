@@ -61,6 +61,11 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
+
 	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
@@ -102,6 +107,11 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		return -EROFS;
+	}
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
