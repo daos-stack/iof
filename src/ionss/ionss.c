@@ -2099,14 +2099,14 @@ int main(int argc, char **argv)
 
 	while (1) {
 		static struct option long_options[] = {
-			{"group-name", optional_argument, 0, 1},
-			{"poll-interval", optional_argument, 0, 2},
-			{"max-read", optional_argument, 0, 3},
-			{"max-write", optional_argument, 0, 4},
-			{"readdir-size", optional_argument, 0, 5},
-			{"max-direct-read", optional_argument, 0, 6},
+			{"group-name", required_argument, 0, 1},
+			{"poll-interval", required_argument, 0, 2},
+			{"max-read", required_argument, 0, 3},
+			{"max-write", required_argument, 0, 4},
+			{"readdir-size", required_argument, 0, 5},
+			{"max-direct-read", required_argument, 0, 6},
 			{"cnss-threads", no_argument, 0, 7},
-			{"thread-count", optional_argument, 0, 't'},
+			{"thread-count", required_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
 		};
