@@ -457,6 +457,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	IOF_LOG_INFO("Filesystem mode: Private");
 
 	fs_handle->max_read = query->max_read;
+	fs_handle->max_iov_read = query->max_iov_read;
 	fs_handle->max_write = query->max_write;
 	fs_handle->readdir_size = query->readdir_size;
 

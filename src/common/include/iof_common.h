@@ -135,6 +135,7 @@ struct iof_psr_query {
 	uint32_t max_write;
 	crt_iov_t query_list;
 	uint32_t readdir_size;
+	uint32_t max_iov_read;
 };
 
 struct iof_string_in {

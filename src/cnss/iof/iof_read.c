@@ -65,8 +65,6 @@ struct read_bulk_cb_r {
 	int rc;
 };
 
-#define BULK_THRESHOLD 64
-
 static int read_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_cb_r *reply = cb_info->cci_arg;
@@ -321,7 +319,7 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	if (len >= BULK_THRESHOLD)
+	if (len > handle->fs_handle->max_iov_read)
 		rc = ioc_read_bulk(buff, len, position, handle);
 	else
 		rc = ioc_read_direct(buff, len, position, handle);

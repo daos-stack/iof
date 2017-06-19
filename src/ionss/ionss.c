@@ -1038,6 +1038,12 @@ int iof_read_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
+	if (in->len > base.max_iov_read) {
+		IOF_LOG_WARNING("Invalid read, too large");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
 	data = malloc(in->len);
@@ -2126,6 +2132,7 @@ int main(int argc, char **argv)
 	base.poll_interval = 1000 * 1000;
 	base.max_read = 1024 * 1024;
 	base.max_write = 1024 * 1024;
+	base.max_iov_read = 64;
 	base.max_readdir = 1024 * 64;
 
 	while (1) {
@@ -2135,6 +2142,7 @@ int main(int argc, char **argv)
 			{"max-read", optional_argument, 0, 3},
 			{"max-write", optional_argument, 0, 4},
 			{"readdir-size", optional_argument, 0, 5},
+			{"max-direct-read", optional_argument, 0, 6},
 			{"thread-count", optional_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -2174,6 +2182,13 @@ int main(int argc, char **argv)
 			ret = parse_size(&base.max_readdir, optarg);
 			if (ret != 0) {
 				printf("Unable to set readdir size to %s\n",
+				       optarg);
+			}
+			break;
+		case 6:
+			ret = parse_size(&base.max_iov_read, optarg);
+			if (ret != 0) {
+				printf("Unable to set read-direct size to %s\n",
 				       optarg);
 			}
 			break;

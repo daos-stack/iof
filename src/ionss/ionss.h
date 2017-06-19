@@ -58,6 +58,7 @@ struct ios_base {
 	uint			poll_interval;
 	crt_context_t		crt_ctx;
 	uint32_t		max_read;
+	uint32_t		max_iov_read;
 	uint32_t		max_write;
 	uint32_t		max_readdir;
 };
