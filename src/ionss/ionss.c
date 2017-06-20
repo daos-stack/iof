@@ -408,26 +408,12 @@ out:
 
 int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
-	struct iof_readdir_in *in;
-	struct iof_readdir_out *out;
+	struct iof_readdir_out *out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
 	crt_iov_t iov = {0};
 	crt_sg_list_t sgl = {0};
 	int rc;
 
-	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
-		goto out;
-	}
-
 	if (cb_info->bci_rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -629,15 +615,9 @@ out:
 
 int iof_closedir_handler(crt_rpc_t *rpc)
 {
-	struct iof_gah_in *in = NULL;
+	struct iof_gah_in *in = crt_req_get(rpc);
 	struct ionss_dir_handle *handle = NULL;
 	int rc;
-
-	in = crt_req_get(rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		return 0;
-	}
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
@@ -1076,45 +1056,20 @@ out:
 
 int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
-	struct iof_read_bulk_in *in;
-	struct iof_read_bulk_out *out;
-	crt_iov_t iov = {0};
-	crt_sg_list_t sgl = {0};
+	struct ionss_read_desc *rd = cb_info->bci_arg;
 	int rc;
 
-	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
-		goto out;
-	}
-
 	if (cb_info->bci_rc) {
-		out->err = IOF_ERR_CART;
+		rd->out->err = IOF_ERR_CART;
 		goto out;
 	}
 
-	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
-
-	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
-	if (rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	free(iov.iov_buf);
-	out->len = iov.iov_buf_len;
+	free(rd->buf);
+	rd->out->len = rd->read_len;
 
 	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
 	if (rc)
-		out->err = IOF_ERR_CART;
+		rd->out->err = IOF_ERR_CART;
 
 out:
 	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
@@ -1124,6 +1079,10 @@ out:
 
 	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
 
+	if (rc)
+		IOF_LOG_ERROR("decref failed, ret = %u", rc);
+
+	free(rd);
 	return 0;
 }
 
@@ -1141,13 +1100,11 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	struct iof_read_bulk_in *in = crt_req_get(rpc);
 	struct iof_read_bulk_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
-	void *data = NULL;
-	size_t bytes_read;
+	struct ionss_read_desc *rd = NULL;
 	struct crt_bulk_desc bulk_desc = {0};
 	crt_bulk_t local_bulk_hdl = {0};
 	crt_sg_list_t sgl = {0};
 	crt_iov_t iov = {0};
-	crt_size_t len;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
@@ -1156,24 +1113,38 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
-	rc = crt_bulk_get_len(in->bulk, &len);
-	if (rc || len == 0) {
+	rd = calloc(1, sizeof(*rd));
+	if (!rd) {
+		out->err = IOF_ERR_NOMEM;
+		goto out;
+	}
+
+	rd->out = out;
+
+	rc = crt_bulk_get_len(in->bulk, &rd->buf_len);
+	if (rc || rd->buf_len == 0) {
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
 
-	data = malloc(len);
-	if (!data) {
+	if (rd->buf_len > base.max_read) {
+		IOF_LOG_WARNING("Invalid read, too large");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	rd->buf = malloc(rd->buf_len);
+	if (!rd->buf) {
 		out->err = IOF_ERR_NOMEM;
 		goto out;
 	}
 
 	errno = 0;
-	bytes_read = pread(handle->fd, data, len, in->base);
-	if (bytes_read == -1) {
+	rd->read_len = pread(handle->fd, rd->buf, rd->buf_len, in->base);
+	if (rd->read_len == -1) {
 		out->rc = errno;
 		goto out;
-	} else if (!bytes_read) {
+	} else if (!rd->read_len) {
 		goto out;
 	}
 
@@ -1183,9 +1154,9 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	iov.iov_len = bytes_read;
-	iov.iov_buf = data;
-	iov.iov_buf_len = bytes_read;
+	iov.iov_len = rd->read_len;
+	iov.iov_buf = rd->buf;
+	iov.iov_buf_len = rd->read_len;
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
@@ -1199,9 +1170,9 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
 	bulk_desc.bd_remote_hdl = in->bulk;
 	bulk_desc.bd_local_hdl = local_bulk_hdl;
-	bulk_desc.bd_len = bytes_read;
+	bulk_desc.bd_len = rd->read_len;
 
-	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, NULL, NULL);
+	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rd, NULL);
 	if (rc) {
 		out->err = IOF_ERR_CART;
 		goto out;
@@ -1222,8 +1193,11 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
-	if (data)
-		free(data);
+	if (rd) {
+		if (rd->buf)
+			free(rd->buf);
+		free(rd);
+	}
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -1583,8 +1557,8 @@ out:
 
 int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 {
-	struct iof_write_bulk *in;
-	struct iof_write_out *out;
+	struct iof_write_bulk *in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
+	struct iof_write_out *out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
 	size_t bytes_written;
 	struct ionss_file_handle *handle = NULL;
 	crt_iov_t iov = {0};
@@ -1592,20 +1566,7 @@ int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 
 	int rc;
 
-	out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not retrieve output args");
-		goto out;
-	}
-
 	if (cb_info->bci_rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
-	if (!in) {
-		IOF_LOG_ERROR("Could not retrieve input args");
 		out->err = IOF_ERR_CART;
 		goto out;
 	}

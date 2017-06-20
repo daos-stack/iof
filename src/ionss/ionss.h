@@ -110,6 +110,20 @@ struct ionss_file_handle {
 
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)
 
+/*
+ * Pipelining reads.
+ *
+ */
+
+/* Active read descriptor */
+struct ionss_read_desc {
+	crt_rpc_t			rpc;
+	struct iof_read_bulk_out	*out;
+	void				*buf;
+	crt_size_t			buf_len;
+	crt_size_t			read_len;
+};
+
 /* From fs.c */
 
 /* Create a new fh.
