@@ -277,7 +277,7 @@ static int attach_group(struct iof_state *iof_state,
 	return 0;
 }
 
-int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
+static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	struct iof_group_info *group;
@@ -304,6 +304,8 @@ int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		free(iof_state->groups);
 		return IOF_ERR_NOMEM;
 	}
+
+	CRT_INIT_LIST_HEAD(&iof_state->fs_list);
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ionss_count", 1);
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "ionss",
@@ -597,6 +599,8 @@ static int initialize_projection(struct iof_state *iof_state,
 	IOF_LOG_DEBUG("Fuse mount installed at: %s",
 		      fs_handle->mount_point);
 
+	crt_list_add_tail(&fs_handle->link, &iof_state->fs_list);
+
 	return 0;
 }
 
@@ -647,7 +651,7 @@ static int query_projections(struct iof_state *iof_state,
 	return 0;
 }
 
-int iof_post_start(void *arg)
+static int iof_post_start(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	int ret;
@@ -696,10 +700,11 @@ int iof_post_start(void *arg)
 }
 
 /* Called once per projection, after the FUSE filesystem has been torn down */
-void iof_deregister_fuse(void *arg)
+static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 
+	crt_list_del(&fs_handle->link);
 	free(fs_handle->fuse_ops);
 	free(fs_handle->base_dir);
 	free(fs_handle->mount_point);
@@ -707,11 +712,18 @@ void iof_deregister_fuse(void *arg)
 	free(fs_handle);
 }
 
-void iof_flush(void *arg)
+static void iof_stop(void *arg)
 {
+	struct iof_state *iof_state = (struct iof_state *)arg;
+	struct iof_projection_info *fs_handle;
 
-	IOF_LOG_INFO("Called iof_flush");
+	IOF_LOG_INFO("Called iof_stop");
 
+	crt_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		IOF_LOG_INFO("Setting projection %d offline %s",
+			     fs_handle->fs_id, fs_handle->mount_point);
+		fs_handle->offline_reason = EACCES;
+	}
 }
 
 static int detach_cb(const struct crt_cb_info *cb_info)
@@ -723,7 +735,7 @@ static int detach_cb(const struct crt_cb_info *cb_info)
 	return IOF_SUCCESS;
 }
 
-void iof_finish(void *arg)
+static void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
 	struct iof_group_info *group;
@@ -780,14 +792,14 @@ void iof_finish(void *arg)
 	free(iof_state);
 }
 
-struct cnss_plugin self = {.name            = "iof",
-			   .version         = CNSS_PLUGIN_VERSION,
-			   .require_service = 0,
-			   .start           = iof_reg,
-			   .post_start      = iof_post_start,
-			   .deregister_fuse = iof_deregister_fuse,
-			   .flush           = iof_flush,
-			   .finish          = iof_finish};
+struct cnss_plugin self = {.name                  = "iof",
+			   .version               = CNSS_PLUGIN_VERSION,
+			   .require_service       = 0,
+			   .start                 = iof_reg,
+			   .post_start            = iof_post_start,
+			   .deregister_fuse       = iof_deregister_fuse,
+			   .stop_plugin_services  = iof_stop,
+			   .destroy_plugin_data   = iof_finish};
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 {

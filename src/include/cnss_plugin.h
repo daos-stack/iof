@@ -172,12 +172,37 @@ struct cnss_plugin {
 			       * is disabled and no more callbacks are made.
 			       */
 	int (*post_start)(void *);
-	void (*flush)(void *); /* Commence shutdown procedure */
+
+	/* Shutdown sequence:
+	 * 1. stop_client_services called for each plugin
+	 * 2. flush_client_services called for each plugin
+	 * 3. If CNSS is a service set, execute a crt_barrier
+	 * 4. stop_plugin_services called for each plugin
+	 * 5. flush_plugin_services called for each plugin
+	 * 6. destroy_plugin_data called for each plugin
+	 */
+	void (*stop_client_services)(void *); /* Indicates to plugin that no
+					       * additional 3rd party requests
+					       * are expected.
+					       */
+	void (*flush_client_services)(void *); /* Wait for all outstanding
+						* requests to finish
+						*/
+	void (*stop_plugin_services)(void *); /* Indicates to plugin that no
+					       * additional requests are
+					       * expected from other plugins
+					       */
+	void (*flush_plugin_services)(void *); /* Wait for all outstanding
+						* requests to finish
+						*/
+	void (*destroy_plugin_data)(void *); /* Shutdown is complete and memory
+					      * associated with plugin can
+					      * now be safely deallocated
+					      */
 	void (*deregister_fuse)(void *); /* Remove a previously registered fuse
 					  * handle.  Called only if
 					  * register_fuse_fs returned true
 					  */
-	void (*finish)(void *); /* Shutdown, free all memory before returning */
 	void (*dump_log)(void *); /* Optional log dump */
 };
 
@@ -201,7 +226,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f00a
+#define CNSS_PLUGIN_VERSION 0x10f00b
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

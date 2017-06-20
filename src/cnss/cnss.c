@@ -498,6 +498,26 @@ void shutdown_fs(struct cnss_info *cnss_info)
 	}
 }
 
+struct iof_barrier_info {
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
+	bool in_barrier;
+};
+
+static void barrier_done(struct crt_barrier_cb_info *info)
+{
+	struct iof_barrier_info *b_info = info->bci_arg;
+
+	if (info->bci_rc != 0)
+		IOF_LOG_ERROR("Could not execute shutdown barrier: rc = %d\n",
+			      info->bci_rc);
+
+	pthread_mutex_lock(&b_info->lock);
+	b_info->in_barrier = false;
+	pthread_cond_signal(&b_info->cond);
+	pthread_mutex_unlock(&b_info->lock);
+}
+
 int main(void)
 {
 	struct stat buf;
@@ -505,6 +525,7 @@ int main(void)
 	char *plugin_file = NULL;
 	const char *prefix;
 	char *version = iof_get_version();
+	struct iof_barrier_info b_info;
 	struct plugin_entry *list_iter;
 	struct cnss_info *cnss_info;
 	int active_plugins = 0;
@@ -652,14 +673,26 @@ int main(void)
 
 	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
 
-	CALL_PLUGIN_FN(&cnss_info->plugins, flush);
+	CALL_PLUGIN_FN(&cnss_info->plugins, stop_client_services);
+	CALL_PLUGIN_FN(&cnss_info->plugins, flush_client_services);
 
-	/* TODO: This doesn't seem right.   After flush, plugins can still
-	 * actively send RPCs.   We really need a barrier here.  Then
-	 * call finish.   Then finalize.
-	 */
+	if (service_process_set) {
+		pthread_mutex_init(&b_info.lock, NULL);
+		pthread_cond_init(&b_info.cond, NULL);
+		b_info.in_barrier = true;
+		crt_barrier(NULL, barrier_done, &b_info);
+		/* Existing service thread will progress barrier */
+		pthread_mutex_lock(&b_info.lock);
+		while (b_info.in_barrier)
+			pthread_cond_wait(&b_info.cond, &b_info.lock);
+		pthread_mutex_unlock(&b_info.lock);
+	}
+
+	CALL_PLUGIN_FN(&cnss_info->plugins, stop_plugin_services);
+	CALL_PLUGIN_FN(&cnss_info->plugins, flush_plugin_services);
+
 	shutdown_fs(cnss_info);
-	CALL_PLUGIN_FN(&cnss_info->plugins, finish);
+	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
 
 	ret = crt_finalize();
 	while (!crt_list_empty(&cnss_info->plugins)) {

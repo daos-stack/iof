@@ -206,7 +206,7 @@ static int run_tests(void)
 	int id;
 	int rc;
 
-	/* Only checks the first 256 bytes so this check will work */
+	/* Only checks the first 100 bytes so this check will work */
 	num_failures += CHECK_FILE_READ("class/bar/hello", "Hello World");
 	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 0, int32);
 	num_failures += CHECK_FILE_WRITE("class/bar/foo", "10");

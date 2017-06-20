@@ -38,6 +38,7 @@
 #ifndef __IOF_H__
 #define __IOF_H__
 
+#include <crt_util/list.h>
 #include "cnss_plugin.h"
 #include "ios_gah.h"
 #include "iof_atomic.h"
@@ -81,6 +82,7 @@ struct iof_state {
 	size_t				cb_size;
 	/* cart context */
 	crt_context_t			crt_ctx;
+	crt_list_t			fs_list;
 	/* CNSS Prefix */
 	char				*cnss_prefix;
 	struct ctrl_dir			*ionss_dir;
@@ -96,26 +98,27 @@ struct iof_group_info {
 };
 
 struct iof_projection_info {
-	struct iof_projection	proj;
-	struct iof_state	*iof_state;
-	/* Cached from psr_ep */
-	crt_endpoint_t		dest_ep;
-	struct ctrl_dir		*fs_dir;
-	struct ctrl_dir		*stats_dir;
-	struct iof_stats	*stats;
-	char			*mount_point;
-	char			*base_dir;
+	struct iof_projection		proj;
+	struct iof_state		*iof_state;
+	crt_list_t			link;
+	/* destination endpoint */
+	crt_endpoint_t			dest_ep;
+	struct ctrl_dir			*fs_dir;
+	struct ctrl_dir			*stats_dir;
+	struct iof_stats		*stats;
+	char				*mount_point;
+	char				*base_dir;
 	/* fuse client implementation */
-	struct fuse_operations	*fuse_ops;
+	struct fuse_operations		*fuse_ops;
 	/* Feature Flags */
-	uint8_t			flags;
-	int			fs_id;
-	uint32_t		max_read;
-	uint32_t		max_write;
-	uint32_t		max_iov_read;
-	uint32_t		readdir_size;
+	uint8_t				flags;
+	int				fs_id;
+	uint32_t			max_read;
+	uint32_t			max_write;
+	uint32_t			max_iov_read;
+	uint32_t			readdir_size;
 	/* If set to True then projection is off-line */
-	int			offline_reason;
+	int				offline_reason;
 };
 
 
