@@ -42,6 +42,7 @@
 #include "iof_atomic.h"
 #include "ios_gah.h"
 #include "iof_pool.h"
+#include <crt_util/list.h>
 
 #define IOF_MAX_FSTYPE_LEN 32
 
@@ -76,6 +77,9 @@ struct ios_projection {
 	uint64_t		dev_no;
 	crt_list_t		files;
 	pthread_mutex_t		lock;
+	int			current_read_count;
+	int			max_read_count;
+	crt_list_t		read_list;
 };
 
 /* Convert from a fs_id as received over the network to a projection pointer.
@@ -115,13 +119,33 @@ struct ionss_file_handle {
  *
  */
 
-/* Active read descriptor */
-struct ionss_read_desc {
-	crt_rpc_t			rpc;
+/* Read request descriptor
+ *
+ * Used to describe a read request.  There is one of these per RPC that the
+ * IONSS receives.
+ */
+struct ionss_read_req_desc {
+	crt_rpc_t			*rpc;
+	struct ionss_file_handle	*handle;
 	struct iof_read_bulk_out	*out;
+	struct iof_read_bulk_in         *in;
+	crt_size_t			req_len;
+	struct ionss_active_read_desc   *ard;
+	crt_list_t			list;
+};
+
+/* Active read descriptor
+ *
+ * Used to descrive an in-progress read request.  These consume resources so
+ * are limited to a fixed number.
+ */
+struct ionss_active_read_desc {
+	struct ionss_read_req_desc      *rrd;
 	void				*buf;
 	crt_size_t			buf_len;
 	crt_size_t			read_len;
+	crt_bulk_t			local_bulk_handle;
+
 };
 
 /* From fs.c */

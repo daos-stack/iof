@@ -147,7 +147,10 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		if (out->err == IOF_GAH_INVALID)
 			reply->handle->common.gah_valid = 0;
 
-		reply->err = EIO;
+		if (out->err == IOF_ERR_NOMEM)
+			reply->err = ENOMEM;
+		else
+			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
@@ -244,6 +247,7 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
 	in->base = position;
+	in->len = len;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
@@ -280,12 +284,15 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		return -reply.rc;
 	}
 
-	len = reply.out->data.iov_len;
-
-	if (len > 0) {
-		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
+	if (reply.out->iov_len > 0) {
+		if (reply.out->data.iov_len != reply.out->iov_len) {
+			IOF_LOG_ERROR("Missing IOV %d", reply.out->iov_len);
+			return -EIO;
+		}
+		len = reply.out->data.iov_len;
+		memcpy(buff, reply.out->data.iov_buf, len);
 	} else {
-		len = reply.out->len;
+		len = reply.out->bulk_len;
 		IOF_LOG_INFO("Received %#zx via bulk", len);
 	}
 

@@ -121,11 +121,13 @@ struct crt_msg_field *read_bulk_in[] = {
 	&CMF_GAH,
 	&CMF_BULK,
 	&CMF_UINT64,
+	&CMF_UINT32,
 };
 
 struct crt_msg_field *read_bulk_out[] = {
 	&CMF_IOVEC,
-	&CMF_UINT64,
+	&CMF_UINT32,
+	&CMF_UINT32,
 	&CMF_INT,
 	&CMF_INT
 };

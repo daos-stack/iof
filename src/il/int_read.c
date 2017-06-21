@@ -147,11 +147,9 @@ read_cb(const struct crt_cb_info *cb_info)
 static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_bulk_cb_r *reply = NULL;
-	struct iof_read_bulk_out *out;
+	struct read_bulk_cb_r *reply = cb_info->cci_arg;
+	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
-
-	reply = (struct read_bulk_cb_r *)cb_info->cci_arg;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -169,21 +167,16 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get reply");
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
 	if (out->err) {
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
 		if (out->err == IOF_GAH_INVALID)
 			reply->f_info->gah_valid = 0;
 
-		reply->err = EIO;
+		if (out->err == IOF_ERR_NOMEM)
+			reply->err = ENOMEM;
+		else
+			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
@@ -295,6 +288,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	in = crt_req_get(rpc);
 	in->gah = f_info->gah;
 	in->base = position;
+	in->len = len;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
@@ -333,12 +327,16 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 		return -1;
 	}
 
-	len = reply.out->data.iov_len;
-
-	if (len > 0) {
-		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
+	if (reply.out->iov_len > 0) {
+		if (reply.out->data.iov_len != reply.out->iov_len) {
+			IOF_LOG_ERROR("Missing IOV %d", reply.out->iov_len);
+			*errcode = EIO;
+			return -1;
+		}
+		len = reply.out->data.iov_len;
+		memcpy(buff, reply.out->data.iov_buf, len);
 	} else {
-		len = reply.out->len;
+		len = reply.out->bulk_len;
 		IOF_LOG_INFO("Received %#zx via bulk", len);
 	}
 

@@ -233,11 +233,13 @@ struct iof_read_bulk_in {
 	struct ios_gah gah;
 	crt_bulk_t bulk;
 	uint64_t base;
+	uint32_t len;
 };
 
 struct iof_read_bulk_out {
 	crt_iov_t data;
-	uint64_t len;
+	uint32_t bulk_len;
+	uint32_t iov_len;
 	int rc;
 	int err;
 };

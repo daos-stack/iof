@@ -1044,126 +1044,139 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
+static
+struct ionss_active_read_desc *ard_acquire(struct ios_projection *projection)
 {
-	struct ionss_read_desc *rd = cb_info->bci_arg;
-	int rc;
-
-	if (cb_info->bci_rc) {
-		rd->out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	free(rd->buf);
-	rd->out->len = rd->read_len;
-
-	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
-	if (rc)
-		rd->out->err = IOF_ERR_CART;
-
-out:
-	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
-
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
-
-	if (rc)
-		IOF_LOG_ERROR("decref failed, ret = %u", rc);
-
-	free(rd);
-	return 0;
-}
-
-/*
- * The target of a bulk_read RPC from a client, replies using bulk data.
- *
- * Checks the read size
- * Allocates memory
- * Does the read
- * Creates a bulk handle
- * Submits the bulk handle
- */
-static void
-iof_read_bulk_handler(crt_rpc_t *rpc)
-{
-	struct iof_read_bulk_in *in = crt_req_get(rpc);
-	struct iof_read_bulk_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	struct ionss_read_desc *rd = NULL;
-	struct crt_bulk_desc bulk_desc = {0};
-	crt_bulk_t local_bulk_hdl = {0};
+	struct ionss_active_read_desc *ard;
 	crt_sg_list_t sgl = {0};
 	crt_iov_t iov = {0};
 	int rc;
 
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
+	ard = calloc(1, sizeof(*ard));
+	if (!ard)
+		return NULL;
 
-	IOF_LOG_DEBUG("Reading from %d", handle->fd);
-
-	rd = calloc(1, sizeof(*rd));
-	if (!rd) {
-		out->err = IOF_ERR_NOMEM;
-		goto out;
+	ard->buf = malloc(base.max_read);
+	if (!ard->buf) {
+		free(ard);
+		return NULL;
 	}
+	ard->buf_len = base.max_read;
 
-	rd->out = out;
-
-	rc = crt_bulk_get_len(in->bulk, &rd->buf_len);
-	if (rc || rd->buf_len == 0) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	if (rd->buf_len > base.max_read) {
-		IOF_LOG_WARNING("Invalid read, too large");
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	rd->buf = malloc(rd->buf_len);
-	if (!rd->buf) {
-		out->err = IOF_ERR_NOMEM;
-		goto out;
-	}
-
-	errno = 0;
-	rd->read_len = pread(handle->fd, rd->buf, rd->buf_len, in->base);
-	if (rd->read_len == -1) {
-		out->rc = errno;
-		goto out;
-	} else if (!rd->read_len) {
-		goto out;
-	}
-
-	rc = crt_req_addref(rpc);
-	if (rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	iov.iov_len = rd->read_len;
-	iov.iov_buf = rd->buf;
-	iov.iov_buf_len = rd->read_len;
+	iov.iov_len = ard->buf_len;
+	iov.iov_buf = ard->buf;
+	iov.iov_buf_len = ard->buf_len;
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO, &local_bulk_hdl);
+	rc = crt_bulk_create(projection->base->crt_ctx, &sgl, CRT_BULK_RO,
+			     &ard->local_bulk_handle);
 	if (rc) {
-		out->err = IOF_ERR_CART;
+		IOF_LOG_DEBUG("Failed to create bulk handle %d", rc);
+		free(ard->buf);
+		free(ard);
+		return NULL;
+	}
+
+	IOF_LOG_DEBUG("Allocated ard %p", ard);
+
+	return ard;
+}
+
+static void ard_release(struct ionss_active_read_desc *ard)
+{
+	if (!ard)
+		return;
+
+	IOF_LOG_DEBUG("Released ard %p", ard);
+
+	if (ard->buf)
+		free(ard->buf);
+
+	if (ard->local_bulk_handle)
+		crt_bulk_free(ard->local_bulk_handle);
+
+	free(ard);
+}
+
+static int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info);
+static void iof_process_read_bulk(struct ionss_read_req_desc *rrd);
+
+void iof_read_check_and_send(struct ios_projection *projection)
+{
+	struct ionss_read_req_desc *rrd;
+
+	pthread_mutex_lock(&projection->lock);
+	if (crt_list_empty(&projection->read_list)) {
+		projection->current_read_count--;
+		IOF_LOG_DEBUG("Dropping read slot (%d/%d)",
+			      projection->current_read_count,
+			      projection->max_read_count);
+		pthread_mutex_unlock(&projection->lock);
+		return;
+	}
+
+	rrd = crt_list_entry(projection->read_list.next,
+			     struct ionss_read_req_desc, list);
+
+	crt_list_del(&rrd->list);
+
+	IOF_LOG_DEBUG("Submiting new read %p (%d/%d)", rrd,
+		      projection->current_read_count,
+		      projection->max_read_count);
+
+	pthread_mutex_unlock(&projection->lock);
+	iof_process_read_bulk(rrd);
+}
+
+/* Process a read request
+ *
+ * This function processes a single rrd and either submits a bulk write with
+ * the result of completes and frees the request
+ */
+static void
+iof_process_read_bulk(struct ionss_read_req_desc *rrd)
+{
+	struct ionss_file_handle *handle = rrd->handle;
+	struct ios_projection *projection = rrd->handle->projection;
+	struct iof_read_bulk_out *out = rrd->out;
+	struct crt_bulk_desc bulk_desc = {0};
+	int rc;
+
+	IOF_LOG_DEBUG("Processing read rrd %p", rrd);
+
+	rrd->ard = ard_acquire(handle->projection);
+	if (!rrd->ard) {
+		out->err = IOF_ERR_NOMEM;
 		goto out;
 	}
 
-	bulk_desc.bd_rpc = rpc;
-	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
-	bulk_desc.bd_remote_hdl = in->bulk;
-	bulk_desc.bd_local_hdl = local_bulk_hdl;
-	bulk_desc.bd_len = rd->read_len;
+	IOF_LOG_DEBUG("Processing read rrd %p ard %p", rrd, rrd->ard);
 
-	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rd, NULL);
+	IOF_LOG_DEBUG("Reading from %d", handle->fd);
+
+	errno = 0;
+	rrd->ard->read_len = pread(handle->fd, rrd->ard->buf, rrd->req_len,
+				   rrd->in->base);
+	if (rrd->ard->read_len == -1) {
+		out->rc = errno;
+		goto out;
+	} else if (rrd->ard->read_len <= base.max_iov_read) {
+		out->iov_len = rrd->ard->read_len;
+		crt_iov_set(&out->data, rrd->ard->buf, rrd->ard->read_len);
+		goto out;
+	}
+
+	bulk_desc.bd_rpc = rrd->rpc;
+	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
+	bulk_desc.bd_remote_hdl = rrd->in->bulk;
+	bulk_desc.bd_local_hdl = rrd->ard->local_bulk_handle;
+	bulk_desc.bd_len = rrd->ard->read_len;
+
+	IOF_LOG_DEBUG("Sending bulk " GAH_PRINT_STR,
+		      GAH_PRINT_VAL(rrd->in->gah));
+
+	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rrd, NULL);
 	if (rc) {
 		out->err = IOF_ERR_CART;
 		goto out;
@@ -1179,16 +1192,129 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 	return;
 
 out:
+
+	rc = crt_reply_send(rrd->rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	rc = crt_req_decref(rrd->rpc);
+	if (rc)
+		IOF_LOG_ERROR("decref failed, ret = %u", rc);
+
+	ard_release(rrd->ard);
+	free(rrd);
+
+	ios_fh_decref(handle, 1);
+
+	iof_read_check_and_send(projection);
+}
+
+/* Completion callback for bulk read request
+ *
+ * This function is called when a put to the client has completed for a bulk
+ * write.
+ */
+static int
+iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
+{
+	struct ionss_read_req_desc *rrd = cb_info->bci_arg;
+	struct ios_projection *projection = rrd->handle->projection;
+	int rc;
+
+	if (cb_info->bci_rc)
+		rrd->out->err = IOF_ERR_CART;
+	else
+		rrd->out->bulk_len = rrd->ard->read_len;
+
+	rc = crt_reply_send(rrd->rpc);
+
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	rc = crt_req_decref(rrd->rpc);
+	if (rc)
+		IOF_LOG_ERROR("decref failed, ret = %u", rc);
+
+	ard_release(rrd->ard);
+	free(rrd);
+
+	iof_read_check_and_send(projection);
+	return 0;
+}
+
+/*
+ * The target of a bulk_read RPC from a client, replies using bulk data.
+ *
+ * Pulls the RPC off the network, allocates a read request descriptor, checks
+ * active read count and either submits the read or queues it for later.
+ */
+static void
+iof_read_bulk_handler(crt_rpc_t *rpc)
+{
+	struct iof_read_bulk_in *in = crt_req_get(rpc);
+	struct iof_read_bulk_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
+	struct ionss_read_req_desc *rrd = NULL;
+
+	struct ios_projection *projection;
+	int rc;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (out->err)
+		goto out;
+
+	if (in->len > base.max_read) {
+		IOF_LOG_WARNING("Invalid read, too large");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	rrd = calloc(1, sizeof(*rrd));
+	if (!rrd) {
+		out->err = IOF_ERR_NOMEM;
+		goto out;
+	}
+
+	rrd->rpc = rpc;
+	rrd->in = in;
+	rrd->out = out;
+	rrd->req_len = in->len;
+	rrd->handle = handle;
+
+	rc = crt_req_addref(rpc);
+	if (rc) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	projection = handle->projection;
+
+	pthread_mutex_lock(&projection->lock);
+	if (projection->current_read_count < projection->max_read_count) {
+		projection->current_read_count++;
+		IOF_LOG_DEBUG("Injecting new read %p (%d/%d)", rrd,
+			      projection->current_read_count,
+			      projection->max_read_count);
+		pthread_mutex_unlock(&projection->lock);
+		iof_process_read_bulk(rrd);
+	} else {
+		crt_list_add_tail(&rrd->list, &projection->read_list);
+		pthread_mutex_unlock(&projection->lock);
+	}
+
+	return;
+out:
+
+	IOF_LOG_DEBUG("Failed to read %d " GAH_PRINT_STR, out->err,
+		      GAH_PRINT_VAL(in->gah));
 	rc = crt_reply_send(rpc);
 
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
-	if (rd) {
-		if (rd->buf)
-			free(rd->buf);
-		free(rd);
-	}
+	if (rrd)
+		free(rrd);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -2211,6 +2337,9 @@ int main(int argc, char **argv)
 		projection->base = &base;
 		CRT_INIT_LIST_HEAD(&projection->files);
 		pthread_mutex_init(&projection->lock, NULL);
+
+		projection->max_read_count = 3;
+		CRT_INIT_LIST_HEAD(&projection->read_list);
 
 		if (!full_path) {
 			IOF_LOG_ERROR("Export path does not exist: %s",
