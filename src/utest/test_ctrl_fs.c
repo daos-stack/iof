@@ -107,7 +107,7 @@ static int check_file_read(const char *fname, const char *expected,
 
 	}
 
-	if (strncmp(buf, expected, 256) != 0) {
+	if (strncmp(buf, expected, 100) != 0) {
 		printf("Value unexpected in %s: (%s != %s).  Test"
 		       " %s:%d failed\n", fname, buf, expected, source, line);
 		return 1;
@@ -195,10 +195,6 @@ DECLARE_WRITE_FUNC(uint64, uint64_t, "%" PRIu64)
 #define CHECK_FILE_WRITE_VAL(name, value, ext) \
 	check_file_write_##ext(name, value, __FILE__, __LINE__)
 
-/* Test that large values get truncated properly */
-#define TOO_LARGE 8192
-static char large_constant[TOO_LARGE];
-
 static int run_tests(void)
 {
 	int num_failures = 0;
@@ -206,7 +202,6 @@ static int run_tests(void)
 	int rc;
 
 	/* Only checks the first 256 bytes so this check will work */
-	num_failures += CHECK_FILE_READ("large", large_constant);
 	num_failures += CHECK_FILE_READ("class/bar/hello", "Hello World");
 	num_failures += CHECK_FILE_READ_VAL("class/bar/foo", 0, int32);
 	num_failures += CHECK_FILE_WRITE("class/bar/foo", "10");
@@ -268,8 +263,6 @@ int main(int argc, char **argv)
 	struct ctrl_dir *class_dir;
 	struct ctrl_dir *bar_dir;
 
-	memset(large_constant, 'a', TOO_LARGE);
-
 	for (;;) {
 		opt = getopt(argc, argv, "i");
 		if (opt == -1)
@@ -313,7 +306,6 @@ int main(int argc, char **argv)
 	ctrl_create_subdir(class_dir, "bar", &bar_dir);
 	ctrl_register_variable(bar_dir, "foo", read_foo,
 			       write_foo, check_destroy_foo, &foo);
-	ctrl_register_constant(NULL, "large", large_constant);
 	ctrl_register_constant(bar_dir, "hello", "Hello World");
 
 	ctrl_register_tracker(NULL, "client", track_open, track_close,
