@@ -69,7 +69,7 @@ enum op_type {
 	DEF_FUSE_OP(release),
 	DEF_FUSE_OP(create),
 	DEF_FUSE_OP(fsync),
-	DEF_FUSE_OP(read),
+	DEF_FUSE_OP(read_buf),
 	DEF_FUSE_OP(symlink),
 	DEF_FUSE_OP(mkdir),
 	DEF_FUSE_OP(rmdir),
@@ -349,7 +349,7 @@ static struct operation default_ops[] = {
 	DECL_FUSE_OP(release, ioc_release),
 	DECL_FUSE_OP(create, ioc_create),
 	DECL_FUSE_OP(fsync, ioc_fsync),
-	DECL_FUSE_OP(read, ioc_read),
+	DECL_FUSE_OP(read_buf, ioc_read_buf),
 	DECL_FUSE_OP(symlink, ioc_symlink),
 	DECL_FUSE_OP(mkdir, ioc_mkdir),
 	DECL_FUSE_OP(rmdir, ioc_rmdir),
@@ -413,7 +413,7 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, release);
 	SET_FUSE_OP(fuse_ops, client_ops, create);
 	SET_FUSE_OP(fuse_ops, client_ops, fsync);
-	SET_FUSE_OP(fuse_ops, client_ops, read);
+	SET_FUSE_OP(fuse_ops, client_ops, read_buf);
 	SET_FUSE_OP(fuse_ops, client_ops, symlink);
 	SET_FUSE_OP(fuse_ops, client_ops, mkdir);
 	SET_FUSE_OP(fuse_ops, client_ops, rmdir);

@@ -270,11 +270,15 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	if (reply.err)
+	if (reply.err) {
+		crt_bulk_free(bulk);
 		return -reply.err;
+	}
 
-	if (reply.rc != 0)
+	if (reply.rc != 0) {
+		crt_bulk_free(bulk);
 		return -reply.rc;
+	}
 
 	len = reply.out->data.iov_len;
 
@@ -298,10 +302,11 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	return len;
 }
 
-int ioc_read(const char *file, char *buff, size_t len, off_t position,
-	     struct fuse_file_info *fi)
+int ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
+		 off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct fuse_bufvec *buf;
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
@@ -319,13 +324,32 @@ int ioc_read(const char *file, char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	if (len > handle->fs_handle->max_iov_read)
-		rc = ioc_read_bulk(buff, len, position, handle);
-	else
-		rc = ioc_read_direct(buff, len, position, handle);
+	buf = calloc(1, sizeof(*buf));
+	if (!buf)
+		return -ENOMEM;
 
-	if (rc > 0)
+	buf->buf[0].mem = malloc(len);
+	if (!buf->buf[0].mem) {
+		free(buf);
+		return -ENOMEM;
+	}
+	buf->count = 1;
+	buf->buf[0].fd = -1;
+	*bufp = buf;
+
+	IOF_LOG_DEBUG("Using buffer at %p", buf->buf[0].mem);
+
+	if (len > handle->fs_handle->max_iov_read)
+		rc = ioc_read_bulk(buf->buf[0].mem, len, position, handle);
+	else
+		rc = ioc_read_direct(buf->buf[0].mem, len, position, handle);
+
+	if (rc > 0) {
 		STAT_ADD_COUNT(handle->fs_handle->stats, read_bytes, rc);
+		buf->buf[0].size = rc;
+	}
+
+	IOF_LOG_INFO("Read complete %i", rc);
 
 	return rc;
 }

@@ -301,7 +301,8 @@ int ioc_symlink(const char *, const char *);
 
 int ioc_fsync(const char *, int, struct fuse_file_info *);
 
-int ioc_read(const char *, char *, size_t, off_t, struct fuse_file_info *);
+int ioc_read_buf(const char *, struct fuse_bufvec **, size_t, off_t,
+		 struct fuse_file_info *);
 
 int ioc_mkdir(const char *, mode_t);
 
