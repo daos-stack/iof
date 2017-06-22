@@ -2680,7 +2680,7 @@ int main(int argc, char **argv)
 	unsigned int thread_count = 2;
 	int err;
 	int c;
-	int cnss_threads = 0;
+	bool cnss_threads = true;
 	bool failover = true;
 	struct rlimit rlim = {0};
 
@@ -2765,7 +2765,7 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 8:
-			cnss_threads = 1;
+			cnss_threads = true;
 			break;
 		case 9:
 			failover = false;

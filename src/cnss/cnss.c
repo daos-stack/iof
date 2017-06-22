@@ -424,7 +424,7 @@ static int register_fuse(void *arg,
 	}
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
-	IOF_LOG_DEBUG("Private data %p threaded %d", private_data, threaded);
+	IOF_LOG_DEBUG("Private data %p threaded %u", private_data, info->mt);
 
 	fuse_opt_free_args(args);
 

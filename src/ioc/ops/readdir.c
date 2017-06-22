@@ -379,14 +379,14 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 				IOF_LOG_INFO("Returning no more data");
 				return 0;
 			}
+		} else {
+			/* Check for filler() returning full.  The filler
+			 * function  returns 1 once the internal FUSE buffer is
+			 * full so check for that case and exit the loop here.
+			 */
+
+			next_offset = dir_reply->nextoff;
 		}
-
-		/* Check for filler() returning full.  The filler function
-		 * returns 1 once the internal FUSE buffer is full so check
-		 * for that case and exit the loop here.
-		 */
-
-		next_offset = dir_reply->nextoff;
 	} while (ret == 0);
 	IOF_LOG_INFO("Returning zero");
 	return 0;

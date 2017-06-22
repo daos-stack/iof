@@ -180,6 +180,8 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	/* Use FUSE provided inode numbers to match the backing filesystem */
 	cfg->use_ino = 1;
 
+	cfg->hard_remove = 1;
+
 	/* Do not resolve the PATH for every operation, but let IOF access
 	 * the information via the fh pointer instead
 	 */
