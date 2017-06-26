@@ -190,20 +190,38 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         self.logger.info("Running")
 
+    def show_stats(self):
+        """Display projection statistics to stdout"""
+
+        proj_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
+                                'projections')
+
+        for idx in os.listdir(proj_dir):
+
+            stats_dir = os.path.join(proj_dir, idx, 'stats')
+
+            if not os.path.exists(stats_dir):
+                self.fail("Stats dir missing")
+
+            mount_point = None
+
+            with open(os.path.join(proj_dir, idx, 'mount_point'), 'r') as f:
+                mount_point = f.read().strip()
+
+            self.logger.info('Dumping statistics for filesystem %s',
+                             mount_point)
+            for stat_file in sorted(os.listdir(stats_dir)):
+                with open(os.path.join(stats_dir, stat_file), 'r') as f:
+                    data = f.read()
+                    f.close()
+                    value = data.rstrip()
+                    if value != '0':
+                        self.logger.info("%s:%s", stat_file, value)
+
     def tearDown(self):
         """tear down the test"""
 
-        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
-                                 'projections', '0', 'stats')
-        if not os.path.exists(stats_dir):
-            self.fail("Stats dir missing")
-
-        self.logger.info("Dumping statistics for filesystem 0")
-        for stat_file in os.listdir(stats_dir):
-            f = open(os.path.join(stats_dir, stat_file), 'r')
-            data = f.read()
-            f.close()
-            self.logger.info("%s:%s", stat_file, data.rstrip("\n"))
+        self.show_stats()
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
@@ -554,6 +572,22 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
             self.skipTest("Mdtest exited badly")
+
+    def test_large_read(self):
+        """Read a large file"""
+        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
+
+        if not os.path.exists(test_file):
+            self.skipTest('Input file does not exist')
+        cmd = 'dd if=%s of=/dev/null bs=4k' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
+
+        cmd = 'dd if=%s of=/dev/null bs=65k' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD bs=65k returned error')
 
     def go(self):
         """A wrapper method to invoke all methods as subTests"""

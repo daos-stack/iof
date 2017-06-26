@@ -123,7 +123,7 @@ def valgrind_suffix(log_path):
                '--error-exitcode=42',
                '--log-file=%s' %
                os.path.join(log_path,
-                            'valgrind-%q{PMIX_RANK}.xml'),
+                            'valgrind-%q{PMIX_RANK}.txt'),
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
                '--partial-loads-ok=yes',
