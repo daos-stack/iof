@@ -61,6 +61,8 @@
 
 #include "cnss.h"
 
+#include <sys/queue.h>
+
 /* struct fs_list is a list of fs_infos */
 LIST_HEAD(fs_list, fs_info);
 
@@ -75,7 +77,7 @@ struct plugin_entry {
 	void *dl_handle;
 
 	/* The list of plugins */
-	LIST_ENTRY(plugin_entry) list;
+	crt_list_t list;
 
 	/* Flag to say if plugin is active */
 	int active;
@@ -131,7 +133,7 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		LIST_FOREACH(_li, LIST, list) {				\
+		crt_list_for_each_entry(_li, LIST, list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
 			_li->fns->FN(_li->fns->handle);		\
 		}							\
@@ -146,7 +148,7 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		LIST_FOREACH(_li, LIST, list) {				\
+		crt_list_for_each_entry(_li, LIST, list) {		\
 			int _rc;					\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
 			_rc = _li->fns->FN(_li->fns->handle);	\
@@ -167,7 +169,7 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		LIST_FOREACH(_li, LIST, list) {				\
+		crt_list_for_each_entry(_li, LIST, list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
 			_li->fns->FN(_li->fns->handle, __VA_ARGS__);	\
 		}							\
@@ -183,7 +185,7 @@ struct fs_info {
 		struct plugin_entry *_li;				\
 		int _rc;						\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		LIST_FOREACH(_li, LIST, list) {				\
+		crt_list_for_each_entry(_li, LIST, list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
 			_rc = _li->fns->FN(_li->fns->handle,		\
 					   &_li->self_fns,		\
@@ -253,7 +255,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 	entry->self_fns.register_fuse_fs = register_fuse;
 	entry->self_fns.handle = entry;
 
-	LIST_INSERT_HEAD(&info->plugins, entry, list);
+	crt_list_add(&entry->list, &info->plugins);
 
 	LIST_INIT(&entry->fuse_list);
 
@@ -492,7 +494,7 @@ void shutdown_fs(struct cnss_info *cnss_info)
 	struct fs_info *info;
 	int rc;
 
-	LIST_FOREACH(plugin, &cnss_info->plugins, list) {
+	crt_list_for_each_entry(plugin, &cnss_info->plugins, list) {
 		while (!LIST_EMPTY(&plugin->fuse_list)) {
 			info = LIST_FIRST(&plugin->fuse_list);
 			rc = deregister_fuse(plugin, info);
@@ -553,7 +555,7 @@ int main(void)
 
 	register_cnss_controls(cnss_info);
 
-	LIST_INIT(&cnss_info->plugins);
+	CRT_INIT_LIST_HEAD(&cnss_info->plugins);
 
 	/* Load the build-in iof "plugin" */
 	ret = add_plugin(cnss_info, iof_plugin_init, NULL);
@@ -595,7 +597,7 @@ int main(void)
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
 	 */
-	LIST_FOREACH(list_iter, &cnss_info->plugins, list) {
+	crt_list_for_each_entry(list_iter, &cnss_info->plugins, list) {
 		if (list_iter->active && list_iter->fns->require_service) {
 			service_process_set = CRT_FLAG_BIT_SERVER;
 			break;
@@ -638,7 +640,7 @@ int main(void)
 	CALL_PLUGIN_FN_CHECK(&cnss_info->plugins, post_start);
 
 	/* Walk the plugins and check for active ones */
-	LIST_FOREACH(list_iter, &cnss_info->plugins, list) {
+	crt_list_for_each_entry(list_iter, &cnss_info->plugins, list) {
 		if (list_iter->active) {
 			active_plugins = 1;
 			break;
@@ -666,10 +668,13 @@ int main(void)
 	CALL_PLUGIN_FN(&cnss_info->plugins, finish);
 
 	ret = crt_finalize();
-	while (!LIST_EMPTY(&cnss_info->plugins)) {
-		struct plugin_entry *entry = LIST_FIRST(&cnss_info->plugins);
+	while (!crt_list_empty(&cnss_info->plugins)) {
+		struct plugin_entry *entry;
 
-		LIST_REMOVE(entry, list);
+		entry = crt_list_entry(cnss_info->plugins.next,
+				       struct plugin_entry, list);
+		crt_list_del(&entry->list);
+
 		if (entry->dl_handle != NULL)
 			dlclose(entry->dl_handle);
 		free(entry);

@@ -38,16 +38,13 @@
 #ifndef __CNSS_H__
 #define __CNSS_H__
 
-#include <sys/queue.h>
-
 #include "log.h"
 #include "ctrl_fs.h"
 
-/* struct cnss_plugin_list is a list of plugin_entries */
-LIST_HEAD(cnss_plugin_list, plugin_entry);
+#include <crt_util/list.h>
 
 struct cnss_info {
-	struct cnss_plugin_list plugins;
+	crt_list_t              plugins;
 	int			active;
 	int			shutting_down;
 };
