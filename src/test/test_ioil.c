@@ -56,6 +56,8 @@ static char *mount_dir;
 
 #define BUF_SIZE 4096
 
+char big_string[BUF_SIZE];
+
 static int init_suite(void)
 {
 	char buf1[CTRL_FS_MAX_LEN];
@@ -187,6 +189,10 @@ static void do_write_tests(int fd, char *buf, size_t len)
 	printf("Seek offset is %zd, expected %zu\n", offset, len * 4);
 	CU_ASSERT_EQUAL(offset, len * 4);
 
+	memset(big_string, 'a', BUF_SIZE - 1);
+	big_string[BUF_SIZE - 1] = 0;
+	bytes = write(fd, big_string, BUF_SIZE);
+
 	rc = close(fd);
 	printf("Closed file, rc = %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
@@ -194,7 +200,7 @@ static void do_write_tests(int fd, char *buf, size_t len)
 
 static void do_read_tests(const char *fname, size_t len)
 {
-	char buf[BUF_SIZE];
+	char buf[BUF_SIZE * 2];
 	char buf2[len + 1];
 	struct iovec iov[2];
 	ssize_t bytes;
@@ -210,19 +216,21 @@ static void do_read_tests(const char *fname, size_t len)
 	printf("Opened %s, fd = %d\n", fname, fd);
 	CU_ASSERT_NOT_EQUAL_FATAL(fd, -1);
 
-	bytes = read(fd, buf, BUF_SIZE - 1);
-	printf("Read %zd bytes, expected %zu\n", bytes, len * 4);
-	CU_ASSERT_EQUAL(bytes, len * 4);
+	bytes = read(fd, buf, BUF_SIZE * 2);
+	printf("Read %zd bytes, expected %zu\n", bytes, BUF_SIZE + (len * 4));
+	CU_ASSERT_EQUAL(bytes, BUF_SIZE + (len * 4));
 
 	offset = lseek(fd, 0, SEEK_CUR);
-	printf("Seek offset is %zd, expected %zu\n", offset, len * 4);
-	CU_ASSERT_EQUAL(offset, len * 4);
+	printf("Seek offset is %zd, expected %zu\n", offset,
+	       BUF_SIZE + (len * 4));
+	CU_ASSERT_EQUAL(offset, BUF_SIZE + len * 4);
 
 	pos = 0;
 	while (pos < (len * 4)) {
-		CU_ASSERT_NSTRING_EQUAL(fname, buf + len, len);
+		CU_ASSERT_NSTRING_EQUAL(fname, buf + pos, len);
 		pos += len;
 	}
+	CU_ASSERT_NSTRING_EQUAL(big_string, buf + pos, BUF_SIZE);
 
 	offset = lseek(fd, 0, SEEK_SET);
 	printf("Seek offset is %zd, expected 0\n", offset);

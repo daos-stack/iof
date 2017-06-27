@@ -588,7 +588,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 	IOIL_LOG_INFO("pwrite(%d, %p, %zu, %zd) intercepted " GAH_PRINT_STR, fd,
 		      buf, len, offset, GAH_PRINT_VAL(entry->common.gah));
 
-	bytes_written = pwrite_rpc(entry, buf, len, entry->pos);
+	bytes_written = pwrite_rpc(entry, buf, len, offset);
 
 	vector_decref(&fd_table, entry);
 
@@ -729,7 +729,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 	IOIL_LOG_INFO("pwritev(%d, %p, %d, %zd) intercepted " GAH_PRINT_STR, fd,
 		      vector, count, offset, GAH_PRINT_VAL(entry->common.gah));
 
-	bytes_written = pwritev_rpc(entry, vector, count, entry->pos);
+	bytes_written = pwritev_rpc(entry, vector, count, offset);
 
 	vector_decref(&fd_table, entry);
 

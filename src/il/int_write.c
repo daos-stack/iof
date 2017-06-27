@@ -208,7 +208,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle, &sgl, CRT_BULK_RO, &in->bulk);
+	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		*errcode = EIO;
