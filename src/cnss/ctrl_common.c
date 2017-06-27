@@ -58,6 +58,22 @@ static uint64_t shutdown_read_cb(void *arg)
 	return cnss_info->shutting_down;
 }
 
+static int write_log_write_cb(const char *buf, void *arg)
+{
+	/* Printing as %s in order to prevent interpreting buf symbols*/
+	IOF_LOG_INFO("%s", buf);
+
+	return 0;
+}
+
+static int dump_log_write_cb(const char *buf, void *arg)
+{
+	/* Printing as %s in order to prevent interpreting buf symbols*/
+	IOF_LOG_INFO("%s", buf);
+
+	return cnss_dump_log(arg);
+}
+
 static int shutdown_write_cb(uint64_t value, void *arg)
 {
 	struct cnss_info *cnss_info = (struct cnss_info *)arg;
@@ -120,47 +136,62 @@ static int log_mask_cb(const char *mask,  void *cb_arg)
 }
 
 
+#define CHECK_RET(ret, label, msg)		\
+	do {					\
+		if (ret != 0) {			\
+			IOF_LOG_ERROR(msg);	\
+			ctrl_fs_stop();		\
+			goto label;		\
+		}				\
+	} while (0)
+
 int register_cnss_controls(struct cnss_info *cnss_info)
 {
 	char *crt_protocol;
-	int ret;
-	int rc = 0;
+	int ret = 0;
 
-	ctrl_register_variable(NULL, "active",
+	ret = ctrl_register_variable(NULL, "active",
 			       iof_uint_read,
 			       NULL, NULL,
 			       &cnss_info->active);
+	CHECK_RET(ret, exit, "Could not register 'active' ctrl");
 
 	ret = ctrl_register_uint64_variable(NULL, "shutdown",
 					    shutdown_read_cb,
 					    shutdown_write_cb,
 					    (void *)cnss_info);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register shutdown ctrl");
-		rc = ret;
-		ctrl_fs_stop();
-	}
+	CHECK_RET(ret, exit, "Could not register shutdown ctrl");
+
+	ret = ctrl_register_variable(NULL, "dump_log",
+				NULL /* read_cb */,
+				dump_log_write_cb, /* write_cb */
+				NULL, /* destroy_cb */
+				(void *)cnss_info);
+	CHECK_RET(ret, exit, "Could not register dump_log ctrl");
+
+	ret = ctrl_register_variable(NULL, "write_log",
+				NULL /* read_cb */,
+				write_log_write_cb, /* write_cb */
+				NULL, /* destroy_cb */
+				NULL);
+	CHECK_RET(ret, exit, "Could not register write_log ctrl");
 
 	ret = ctrl_register_variable(NULL, "log_mask",
 				  NULL /* read_cb */,
 				  log_mask_cb /* write_cb */,
 				  NULL /* destroy_cb */, NULL);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register log_mask ctrl");
-		rc = ret;
-		ctrl_fs_stop();
-	}
+	CHECK_RET(ret, exit, "Could not register log_mask ctrl");
 
 	ret = ctrl_register_constant_int64(NULL, "cnss_id", getpid());
-	if (ret != 0) {
-		IOF_LOG_ERROR("Could not register cnss_id");
-		rc = ret;
-		ctrl_fs_stop();
-	}
+	CHECK_RET(ret, exit, "Could not register cnss_id");
 
 	crt_protocol = getenv("CRT_PHY_ADDR_STR");
-	if (crt_protocol) /* Only register if set */
-		ctrl_register_constant(NULL, "crt_protocol", crt_protocol);
+	if (crt_protocol) { /* Only register if set */
+		ret = ctrl_register_constant(NULL, "crt_protocol",
+					crt_protocol);
+		CHECK_RET(ret, exit, "Could not register crt_protocol");
+	}
 
-	return rc;
+exit:
+	return ret;
 }

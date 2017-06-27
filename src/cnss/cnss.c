@@ -694,3 +694,15 @@ shutdown_ctrl_fs:
 
 	return ret;
 }
+
+int cnss_dump_log(void *arg)
+{
+	struct cnss_info *cnss_info = (struct cnss_info *)arg;
+
+	if (!cnss_info)
+		return -1;
+
+	CALL_PLUGIN_FN(&cnss_info->plugins, dump_log);
+	return 0;
+}
+

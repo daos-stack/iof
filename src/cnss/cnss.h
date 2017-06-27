@@ -50,5 +50,6 @@ struct cnss_info {
 };
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
+int cnss_dump_log(void *arg);
 
 #endif /* __CNSS_H__ */

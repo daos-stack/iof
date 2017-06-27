@@ -178,6 +178,7 @@ struct cnss_plugin {
 					  * register_fuse_fs returned true
 					  */
 	void (*finish)(void *); /* Shutdown, free all memory before returning */
+	void (*dump_log)(void *); /* Optional log dump */
 };
 
 /* At startup the CNSS process loads every library in a predefined

@@ -50,6 +50,11 @@
 #include "ctrl_common.h"
 #include "ctrl_fs_util_test.h"
 
+int cnss_dump_log(void *arg)
+{
+	return 0;
+}
+
 int cnss_client_attach(int client_id, void *arg)
 {
 	IOF_LOG_INFO("attached %d", client_id);
@@ -216,6 +221,9 @@ static int run_tests(void)
 	num_failures += CHECK_FILE_READ_VAL("client", 4, int32);
 	num_failures += CHECK_FILE_READ_VAL("int", -1, int64);
 	num_failures += CHECK_FILE_READ_VAL("uint", (uint64_t)-1, uint64);
+	num_failures += CHECK_FILE_WRITE("dump_log", "test");
+	num_failures += CHECK_FILE_WRITE("write_log", "test");
+
 	rc = ctrl_fs_get_tracker_id(&id, "client");
 	if (rc != 0 || id != 5) {
 		printf("Expected 5 from client file\n");
