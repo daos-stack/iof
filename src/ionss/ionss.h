@@ -41,6 +41,7 @@
 #include <dirent.h>
 #include "iof_atomic.h"
 #include "ios_gah.h"
+#include <sys/queue.h>
 
 #define IOF_MAX_FSTYPE_LEN 32
 

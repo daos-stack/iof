@@ -82,8 +82,8 @@ static enum ios_return ios_gah_store_increase_capacity(
 		gah_store->ptr_array[ii]->fid = ii;
 
 		/** point tail to the new tail */
-		STAILQ_INSERT_TAIL(&gah_store->free_list,
-				   gah_store->ptr_array[ii], list);
+		crt_list_add_tail(&gah_store->ptr_array[ii]->list,
+				  &gah_store->free_list);
 	}
 	gah_store->capacity = new_cap;
 
@@ -142,7 +142,7 @@ static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
 		return IOS_ERR_NOMEM;
 	}
 
-	STAILQ_INIT(&gah_store->free_list);
+	CRT_INIT_LIST_HEAD(&gah_store->free_list);
 
 	/** setup the pointer array */
 	for (ii = 0; ii < IOS_GAH_STORE_INIT_CAPACITY; ii++) {
@@ -150,8 +150,8 @@ static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
 		gah_store->ptr_array[ii]->fid = ii;
 
 		/** setup the linked list */
-		STAILQ_INSERT_TAIL(&gah_store->free_list,
-				   gah_store->ptr_array[ii], list);
+		crt_list_add_tail(&gah_store->ptr_array[ii]->list,
+				  &gah_store->free_list);
 	}
 
 	return IOS_SUCCESS;
@@ -210,7 +210,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 		return IOS_ERR_INVALID_PARAM;
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
-	if (STAILQ_EMPTY(&gah_store->free_list)) {
+	if (crt_list_empty(&gah_store->free_list)) {
 		rc = ios_gah_store_increase_capacity(gah_store,
 				IOS_GAH_STORE_DELTA);
 		if (rc != IOS_SUCCESS)
@@ -218,8 +218,9 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 	}
 
 	/** take one gah from the head of the list */
-	ent = STAILQ_FIRST(&gah_store->free_list);
-	STAILQ_REMOVE_HEAD(&gah_store->free_list, list);
+	ent = crt_list_entry(gah_store->free_list.next, struct ios_gah_ent,
+			     list);
+	crt_list_del(&ent->list);
 
 	ent->in_use = 1;
 	ent->internal = data;
@@ -263,8 +264,8 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 	gah_store->ptr_array[gah->fid]->in_use = 0;
 
 	/** append the reclaimed entry to the list of available entires */
-	STAILQ_INSERT_HEAD(&gah_store->free_list,
-			   gah_store->ptr_array[gah->fid], list);
+	crt_list_add(&gah_store->ptr_array[gah->fid]->list,
+		     &gah_store->free_list);
 
 	gah_store->size--;
 

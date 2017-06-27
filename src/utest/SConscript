@@ -114,6 +114,7 @@ def scons():
         else:
             LIBS['test_ctrl_fs.c'].append('fuse')
     test_env.AppendUnique(CPPPATH=['../common/include'])
+    prereqs.require(test_env, 'cart')
     cunit_env = test_env.Clone()
     cunit_env.AppendUnique(LIBS=['cunit'])
     tests = []

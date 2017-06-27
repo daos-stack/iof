@@ -69,7 +69,7 @@ def build_static_tests(env):
 def scons():
     """Scons function"""
 
-    Import('env')
+    Import('env prereqs')
 
     if not env.GetOption('clean'):
         # Run config in a new environment so the environment isn't polluted
@@ -96,6 +96,8 @@ def scons():
     tenv.AppendUnique(LIBPATH='../il')
     tenv.AppendUnique(LIBS=['cunit'])
     tenv.AppendUnique(RPATH='$PREFIX/lib')
+
+    prereqs.require(tenv, 'cart')
 
     print tenv.subst("CPPPATH = $CPPPATH")
 
