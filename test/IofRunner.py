@@ -142,7 +142,7 @@ class IofRunner():
         os.environ['OFI_INTERFACE'] = \
             self.test_info.get_defaultENV('OFI_INTERFACE', "eth0")
         os.environ['CRT_LOG_MASK'] = \
-            self.test_info.get_defaultENV('CRT_LOG_MASK', "DEBUG,MEM=ERR")
+            self.test_info.get_defaultENV('CRT_LOG_MASK', "INFO")
 
     def launch_process(self):
         """Launch the CNSS and IONSS processes"""
