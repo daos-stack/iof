@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,83 +34,76 @@
  * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * A simple, efficient pool for allocating small objects of equal size.
  */
+#ifndef __IOF_POOL_H__
+#define __IOF_POOL_H__
 
-#ifdef IOF_USE_FUSE3
-#include <fuse3/fuse.h>
-#else
-#include <fuse/fuse.h>
-#endif
+#include <pthread.h>
+#include <crt_util/list.h>
 
-#include "iof_common.h"
-#include "iof.h"
-#include "log.h"
-#include "ios_gah.h"
+/* A datastructure used to describe and register a type */
+struct iof_pool_reg {
+	/* Perform any one-time setup or assigning constants. */
+	int	(*init)(void *, void *);
 
-struct closedir_cb_r {
-	struct iof_tracker tracker;
+	/* Prepare an object for use by freeing any old data
+	 * and allocating new data
+	 */
+	int	(*clean)(void *);
+
+	/* Called once at teardown */
+	void	(*release)(void *);
+	int	size;
+	int	offset;
+	void	*handle;
 };
 
-static int closedir_cb(const struct crt_cb_info *cb_info)
-{
-	struct closedir_cb_r *reply = cb_info->cci_arg;
+#define POOL_TYPE_INIT(itype, imember) .size = sizeof(struct itype),	\
+		.offset = offsetof(struct itype, imember)
 
-	/* There is no error handling needed here, as all client state will be
-	 * destroyed on return anyway.
-	 */
+/* A datastructure used to manage a type.  Includes both the
+ * registration data and any live state
+ */
+struct iof_pool_type {
+	struct iof_pool_reg	reg;
+	crt_list_t		type_list;
+	crt_list_t		free_list;
+	crt_list_t		pending_list;
+	pthread_mutex_t		lock;
+	int			count;
+};
 
-	iof_tracker_signal(&reply->tracker);
-	return 0;
-}
+struct iof_pool {
+	crt_list_t		list;
+	pthread_mutex_t		lock;
+};
 
-int ioc_closedir(const char *dir, struct fuse_file_info *fi)
-{
-	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
-	struct iof_gah_in *in;
-	struct closedir_cb_r reply = {0};
-	int rc;
+/* Create a new pool, called once at startup */
+int iof_pool_init(struct iof_pool *);
 
-	STAT_ADD(fs_handle->stats, closedir);
+/* Destroy a pool, called once at shutdown */
+void iof_pool_destroy(struct iof_pool *);
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
+/* Register a new type to a pool, called multiple times after init */
+struct iof_pool_type *
+iof_pool_register(struct iof_pool *, struct iof_pool_reg *);
 
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
+/* Allocate a datastructure in performant way */
+void *iof_pool_acquire(struct iof_pool_type *);
 
-	/* If the GAH has been reported as invalid by the server in the past
-	 * then do not attempt to do anything with it.
-	 *
-	 * However, even if the local handle has been reported invalid then
-	 * still continue to release the GAH on the server side.
-	 */
-	if (!dir_handle->gah_valid) {
-		rc = EIO;
-		goto out;
-	}
+/* Release a datastructuve in a performant way */
+void iof_pool_release(struct iof_pool_type *, void *);
 
-	in = crt_req_get(dir_handle->close_rpc);
-	in->gah = dir_handle->gah;
-	iof_tracker_init(&reply.tracker, 1);
+/* Pre-allocate datastructures
+ * This should be called off the critical path, after previous acquire/release
+ * calls and will do memory allocation as required.  Only 1 call is needed after
+ * transitions so it does not need calling in progress loops.
+ */
+void iof_pool_restock(struct iof_pool_type *);
 
-	rc = crt_req_send(dir_handle->close_rpc, closedir_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		rc = EIO;
-		goto out;
-	}
+/* Reclaim any memory possible across all types */
+void iof_pool_reclaim(struct iof_pool *);
 
-	dir_handle->close_rpc = NULL;
-
-	iof_pool_release(fs_handle->dh, dir_handle);
-	iof_pool_restock(fs_handle->dh);
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	return 0;
-out:
-
-	iof_pool_release(fs_handle->dh, dir_handle);
-
-	return -rc;
-}
+#endif /*  __IOF_POOL_H__ */

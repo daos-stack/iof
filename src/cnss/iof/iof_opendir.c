@@ -92,17 +92,14 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	struct iof_dir_handle *dir_handle;
 	struct iof_string_in *in;
 	struct opendir_cb_r reply = {0};
-	size_t dir_len = strlen(dir) + 1;
-	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	dir_handle = calloc(1, dir_len + sizeof(*dir_handle));
+	dir_handle = iof_pool_acquire(fs_handle->dh);
 	if (!dir_handle)
 		return -ENOMEM;
-	strncpy(dir_handle->name, dir, dir_len);
 
 	dir_handle->fs_handle = fs_handle;
 	dir_handle->ep = fs_handle->dest_ep;
@@ -111,28 +108,22 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	STAT_ADD(fs_handle->stats, opendir);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, dir_handle->ep,
-			    FS_TO_OP(fs_handle, opendir), &rpc);
-
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
-		free(dir_handle);
-		return -EIO;
-	}
-
 	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
+	in = crt_req_get(dir_handle->open_rpc);
 	in->path = (crt_string_t)dir;
 	in->fs_id = fs_handle->fs_id;
 
 	reply.dh = dir_handle;
 
-	rc = crt_req_send(rpc, opendir_cb, &reply);
+	rc = crt_req_send(dir_handle->open_rpc, opendir_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		free(dir_handle);
+		iof_pool_release(fs_handle->dh, dir_handle);
 		return -EIO;
 	}
+	dir_handle->open_rpc = NULL;
+	dir_handle->name = strdup(dir);
+	iof_pool_restock(fs_handle->dh);
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
@@ -143,7 +134,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, dir_handle,
 			     GAH_PRINT_FULL_VAL(dir_handle->gah));
 	} else {
-		free(dir_handle);
+		iof_pool_release(fs_handle->dh, dir_handle);
 	}
 
 	IOF_LOG_DEBUG("path %s rc %d",

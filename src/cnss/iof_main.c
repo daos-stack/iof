@@ -55,6 +55,7 @@
 #include "log.h"
 #include "ios_gah.h"
 #include "iof_ioctl.h"
+#include "iof_pool.h"
 
 struct query_cb_r {
 	struct iof_tracker tracker;
@@ -277,6 +278,59 @@ static int attach_group(struct iof_state *iof_state,
 	return 0;
 }
 
+int dh_init(void *arg, void *handle)
+{
+	struct iof_dir_handle *dh = arg;
+
+	dh->fs_handle = handle;
+	dh->ep = dh->fs_handle->dest_ep;
+	return 0;
+}
+
+int dh_clean(void *arg)
+{
+	struct iof_dir_handle *dh = arg;
+	int rc;
+
+	/* If there has been an error on the local handle, or readdir() is not
+	 * exhausted then ensure that all resources are freed correctly
+	 */
+	if (dh->rpc)
+		crt_req_decref(dh->rpc);
+	dh->rpc = NULL;
+
+	if (dh->name)
+		free(dh->name);
+	dh->name = NULL;
+
+	if (dh->open_rpc)
+		crt_req_decref(dh->open_rpc);
+
+	if (dh->close_rpc)
+		crt_req_decref(dh->close_rpc);
+
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, dh->ep,
+			    FS_TO_OP(dh->fs_handle, opendir), &dh->open_rpc);
+	if (rc || !dh->open_rpc)
+		return -1;
+
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, dh->ep,
+			    FS_TO_OP(dh->fs_handle, closedir), &dh->close_rpc);
+	if (rc || !dh->close_rpc) {
+		crt_req_decref(dh->open_rpc);
+		return -1;
+	}
+	return 0;
+}
+
+void dh_release(void *arg)
+{
+	struct iof_dir_handle *dh = arg;
+
+	crt_req_decref(dh->open_rpc);
+	crt_req_decref(dh->close_rpc);
+}
+
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
@@ -294,6 +348,12 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->groups = calloc(1, sizeof(struct iof_group_info));
 	if (iof_state->groups == NULL) {
 		IOF_LOG_ERROR("No memory available to configure IONSS");
+		return IOF_ERR_NOMEM;
+	}
+
+	ret = iof_pool_init(&iof_state->pool);
+	if (ret != 0) {
+		free(iof_state->groups);
 		return IOF_ERR_NOMEM;
 	}
 
@@ -462,6 +522,18 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->max_iov_read = query->max_iov_read;
 	fs_handle->max_write = query->max_write;
 	fs_handle->readdir_size = query->readdir_size;
+
+	{
+		struct iof_pool_reg pt = { .handle = fs_handle,
+					  .init = dh_init,
+					  .clean = dh_clean,
+					  .release = dh_release,
+					  POOL_TYPE_INIT(iof_dir_handle, list)};
+
+		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
+		if (!fs_handle->dh)
+			return IOF_ERR_NOMEM;
+	}
 
 	base_name = basename(fs_info->mnt);
 
@@ -787,6 +859,7 @@ static void iof_finish(void *arg)
 		IOF_LOG_ERROR("Could not destroy context");
 	IOF_LOG_INFO("Called iof_finish with %p", iof_state);
 
+	iof_pool_destroy(&iof_state->pool);
 	free(iof_state->groups);
 	free(iof_state->cnss_prefix);
 	free(iof_state);

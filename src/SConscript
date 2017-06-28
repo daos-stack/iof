@@ -43,6 +43,7 @@ COMMON_SRC = ['version.c',
               'iof_fs.c',
               'log.c',
               'iof_rpc.c',
+              'iof_pool.c',
               'iof_obj_pool.c',
               'iof_vector.c',
               'iof_mntent.c']

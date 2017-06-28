@@ -43,6 +43,7 @@
 #include "ios_gah.h"
 #include "iof_atomic.h"
 #include "iof_fs.h"
+#include "iof_pool.h"
 
 struct iof_stats {
 	ATOMIC unsigned int opendir;
@@ -88,6 +89,7 @@ struct iof_state {
 	struct ctrl_dir			*ionss_dir;
 	struct ctrl_dir			*projections_dir;
 	struct iof_group_info		*groups;
+	struct iof_pool			pool;
 	uint32_t			num_groups;
 };
 
@@ -113,6 +115,7 @@ struct iof_projection_info {
 	/* Feature Flags */
 	uint8_t				flags;
 	int				fs_id;
+	struct iof_pool_type		*dh;
 	uint32_t			max_read;
 	uint32_t			max_write;
 	uint32_t			max_iov_read;
@@ -199,8 +202,10 @@ struct iof_dir_handle {
 	struct ios_gah			gah;
 	/* Any RPC reference held across readdir() calls */
 	crt_rpc_t			*rpc;
+	crt_rpc_t			*open_rpc;
+	crt_rpc_t			*close_rpc;
 	/* Pointer to any retreived data from readdir() RPCs */
-	struct iof_readdir_reply	 *replies;
+	struct iof_readdir_reply	*replies;
 	int				reply_count;
 	void				*replies_base;
 	/* Set to True if the current batch of replies is the final one */
@@ -210,8 +215,9 @@ struct iof_dir_handle {
 	/* Set to 0 if the server rejects the GAH at any point */
 	int				gah_valid;
 	crt_endpoint_t			ep;
+	crt_list_t			list;
 	/* The name of the directory */
-	char				name[];
+	char				*name;
 };
 
 /* Data which is stored against an open file handle */
