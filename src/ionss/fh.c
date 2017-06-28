@@ -80,13 +80,14 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	int rc;
 
 	oldref = atomic_fetch_sub(&fh->ref, count);
-	if (oldref != count) {
-		IOF_LOG_DEBUG("Keeping " GAH_PRINT_STR " ref %d",
-			      GAH_PRINT_VAL(fh->gah), fh->ref);
-		return;
-	}
 
-	IOF_LOG_INFO("Dropping " GAH_PRINT_STR, GAH_PRINT_VAL(fh->gah));
+	IOF_LOG_DEBUG("decref (%d) " GAH_PRINT_STR " to %d", count,
+		      GAH_PRINT_VAL(fh->gah), oldref - count);
+
+	if (oldref != count)
+		return;
+
+	IOF_LOG_DEBUG("Closing %d", fh->fd);
 
 	rc = close(fh->fd);
 	if (rc != 0)
@@ -130,8 +131,8 @@ struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
 
 	oldref = atomic_fetch_add(&fh->ref, 1);
 
-	IOF_LOG_DEBUG("%s() Found " GAH_PRINT_STR " ref %d",
-		      fn, GAH_PRINT_VAL(fh->gah), oldref);
+	IOF_LOG_DEBUG("%s() Using " GAH_PRINT_STR " ref %d",
+		      fn, GAH_PRINT_VAL(fh->gah), oldref + 1);
 
 	return fh;
 }
