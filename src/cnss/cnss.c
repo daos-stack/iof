@@ -61,11 +61,6 @@
 
 #include "cnss.h"
 
-#include <sys/queue.h>
-
-/* struct fs_list is a list of fs_infos */
-LIST_HEAD(fs_list, fs_info);
-
 /* A descriptor for the plugin */
 struct plugin_entry {
 	/* The callback functions, as provided by the plugin */
@@ -87,7 +82,7 @@ struct plugin_entry {
 	 */
 	struct cnss_plugin_cb self_fns;
 
-	struct fs_list fuse_list;
+	crt_list_t fuse_list;
 };
 
 struct fs_info {
@@ -99,11 +94,10 @@ struct fs_info {
 	pthread_t thread;
 	pthread_mutex_t lock;
 	void *private_data;
-	LIST_ENTRY(fs_info) entries;
+	crt_list_t entries;
 	int running:1;
 	int mt:1;
 };
-
 
 #define FN_TO_PVOID(fn) (*((void **)&(fn)))
 
@@ -257,7 +251,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 	crt_list_add(&entry->list, &info->plugins);
 
-	LIST_INIT(&entry->fuse_list);
+	CRT_INIT_LIST_HEAD(&entry->fuse_list);
 
 	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
 		     entry->fns->name,
@@ -435,7 +429,7 @@ static int register_fuse(void *arg,
 		goto cleanup;
 	}
 
-	LIST_INSERT_HEAD(&plugin->fuse_list, info, entries);
+	crt_list_add(&info->entries, &plugin->fuse_list);
 
 	return 0;
 cleanup:
@@ -478,7 +472,7 @@ static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
 	pthread_join(info->thread, 0);
-	LIST_REMOVE(info, entries);
+	crt_list_del(&info->entries);
 
 	pthread_mutex_destroy(&info->lock);
 	free(info->mnt);
@@ -491,12 +485,12 @@ static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 void shutdown_fs(struct cnss_info *cnss_info)
 {
 	struct plugin_entry *plugin;
-	struct fs_info *info;
+	struct fs_info *info, *i2;
 	int rc;
 
 	crt_list_for_each_entry(plugin, &cnss_info->plugins, list) {
-		while (!LIST_EMPTY(&plugin->fuse_list)) {
-			info = LIST_FIRST(&plugin->fuse_list);
+		crt_list_for_each_entry_safe(info, i2, &plugin->fuse_list,
+					     entries) {
 			rc = deregister_fuse(plugin, info);
 			if (rc)
 				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
