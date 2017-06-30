@@ -41,17 +41,16 @@
 #include <dirent.h>
 #include "iof_atomic.h"
 #include "ios_gah.h"
-#include <sys/queue.h>
+#include "iof_pool.h"
 
 #define IOF_MAX_FSTYPE_LEN 32
-
-LIST_HEAD(active_files, ionss_file_handle);
 
 struct ios_base {
 	struct ios_projection	*projection_array;
 	struct iof_fs_info	*fs_list;
 	struct ios_gah_store	*gs;
 	struct proto		*proto;
+	struct iof_pool		pool;
 	uint			projection_count;
 	crt_group_t		*primary_group;
 	crt_rank_t		my_rank;
@@ -65,18 +64,18 @@ struct ios_base {
 };
 
 struct ios_projection {
-	struct ios_base *base;
-	char		*full_path;
-	char		fs_type[IOF_MAX_FSTYPE_LEN];
-	DIR		*dir;
-	uint		dir_fd;
-	uint		id;
-	uint		flags;
-	uint		active;
-	uint64_t	dev_no;
-	struct active_files files;
-	pthread_mutex_t lock;
-	struct active_files inactive_files;
+	struct ios_base		*base;
+	char			*full_path;
+	char			fs_type[IOF_MAX_FSTYPE_LEN];
+	DIR			*dir;
+	struct iof_pool_type	*fh_pool;
+	uint			dir_fd;
+	uint			id;
+	uint			flags;
+	uint			active;
+	uint64_t		dev_no;
+	crt_list_t		files;
+	pthread_mutex_t		lock;
 };
 
 /* Convert from a fs_id as received over the network to a projection pointer.
@@ -101,12 +100,12 @@ struct ionss_dir_handle {
 struct ionss_file_handle {
 	struct ios_gah		gah;
 	struct ios_projection	*projection;
+	crt_list_t		clist;
 	uint			fs_id;
 	uint			fd;
 	int			flags;
 	ATOMIC uint		ref;
 	ino_t			inode_no;
-	LIST_ENTRY(ionss_file_handle)	list;
 };
 
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)
@@ -140,9 +139,6 @@ int ios_fh_alloc(struct ios_projection *, struct ionss_file_handle **);
  * Should be called with a count of 1 for every handle returned by ios_fh_find()
  */
 void ios_fh_decref(struct ionss_file_handle *, int);
-
-/* Pre-allocate a new fh to speed up subsequent calls to ios_fh_alloc() */
-void ios_fh_prealloc(struct ios_projection *);
 
 /* Lookup a file handle from a GAH and take a reference to it.
  */

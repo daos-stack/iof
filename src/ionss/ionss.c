@@ -742,7 +742,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	 * If the handle can be re-used then close the new file descriptor
 	 * and take a reference on the existing GAH.
 	 */
-	LIST_FOREACH(tmp_handle, &projection->files, list) {
+	crt_list_for_each_entry(tmp_handle, &projection->files, clist) {
 		if (stbuf.st_ino != tmp_handle->inode_no)
 			continue;
 
@@ -774,7 +774,7 @@ iof_open_handler(crt_rpc_t *rpc)
 		handle->flags = in->flags;
 		handle->inode_no = stbuf.st_ino;
 
-		LIST_INSERT_HEAD(&projection->files, handle, list);
+		crt_list_add(&handle->clist, &projection->files);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -794,7 +794,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (projection)
-		ios_fh_prealloc(projection);
+		iof_pool_restock(projection->fh_pool);
 }
 
 static void
@@ -851,7 +851,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	 * If the handle can be re-used then close the new file descriptor
 	 * and take a reference on the existing GAH.
 	 */
-	LIST_FOREACH(tmp_handle, &projection->files, list) {
+	crt_list_for_each_entry(tmp_handle, &projection->files, clist) {
 		if (stbuf.st_ino != tmp_handle->inode_no)
 			continue;
 
@@ -883,7 +883,7 @@ iof_create_handler(crt_rpc_t *rpc)
 		handle->flags = in->flags;
 		handle->inode_no = stbuf.st_ino;
 
-		LIST_INSERT_HEAD(&projection->files, handle, list);
+		crt_list_add(&handle->clist, &projection->files);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -905,7 +905,7 @@ out:
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
 	if (projection)
-		ios_fh_prealloc(projection);
+		iof_pool_restock(projection->fh_pool);
 }
 
 /* Handle a close from a client.
@@ -1920,10 +1920,9 @@ static void *progress_thread(void *arg)
  */
 static void release_projection_resources(struct ios_projection *projection)
 {
-	while (!LIST_EMPTY(&projection->files)) {
-		struct ionss_file_handle *handle;
+	struct ionss_file_handle *handle, *next;
 
-		handle = LIST_FIRST(&projection->files);
+	crt_list_for_each_entry_safe(handle, next, &projection->files, clist) {
 
 		IOF_LOG_INFO("Closing handle %p fd %d " GAH_PRINT_STR,
 			     handle, handle->fd, GAH_PRINT_VAL(handle->gah));
@@ -2045,6 +2044,15 @@ void show_help(const char *prog)
 	printf("\t\t--max-write\tMaximum size of write requests\n");
 	printf("\t-h\t--help\t\tThis help text\n");
 	printf("\n");
+}
+
+static int
+fh_init(void *arg, void *handle)
+{
+	struct ionss_file_handle *dh = arg;
+
+	dh->projection = handle;
+	return 0;
 }
 
 int main(int argc, char **argv)
@@ -2171,6 +2179,12 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
+	ret = iof_pool_init(&base.pool);
+	if (ret != 0) {
+		ret = IOF_ERR_NOMEM;
+		goto cleanup;
+	}
+
 	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
 
 	/*
@@ -2187,12 +2201,15 @@ int main(int argc, char **argv)
 		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
 		char *full_path = realpath(argv[i + optind], NULL);
+		struct iof_pool_reg fhp = { .handle = projection,
+					    .init = fh_init,
+					    POOL_TYPE_INIT(ionss_file_handle,
+							   clist)};
 		int rc;
 
 		projection->active = 0;
 		projection->base = &base;
-		LIST_INIT(&projection->files);
-		LIST_INIT(&projection->inactive_files);
+		CRT_INIT_LIST_HEAD(&projection->files);
 		pthread_mutex_init(&projection->lock, NULL);
 
 		if (!full_path) {
@@ -2244,6 +2261,10 @@ int main(int argc, char **argv)
 		projection->flags = IOF_FS_DEFAULT;
 		if (access(full_path, W_OK) == 0)
 			projection->flags |= IOF_WRITEABLE;
+
+		projection->fh_pool = iof_pool_register(&base.pool, &fhp);
+		if (!projection->fh_pool)
+			continue;
 
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;
@@ -2363,16 +2384,6 @@ int main(int argc, char **argv)
 
 		pthread_mutex_destroy(&projection->lock);
 
-		/* After closing all files free all remaining pre-allocated file
-		 * handles
-		 */
-		while (!LIST_EMPTY(&projection->inactive_files)) {
-			struct ionss_file_handle *handle;
-
-			handle = LIST_FIRST(&projection->inactive_files);
-			LIST_REMOVE(handle, list);
-			free(handle);
-		}
 	}
 
 	/* TODO:
@@ -2384,6 +2395,8 @@ int main(int argc, char **argv)
 	ret = ios_gah_destroy(base.gs);
 	if (ret)
 		IOF_LOG_ERROR("Could not close GAH pool");
+
+	iof_pool_destroy(&base.pool);
 
 	ret = crt_finalize();
 	if (ret)

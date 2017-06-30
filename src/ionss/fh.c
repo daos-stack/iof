@@ -49,23 +49,16 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 	*fhp = NULL;
 
-	if (LIST_EMPTY(&projection->inactive_files)) {
-		fh = calloc(1, sizeof(*fh));
-		if (!fh) {
-			IOF_LOG_ERROR("Failed to allocate memory");
-			return IOF_ERR_NOMEM;
-		}
-		fh->projection = projection;
-	} else {
-		fh = LIST_FIRST(&projection->inactive_files);
-		LIST_REMOVE(fh, list);
-	}
+	fh = iof_pool_acquire(projection->fh_pool);
+	if (!fh)
+		return IOF_ERR_NOMEM;
 
 	base = projection->base;
 
 	rc = ios_gah_allocate(base->gs, &fh->gah, 0, 0, fh);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
+		iof_pool_release(projection->fh_pool, fh);
 		free(fh);
 		return IOS_ERR_NOMEM;
 	}
@@ -102,16 +95,13 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	projection = fh->projection;
 	base = projection->base;
 
+	crt_list_del(&fh->clist);
+
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
 		IOF_LOG_ERROR("Failed to deallocate GAH %d", rc);
 
-	LIST_REMOVE(fh, list);
-
-	if (LIST_EMPTY(&projection->inactive_files))
-		LIST_INSERT_HEAD(&projection->inactive_files, fh, list);
-	else
-		free(fh);
+	iof_pool_release(projection->fh_pool, fh);
 }
 
 /* Try to ensure that there is at least one pre-allocated file_handle
@@ -120,23 +110,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
  */
 void ios_fh_prealloc(struct ios_projection *projection)
 {
-	struct ionss_file_handle *fh;
-
-	if (!LIST_EMPTY(&projection->inactive_files))
-		return;
-
-	fh = calloc(1, sizeof(*fh));
-	if (!fh) {
-		IOF_LOG_ERROR("Failed to allocate memory");
-		return;
-	}
-
-	fh->projection = projection;
-
-	pthread_mutex_lock(&projection->lock);
-	LIST_INSERT_HEAD(&projection->inactive_files, fh, list);
-	pthread_mutex_unlock(&projection->lock);
-
+	iof_pool_restock(projection->fh_pool);
 }
 
 struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
