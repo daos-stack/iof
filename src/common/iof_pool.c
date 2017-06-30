@@ -329,6 +329,15 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
  * the case.
  */
 void
+iof_pool_consume(struct iof_pool_type *type, void *ptr)
+{
+	IOF_LOG_DEBUG("Marking %p as consumed", ptr);
+	pthread_mutex_lock(&type->lock);
+	type->count--;
+	pthread_mutex_unlock(&type->lock);
+}
+
+void
 iof_pool_restock(struct iof_pool_type *type)
 {
 	IOF_LOG_DEBUG("Restocking %p count (%d/%d/%d)", type,

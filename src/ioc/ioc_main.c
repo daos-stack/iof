@@ -373,6 +373,61 @@ gh_release(void *arg)
 	crt_req_decref(req->rpc);
 }
 
+static int
+rb_small_init(void *arg, void *handle)
+{
+	struct iof_rb *rb = arg;
+	struct iof_projection_info *fs_handle = handle;
+
+	rb->buf.buf[0].mem = calloc(1, fs_handle->max_iov_read);
+	if (!rb->buf.buf[0].mem)
+		return -1;
+
+	rb->buf.count = 1;
+	rb->buf.buf[0].fd = -1;
+
+	return 0;
+}
+
+static int
+rb_page_init(void *arg, void *handle)
+{
+	struct iof_rb *rb = arg;
+
+	rb->buf.buf[0].mem = calloc(1, 4096);
+	if (!rb->buf.buf[0].mem)
+		return -1;
+
+	rb->buf.count = 1;
+	rb->buf.buf[0].fd = -1;
+
+	return 0;
+}
+
+static int
+rb_large_init(void *arg, void *handle)
+{
+	struct iof_rb *rb = arg;
+	struct iof_projection_info *fs_handle = handle;
+
+	rb->buf.buf[0].mem = calloc(1, fs_handle->max_read);
+	if (!rb->buf.buf[0].mem)
+		return -1;
+
+	rb->buf.count = 1;
+	rb->buf.buf[0].fd = -1;
+
+	return 0;
+}
+
+static void
+rb_release(void *arg)
+{
+	struct iof_rb *rb = arg;
+
+	free(rb->buf.buf[0].mem);
+}
+
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = arg;
@@ -716,12 +771,42 @@ static int initialize_projection(struct iof_state *iof_state,
 					  .release = gh_release,
 					  POOL_TYPE_INIT(getattr_req, list)};
 
+		struct iof_pool_reg rb_small = { .handle = fs_handle,
+						 .init = rb_small_init,
+						 .release = rb_release,
+						 POOL_TYPE_INIT(iof_rb, list)};
+
+		struct iof_pool_reg rb_page = { .handle = fs_handle,
+						 .init = rb_page_init,
+						 .release = rb_release,
+						 POOL_TYPE_INIT(iof_rb, list)};
+
+		struct iof_pool_reg rb_large = { .handle = fs_handle,
+						 .init = rb_large_init,
+						 .release = rb_release,
+						 POOL_TYPE_INIT(iof_rb, list)};
+
 		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
 		if (!fs_handle->dh)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->gh = iof_pool_register(&iof_state->pool, &gt);
 		if (!fs_handle->gh)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->rb_pool_small = iof_pool_register(&iof_state->pool,
+							     &rb_small);
+		if (!fs_handle->rb_pool_small)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->rb_pool_page = iof_pool_register(&iof_state->pool,
+							    &rb_page);
+		if (!fs_handle->rb_pool_page)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->rb_pool_large = iof_pool_register(&iof_state->pool,
+							     &rb_large);
+		if (!fs_handle->rb_pool_large)
 			return IOF_ERR_NOMEM;
 	}
 

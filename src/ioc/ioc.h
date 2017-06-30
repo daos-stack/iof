@@ -99,6 +99,11 @@ struct iof_group_info {
 	char				*grp_name;
 };
 
+struct iof_rb {
+	struct fuse_bufvec	buf;
+	crt_list_t		list;
+};
+
 struct iof_projection_info {
 	struct iof_projection		proj;
 	struct iof_state		*iof_state;
@@ -117,6 +122,9 @@ struct iof_projection_info {
 	int				fs_id;
 	struct iof_pool_type		*dh;
 	struct iof_pool_type		*gh;
+	struct iof_pool_type		*rb_pool_small;
+	struct iof_pool_type		*rb_pool_page;
+	struct iof_pool_type		*rb_pool_large;
 	uint32_t			max_read;
 	uint32_t			max_write;
 	uint32_t			max_iov_read;

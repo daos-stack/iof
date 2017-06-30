@@ -48,16 +48,7 @@
 #include "ios_gah.h"
 
 struct read_cb_r {
-	struct iof_data_out *out;
-	struct iof_file_handle *handle;
-	crt_rpc_t *rpc;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
-struct read_bulk_cb_r {
-	struct iof_read_bulk_out *out;
+	void *out;
 	struct iof_file_handle *handle;
 	crt_rpc_t *rpc;
 	struct iof_tracker tracker;
@@ -121,7 +112,7 @@ read_cb(const struct crt_cb_info *cb_info)
 static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_bulk_cb_r *reply = cb_info->cci_arg;
+	struct read_cb_r *reply = cb_info->cci_arg;
 	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
 
@@ -174,12 +165,15 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
-int ioc_read_direct(char *buff, size_t len, off_t position,
-		    struct iof_file_handle *handle)
+static int
+ioc_read_direct(struct iof_rb *rb, size_t len, off_t position,
+		struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_read_in *in;
+	struct iof_data_out *out;
 	struct read_cb_r reply = {0};
+	char *buff = rb->buf.buf[0].mem;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
@@ -204,6 +198,8 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
+	iof_pool_restock(fs_handle->rb_pool_small);
+
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err)
@@ -212,10 +208,11 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	if (reply.rc != 0)
 		return -reply.rc;
 
-	len = reply.out->data.iov_len;
+	out = reply.out;
+	len = out->data.iov_len;
 
 	if (len > 0)
-		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
+		memcpy(buff, out->data.iov_buf, out->data.iov_len);
 
 	rc = crt_req_decref(reply.rpc);
 	if (rc)
@@ -224,12 +221,15 @@ int ioc_read_direct(char *buff, size_t len, off_t position,
 	return len;
 }
 
-int ioc_read_bulk(char *buff, size_t len, off_t position,
-		  struct iof_file_handle *handle)
+static int
+ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
+	      struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_read_bulk_in *in;
-	struct read_bulk_cb_r reply = {0};
+	struct iof_read_bulk_out *out;
+	struct read_cb_r reply = {0};
+	char *buff = rb->buf.buf[0].mem;
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
 	crt_sg_list_t sgl = {0};
@@ -272,6 +272,10 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
+	if (len <= 4096)
+		iof_pool_restock(fs_handle->rb_pool_page);
+	else
+		iof_pool_restock(fs_handle->rb_pool_large);
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err) {
@@ -284,15 +288,17 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 		return -reply.rc;
 	}
 
-	if (reply.out->iov_len > 0) {
-		if (reply.out->data.iov_len != reply.out->iov_len) {
-			IOF_LOG_ERROR("Missing IOV %d", reply.out->iov_len);
+	out = reply.out;
+	if (out->iov_len > 0) {
+		if (out->data.iov_len != out->iov_len) {
+			/* TODO: This is a resource leak */
+			IOF_LOG_ERROR("Missing IOV %d", out->iov_len);
 			return -EIO;
 		}
-		len = reply.out->data.iov_len;
-		memcpy(buff, reply.out->data.iov_buf, len);
+		len = out->data.iov_len;
+		memcpy(buff, out->data.iov_buf, len);
 	} else {
-		len = reply.out->bulk_len;
+		len = out->bulk_len;
 		IOF_LOG_INFO("Received %#zx via bulk", len);
 	}
 
@@ -309,20 +315,24 @@ int ioc_read_bulk(char *buff, size_t len, off_t position,
 	return len;
 }
 
-int ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
-		 off_t position, struct fuse_file_info *fi)
+int
+ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
+	     off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct fuse_bufvec *buf;
+	struct iof_rb *rb;
+	struct iof_pool_type *pt;
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(handle->common.gah));
 
-	STAT_ADD(handle->fs_handle->stats, read);
+	STAT_ADD(fs_handle->stats, read);
 
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
@@ -331,29 +341,39 @@ int ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 		return -EIO;
 	}
 
-	buf = calloc(1, sizeof(*buf));
-	if (!buf)
+	if (len <= fs_handle->max_iov_read)
+		pt = fs_handle->rb_pool_small;
+	else if (len <= 4096)
+		pt = fs_handle->rb_pool_page;
+	else
+		pt = fs_handle->rb_pool_large;
+
+	rb = iof_pool_acquire(pt);
+	if (!rb)
 		return -ENOMEM;
 
-	buf->buf[0].mem = malloc(len);
-	if (!buf->buf[0].mem) {
-		free(buf);
-		return -ENOMEM;
-	}
-	buf->count = 1;
-	buf->buf[0].fd = -1;
-	*bufp = buf;
+	buf = &rb->buf;
 
 	IOF_LOG_DEBUG("Using buffer at %p", buf->buf[0].mem);
 
-	if (len > handle->fs_handle->max_iov_read)
-		rc = ioc_read_bulk(buf->buf[0].mem, len, position, handle);
+	if (len > fs_handle->max_iov_read)
+		rc = ioc_read_bulk(rb, len, position, handle);
 	else
-		rc = ioc_read_direct(buf->buf[0].mem, len, position, handle);
+		rc = ioc_read_direct(rb, len, position, handle);
 
-	if (rc > 0) {
-		STAT_ADD_COUNT(handle->fs_handle->stats, read_bytes, rc);
+
+	/* In theory for zero-sized reads FUSE could do without a buffer here
+	 * as there are no file contents to describe however the API requires
+	 * one.
+	 */
+
+	if (rc >= 0) {
+		STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
 		buf->buf[0].size = rc;
+		*bufp = buf;
+		iof_pool_consume(pt, rb);
+	} else {
+		iof_pool_release(pt, rb);
 	}
 
 	IOF_LOG_INFO("Read complete %i", rc);

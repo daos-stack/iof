@@ -109,8 +109,11 @@ iof_pool_register(struct iof_pool *, struct iof_pool_reg *);
 /* Allocate a datastructure in performant way */
 void *iof_pool_acquire(struct iof_pool_type *);
 
-/* Release a datastructuve in a performant way */
+/* Release a datastructure in a performant way */
 void iof_pool_release(struct iof_pool_type *, void *);
+
+/* Mark a datastructure as freed externally */
+void iof_pool_consume(struct iof_pool_type *, void *);
 
 /* Pre-allocate datastructures
  * This should be called off the critical path, after previous acquire/release
