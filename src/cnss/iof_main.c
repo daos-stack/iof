@@ -523,18 +523,6 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->max_write = query->max_write;
 	fs_handle->readdir_size = query->readdir_size;
 
-	{
-		struct iof_pool_reg pt = { .handle = fs_handle,
-					  .init = dh_init,
-					  .clean = dh_clean,
-					  .release = dh_release,
-					  POOL_TYPE_INIT(iof_dir_handle, list)};
-
-		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
-		if (!fs_handle->dh)
-			return IOF_ERR_NOMEM;
-	}
-
 	base_name = basename(fs_info->mnt);
 
 	ret = asprintf(&fs_handle->mount_point, "%s/%s",
@@ -668,6 +656,23 @@ static int initialize_projection(struct iof_state *iof_state,
 	free(read_option);
 	free(argv);
 
+	{
+		/* Register the directory handle type
+		 *
+		 * This is done late on in the registraction as the dh_int()
+		 * and dh_clean() functions require access to fs_handle.
+		 */
+		struct iof_pool_reg pt = { .handle = fs_handle,
+					  .init = dh_init,
+					  .clean = dh_clean,
+					  .release = dh_release,
+					  POOL_TYPE_INIT(iof_dir_handle, list)};
+
+		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
+		if (!fs_handle->dh)
+			return IOF_ERR_NOMEM;
+	}
+
 	IOF_LOG_DEBUG("Fuse mount installed at: %s",
 		      fs_handle->mount_point);
 
@@ -796,6 +801,14 @@ static void iof_stop(void *arg)
 			     fs_handle->fs_id, fs_handle->mount_point);
 		fs_handle->offline_reason = EACCES;
 	}
+
+	/* Destroy the object pool
+	 *
+	 * This is done here as it's after the projections have been taken
+	 * offline so there can be no more allocations however fs_handle
+	 * is still valid has iof_deregister_fuse() has not been called.
+	 */
+	iof_pool_destroy(&iof_state->pool);
 }
 
 static int detach_cb(const struct crt_cb_info *cb_info)
@@ -859,7 +872,6 @@ static void iof_finish(void *arg)
 		IOF_LOG_ERROR("Could not destroy context");
 	IOF_LOG_INFO("Called iof_finish with %p", iof_state);
 
-	iof_pool_destroy(&iof_state->pool);
 	free(iof_state->groups);
 	free(iof_state->cnss_prefix);
 	free(iof_state);

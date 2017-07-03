@@ -72,7 +72,23 @@ struct iof_pool_type {
 	crt_list_t		free_list;
 	crt_list_t		pending_list;
 	pthread_mutex_t		lock;
-	int			count;
+
+	/* Counters for current number of objects */
+	int			count; /* Total currently created */
+	int			free_count; /* Number currently free */
+	int			pending_count; /* Number currently created */
+
+	/* Statistics counters */
+	int			init_count;
+	int			clean_count;
+	int			release_count;
+
+	/* Performance metrics */
+	int			op_init; /* Number of on-path init calls */
+	int			op_clean; /* Number of on-path clean calls */
+	/* Number of sequental calls to acquire() without a call to restock() */
+	int			no_restock; /* Current count */
+	int			no_restock_hwm; /* High water mark */
 };
 
 struct iof_pool {
