@@ -116,6 +116,7 @@ struct iof_projection_info {
 	uint8_t				flags;
 	int				fs_id;
 	struct iof_pool_type		*dh;
+	struct iof_pool_type		*gh;
 	uint32_t			max_read;
 	uint32_t			max_write;
 	uint32_t			max_iov_read;
@@ -234,6 +235,21 @@ struct status_cb_r {
 	struct iof_tracker tracker; /** Completion event tracker */
 	int err; /** errno of any internal error */
 	int rc;  /** errno reported by remote POSIX operation */
+};
+
+struct getattr_cb_r {
+	struct iof_tracker tracker;
+	int err;
+	int rc;
+	struct stat *stat;
+};
+
+struct getattr_req {
+	struct getattr_cb_r		reply;
+	crt_endpoint_t			ep;
+	struct iof_projection_info	*fs_handle;
+	struct crt_rpc			*rpc;
+	crt_list_t			list;
 };
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.

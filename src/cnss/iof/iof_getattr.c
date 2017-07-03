@@ -45,12 +45,6 @@
 #include "iof.h"
 #include "log.h"
 
-struct getattr_cb_r {
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-	struct stat *stat;
-};
 
 static void
 getattr_cb(const struct crt_cb_info *cb_info)
@@ -84,9 +78,9 @@ getattr_cb(const struct crt_cb_info *cb_info)
 int ioc_getattr_name(const char *path, struct stat *stbuf)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
+	struct getattr_req *req;
 	struct iof_string_in *in;
-	struct getattr_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
+
 	int rc;
 
 	IOF_LOG_DEBUG("Path: %s", path);
@@ -96,33 +90,34 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, getattr), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
-		return -EIO;
-	}
+	req = iof_pool_acquire(fs_handle->gh);
+	if (!req)
+		return -ENOMEM;
 
-	in = crt_req_get(rpc);
+	in = crt_req_get(req->rpc);
 	in->path = (crt_string_t)path;
-	in->fs_id = fs_handle->fs_id;
+	req->reply.stat = stbuf;
 
-	iof_tracker_init(&reply.tracker, 1);
-	reply.stat = stbuf;
-
-	rc = crt_req_send(rpc, getattr_cb, &reply);
+	rc = crt_req_send(req->rpc, getattr_cb, &req->reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		iof_pool_release(fs_handle->gh, req);
 		return -EIO;
 	}
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
+	req->rpc = NULL;
+	iof_pool_restock(fs_handle->gh);
 
-	if (reply.err == EHOSTDOWN)
-		ioc_mark_ep_offline(fs_handle, &rpc->cr_ep);
+	iof_fs_wait(&fs_handle->proj, &req->reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
+	if (req->reply.err == EHOSTDOWN)
+		ioc_mark_ep_offline(fs_handle, &req->ep);
 
-	return IOC_STATUS_TO_RC(&reply);
+	rc = IOC_STATUS_TO_RC(&req->reply);
+	IOF_LOG_DEBUG("path %s rc %d", path, rc);
+
+	iof_pool_release(fs_handle->gh, req);
+
+	return rc;
 }
 
 #if IOF_USE_FUSE3

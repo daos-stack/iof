@@ -331,6 +331,48 @@ void dh_release(void *arg)
 	crt_req_decref(dh->close_rpc);
 }
 
+static int
+gh_init(void *arg, void *handle)
+{
+	struct getattr_req *req = arg;
+
+	req->fs_handle = handle;
+	req->ep = req->fs_handle->dest_ep;
+	return 0;
+}
+
+static int
+gh_clean(void *arg)
+{
+	struct getattr_req *req = arg;
+	struct iof_string_in *in;
+	int rc;
+
+	iof_tracker_init(&req->reply.tracker, 1);
+
+	if (req->rpc)
+		crt_req_decref(req->rpc);
+
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, req->ep,
+			    FS_TO_OP(req->fs_handle, getattr), &req->rpc);
+	if (rc || !req->rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
+		return -1;
+	}
+	in = crt_req_get(req->rpc);
+	in->fs_id = req->fs_handle->fs_id;
+
+	return 0;
+}
+
+static void
+gh_release(void *arg)
+{
+	struct getattr_req *req = arg;
+
+	crt_req_decref(req->rpc);
+}
+
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = (struct iof_state *)arg;
@@ -668,8 +710,18 @@ static int initialize_projection(struct iof_state *iof_state,
 					  .release = dh_release,
 					  POOL_TYPE_INIT(iof_dir_handle, list)};
 
+		struct iof_pool_reg gt = { .handle = fs_handle,
+					   .init = gh_init,
+					  .clean = gh_clean,
+					  .release = gh_release,
+					  POOL_TYPE_INIT(getattr_req, list)};
+
 		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
 		if (!fs_handle->dh)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->gh = iof_pool_register(&iof_state->pool, &gt);
+		if (!fs_handle->gh)
 			return IOF_ERR_NOMEM;
 	}
 
