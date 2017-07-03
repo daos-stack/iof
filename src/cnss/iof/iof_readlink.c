@@ -54,7 +54,8 @@ struct readlink_cb_r {
 	int rc;
 };
 
-int ioc_readlink_cb(const struct crt_cb_info *cb_info)
+static void
+ioc_readlink_cb(const struct crt_cb_info *cb_info)
 {
 	struct readlink_cb_r *reply = cb_info->cci_arg;
 	struct iof_string_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -67,7 +68,7 @@ int ioc_readlink_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -75,13 +76,13 @@ int ioc_readlink_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	rc = crt_req_addref(cb_info->cci_rpc);
@@ -95,7 +96,6 @@ int ioc_readlink_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_readlink(const char *link, char *target, size_t len)

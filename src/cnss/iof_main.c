@@ -76,7 +76,8 @@ struct iof_projection_info *ioc_get_handle(void)
  *
  * out->err will always be a errno that can be passed back to FUSE.
  */
-int ioc_status_cb(const struct crt_cb_info *cb_info)
+void
+ioc_status_cb(const struct crt_cb_info *cb_info)
 {
 	struct status_cb_r *reply = cb_info->cci_arg;
 	struct iof_status_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -88,7 +89,7 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -97,7 +98,6 @@ int ioc_status_cb(const struct crt_cb_info *cb_info)
 	}
 	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 /* Mark an endpoint as off-line, most likely because a process has been
@@ -137,7 +137,8 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 	fs_handle->offline_reason = EHOSTDOWN;
 }
 
-static int query_cb(const struct crt_cb_info *cb_info)
+static void
+query_cb(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply = cb_info->cci_arg;
 	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
@@ -153,7 +154,7 @@ static int query_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = cb_info->cci_rc;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	ret = crt_req_addref(cb_info->cci_rpc);
@@ -161,13 +162,12 @@ static int query_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 			      ret);
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	*reply->query = query;
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 /*Send RPC to PSR to get information about projected filesystems*/
@@ -811,13 +811,12 @@ static void iof_stop(void *arg)
 	iof_pool_destroy(&iof_state->pool);
 }
 
-static int detach_cb(const struct crt_cb_info *cb_info)
+static void
+detach_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_tracker *tracker = cb_info->cci_arg;
 
 	iof_tracker_signal(tracker);
-
-	return IOF_SUCCESS;
 }
 
 static void iof_finish(void *arg)

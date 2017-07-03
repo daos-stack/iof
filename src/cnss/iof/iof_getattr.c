@@ -52,7 +52,8 @@ struct getattr_cb_r {
 	struct stat *stat;
 };
 
-static int getattr_cb(const struct crt_cb_info *cb_info)
+static void
+getattr_cb(const struct crt_cb_info *cb_info)
 {
 	struct getattr_cb_r *reply = cb_info->cci_arg;
 	struct iof_getattr_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -60,13 +61,13 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 	if (IOC_HOST_IS_DOWN(cb_info)) {
 		reply->err = EHOSTDOWN;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (cb_info->cci_rc != 0) {
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	reply->rc = out->rc;
@@ -78,7 +79,6 @@ static int getattr_cb(const struct crt_cb_info *cb_info)
 		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_getattr_name(const char *path, struct stat *stbuf)

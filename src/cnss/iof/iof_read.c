@@ -65,7 +65,8 @@ struct read_bulk_cb_r {
 	int rc;
 };
 
-static int read_cb(const struct crt_cb_info *cb_info)
+static void
+read_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_cb_r *reply = cb_info->cci_arg;
 	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -84,7 +85,7 @@ static int read_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -95,13 +96,13 @@ static int read_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	rc = crt_req_addref(cb_info->cci_rpc);
@@ -115,10 +116,10 @@ static int read_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
-static int read_bulk_cb(const struct crt_cb_info *cb_info)
+static void
+read_bulk_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_bulk_cb_r *reply = cb_info->cci_arg;
 	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -137,7 +138,7 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -148,13 +149,13 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	rc = crt_req_addref(cb_info->cci_rpc);
@@ -168,7 +169,6 @@ static int read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_read_direct(char *buff, size_t len, off_t position,

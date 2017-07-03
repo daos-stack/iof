@@ -254,7 +254,7 @@ struct status_cb_r {
 
 void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 
-int ioc_status_cb(const struct crt_cb_info *);
+void ioc_status_cb(const struct crt_cb_info *);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
 
@@ -269,7 +269,7 @@ struct open_cb_r {
 	int rc;
 };
 
-int ioc_open_cb(const struct crt_cb_info *);
+void ioc_open_cb(const struct crt_cb_info *);
 
 struct iof_file_handle *ioc_fh_new(const char *);
 

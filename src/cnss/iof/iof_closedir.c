@@ -51,7 +51,8 @@ struct closedir_cb_r {
 	struct iof_tracker tracker;
 };
 
-static int closedir_cb(const struct crt_cb_info *cb_info)
+static void
+closedir_cb(const struct crt_cb_info *cb_info)
 {
 	struct closedir_cb_r *reply = cb_info->cci_arg;
 
@@ -60,7 +61,6 @@ static int closedir_cb(const struct crt_cb_info *cb_info)
 	 */
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_closedir(const char *dir, struct fuse_file_info *fi)

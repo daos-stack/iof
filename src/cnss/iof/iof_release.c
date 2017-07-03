@@ -52,7 +52,8 @@ struct release_cb_r {
 	int err;
 };
 
-static int release_cb(const struct crt_cb_info *cb_info)
+static void
+release_cb(const struct crt_cb_info *cb_info)
 {
 	struct release_cb_r *reply = cb_info->cci_arg;
 
@@ -63,11 +64,10 @@ static int release_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_release(const char *file, struct fuse_file_info *fi)

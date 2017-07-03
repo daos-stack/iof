@@ -54,7 +54,8 @@ struct statfs_cb_r {
 	int rc;
 };
 
-static int statfs_cb(const struct crt_cb_info *cb_info)
+static void
+statfs_cb(const struct crt_cb_info *cb_info)
 {
 	struct statfs_cb_r *reply = cb_info->cci_arg;
 	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -73,7 +74,7 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -81,13 +82,13 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->rc) {
 		reply->rc = out->rc;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	rc = crt_req_addref(cb_info->cci_rpc);
@@ -101,7 +102,6 @@ static int statfs_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_statfs(const char *path, struct statvfs *stat)

@@ -146,28 +146,27 @@ void shutdown_impl(void)
  * Call the shutdown implementation in the broadcast RPC callback in order
  * to ensure that the broadcast actually made it to all other IONSS ranks.
  */
-static int shutdown_bcast_cb(const struct crt_cb_info *cb_info)
+static void
+shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 {
 	int rc;
 
 	if (cb_info->cci_rc == 0) {
 		shutdown_impl();
-		return 0;
+		return;
 	}
 	IOF_LOG_ERROR("Broadcast failed, rc = %u", cb_info->cci_rc);
 	/* Retry in case of failure */
 	rc = crt_req_send(cb_info->cci_rpc, shutdown_bcast_cb, NULL);
-	if (rc) {
+	if (rc)
 		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
-		return rc;
-	}
-	return cb_info->cci_rc;
 }
 
 /*
  * Handle broadcast shutdown RPCs from other IONSS ranks.
  */
-static int shutdown_handler(crt_rpc_t *rpc)
+static void
+shutdown_handler(crt_rpc_t *rpc)
 {
 	int rc = 0;
 
@@ -175,7 +174,6 @@ static int shutdown_handler(crt_rpc_t *rpc)
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 	shutdown_impl();
-	return 0;
 }
 
 /*
@@ -183,7 +181,8 @@ static int shutdown_handler(crt_rpc_t *rpc)
  * other running IONSS processes in the primary group, the local decision
  * to shut down must be broadcast to the others before exiting.
  */
-static int cnss_detach_handler(crt_rpc_t *rpc)
+static void
+cnss_detach_handler(crt_rpc_t *rpc)
 {
 	int rc;
 	crt_rpc_t *rpc_bcast = NULL;
@@ -197,7 +196,7 @@ static int cnss_detach_handler(crt_rpc_t *rpc)
 
 	/* Do nothing if there are more CNSS attached */
 	if (--cnss_count)
-		return 0;
+		return;
 
 	IOF_LOG_DEBUG("Last CNSS detached from Rank %d",
 			base.my_rank);
@@ -205,7 +204,7 @@ static int cnss_detach_handler(crt_rpc_t *rpc)
 	/* Call shutdown directly if this is the only IONSS running */
 	if (base.num_ranks == 1) {
 		shutdown_impl();
-		return 0;
+		return;
 	}
 
 	IOF_LOG_DEBUG("Broadcasting shutdown to %d IONSS",
@@ -219,14 +218,11 @@ static int cnss_detach_handler(crt_rpc_t *rpc)
 	if (rc || !rpc_bcast) {
 		IOF_LOG_ERROR("Could not create broadcast"
 			      " shutdown request ret = %d", rc);
-		return 0;
+		return;
 	}
 	rc = crt_req_send(rpc_bcast, shutdown_bcast_cb, NULL);
-	if (rc) {
+	if (rc)
 		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
-		return 0;
-	}
-	return 0;
 }
 
 /* Convert an absolute path into a real one, returning a pointer
@@ -268,7 +264,8 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 	return IOF_SUCCESS;
 }
 
-int iof_getattr_handler(crt_rpc_t *rpc)
+static void
+iof_getattr_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_getattr_out *out = crt_reply_get(rpc);
@@ -299,8 +296,6 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-
-	return 0;
 }
 
 /*
@@ -314,7 +309,8 @@ out:
  * iof_getattr_handler instead. Thus it is safe to assume that this function
  * will never be called on a directory.
  */
-int iof_getattr_gah_handler(crt_rpc_t *rpc)
+static void
+iof_getattr_gah_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_getattr_out *out = crt_reply_get(rpc);
@@ -344,11 +340,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_opendir_handler(crt_rpc_t *rpc)
+static void
+iof_opendir_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_opendir_out *out = crt_reply_get(rpc);
@@ -403,7 +398,6 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-	return 0;
 }
 
 int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
@@ -454,7 +448,8 @@ out:
  * really should pass this back to the client properly so it doesn't retry.
  *
  */
-int iof_readdir_handler(crt_rpc_t *rpc)
+static void
+iof_readdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_readdir_in *in = crt_req_get(rpc);
 	struct iof_readdir_out *out = crt_reply_get(rpc);
@@ -597,7 +592,7 @@ out:
 			goto out;
 		}
 
-		return 0;
+		return;
 	} else if (reply_idx) {
 		out->iov_count = reply_idx;
 		crt_iov_set(&out->replies, &replies[0],
@@ -610,10 +605,10 @@ out:
 
 	if (replies)
 		free(replies);
-	return 0;
 }
 
-int iof_closedir_handler(crt_rpc_t *rpc)
+static void
+iof_closedir_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct ionss_dir_handle *handle = NULL;
@@ -641,7 +636,6 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-	return 0;
 }
 
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
@@ -693,7 +687,8 @@ int iof_closedir_handler(crt_rpc_t *rpc)
 			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
 	} while (0)
 
-int iof_open_handler(crt_rpc_t *rpc)
+static void
+iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_open_in *in = crt_req_get(rpc);
 	struct iof_open_out *out = crt_reply_get(rpc);
@@ -800,10 +795,10 @@ out:
 
 	if (projection)
 		ios_fh_prealloc(projection);
-	return 0;
 }
 
-int iof_create_handler(crt_rpc_t *rpc)
+static void
+iof_create_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in = crt_req_get(rpc);
 	struct iof_open_out *out = crt_reply_get(rpc);
@@ -911,14 +906,14 @@ out:
 
 	if (projection)
 		ios_fh_prealloc(projection);
-	return 0;
 }
 
 /* Handle a close from a client.
  * For close RPCs there is no reply so simply ack the RPC first
  * and then do the work off the critical path.
  */
-int iof_close_handler(crt_rpc_t *rpc)
+static void
+iof_close_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct ionss_file_handle *handle;
@@ -932,11 +927,10 @@ int iof_close_handler(crt_rpc_t *rpc)
 
 	if (handle)
 		ios_fh_decref(handle, 2);
-
-	return 0;
 }
 
-int iof_fsync_handler(crt_rpc_t *rpc)
+static void
+iof_fsync_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -966,11 +960,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_fdatasync_handler(crt_rpc_t *rpc)
+static void
+iof_fdatasync_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1001,11 +994,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_read_handler(crt_rpc_t *rpc)
+static void
+iof_read_handler(crt_rpc_t *rpc)
 {
 	struct iof_read_in *in = crt_req_get(rpc);
 	struct iof_data_out *out = crt_reply_get(rpc);
@@ -1050,8 +1042,6 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
 int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
@@ -1095,7 +1085,8 @@ out:
  * Creates a bulk handle
  * Submits the bulk handle
  */
-int iof_read_bulk_handler(crt_rpc_t *rpc)
+static void
+iof_read_bulk_handler(crt_rpc_t *rpc)
 {
 	struct iof_read_bulk_in *in = crt_req_get(rpc);
 	struct iof_read_bulk_out *out = crt_reply_get(rpc);
@@ -1185,7 +1176,7 @@ int iof_read_bulk_handler(crt_rpc_t *rpc)
 
 	ios_fh_decref(handle, 1);
 
-	return 0;
+	return;
 
 out:
 	rc = crt_reply_send(rpc);
@@ -1201,11 +1192,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_rename_handler(crt_rpc_t *rpc)
+static void
+iof_rename_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1232,11 +1222,10 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_symlink_handler(crt_rpc_t *rpc)
+static void
+iof_symlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1263,11 +1252,10 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_mkdir_handler(crt_rpc_t *rpc)
+static void
+iof_mkdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1291,8 +1279,6 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
 /* This function needs additional checks to handle longer links.
@@ -1300,7 +1286,8 @@ out:
  * There is a upper limit on the lenth FUSE has provided in the CNSS but this
  * function should ensure that it's not introducing further restricions.
  */
-int iof_readlink_handler(crt_rpc_t *rpc)
+static void
+iof_readlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_string_out *out = crt_reply_get(rpc);
@@ -1324,11 +1311,10 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_truncate_handler(crt_rpc_t *rpc)
+static void
+iof_truncate_handler(crt_rpc_t *rpc)
 {
 	struct iof_truncate_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1361,11 +1347,10 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_ftruncate_handler(crt_rpc_t *rpc)
+static void
+iof_ftruncate_handler(crt_rpc_t *rpc)
 {
 	struct iof_ftruncate_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1393,11 +1378,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_chmod_handler(crt_rpc_t *rpc)
+static void
+iof_chmod_handler(crt_rpc_t *rpc)
 {
 	struct iof_chmod_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1429,10 +1413,9 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
-	return 0;
 }
 
-int iof_chmod_gah_handler(crt_rpc_t *rpc)
+static void iof_chmod_gah_handler(crt_rpc_t *rpc)
 {
 	struct iof_chmod_gah_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1460,11 +1443,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_rmdir_handler(crt_rpc_t *rpc)
+static void
+iof_rmdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1489,11 +1471,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_unlink_handler(crt_rpc_t *rpc)
+static void iof_unlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1517,11 +1497,10 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_write_direct_handler(crt_rpc_t *rpc)
+static void
+iof_write_direct_handler(crt_rpc_t *rpc)
 {
 	struct iof_write_in *in = crt_req_get(rpc);
 	struct iof_write_out *out = crt_reply_get(rpc);
@@ -1551,8 +1530,6 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
 int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
@@ -1621,7 +1598,8 @@ out:
 	return 0;
 }
 
-int iof_write_bulk_handler(crt_rpc_t *rpc)
+static void
+iof_write_bulk_handler(crt_rpc_t *rpc)
 {
 	struct iof_write_bulk *in = crt_req_get(rpc);
 	struct iof_write_out *out = crt_reply_get(rpc);
@@ -1687,7 +1665,7 @@ int iof_write_bulk_handler(crt_rpc_t *rpc)
 	/* Do not call crt_reply_send() in this case as it'll be done in
 	 * the bulk handler.
 	 */
-	return 0;
+	return;
 
 out_decref:
 	rc = crt_req_decref(rpc);
@@ -1702,11 +1680,10 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_utimens_handler(crt_rpc_t *rpc)
+static void
+iof_utimens_handler(crt_rpc_t *rpc)
 {
 	struct iof_time_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1739,11 +1716,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
-int iof_utimens_gah_handler(crt_rpc_t *rpc)
+static void iof_utimens_gah_handler(crt_rpc_t *rpc)
 {
 	struct iof_time_gah_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
@@ -1779,11 +1754,9 @@ out:
 
 	if (handle)
 		ios_fh_decref(handle, 1);
-
-	return 0;
 }
 
-int iof_statfs_handler(crt_rpc_t *rpc)
+static void iof_statfs_handler(crt_rpc_t *rpc)
 {
 	struct iof_string_in *in = crt_req_get(rpc);
 	struct iof_data_out *out = crt_reply_get(rpc);
@@ -1815,8 +1788,6 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	return 0;
 }
 
 static void iof_register_default_handlers(void)
@@ -1859,7 +1830,8 @@ static void iof_register_default_handlers(void)
  * Process filesystem query from CNSS
  * This function currently uses dummy data to send back to CNSS
  */
-int iof_query_handler(crt_rpc_t *query_rpc)
+static void
+iof_query_handler(crt_rpc_t *query_rpc)
 {
 	struct iof_psr_query *query = crt_reply_get(query_rpc);
 	int ret;
@@ -1876,7 +1848,6 @@ int iof_query_handler(crt_rpc_t *query_rpc)
 		IOF_LOG_ERROR("query rpc response not sent, ret = %d", ret);
 
 	cnss_count++;
-	return 0;
 }
 
 int ionss_register(void)

@@ -57,7 +57,8 @@ struct write_cb_r {
 
 #define BULK_THRESHOLD 64
 
-static int write_cb(const struct crt_cb_info *cb_info)
+static void
+write_cb(const struct crt_cb_info *cb_info)
 {
 	struct write_cb_r *reply = cb_info->cci_arg;
 	struct iof_write_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -75,7 +76,7 @@ static int write_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err) {
@@ -92,13 +93,12 @@ static int write_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	reply->len = out->len;
 	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_write_direct(const char *buff, size_t len, off_t position,

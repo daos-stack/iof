@@ -60,7 +60,8 @@ struct iof_file_handle *ioc_fh_new(const char *name)
 	return handle;
 }
 
-int ioc_open_cb(const struct crt_cb_info *cb_info)
+void
+ioc_open_cb(const struct crt_cb_info *cb_info)
 {
 	struct open_cb_r *reply = cb_info->cci_arg;
 	struct iof_open_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -78,7 +79,7 @@ int ioc_open_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err == 0 && out->rc == 0)
@@ -86,7 +87,6 @@ int ioc_open_cb(const struct crt_cb_info *cb_info)
 	reply->err = out->err;
 	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_open(const char *file, struct fuse_file_info *fi)

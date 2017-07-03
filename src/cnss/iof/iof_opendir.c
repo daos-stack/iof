@@ -54,7 +54,8 @@ struct opendir_cb_r {
 	int rc;
 };
 
-static int opendir_cb(const struct crt_cb_info *cb_info)
+static void
+opendir_cb(const struct crt_cb_info *cb_info)
 {
 	struct opendir_cb_r *reply = cb_info->cci_arg;
 	struct iof_opendir_out *out = crt_reply_get(cb_info->cci_rpc);
@@ -72,7 +73,7 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 		else
 			reply->rc = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	if (out->err == 0 && out->rc == 0) {
@@ -83,7 +84,6 @@ static int opendir_cb(const struct crt_cb_info *cb_info)
 	reply->err = out->err;
 	reply->rc = out->rc;
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 int ioc_opendir(const char *dir, struct fuse_file_info *fi)

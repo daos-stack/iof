@@ -58,7 +58,8 @@ struct readdir_cb_r {
  *
  * All this function does is take a reference on the data and return.
  */
-static int readdir_cb(const struct crt_cb_info *cb_info)
+static void
+readdir_cb(const struct crt_cb_info *cb_info)
 {
 	struct readdir_cb_r *reply = cb_info->cci_arg;
 	int ret;
@@ -71,7 +72,7 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("Error from RPC %d", cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	ret = crt_req_addref(cb_info->cci_rpc);
@@ -80,13 +81,12 @@ static int readdir_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
 			      ret);
 		iof_tracker_signal(&reply->tracker);
-		return 0;
+		return;
 	}
 
 	reply->out = crt_reply_get(cb_info->cci_rpc);
 	reply->rpc = cb_info->cci_rpc;
 	iof_tracker_signal(&reply->tracker);
-	return 0;
 }
 
 /*
