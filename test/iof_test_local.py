@@ -193,6 +193,14 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         self.logger.info("Running")
 
+    def mark_log(self, msg):
+        """Log a message to stdout and to the CNSS logs"""
+
+        log_file = os.path.join(self.import_dir, '.ctrl', 'write_log')
+        print(msg)
+        with open(log_file, 'w')  as fd:
+            fd.write(msg)
+
     def show_stats(self):
         """Display projection statistics to stdout"""
 
@@ -615,15 +623,19 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         # subdirectory under import/export for each test, or disable cacheing
         # in the kernel.
         subtest_count = 0
-        for possible in dir(self):
+        for possible in sorted(dir(self)):
             if not possible.startswith('test_'):
                 continue
 
-            subtest_count += 1
             obj = getattr(self, possible)
-            print('Running test %s' % possible)
+            if not callable(obj):
+                continue
+
+            subtest_count += 1
             with self.subTest(possible[5:]):
+                self.mark_log('Starting test %s' % possible)
                 obj()
+                self.mark_log('Finished test %s, cleaning up' % possible)
                 idir = os.path.join(self.export_dir)
                 files = os.listdir(idir)
                 for e in files:
