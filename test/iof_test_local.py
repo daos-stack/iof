@@ -144,6 +144,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
         valgrind = iofcommontestsuite.valgrind_suffix(log_path)
+        self.test_valgrind = iofcommontestsuite.valgrind_suffix(log_path,
+                                                                pmix=False)
         ionss_args = ['ionss']
         if valgrind:
             #ionss_args.append('--poll-interval=1')
@@ -497,7 +499,10 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
             self.logger.info("libioil test - input string:\n %s\n", testname)
             # set this to match value used by this job
-            procrtn = subprocess.call([testname], timeout=180,
+            cmd = []
+            cmd.extend(self.test_valgrind)
+            cmd.extend([testname])
+            procrtn = subprocess.call(cmd, timeout=180,
                                       env=environ)
 
             if procrtn != 0:

@@ -272,7 +272,7 @@ static void do_misc_tests(const char *fname, size_t len)
 	struct stat stat_info;
 	void *address;
 	char buf[BUF_SIZE];
-	FILE *fp;
+	FILE *fp = NULL;
 	size_t items;
 	int rc;
 	int fd;
@@ -355,8 +355,13 @@ static void do_misc_tests(const char *fname, size_t len)
 		CU_ASSERT_STRING_EQUAL(buf, "@@@@@@@@");
 	}
 skip_mmap:
-	rc = close(fd);
-	printf("close returned %d\n", rc);
+	if (fp != NULL) {
+		rc = fclose(fp);
+		printf("fclose returned %d\n", rc);
+	} else {
+		rc = close(fd);
+		printf("close returned %d\n", rc);
+	}
 	CU_ASSERT_EQUAL(rc, 0);
 
 	fd = open(fname, O_RDWR);

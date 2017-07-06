@@ -87,11 +87,14 @@ def commonSetUpModule():
     cts.common_manage_ionss_dir()
     print("Testnss: module setup end\n\n")
 
-def valgrind_suffix(log_path):
+def valgrind_suffix(log_path, pmix=True):
     """Return the commands required to launch valgrind"""
     use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
     crt_suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
                                     "etc", "memcheck-cart.supp")
+    pid = '%p'
+    if pmix:
+        pid = '%q{PMIX_RANK}'
 
     iof_test_bin = os.getenv('IOF_TEST_BIN')
     if iof_test_bin:
@@ -106,7 +109,7 @@ def valgrind_suffix(log_path):
         return ['valgrind', '--xml=yes',
                 '--xml-file=%s' %
                 os.path.join(log_path,
-                             'valgrind-%q{PMIX_RANK}.xml'),
+                             "valgrind-%s.xml" % pid),
                 '--leak-check=full', '--gen-suppressions=all',
                 '--fullpath-after=',
                 '--partial-loads-ok=yes',
@@ -117,13 +120,13 @@ def valgrind_suffix(log_path):
         return ['valgrind', '--tool=callgrind',
                 '-callgrind-out-file=%s' %
                 os.path.join(log_path,
-                             'valgrind-%q{PMIX_RANK}.xml')]
+                             "valgrind-%s.xml" % pid)]
     elif use_valgrind == "memcheck-native":
         cmd = ['valgrind',
                '--error-exitcode=42',
                '--log-file=%s' %
                os.path.join(log_path,
-                            'valgrind-%q{PMIX_RANK}.txt'),
+                            "valgrind-%s.txt" % pid),
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
                '--partial-loads-ok=yes',

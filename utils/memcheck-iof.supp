@@ -48,3 +48,12 @@
    fun:ctrl_open
    fun:fuse_fs_open
 }
+{
+   Known benign, single leak
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:calloc
+   fun:_dlerror_run
+   fun:dlsym
+   ...
+}

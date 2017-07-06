@@ -362,10 +362,11 @@ static __attribute__((destructor)) void ioil_fini(void)
 	if (ioil_initialized) {
 		for (i = 0; i < ionss_count; i++)
 			crt_group_detach(ionss_grps[i].dest_grp);
-		free(ionss_grps);
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
 		ctrl_fs_util_finalize();
+		free(ionss_grps);
+		free(projections);
 	}
 	ioil_initialized = false;
 
