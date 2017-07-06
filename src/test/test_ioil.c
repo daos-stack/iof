@@ -54,6 +54,13 @@
 static const char *cnss_prefix;
 static char *mount_dir;
 
+
+#define WRITE_LOG_VERBOSE(fmt2, fmt1, ...) \
+	ctrl_fs_write_strf("write_log", fmt1 fmt2, __VA_ARGS__)
+
+#define WRITE_LOG(...) \
+	WRITE_LOG_VERBOSE(" at %s:%d", __VA_ARGS__, __FILE__, __LINE__)
+
 #define BUF_SIZE 4096
 
 char big_string[BUF_SIZE];
@@ -72,6 +79,7 @@ static int init_suite(void)
 		printf("ERROR: Could not find cnss\n");
 		return -1;
 	}
+	WRITE_LOG("setting up test");
 
 	for (;;) {
 		sprintf(buf1, "iof/projections/%d/mount_point", mnt_num++);
@@ -106,6 +114,7 @@ static int clean_suite(void)
 {
 	free(mount_dir);
 
+	WRITE_LOG("finalizing test");
 	ctrl_fs_util_finalize();
 
 	return CUE_SUCCESS;
@@ -118,6 +127,7 @@ static void gah_test(void)
 	int fd;
 	int rc;
 
+	WRITE_LOG("starting gah_test");
 	snprintf(buf, BUF_SIZE, "%s/ioil_test_file", mount_dir);
 	buf[BUF_SIZE - 1] = 0;
 
@@ -129,6 +139,7 @@ static void gah_test(void)
 		return;
 	}
 
+	WRITE_LOG("calling ioctl on iof file");
 	rc = ioctl(fd, IOF_IOCTL_GAH, &gah_info);
 
 	CU_ASSERT_EQUAL(rc, 0);
@@ -150,6 +161,7 @@ static void gah_test(void)
 
 	if (rc == 0)
 		printf("ERROR: Failed ioctl test of non-IOF file: %s\n", buf);
+	WRITE_LOG("stop gah_test");
 }
 
 static void do_write_tests(int fd, char *buf, size_t len)
@@ -159,6 +171,7 @@ static void do_write_tests(int fd, char *buf, size_t len)
 	off_t offset;
 	int rc;
 
+	WRITE_LOG("starting write test");
 	bytes = write(fd, buf, len);
 	printf("Wrote %zd bytes, expected %zu\n", bytes, len);
 	CU_ASSERT_EQUAL(bytes, len);
@@ -199,6 +212,7 @@ static void do_write_tests(int fd, char *buf, size_t len)
 	rc = close(fd);
 	printf("Closed file, rc = %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
+	WRITE_LOG("end write test");
 }
 
 static void do_read_tests(const char *fname, size_t len)
@@ -212,6 +226,7 @@ static void do_read_tests(const char *fname, size_t len)
 	int fd;
 	int rc;
 
+	WRITE_LOG("starting read test");
 	memset(buf, 0, sizeof(buf));
 	memset(buf2, 0, sizeof(buf2));
 
@@ -268,6 +283,7 @@ static void do_read_tests(const char *fname, size_t len)
 	rc = close(fd);
 	printf("Closed file, rc = %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
+	WRITE_LOG("end read test");
 }
 
 static void do_misc_tests(const char *fname, size_t len)
@@ -280,6 +296,7 @@ static void do_misc_tests(const char *fname, size_t len)
 	int rc;
 	int fd;
 	int new_fd;
+	WRITE_LOG("starting misc test");
 
 	memset(buf, 0, sizeof(buf));
 
@@ -382,6 +399,7 @@ skip_mmap:
 	rc = close(fd);
 	printf("close returned %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
+	WRITE_LOG("end misc test");
 }
 
 /* Simple sanity test to ensure low-level POSIX APIs work */

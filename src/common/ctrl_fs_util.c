@@ -45,6 +45,7 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <libgen.h>
+#include <stdarg.h>
 #define DEF_LOG_FAC log_handle
 #include "iof_atomic.h"
 #include "log.h"
@@ -86,8 +87,10 @@ static int open_stream_for_read(FILE **fp, const char *path)
 		return ret;
 
 	*fp = fdopen(fd, "r");
-	if (*fp == NULL)
+	if (*fp == NULL) {
+		close(fd);
 		return -CTRL_FS_OPEN_FAILED;
+	}
 
 	return 0;
 }
@@ -107,8 +110,10 @@ static int open_stream_for_write(FILE **fp, const char *path)
 		return -CTRL_FS_OPEN_FAILED;
 
 	*fp = fdopen(fd, "w");
-	if (*fp == NULL)
+	if (*fp == NULL) {
+		close(fd);
 		return -CTRL_FS_OPEN_FAILED;
+	}
 
 	return 0;
 }
@@ -160,30 +165,56 @@ int ctrl_fs_read_str(char *str, int len, const char *path)
 	return ret;
 }
 
-#define DECLARE_IO_FUNC(name, io_type, io_func, type, format) \
-	int name(type val, const char *path)                  \
-	{                                                     \
-		FILE *fp;                                     \
-		int ret;                                      \
-		if (path == NULL)                             \
-			return -CTRL_FS_INVALID_ARG;          \
-		ret = open_stream_for_##io_type(&fp, path);   \
-		if (ret != 0)                                 \
-			return ret;                           \
-		ret = io_func(fp, format, val);               \
-		if (ret <= 0)                                 \
-			return -CTRL_FS_IO_FAILED;            \
-		fclose(fp);                                   \
-		return 0;                                     \
+#define DECLARE_READ_FUNC(name, type, format)          \
+	int name(type val, const char *path)           \
+	{                                              \
+		FILE *fp;                              \
+		int ret;                               \
+		if (path == NULL)                      \
+			return -CTRL_FS_INVALID_ARG;   \
+		ret = open_stream_for_read(&fp, path); \
+		if (ret != 0)                          \
+			return ret;                    \
+		ret = fscanf(fp, format, val);         \
+		if (ret <= 0)                          \
+			return -CTRL_FS_IO_FAILED;     \
+		fclose(fp);                            \
+		return 0;                              \
 	}
 
-DECLARE_IO_FUNC(ctrl_fs_read_int64, read, fscanf, int64_t *, "%" PRIi64)
-DECLARE_IO_FUNC(ctrl_fs_read_uint64, read, fscanf, uint64_t *, "%" PRIu64)
-DECLARE_IO_FUNC(ctrl_fs_read_int32, read, fscanf, int32_t *, "%i")
-DECLARE_IO_FUNC(ctrl_fs_read_uint32, read, fscanf, uint32_t *, "%u")
-DECLARE_IO_FUNC(ctrl_fs_write_int64, write, fprintf, int64_t, "%" PRIi64)
-DECLARE_IO_FUNC(ctrl_fs_write_uint64, write, fprintf, uint64_t, "%" PRIu64)
-DECLARE_IO_FUNC(ctrl_fs_write_str, write, fprintf, const char *, "%s")
+DECLARE_READ_FUNC(ctrl_fs_read_int64, int64_t *, "%" PRIi64)
+DECLARE_READ_FUNC(ctrl_fs_read_uint64, uint64_t *, "%" PRIu64)
+DECLARE_READ_FUNC(ctrl_fs_read_int32, int32_t *, "%i")
+DECLARE_READ_FUNC(ctrl_fs_read_uint32, uint32_t *, "%u")
+
+int ctrl_fs_write_strf(const char *path, const char *format, ...)
+{
+	va_list ap;
+	FILE *fp;
+	int ret;
+
+	if (path == NULL)
+		return -CTRL_FS_INVALID_ARG;
+
+	ret = open_stream_for_write(&fp, path);
+
+	if (ret != 0)
+		return ret;
+
+	va_start(ap, format);
+	ret = vfprintf(fp, format, ap);
+	va_end(ap);
+	va_start(ap, format);
+	crt_vclog(DEF_LOG_HANDLE | CLOG_INFO, format, ap);
+	va_end(ap);
+
+	fclose(fp);
+
+	if (ret <= 0)
+		return -CTRL_FS_IO_FAILED;
+
+	return 0;
+}
 
 int ctrl_fs_trigger(const char *path)
 {

@@ -135,7 +135,18 @@ int CTRL_PUBLIC ctrl_fs_get_tracker_id(int *value, const char *path);
  * \retval required_len if not enough space (str unchanged)
  * \retval -errcode on any other error
  */
-int CTRL_PUBLIC ctrl_fs_write_str(const char *str, const char *path);
+#define ctrl_fs_write_str(str, path) \
+	ctrl_fs_write_strf(path, "%s", str)
+
+/* Write format string to ctrl variable
+ * \param path[in] path to control (relative to ctrl root)
+ * \param format[in] format string
+ * \retval 0 if successful
+ * \retval required_len if not enough space (str unchanged)
+ * \retval -errcode on any other error
+ */
+int CTRL_PUBLIC ctrl_fs_write_strf(const char *path, const char *format, ...)
+	__attribute__ ((__format__(__printf__, 2, 3)));
 
 /* Write a 64 bit int to a ctrl file
  * \param val[in] value to write
@@ -143,7 +154,8 @@ int CTRL_PUBLIC ctrl_fs_write_str(const char *str, const char *path);
  * \retval 0 if successful
  * \retval -errcode on any other error
  */
-int CTRL_PUBLIC ctrl_fs_write_int64(int64_t val, const char *path);
+#define ctrl_fs_write_int64(val, path) \
+	ctrl_fs_write_strf(path, "%" PRIi64, ((int64_t)(val)))
 
 /* Write a 64 bit uint to a ctrl file
  * \param val[in] value to write
@@ -151,7 +163,8 @@ int CTRL_PUBLIC ctrl_fs_write_int64(int64_t val, const char *path);
  * \retval 0 if successful
  * \retval -errcode on any other error
  */
-int CTRL_PUBLIC ctrl_fs_write_uint64(uint64_t val, const char *path);
+#define ctrl_fs_write_uint64(val, path) \
+	ctrl_fs_write_strf(path, "%" PRIu64, ((uint64_t)(val)))
 
 #if defined(__cplusplus)
 extern "C" }
