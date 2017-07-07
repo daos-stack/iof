@@ -48,10 +48,10 @@ struct ctrl_dir;
 
 /* Starts the control file system, mounted at <prefix> */
 int ctrl_fs_start(const char *prefix);
-/* Signals to stop the control file system */
-int ctrl_fs_stop(void);
-/* Waits for the control file system to stop */
-int ctrl_fs_wait(void);
+/* Signals to disable new opens on control file system */
+int ctrl_fs_disable(void);
+/* Stops control file system and blocks until it exits */
+int ctrl_fs_shutdown(void);
 
 /* Create a control subdirectory.  If one exists already of the same
  * name, it returns a pointer to the existing node.

@@ -40,16 +40,15 @@
 
 #include "log.h"
 #include "ctrl_fs.h"
+#include "ctrl_common.h"
 
 #include <crt_util/list.h>
 
 struct cnss_info {
 	crt_list_t              plugins;
-	int			active;
-	int			shutting_down;
+	struct ctrl_info	info;
 };
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size);
-int cnss_dump_log(void *arg);
 
 #endif /* __CNSS_H__ */

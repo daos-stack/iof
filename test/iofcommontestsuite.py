@@ -112,6 +112,7 @@ def valgrind_suffix(log_path, pmix=True):
                 '--xml-file=%s' %
                 os.path.join(log_path,
                              "valgrind-%s.xml" % pid),
+                '--sim-hints=fuse-compatible',
                 '--leak-check=full', '--gen-suppressions=all',
                 '--fullpath-after=',
                 '--partial-loads-ok=yes',
@@ -128,6 +129,7 @@ def valgrind_suffix(log_path, pmix=True):
     elif use_valgrind == "memcheck-native":
         cmd = ['valgrind',
                '--fair-sched=try',
+               '--sim-hints=fuse-compatible',
                '--error-exitcode=42',
                '--log-file=%s' %
                os.path.join(log_path,

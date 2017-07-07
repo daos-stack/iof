@@ -520,7 +520,6 @@ static void barrier_done(struct crt_barrier_cb_info *info)
 
 int main(void)
 {
-	struct stat buf;
 	char *cnss = "CNSS";
 	char *plugin_file = NULL;
 	const char *prefix;
@@ -555,6 +554,8 @@ int main(void)
 	if (!cnss_info)
 		return CNSS_ERR_NOMEM;
 
+	ctrl_info_init(&cnss_info->info);
+
 	ret = asprintf(&ctrl_prefix, "%s/.ctrl", prefix);
 
 	if (ret == -1) {
@@ -568,7 +569,7 @@ int main(void)
 		return CNSS_ERR_CTRL_FS;
 	}
 
-	register_cnss_controls(cnss_info);
+	register_cnss_controls(&cnss_info->info);
 
 	CRT_INIT_LIST_HEAD(&cnss_info->plugins);
 
@@ -669,9 +670,9 @@ int main(void)
 		goto shutdown_ctrl_fs;
 	}
 
-	cnss_info->active = 1;
+	cnss_info->info.active = 1;
 
-	ctrl_fs_wait(); /* Blocks until ctrl_fs is shutdown */
+	wait_for_shutdown(&cnss_info->info);
 
 	CALL_PLUGIN_FN(&cnss_info->plugins, stop_client_services);
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush_client_services);
@@ -707,24 +708,26 @@ int main(void)
 		free(entry);
 	}
 
+	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
+
 	free(ctrl_prefix);
 	iof_log_close();
 	free(cnss_info);
+
 	return ret;
 
 shutdown_ctrl_fs:
-	ctrl_fs_stop();
-	/* Need to trigger an operation on ctrl fs to actually shutdown */
-	stat(ctrl_prefix, &buf);
-	ctrl_fs_wait();
+	ctrl_fs_disable();
+	ctrl_fs_shutdown();
 	free(ctrl_prefix);
 
 	return ret;
 }
 
-int cnss_dump_log(void *arg)
+int cnss_dump_log(struct ctrl_info *info)
 {
-	struct cnss_info *cnss_info = (struct cnss_info *)arg;
+	struct cnss_info *cnss_info = container_of(info, struct cnss_info,
+						   info);
 
 	if (!cnss_info)
 		return -1;

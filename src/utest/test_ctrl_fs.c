@@ -50,7 +50,7 @@
 #include "ctrl_common.h"
 #include "ctrl_fs_util_test.h"
 
-int cnss_dump_log(void *arg)
+int cnss_dump_log(struct ctrl_info *info)
 {
 	return 0;
 }
@@ -270,6 +270,7 @@ int main(int argc, char **argv)
 	bool interactive = false;
 	struct ctrl_dir *class_dir;
 	struct ctrl_dir *bar_dir;
+	struct ctrl_info info = {0};
 
 	for (;;) {
 		opt = getopt(argc, argv, "i");
@@ -308,7 +309,9 @@ int main(int argc, char **argv)
 
 	ctrl_fs_start(buf);
 
-	register_cnss_controls(NULL);
+	ctrl_info_init(&info);
+	if (register_cnss_controls(&info) != 0)
+		goto shutdown;
 
 	ctrl_create_subdir(NULL, "class", &class_dir);
 	ctrl_create_subdir(class_dir, "bar", &bar_dir);
@@ -332,9 +335,12 @@ int main(int argc, char **argv)
 		}
 	}
 
-	ctrl_fs_wait();
+	wait_for_shutdown(&info);
+shutdown:
 
 	ctrl_fs_util_test_finalize();
+
+	ctrl_fs_shutdown();
 
 	if (foo != -1) {
 		num_failures++;
@@ -357,6 +363,7 @@ int main(int argc, char **argv)
 		sprintf(cmd_buf, "rm -rf %s", prefix);
 		system(cmd_buf);
 	}
+
 
 	return num_failures;
 }

@@ -37,8 +37,25 @@
  */
 #include <inttypes.h>
 #include <string.h>
+#include <pthread.h>
 #include <crt_util/clog.h>
 #include "ctrl_common.h"
+
+void ctrl_info_init(struct ctrl_info *ctrl_info)
+{
+	memset(ctrl_info, 0, sizeof(*ctrl_info));
+	pthread_mutex_init(&ctrl_info->lock, NULL);
+	pthread_cond_init(&ctrl_info->cond, NULL);
+}
+
+void wait_for_shutdown(struct ctrl_info *ctrl_info)
+{
+	pthread_mutex_lock(&ctrl_info->lock);
+	while (!ctrl_info->shutting_down)
+		pthread_cond_wait(&ctrl_info->cond, &ctrl_info->lock);
+	pthread_mutex_unlock(&ctrl_info->lock);
+	IOF_LOG_INFO("Shutdown signal received");
+}
 
 static int iof_uint_read(char *buf, size_t buflen, void *arg)
 {
@@ -50,13 +67,37 @@ static int iof_uint_read(char *buf, size_t buflen, void *arg)
 
 static uint64_t shutdown_read_cb(void *arg)
 {
-	struct cnss_info *cnss_info = (struct cnss_info *)arg;
+	struct ctrl_info *ctrl_info = (struct ctrl_info *)arg;
 
-	if (!cnss_info)
-		return 0;
-
-	return cnss_info->shutting_down;
+	return ctrl_info->shutting_down;
 }
+
+static int shutdown_write_cb(uint64_t value, void *arg)
+{
+	struct ctrl_info *ctrl_info = (struct ctrl_info *)arg;
+
+	if (value != 1)
+		return EINVAL;
+
+	/* If a shutdown has already been triggered then reject future
+	 * requests
+	 */
+	if (ctrl_info->shutting_down)
+		return EINVAL;
+
+	if (!ctrl_info->shutting_down) {
+		IOF_LOG_INFO("Shutting down");
+		ctrl_fs_disable(); /* disables new opens on ctrl files */
+		pthread_mutex_lock(&ctrl_info->lock);
+		ctrl_info->shutting_down = 1;
+		pthread_cond_signal(&ctrl_info->cond);
+		pthread_mutex_unlock(&ctrl_info->lock);
+	}
+
+	return 0;
+}
+
+
 
 static int write_log_write_cb(const char *buf, void *arg)
 {
@@ -72,35 +113,6 @@ static int dump_log_write_cb(const char *buf, void *arg)
 	IOF_LOG_INFO("%s", buf);
 
 	return cnss_dump_log(arg);
-}
-
-static int shutdown_write_cb(uint64_t value, void *arg)
-{
-	struct cnss_info *cnss_info = (struct cnss_info *)arg;
-
-	if (value > 1)
-		return EINVAL;
-
-	/* This should only happen from when invoked from utest code */
-	if (!cnss_info) {
-		IOF_LOG_INFO("Stopping ctrl fs");
-		ctrl_fs_stop();
-		return 0;
-	}
-
-	/* If a shutdown has already been triggered then reject future
-	 * requests
-	 */
-	if (cnss_info->shutting_down && value != 1)
-		return EINVAL;
-
-	if (!cnss_info->shutting_down && value == 1) {
-		cnss_info->shutting_down = 1;
-		IOF_LOG_INFO("Stopping ctrl fs");
-		ctrl_fs_stop();
-	}
-
-	return 0;
 }
 
 #define MAX_MASK_LEN 256
@@ -135,17 +147,16 @@ static int log_mask_cb(const char *mask,  void *cb_arg)
 	return 0;
 }
 
-
-#define CHECK_RET(ret, label, msg)		\
-	do {					\
-		if (ret != 0) {			\
-			IOF_LOG_ERROR(msg);	\
-			ctrl_fs_stop();		\
-			goto label;		\
-		}				\
+#define CHECK_RET(ret, label, msg)		         \
+	do {					         \
+		if (ret != 0) {			         \
+			IOF_LOG_ERROR(msg);	         \
+			shutdown_write_cb(1, ctrl_info); \
+			goto label;		         \
+		}				         \
 	} while (0)
 
-int register_cnss_controls(struct cnss_info *cnss_info)
+int register_cnss_controls(struct ctrl_info *ctrl_info)
 {
 	char *crt_protocol;
 	int ret = 0;
@@ -153,20 +164,20 @@ int register_cnss_controls(struct cnss_info *cnss_info)
 	ret = ctrl_register_variable(NULL, "active",
 			       iof_uint_read,
 			       NULL, NULL,
-			       &cnss_info->active);
+			       &ctrl_info->active);
 	CHECK_RET(ret, exit, "Could not register 'active' ctrl");
 
 	ret = ctrl_register_uint64_variable(NULL, "shutdown",
 					    shutdown_read_cb,
 					    shutdown_write_cb,
-					    (void *)cnss_info);
+					    (void *)ctrl_info);
 	CHECK_RET(ret, exit, "Could not register shutdown ctrl");
 
 	ret = ctrl_register_variable(NULL, "dump_log",
 				NULL /* read_cb */,
 				dump_log_write_cb, /* write_cb */
 				NULL, /* destroy_cb */
-				(void *)cnss_info);
+				(void *)ctrl_info);
 	CHECK_RET(ret, exit, "Could not register dump_log ctrl");
 
 	ret = ctrl_register_variable(NULL, "write_log",

@@ -42,13 +42,25 @@
 
 #include "log.h"
 #include "ctrl_fs.h"
-#include "cnss.h"
+
+struct ctrl_info {
+	pthread_mutex_t		lock;
+	pthread_cond_t		cond;
+	int			active;
+	int			shutting_down;
+};
 
 /* The open function registered with the /client counter */
 int cnss_client_attach(int client_id, void *arg);
 /* The close function registered with the /client counter */
 int cnss_client_detach(int client_id, void *arg);
 /* A function to register the /shutdown and /client controls */
-int register_cnss_controls(struct cnss_info *cnss_info);
+int register_cnss_controls(struct ctrl_info *ctrl_info);
+/* Wait for shutdown signal */
+void wait_for_shutdown(struct ctrl_info *ctrl_info);
+/* Initialize ctrl_info */
+void ctrl_info_init(struct ctrl_info *ctrl_info);
+/* A prototype for dump function that must be defined */
+int cnss_dump_log(struct ctrl_info *info);
 
 #endif /* __CTRL_COMMON_H__ */

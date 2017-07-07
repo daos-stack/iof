@@ -587,8 +587,8 @@ static int initialize_projection(struct iof_state *iof_state,
 	void *argv;
 	char *base_name;
 	char *read_option = NULL;
-	char const *opts[] = {"-ofsname=IOF",
-			      "-osubtype=pam",
+	char const *opts[] = {"-o", "fsname=IOF",
+			      "-o", "subtype=pam",
 #if !IOF_USE_FUSE3
 			      "-o", "use_ino",
 			      "-o", "entry_timeout=0",

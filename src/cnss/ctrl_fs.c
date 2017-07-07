@@ -46,6 +46,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <sys/queue.h>
+#include <sys/xattr.h>
 #ifdef __APPLE__
 # include <sys/syslimits.h>
 #else /* !__APPLE__ */
@@ -832,7 +833,9 @@ static void *ctrl_thread_func(void *arg)
 	if (ctrl_fs.ch)
 		fuse_unmount(ctrl_fs.prefix, ctrl_fs.ch);
 #endif
+	IOF_LOG_INFO("Fuse destroy called");
 	fuse_destroy(ctrl_fs.fuse);
+	IOF_LOG_INFO("ctrl_fs thread exit");
 
 	return NULL;
 }
@@ -1006,7 +1009,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 	bool write_access = false;
 
 	if (!ctrl_fs.started)
-		return 0;
+		return -ENOENT;
 
 	IOF_LOG_INFO("ctrl fs open called for %s", fname);
 
@@ -1065,7 +1068,7 @@ static int ctrl_truncate(const char *fname, off_t size)
 	int rc;
 
 	if (!ctrl_fs.started)
-		return 0;
+		return -ENOENT;
 
 	IOF_LOG_INFO("ctrl fs truncate called for %s", fname);
 
@@ -1289,8 +1292,8 @@ static struct fuse_operations fuse_ops = {
 
 int ctrl_fs_start(const char *prefix)
 {
-	static char const *opts[] = {"", "-ofsname=CNSS",
-				     "-osubtype=ctrl"};
+	static char const *opts[] = {"", "-o", "fsname=CNSS",
+				     "-o", "subtype=ctrl"};
 	struct fuse_args args = {0};
 
 	struct stat stat_info;
@@ -1384,25 +1387,38 @@ out:
 	return ctrl_fs.startup_rc;
 }
 
-int ctrl_fs_stop(void)
+int ctrl_fs_disable(void)
 {
 	if (ctrl_fs.startup_rc != 0)
 		return 0; /* Assume the error has already been reported */
 
 	ctrl_fs.started = false;
 
-	fuse_exit(ctrl_fs.fuse);
-
 	return 0;
 }
 
-int ctrl_fs_wait(void)
+int ctrl_fs_shutdown(void)
 {
+	const char *attr = "ctrl_fs.exit.flag";
 	int rc;
 
 	if (ctrl_fs.startup_rc != 0)
 		return 0; /* Assume the error has already been reported */
 
+	IOF_LOG_INFO("Sending exit to ctrl_fs thread");
+	fuse_exit(ctrl_fs.fuse);
+	/*
+	 * Send a dummy operation to the filesystem.  The fact that
+	 * setxattr isn't implemented is irrelevant.  We just need something
+	 * to force an exit of the fuse_loop after setting the exit flag
+	 */
+#ifdef __APPLE__
+	setxattr(ctrl_fs.prefix, attr, NULL, 0, 0, 0);
+#else
+	setxattr(ctrl_fs.prefix, attr, NULL, 0, 0);
+#endif
+
+	IOF_LOG_INFO("Waiting for ctrl_fs thread");
 	rc = pthread_join(ctrl_fs.thread, NULL);
 
 	if (rc != 0) {
@@ -1410,6 +1426,7 @@ int ctrl_fs_wait(void)
 		IOF_LOG_ERROR("Error joining ctrl_fs thread %d", rc);
 		return -rc;
 	}
+	IOF_LOG_INFO("Cleaning up ctrl_fs");
 
 	cleanup_ctrl_fs();
 	cleanup_node(&ctrl_fs.root);
