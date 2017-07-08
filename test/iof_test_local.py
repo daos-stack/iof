@@ -139,17 +139,18 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         log_path = os.path.join(log_path, self.logdir_name())
 
-        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO,CTRL=WARN")
+        valgrind = iofcommontestsuite.valgrind_suffix(log_path)
+
+        default_log_mask = "INFO,CTRL=WARN"
+        if valgrind:
+            default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
+        self.log_mask = os.getenv("CRT_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
-        valgrind = iofcommontestsuite.valgrind_suffix(log_path)
         self.test_valgrind = iofcommontestsuite.valgrind_suffix(log_path,
                                                                 pmix=False)
         ionss_args = ['ionss']
-        if valgrind:
-            #ionss_args.append('--poll-interval=1')
-            self.log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
 
         cmd = [orterun,
                '--output-filename', log_path]
@@ -638,7 +639,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         print("Ran %d subtests" % (subtest_count))
 
-def local_launch():
+def local_launch(ioil_dir):
     """Launch a local filesystem for interactive use"""
 
     fs = Testlocal()
@@ -648,6 +649,11 @@ def local_launch():
     print(fs.import_dir)
     print("Ctrl-C to shutdown or run")
     print("echo 1 > %s/.ctrl/shutdown" % fs.import_dir)
+    print("")
+    print("To use the interception library, set ")
+    print("LD_PRELOAD=%s/libioil.so or " % ioil_dir)
+    print("link that library in your application before system libraries.  ")
+    print("The latter option makes debugging simpler.")
     print("")
     my_rc = 0
     try:
@@ -660,6 +666,12 @@ def local_launch():
     return my_rc
 
 if __name__ == '__main__':
+    import argparse
+    #pylint: disable=import-error
+    #pylint: disable=no-name-in-module
+    from distutils.spawn import find_executable
+    #pylint: enable=import-error
+    #pylint: enable=no-name-in-module
 
     # Invoke testing if this command is run directly
     #
@@ -671,57 +683,57 @@ if __name__ == '__main__':
     # ./iof_test_local.py --valgrind --log-mask=DEBUG --redirect chmod
     #
     # Unrecognised args are passed through to unittest.main().
+    cnss_path = find_executable('cnss')
+    if not cnss_path:
+        print("cnss executable not found.  Run setup script first")
+        sys.exit(1)
+    iof_root = os.path.dirname(os.path.dirname(cnss_path))
+    ioil_path = os.path.join(iof_root, 'lib')
 
-    uargs = [sys.argv[0]]
-    iargs = list(sys.argv)
-    iargs.pop(0)
+    tests = []
+    for a_test in dir(Testlocal):
+        if not a_test.startswith('test_'):
+            continue
+
+        tests.append(a_test[5:])
+
+    test_help = "A test to run (%s) or a utest argument" % ', '.join(tests)
+    parser = argparse.ArgumentParser(description='Run local iof tests')
+    parser.add_argument('tests', metavar='TEST', type=str,
+                        help=test_help, nargs='*')
+    parser.add_argument('--valgrind', action='store_true',
+                        help='Run the test under valgrind')
+    parser.add_argument('--redirect', action='store_true',
+                        help='Redirect daemon output to a file')
+    parser.add_argument('--launch', action='store_true',
+                        help='Launch a local file system for interactive use')
+    parser.add_argument('--log-mask', dest='mask', metavar='MASK', type=str,
+                        default='INFO,CTRL=WARN', help='Set the CaRT log mask')
+    args = parser.parse_args()
+
+    if args.valgrind:
+        os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
+    if args.redirect:
+        os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
+    os.environ['CRT_LOG_MASK'] = args.mask
 
     tests_to_run = []
-    launch = False
-    if iargs:
+    uargs = []
+    print(args.tests)
+    for test in args.tests:
+        if test in tests:
+            tests_to_run.append('Testlocal.test_%s' % test)
+        else:
+            uargs.append(test)
 
-        tests = []
-        for a_test in dir(Testlocal):
-            if not a_test.startswith('test_'):
-                continue
+    if uargs:
+        print("Unknown option given, passing through to unittest")
+        print("Valid test names are %s" % ','.join(sorted(tests)))
 
-            tests.append(a_test[5:])
+    uargs.insert(0, sys.argv[0])
 
-        unknown = False
-        for arg in iargs:
-            if arg == '--valgrind':
-                os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
-            elif arg.startswith('--log-mask='):
-                os.environ['CRT_LOG_MASK'] = arg[11:]
-            elif arg == '--redirect':
-                os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
-            elif arg in ['-h', '--help']:
-                print("""
-In addition to the options below the following options are supported
-
-  --valgrind        Run the test under valgrind
-  --redirect        Redirect daemon output to file
-  --log-mask=<MASK> Set the CaRT log mask to MASK
-  --launch          Launch a local filesystem for interactive use
-
-Test methods can be specified directly on the command line""")
-                print("Valid test names are %s" % ','.join(sorted(tests)))
-                print("")
-                uargs.append(arg)
-            elif arg == '--launch':
-                launch = True
-            elif arg in tests:
-                tests_to_run.append('Testlocal.test_%s' % arg)
-            else:
-                unknown = True
-                uargs.append(arg)
-
-        if unknown:
-            print("Unknown option given, passing through to unittest")
-            print("Valid test names are %s" % ','.join(sorted(tests)))
-
-    if launch:
-        rc = local_launch()
+    if args.launch:
+        rc = local_launch(ioil_path)
         sys.exit(rc)
 
     if not tests_to_run:
