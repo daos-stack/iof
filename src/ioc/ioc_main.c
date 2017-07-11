@@ -105,9 +105,9 @@ ioc_status_cb(const struct crt_cb_info *cb_info)
  *
  * Although this takes a endpoint_t option it's effectively only checking
  * the rank as each projection is only served from a single group and all
- * tags in a rank will be evicted simultanously.
+ * tags in a rank will be evicted simultaneously.
  *
- * This is called after a RPC reply is recieved so it might be invoked
+ * This is called after a RPC reply is received so it might be invoked
  * multiple times for the same failure, and the dest_ep might have been
  * updated after the RPC was sent but before the RPC was rejected.
  */

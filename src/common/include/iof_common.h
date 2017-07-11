@@ -128,7 +128,7 @@ struct iof_fs_info {
 	uint8_t flags;
 };
 
-/* The responce to the initial query RPC.
+/* The response to the initial query RPC.
  * Note that readdir_size comes after the IOV in order to avoid
  * the compiler automatically padding the struct.
  */

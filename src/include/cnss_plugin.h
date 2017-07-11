@@ -69,7 +69,7 @@ typedef int (*ctrl_fs_read_cb_t)(char *buf, size_t buflen, void *cb_arg);
 /* Optional callback invoked when a write is done on a ctrl fs variable */
 typedef int (*ctrl_fs_write_cb_t)(const char *value, void *cb_arg);
 
-/* Optional callback invoked when an open to retreive a value for a ctrl
+/* Optional callback invoked when an open to retrieve a value for a ctrl
  * fs tracker which value will be passed to the close callback
  */
 typedef int (*ctrl_fs_open_cb_t)(int *value, void *cb_arg);
