@@ -140,6 +140,9 @@ static void gah_test(void)
 		printf("ioctl returned " GAH_PRINT_STR "\n",
 		       GAH_PRINT_VAL(gah_info.gah));
 
+	rc = close(fd);
+	CU_ASSERT_EQUAL(rc, 0);
+
 	/* Run ioctl test on stdout.  Should fail */
 	rc = ioctl(1, IOF_IOCTL_GAH, &gah_info);
 
