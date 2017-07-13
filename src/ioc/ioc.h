@@ -121,7 +121,8 @@ struct iof_projection_info {
 	uint8_t				flags;
 	int				fs_id;
 	struct iof_pool_type		*dh;
-	struct iof_pool_type		*gh;
+	struct iof_pool_type		*gh_pool;
+	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*rb_pool_small;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;

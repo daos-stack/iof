@@ -331,6 +331,12 @@ void dh_release(void *arg)
 	crt_req_decref(dh->close_rpc);
 }
 
+/* Create a getattr descriptor for use with mempool.
+ *
+ * Two pools of descriptors are used here, one for getattr and a second
+ * for getfattr.  The only difference is the RPC id so the datatypes are
+ * the same, as are the init and release functions.
+ */
 static int
 gh_init(void *arg, void *handle)
 {
@@ -341,6 +347,7 @@ gh_init(void *arg, void *handle)
 	return 0;
 }
 
+/* Clean, and prepare for use a getattr descriptor */
 static int
 gh_clean(void *arg)
 {
@@ -350,26 +357,71 @@ gh_clean(void *arg)
 
 	iof_tracker_init(&req->reply.tracker, 1);
 
-	if (req->rpc)
+	/* If this descriptor has previously been used the destroy the
+	 * existing RPC
+	 */
+	if (req->rpc) {
 		crt_req_decref(req->rpc);
+		crt_req_decref(req->rpc);
+		req->rpc = NULL;
+	}
 
+	/* Create a new RPC ready for later use.  Take an inital reference
+	 * to the RPC so that it is not cleaned up after a successful send.
+	 *
+	 * After calling send the getattr code will re-take the dropped
+	 * reference which means that on all subsequent calls to clean()
+	 * or release() the ref count will be two.
+	 *
+	 * This means that both descriptor creation and destruction are
+	 * done off the critical path.
+	 */
 	rc = crt_req_create(req->fs_handle->proj.crt_ctx, req->ep,
 			    FS_TO_OP(req->fs_handle, getattr), &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -1;
 	}
+	crt_req_addref(req->rpc);
 	in = crt_req_get(req->rpc);
 	in->fs_id = req->fs_handle->fs_id;
 
 	return 0;
 }
 
+/* Clean and prepare for use a getfattr descriptor */
+static int
+fgh_clean(void *arg)
+{
+	struct getattr_req *req = arg;
+	int rc;
+
+	iof_tracker_init(&req->reply.tracker, 1);
+
+	if (req->rpc) {
+		crt_req_decref(req->rpc);
+		crt_req_decref(req->rpc);
+		req->rpc = NULL;
+	}
+
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, req->ep,
+			    FS_TO_OP(req->fs_handle, getattr_gah), &req->rpc);
+	if (rc || !req->rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
+		return -1;
+	}
+	crt_req_addref(req->rpc);
+
+	return 0;
+}
+
+/* Destroy a descriptor which could be either getattr or getfattr */
 static void
 gh_release(void *arg)
 {
 	struct getattr_req *req = arg;
 
+	crt_req_decref(req->rpc);
 	crt_req_decref(req->rpc);
 }
 
@@ -760,16 +812,22 @@ static int initialize_projection(struct iof_state *iof_state,
 		 * and dh_clean() functions require access to fs_handle.
 		 */
 		struct iof_pool_reg pt = { .handle = fs_handle,
-					  .init = dh_init,
-					  .clean = dh_clean,
-					  .release = dh_release,
-					  POOL_TYPE_INIT(iof_dir_handle, list)};
+					   .init = dh_init,
+					   .clean = dh_clean,
+					   .release = dh_release,
+					   POOL_TYPE_INIT(iof_dir_handle, list)};
 
 		struct iof_pool_reg gt = { .handle = fs_handle,
 					   .init = gh_init,
-					  .clean = gh_clean,
-					  .release = gh_release,
-					  POOL_TYPE_INIT(getattr_req, list)};
+					   .clean = gh_clean,
+					   .release = gh_release,
+					   POOL_TYPE_INIT(getattr_req, list)};
+
+		struct iof_pool_reg fgt = { .handle = fs_handle,
+					    .init = gh_init,
+					    .clean = fgh_clean,
+					    .release = gh_release,
+					    POOL_TYPE_INIT(getattr_req, list)};
 
 		struct iof_pool_reg rb_small = { .handle = fs_handle,
 						 .init = rb_small_init,
@@ -790,8 +848,12 @@ static int initialize_projection(struct iof_state *iof_state,
 		if (!fs_handle->dh)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->gh = iof_pool_register(&iof_state->pool, &gt);
-		if (!fs_handle->gh)
+		fs_handle->gh_pool = iof_pool_register(&iof_state->pool, &gt);
+		if (!fs_handle->gh_pool)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->fgh_pool = iof_pool_register(&iof_state->pool, &fgt);
+		if (!fs_handle->fgh_pool)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->rb_pool_small = iof_pool_register(&iof_state->pool,
