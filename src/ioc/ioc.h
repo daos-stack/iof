@@ -89,7 +89,6 @@ struct iof_state {
 	struct ctrl_dir			*ionss_dir;
 	struct ctrl_dir			*projections_dir;
 	struct iof_group_info		*groups;
-	struct iof_pool			pool;
 	uint32_t			num_groups;
 };
 
@@ -120,9 +119,11 @@ struct iof_projection_info {
 	/* Feature Flags */
 	uint8_t				flags;
 	int				fs_id;
+	struct iof_pool			pool;
 	struct iof_pool_type		*dh;
 	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
+	struct iof_pool_type		*fh_pool;
 	struct iof_pool_type		*rb_pool_small;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
@@ -234,8 +235,12 @@ struct iof_dir_handle {
 struct iof_file_handle {
 	struct iof_projection_info	*fs_handle;
 	struct iof_file_common		common;
+	crt_rpc_t			*open_rpc;
+	crt_rpc_t			*creat_rpc;
+	crt_rpc_t			*release_rpc;
+	crt_list_t			list;
 	ino_t				inode_no;
-	char				name[];
+	char				*name;
 };
 
 struct iof_projection_info *ioc_get_handle(void);
@@ -295,8 +300,6 @@ struct open_cb_r {
 };
 
 void ioc_open_cb(const struct crt_cb_info *);
-
-struct iof_file_handle *ioc_fh_new(const char *);
 
 int ioc_release(const char *, struct fuse_file_info *);
 

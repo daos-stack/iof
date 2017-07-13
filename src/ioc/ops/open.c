@@ -47,19 +47,6 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct iof_file_handle *ioc_fh_new(const char *name)
-{
-	struct iof_file_handle *handle;
-	size_t name_len = strlen(name) + 1;
-
-	handle = calloc(1, name_len + sizeof(*handle));
-	if (!handle)
-		return NULL;
-	strncpy(handle->name, name, name_len);
-
-	return handle;
-}
-
 void
 ioc_open_cb(const struct crt_cb_info *cb_info)
 {
@@ -95,7 +82,6 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	struct iof_file_handle *handle;
 	struct iof_open_in *in;
 	struct open_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	STAT_ADD(fs_handle->stats, open);
@@ -129,25 +115,17 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		}
 	}
 
-	handle = ioc_fh_new(file);
+	handle = iof_pool_acquire(fs_handle->fh_pool);
 	if (!handle)
 		return -ENOMEM;
 
-	handle->fs_handle = fs_handle;
-	handle->common.ep = fs_handle->dest_ep;
 	handle->common.projection = &fs_handle->proj;
 
 	IOF_LOG_INFO("file %s flags 0%o handle %p", file, fi->flags, handle);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
-			    FS_TO_OP(fs_handle, open), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
-		return -EIO;
-	}
 
 	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
+	in = crt_req_get(handle->open_rpc);
 	in->path = (crt_string_t)file;
 
 	in->fs_id = fs_handle->fs_id;
@@ -155,13 +133,18 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	reply.fh = handle;
 
-	rc = crt_req_send(rpc, ioc_open_cb, &reply);
+	rc = crt_req_send(handle->open_rpc, ioc_open_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
+	handle->name = strdup(file);
+	iof_pool_restock(fs_handle->fh_pool);
+	crt_req_addref(handle->open_rpc);
 
 	LOG_FLAGS(handle, fi->flags);
+
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
@@ -178,7 +161,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 		fi->fh = (uint64_t)handle;
 		handle->common.gah_valid = 1;
 	} else {
-		free(handle);
+		iof_pool_release(fs_handle->fh_pool, handle);
 	}
 
 	return rc;

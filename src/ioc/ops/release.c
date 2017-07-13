@@ -76,7 +76,6 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_gah_in *in;
 	struct release_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
@@ -89,7 +88,7 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	 * be offline for reasons other than IONSS failure.
 	 */
 	if (FS_IS_OFFLINE(fs_handle)) {
-		free(handle);
+		iof_pool_release(fs_handle->fh_pool, handle);
 		return -fs_handle->offline_reason;
 	}
 
@@ -100,30 +99,24 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
-		free(handle);
-		return -EIO;
-	}
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
-			    FS_TO_OP(fs_handle, close), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
+	in = crt_req_get(handle->release_rpc);
 	in->gah = handle->common.gah;
 
-	rc = crt_req_send(rpc, release_cb, &reply);
+	rc = crt_req_send(handle->release_rpc, release_cb, &reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
+	crt_req_addref(handle->release_rpc);
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	free(handle);
+	iof_pool_release(fs_handle->fh_pool, handle);
 	return -reply.err;
 }

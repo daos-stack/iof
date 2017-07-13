@@ -338,6 +338,84 @@ void dh_release(void *arg)
  * the same, as are the init and release functions.
  */
 static int
+fh_init(void *arg, void *handle)
+{
+	struct iof_file_handle *fh = arg;
+
+	fh->fs_handle = handle;
+	return 0;
+}
+
+static int
+fh_clean(void *arg)
+{
+	struct iof_file_handle *fh = arg;
+	int rc;
+
+	if (fh->name)
+		free(fh->name);
+	fh->name = NULL;
+
+	if (fh->open_rpc) {
+		crt_req_decref(fh->open_rpc);
+		crt_req_decref(fh->open_rpc);
+		fh->open_rpc = NULL;
+	}
+
+	if (fh->creat_rpc) {
+		crt_req_decref(fh->creat_rpc);
+		crt_req_decref(fh->creat_rpc);
+		fh->creat_rpc = NULL;
+	}
+
+	if (fh->release_rpc) {
+		crt_req_decref(fh->release_rpc);
+		crt_req_decref(fh->release_rpc);
+		fh->release_rpc = NULL;
+	}
+
+	fh->common.ep = fh->fs_handle->dest_ep;
+
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
+	if (rc || !fh->open_rpc)
+		return -1;
+
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
+	if (rc || !fh->creat_rpc) {
+		crt_req_decref(fh->open_rpc);
+		return -1;
+	}
+
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
+	if (rc || !fh->release_rpc) {
+		crt_req_decref(fh->open_rpc);
+		crt_req_decref(fh->creat_rpc);
+		return -1;
+	}
+
+	crt_req_addref(fh->open_rpc);
+	crt_req_addref(fh->creat_rpc);
+	crt_req_addref(fh->release_rpc);
+	return 0;
+}
+
+static void
+fh_release(void *arg)
+{
+	struct iof_file_handle *fh = arg;
+
+	crt_req_decref(fh->open_rpc);
+	crt_req_decref(fh->open_rpc);
+	crt_req_decref(fh->creat_rpc);
+	crt_req_decref(fh->creat_rpc);
+	crt_req_decref(fh->release_rpc);
+	crt_req_decref(fh->release_rpc);
+}
+
+static int
 gh_init(void *arg, void *handle)
 {
 	struct getattr_req *req = arg;
@@ -500,12 +578,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return IOF_ERR_NOMEM;
 	}
 
-	ret = iof_pool_init(&iof_state->pool);
-	if (ret != 0) {
-		free(iof_state->groups);
-		return IOF_ERR_NOMEM;
-	}
-
 	group = &iof_state->groups[0];
 	group->grp_name = strdup(IOF_DEFAULT_SET);
 	if (group->grp_name == NULL) {
@@ -663,6 +735,12 @@ static int initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle)
 		return IOF_ERR_NOMEM;
 
+	ret = iof_pool_init(&fs_handle->pool);
+	if (ret != 0) {
+		free(fs_handle);
+		return IOF_ERR_NOMEM;
+	}
+
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
 	IOF_LOG_INFO("Filesystem mode: Private");
@@ -817,6 +895,12 @@ static int initialize_projection(struct iof_state *iof_state,
 					   .release = dh_release,
 					   POOL_TYPE_INIT(iof_dir_handle, list)};
 
+		struct iof_pool_reg fh = { .handle = fs_handle,
+					   .init = fh_init,
+					   .clean = fh_clean,
+					   .release = fh_release,
+					   POOL_TYPE_INIT(iof_file_handle, list)};
+
 		struct iof_pool_reg gt = { .handle = fs_handle,
 					   .init = gh_init,
 					   .clean = gh_clean,
@@ -844,29 +928,33 @@ static int initialize_projection(struct iof_state *iof_state,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
 
-		fs_handle->dh = iof_pool_register(&iof_state->pool, &pt);
+		fs_handle->dh = iof_pool_register(&fs_handle->pool, &pt);
 		if (!fs_handle->dh)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->gh_pool = iof_pool_register(&iof_state->pool, &gt);
+		fs_handle->gh_pool = iof_pool_register(&fs_handle->pool, &gt);
 		if (!fs_handle->gh_pool)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->fgh_pool = iof_pool_register(&iof_state->pool, &fgt);
+		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
 		if (!fs_handle->fgh_pool)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->rb_pool_small = iof_pool_register(&iof_state->pool,
+		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
+		if (!fs_handle->fh_pool)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->rb_pool_small = iof_pool_register(&fs_handle->pool,
 							     &rb_small);
 		if (!fs_handle->rb_pool_small)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->rb_pool_page = iof_pool_register(&iof_state->pool,
+		fs_handle->rb_pool_page = iof_pool_register(&fs_handle->pool,
 							    &rb_page);
 		if (!fs_handle->rb_pool_page)
 			return IOF_ERR_NOMEM;
 
-		fs_handle->rb_pool_large = iof_pool_register(&iof_state->pool,
+		fs_handle->rb_pool_large = iof_pool_register(&fs_handle->pool,
 							     &rb_large);
 		if (!fs_handle->rb_pool_large)
 			return IOF_ERR_NOMEM;
@@ -980,6 +1068,8 @@ static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 
+	iof_pool_destroy(&fs_handle->pool);
+
 	crt_list_del(&fs_handle->link);
 	free(fs_handle->fuse_ops);
 	free(fs_handle->base_dir);
@@ -1000,14 +1090,6 @@ static void iof_stop(void *arg)
 			     fs_handle->fs_id, fs_handle->mount_point);
 		fs_handle->offline_reason = EACCES;
 	}
-
-	/* Destroy the object pool
-	 *
-	 * This is done here as it's after the projections have been taken
-	 * offline so there can be no more allocations however fs_handle
-	 * is still valid has iof_deregister_fuse() has not been called.
-	 */
-	iof_pool_destroy(&iof_state->pool);
 }
 
 static void
