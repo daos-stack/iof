@@ -106,7 +106,9 @@ def valgrind_suffix(log_path, pmix=True):
             '..', 'utils', 'memcheck-iof.supp')
     iof_suppressfile = os.path.realpath(iof_suppressfile)
     if use_valgrind == 'memcheck':
-        return ['valgrind', '--xml=yes',
+        return ['valgrind',
+                '--fair-sched=try',
+                '--xml=yes',
                 '--xml-file=%s' %
                 os.path.join(log_path,
                              "valgrind-%s.xml" % pid),
@@ -117,12 +119,15 @@ def valgrind_suffix(log_path, pmix=True):
                 '--suppressions=%s' % iof_suppressfile,
                 '--show-reachable=yes']
     elif use_valgrind == "callgrind":
-        return ['valgrind', '--tool=callgrind',
+        return ['valgrind',
+                '--fair-sched=try',
+                '--tool=callgrind',
                 '-callgrind-out-file=%s' %
                 os.path.join(log_path,
                              "valgrind-%s.xml" % pid)]
     elif use_valgrind == "memcheck-native":
         cmd = ['valgrind',
+               '--fair-sched=try',
                '--error-exitcode=42',
                '--log-file=%s' %
                os.path.join(log_path,
