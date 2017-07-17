@@ -74,10 +74,8 @@ struct write_cb_r {
 static void
 write_cb(const struct crt_cb_info *cb_info)
 {
-	struct write_cb_r *reply = NULL;
-	struct iof_write_out *out;
-
-	reply = (struct write_cb_r *)cb_info->cci_arg;
+	struct write_cb_r *reply = cb_info->cci_arg;
+	struct iof_write_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -91,14 +89,6 @@ write_cb(const struct crt_cb_info *cb_info)
 			reply->err = EAGAIN;
 		else
 			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	out = crt_reply_get(cb_info->cci_rpc);
-	if (!out) {
-		IOF_LOG_ERROR("Could not get reply");
-		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
