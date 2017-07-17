@@ -266,7 +266,7 @@ int main(int argc, char **argv)
 	int foo = 0;
 	int opt;
 	int tracker_value = 0;
-	int num_failures;
+	int num_failures = 0;
 	bool interactive = false;
 	struct ctrl_dir *class_dir;
 	struct ctrl_dir *bar_dir;
