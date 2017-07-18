@@ -192,6 +192,7 @@ int ctrl_fs_write_strf(const char *path, const char *format, ...)
 	va_list ap;
 	FILE *fp;
 	int ret;
+	int flags;
 
 	if (path == NULL)
 		return -CTRL_FS_INVALID_ARG;
@@ -204,9 +205,12 @@ int ctrl_fs_write_strf(const char *path, const char *format, ...)
 	va_start(ap, format);
 	ret = vfprintf(fp, format, ap);
 	va_end(ap);
-	va_start(ap, format);
-	crt_vclog(DEF_LOG_HANDLE | CLOG_INFO, format, ap);
-	va_end(ap);
+	flags = crt_log_check(DEF_LOG_HANDLE | CLOG_INFO);
+	if (flags != 0) {
+		va_start(ap, format);
+		crt_vlog(flags, format, ap);
+		va_end(ap);
+	}
 
 	fclose(fp);
 
