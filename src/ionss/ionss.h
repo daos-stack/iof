@@ -94,8 +94,6 @@ struct ios_projection {
 #define ID_TO_FD(ID) (base.projection_array[(ID)].dir_fd)
 
 struct ionss_dir_handle {
-	uint	fs_id;
-	char	*h_name;
 	DIR	*h_dir;
 	uint	fd;
 	off_t	offset;
@@ -105,7 +103,6 @@ struct ionss_file_handle {
 	struct ios_gah		gah;
 	struct ios_projection	*projection;
 	crt_list_t		clist;
-	uint			fs_id;
 	uint			fd;
 	int			flags;
 	ATOMIC uint		ref;

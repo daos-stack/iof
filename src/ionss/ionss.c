@@ -376,8 +376,6 @@ iof_opendir_handler(crt_rpc_t *rpc)
 
 	local_handle->fd = fd;
 	local_handle->h_dir = fdopendir(local_handle->fd);
-	local_handle->h_name = strdup(in->path);
-	local_handle->fs_id = in->fs_id;
 	local_handle->offset = 0;
 
 	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
@@ -627,7 +625,6 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		if (rc != 0)
 			IOF_LOG_DEBUG("Failed to close directory %p",
 				      handle->h_dir);
-		free(handle->h_name);
 		free(handle);
 	}
 
@@ -770,7 +767,7 @@ iof_open_handler(crt_rpc_t *rpc)
 		}
 
 		handle->fd = fd;
-		handle->fs_id = in->fs_id;
+		handle->projection = projection;
 		handle->flags = in->flags;
 		handle->inode_no = stbuf.st_ino;
 
@@ -879,7 +876,7 @@ iof_create_handler(crt_rpc_t *rpc)
 		}
 
 		handle->fd = fd;
-		handle->fs_id = in->fs_id;
+		handle->projection = projection;
 		handle->flags = in->flags;
 		handle->inode_no = stbuf.st_ino;
 
@@ -941,7 +938,7 @@ iof_fsync_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -974,7 +971,7 @@ iof_fdatasync_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1487,7 +1484,7 @@ iof_ftruncate_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1552,7 +1549,7 @@ static void iof_chmod_gah_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1638,7 +1635,7 @@ iof_write_direct_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1679,7 +1676,7 @@ int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 		out->err = IOF_GAH_INVALID;
 		goto out;
 	}
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1742,7 +1739,7 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
@@ -1855,7 +1852,7 @@ static void iof_utimens_gah_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[handle->fs_id], out);
+	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
