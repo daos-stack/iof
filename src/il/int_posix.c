@@ -99,8 +99,8 @@ int ioil_initialize_fd_table(int max_fds)
 	rc = vector_init(&fd_table, sizeof(struct fd_entry), max_fds);
 
 	if (rc != 0)
-		IOF_LOG_ERROR("Could not allocated file descriptor table"
-			      ", disabling interception: rc = %d", rc);
+		IOF_LOG_ERROR("Could not allocate file descriptor table"
+			      ", disabling kernel bypass: rc = %d", rc);
 	return rc;
 }
 
@@ -292,14 +292,14 @@ static __attribute__((constructor)) void ioil_init(void)
 	rc = getrlimit(RLIMIT_NOFILE, &rlimit);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not get process file descriptor limit"
-			      ", disabling interception");
+			      ", disabling kernel bypass");
 		return;
 	}
 
 	rc = ioil_initialize_fd_table(rlimit.rlim_max);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not create fd_table, rc = %d,"
-			      ", disabling interception", rc);
+			      ", disabling kernel bypass", rc);
 		return;
 	}
 
@@ -307,7 +307,7 @@ static __attribute__((constructor)) void ioil_init(void)
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not find CNSS (rc = %d)."
-			      " Disabling interception", rc);
+			      " disabling kernel bypass", rc);
 		return;
 	}
 
@@ -318,14 +318,14 @@ static __attribute__((constructor)) void ioil_init(void)
 	rc = crt_init(NULL, CRT_FLAG_BIT_SINGLETON);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not initialize crt, rc = %d,"
-			      " disabling interception", rc);
+			      " disabling kernel bypass", rc);
 		return;
 	}
 
 	rc = crt_context_create(NULL, &crt_ctx);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
-			      " disabling interception", rc);
+			      " disabling kernel bypass", rc);
 		crt_finalize();
 		return;
 	}
@@ -335,14 +335,14 @@ static __attribute__((constructor)) void ioil_init(void)
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
 		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
-			      " disabling interception", rc);
+			      " disabling kernel bypass", rc);
 		return;
 	}
 
 	rc = find_projections();
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not configure projections. "
-			      "Disabling interception");
+		IOF_LOG_ERROR("Could not configure projections, rc = %d"
+			      " disabling kernel bypass", rc);
 		ctrl_fs_util_finalize();
 		return;
 	}
@@ -748,7 +748,7 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 	rc = vector_remove(&fd_table, fd, &entry);
 	if (rc == 0) {
 		IOIL_LOG_INFO("mmap(%p, %zu, %d, %d, %d, %zd) intercepted, "
-			      "stopping interception " GAH_PRINT_STR, address,
+			      "disabling kernel bypass " GAH_PRINT_STR, address,
 			      length, protect, flags, fd, offset,
 			      GAH_PRINT_VAL(entry->common.gah));
 
@@ -896,7 +896,7 @@ IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
 	if (cmd == F_SETFL) { /* We don't support this flag for interception */
 		entry->disabled = true;
 		IOIL_LOG_INFO("Removed IOF entry for fd=%d " GAH_PRINT_STR ": "
-			      "F_SETFL not supported for interception",
+			      "F_SETFL not supported for kernel bypass",
 			      fd, GAH_PRINT_VAL(entry->common.gah));
 		vector_remove(&fd_table, fd, NULL);
 		vector_decref(&fd_table, entry);
