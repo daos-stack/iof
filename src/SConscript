@@ -53,18 +53,21 @@ CNSS_SRC = ['cnss.c',
             'ctrl_common.c',
             'ctrl_fs.c']
 IOC_SRC = ['ioc_main.c',
-           'ioc_fuseops.c']
+           'ioc_fuseops.c',
+           'inode.c']
 IONSS_SRC = ['ionss.c', 'fh.c']
 RPC_SRC = ['chmod',
            'closedir',
            'create',
            'fchmod',
            'fgetattr',
+           'forget',
            'fsync',
            'ftruncate',
            'futimens',
            'getattr',
            'ioctl',
+           'lookup',
            'mkdir',
            'open',
            'opendir',

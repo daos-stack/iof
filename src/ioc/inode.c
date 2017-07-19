@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,68 +40,33 @@
 #include "ioc.h"
 #include "log.h"
 
-int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
+/* Find a GAH from a inode, return 0 if found */
+int
+find_gah(struct iof_projection_info *fs_handle,
+	 fuse_ino_t ino,
+	 struct ios_gah *gah)
 {
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct getattr_req *req;
-	struct iof_gah_in *in;
-	int rc;
+	struct ioc_inode_entry *ie;
+	d_list_t *rlink;
 
-	STAT_ADD(fs_handle->stats, getfattr);
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
-		 */
-		return -EIO;
+	if (ino == 1) {
+		memcpy(gah, &fs_handle->gah, sizeof(*gah));
+		return 0;
 	}
-	IOC_RPC_INIT(fs_handle->fgh_pool, req, rpc, getattr_cb, rc);
-	if (rc)
-		return rc;
 
-	in = crt_req_get(req->rpc);
-	in->gah = handle->common.gah;
-	req->reply.stat = stbuf;
+	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	if (!rlink)
+		return -1;
 
-	iof_fs_send(req, &(req)->reply.ctx);
-	IOC_RPC_FINI(fs_handle->fgh_pool, req, rc);
-	/* Cache the inode number */
-	if (rc == 0)
-		handle->inode_no = stbuf->st_ino;
-	IOF_LOG_DEBUG(GAH_PRINT_STR " rc %d",
-		      GAH_PRINT_VAL(handle->common.gah), rc);
-	return rc;
-}
+	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-int ioc_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
-{
-	if (fi)
-		return ioc_getattr_gah((struct iof_file_handle *)fi->fh, stbuf);
+	IOF_LOG_INFO("Inode %lu " GAH_PRINT_STR, ie->ino,
+		     GAH_PRINT_VAL(ie->gah));
 
-	if (!path)
-		return -EIO;
-	return ioc_getattr_name(path, stbuf);
-}
+	memcpy(gah, &ie->gah, sizeof(*gah));
 
-void
-ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
-{
-	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_file_handle handle = {0};
-	struct stat st = {0};
-	int rc;
-
-	IOF_LOG_INFO("Req %p %lu %p", req, ino, fi);
-
-	rc = find_gah(fs_handle, ino, &handle.common.gah);
-	if (rc != 0)
-		fuse_reply_err(req, EIO);
-
-	handle.fs_handle = fs_handle;
-	handle.common.gah_valid = 1;
-	rc = ioc_getattr_gah(&handle, &st);
-	if (rc)
-		fuse_reply_err(req, -rc);
-	else
-		fuse_reply_attr(req, &st, 0);
+	/* Once the GAH has been copied drop the reference on the parent inode
+	 */
+	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+	return 0;
 }

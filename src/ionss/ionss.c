@@ -235,6 +235,9 @@ fh_compare(struct d_chash_table *htable, d_list_t *rlink,
 	if (fh->mf.inode_no != mf->inode_no)
 		return false;
 
+	if (fh->mf.type != mf->type)
+		return false;
+
 	return (fh->mf.flags == mf->flags);
 }
 
@@ -761,13 +764,12 @@ iof_closedir_handler(crt_rpc_t *rpc)
  */
 static void find_and_insert(struct ios_projection *projection,
 			    int fd,
-			    uint32_t flags,
+			    struct ionss_mini_file *mf,
 			    struct iof_open_out *out)
 {
 	struct ionss_file_handle	*handle = NULL;
 	d_list_t			*rlink;
 	struct stat			 stbuf = {0};
-	struct ionss_mini_file		 mf;
 	int				rc;
 
 	rc = fstat(fd, &stbuf);
@@ -781,10 +783,10 @@ static void find_and_insert(struct ios_projection *projection,
 	 * descriptor, using this if found.  rec_find() will take a reference
 	 * so there is no additional step needed here.
 	 */
-	mf.flags = flags;
-	mf.inode_no = stbuf.st_ino;
 
-	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	mf->inode_no = stbuf.st_ino;
+
+	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
 	if (rlink) {
 		handle = container_of(rlink, struct ionss_file_handle, clist);
 		close(fd);
@@ -805,11 +807,12 @@ static void find_and_insert(struct ios_projection *projection,
 
 	handle->fd = fd;
 	handle->projection = projection;
-	handle->mf.flags = mf.flags;
-	handle->mf.inode_no = mf.inode_no;
+	handle->mf.flags = mf->flags;
+	handle->mf.inode_no = mf->inode_no;
+	handle->mf.type = mf->type;
 	atomic_fetch_add(&handle->ht_ref, 1);
 
-	rlink = d_chash_rec_find_insert(&projection->file_ht, &mf, sizeof(mf),
+	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
 					&handle->clist);
 	if (rlink != &handle->clist) {
 		IOF_LOG_DEBUG("Competing inserts for %p", handle);
@@ -820,12 +823,123 @@ static void find_and_insert(struct ios_projection *projection,
 	out->gah = handle->gah;
 }
 
+static void find_and_insert_lookup(struct ios_projection *projection,
+				   int fd,
+				   struct stat *stbuf,
+				   struct ionss_mini_file *mf,
+				   struct iof_lookup_out *out)
+{
+	struct ionss_file_handle	*handle = NULL;
+	d_list_t			*rlink;
+	int				rc;
+
+	rc = fstat(fd, stbuf);
+	if (rc) {
+		out->rc = errno;
+		close(fd);
+		return;
+	}
+
+	/* Firstly create the key on the stack and use it to search for a
+	 * descriptor, using this if found.  rec_find() will take a reference
+	 * so there is no additional step needed here.
+	 */
+
+	mf->inode_no = stbuf->st_ino;
+
+	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
+	if (rlink) {
+		handle = container_of(rlink, struct ionss_file_handle, clist);
+		close(fd);
+		out->gah = handle->gah;
+		return;
+	}
+
+	/* If the file was not already open then allocate a new descriptor,
+	 * fill it out and attempt to insert it.  If succsssful the
+	 * rec_insert() will take a reference.
+	 */
+	rc = ios_fh_alloc(projection, &handle);
+	if (rc || !handle) {
+		out->err = IOF_ERR_NOMEM;
+		close(fd);
+		return;
+	}
+
+	handle->fd = fd;
+	handle->projection = projection;
+	handle->mf.flags = mf->flags;
+	handle->mf.inode_no = mf->inode_no;
+	handle->mf.type = mf->type;
+	atomic_fetch_add(&handle->ht_ref, 1);
+
+	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
+					&handle->clist);
+	if (rlink != &handle->clist) {
+		IOF_LOG_DEBUG("Competing inserts for %p", handle);
+		ios_fh_decref(handle, 1);
+		handle = container_of(rlink, struct ionss_file_handle, clist);
+	}
+
+	d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
+	out->gah = handle->gah;
+}
+
+static void
+iof_lookup_handler(crt_rpc_t *rpc)
+{
+	struct iof_gah_string_in	*in = crt_req_get(rpc);
+	struct iof_lookup_out		*out = crt_reply_get(rpc);
+	struct ios_projection		*projection = NULL;
+	struct ionss_file_handle	*parent = NULL;
+	struct stat			stbuf = {0};
+	struct ionss_mini_file		mf = {.type = inode_handle,
+					      .flags = O_PATH | O_NOATIME | O_NOFOLLOW | O_RDONLY};
+	int				fd;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	if (out->err)
+		goto out;
+
+	projection = parent->projection;
+
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	errno = 0;
+	fd = openat(parent->fd, in->path, mf.flags);
+	if (fd == -1) {
+		out->rc = errno;
+		if (!out->rc)
+			out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	find_and_insert_lookup(projection, fd, &stbuf, &mf, out);
+
+	IOF_LOG_INFO("Lookup %p, %s %lu %d " GAH_PRINT_STR, rpc,
+		     in->path, mf.inode_no, fd,
+		     GAH_PRINT_VAL(out->gah));
+
+out:
+	IOF_LOG_INFO("Sending reply %d %d", out->rc, out->err);
+	crt_reply_send(rpc);
+	if (projection)
+		iof_pool_restock(projection->fh_pool);
+	if (parent)
+		ios_fh_decref(parent, 1);
+}
+
 static void
 iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_open_in	*in = crt_req_get(rpc);
 	struct iof_open_out	*out = crt_reply_get(rpc);
 	struct ios_projection	*projection = NULL;
+	struct ionss_mini_file	mf = {.type = open_handle};
+
 	int fd;
 	int rc;
 
@@ -854,7 +968,8 @@ iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	find_and_insert(projection, fd, in->flags, out);
+	mf.flags = in->flags;
+	find_and_insert(projection, fd, &mf, out);
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o ", in->path, in->flags);
@@ -878,6 +993,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	struct iof_create_in	*in = crt_req_get(rpc);
 	struct iof_open_out	*out = crt_reply_get(rpc);
 	struct ios_projection	*projection = NULL;
+	struct ionss_mini_file	mf = {.type = open_handle};
 	int fd;
 	int rc;
 
@@ -905,7 +1021,8 @@ iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	find_and_insert(projection, fd, in->flags, out);
+	mf.flags = in->flags;
+	find_and_insert(projection, fd, &mf, out);
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o 0%o", in->path, in->flags,
@@ -1931,6 +2048,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(utimens, iof_utimens_handler),
 		DECL_RPC_HANDLER(utimens_gah, iof_utimens_gah_handler),
 		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
+		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
 	};
 	iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
 }
@@ -2032,6 +2150,7 @@ static void release_projection_resources(struct ios_projection *projection)
 	d_list_t *rlink;
 	int rc;
 
+	IOF_LOG_DEBUG("Destroying file HT");
 	do {
 		rlink = d_chash_rec_first(&projection->file_ht);
 		if (rlink)
@@ -2039,8 +2158,8 @@ static void release_projection_resources(struct ios_projection *projection)
 	} while (rlink);
 
 	rc = d_chash_table_destroy_inplace(&projection->file_ht, false);
-	if (rc != 0)
-		IOF_LOG_ERROR("Failed to destroy hash table");
+	if (rc)
+		IOF_LOG_ERROR("Failed to destroy file HT rc = %d", rc);
 }
 
 int fslookup_entry(struct mntent *entry, void *priv)
@@ -2397,6 +2516,7 @@ int main(int argc, char **argv)
 			IOF_LOG_ERROR("Could not create hash table");
 			continue;
 		}
+
 		pthread_mutex_init(&projection->lock, NULL);
 
 		projection->max_read_count = 3;
@@ -2569,6 +2689,9 @@ int main(int argc, char **argv)
 		 * No locks are held here because at this point all progression
 		 * threads have already been terminated
 		 */
+
+		IOF_LOG_DEBUG("Stopping %p", projection);
+
 		release_projection_resources(projection);
 
 		pthread_mutex_destroy(&projection->lock);

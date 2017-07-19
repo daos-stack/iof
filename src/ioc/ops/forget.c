@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2017 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -36,72 +36,28 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <fuse3/fuse.h>
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"
 
-int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
-{
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct getattr_req *req;
-	struct iof_gah_in *in;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, getfattr);
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
-		 */
-		return -EIO;
-	}
-	IOC_RPC_INIT(fs_handle->fgh_pool, req, rpc, getattr_cb, rc);
-	if (rc)
-		return rc;
-
-	in = crt_req_get(req->rpc);
-	in->gah = handle->common.gah;
-	req->reply.stat = stbuf;
-
-	iof_fs_send(req, &(req)->reply.ctx);
-	IOC_RPC_FINI(fs_handle->fgh_pool, req, rc);
-	/* Cache the inode number */
-	if (rc == 0)
-		handle->inode_no = stbuf->st_ino;
-	IOF_LOG_DEBUG(GAH_PRINT_STR " rc %d",
-		      GAH_PRINT_VAL(handle->common.gah), rc);
-	return rc;
-}
-
-int ioc_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
-{
-	if (fi)
-		return ioc_getattr_gah((struct iof_file_handle *)fi->fh, stbuf);
-
-	if (!path)
-		return -EIO;
-	return ioc_getattr_name(path, stbuf);
-}
-
 void
-ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
 {
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_file_handle handle = {0};
-	struct stat st = {0};
-	int rc;
+	d_list_t *rlink;
 
-	IOF_LOG_INFO("Req %p %lu %p", req, ino, fi);
+	IOF_LOG_INFO("Req %p %lu %lu", req, ino, nlookup);
 
-	rc = find_gah(fs_handle, ino, &handle.common.gah);
-	if (rc != 0)
-		fuse_reply_err(req, EIO);
+	STAT_ADD(fs_handle->stats, forget);
 
-	handle.fs_handle = fs_handle;
-	handle.common.gah_valid = 1;
-	rc = ioc_getattr_gah(&handle, &st);
-	if (rc)
-		fuse_reply_err(req, -rc);
-	else
-		fuse_reply_attr(req, &st, 0);
+	fuse_reply_none(req);
+
+	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	if (!rlink)
+		return;
+
+	do {
+		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+	} while (nlookup--);
 }

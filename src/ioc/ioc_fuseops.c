@@ -127,11 +127,9 @@ static void ioc_show_flags(unsigned in)
  * private_data to be set by the CNSS register routine we simply read it and
  * return the value here.
  */
-static void *ioc_init(struct fuse_conn_info *conn)
+static void *ioc_init_core(struct iof_projection_info *fs_handle,
+			   struct fuse_conn_info *conn)
 {
-	struct iof_projection_info *fs_handle;
-
-	fs_handle = ioc_get_handle();
 
 	IOF_LOG_INFO("Fuse configuration for projection srv:%d cli:%d",
 		     fs_handle->fs_id, fs_handle->proj.cli_fs_id);
@@ -161,12 +159,18 @@ static void *ioc_init(struct fuse_conn_info *conn)
 
 	ioc_show_flags(conn->want);
 
+	IOF_LOG_INFO("max_background %d", conn->max_background);
+	IOF_LOG_INFO("congestion_threshold %d", conn->congestion_threshold);
+
 	return fs_handle;
 }
 
 static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
-	void *handle = ioc_init(conn);
+	struct iof_projection_info	*fs_handle = ioc_get_handle();
+	void				*handle;
+
+	handle = ioc_init_core(fs_handle, conn);
 	/* Disable caching entirely */
 	cfg->entry_timeout = 0;
 	cfg->negative_timeout = 0;
@@ -184,9 +188,6 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 		     cfg->entry_timeout,
 		     cfg->negative_timeout,
 		     cfg->attr_timeout);
-
-	IOF_LOG_INFO("max_background %d", conn->max_background);
-	IOF_LOG_INFO("congestion_threshold %d", conn->congestion_threshold);
 
 	IOF_LOG_INFO("use_ino %d", cfg->use_ino);
 
@@ -350,5 +351,27 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, readlink);
 	SET_FUSE_OP(fuse_ops, client_ops, ioctl);
 	SET_FUSE_OP(fuse_ops, client_ops, statfs);
+	return fuse_ops;
+}
+
+void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
+{
+	struct iof_projection_info *fs_handle = arg;
+
+	ioc_init_core(fs_handle, conn);
+}
+
+struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
+{
+	struct fuse_lowlevel_ops *fuse_ops = calloc(1, sizeof(*fuse_ops));
+
+	if (!fuse_ops)
+		return NULL;
+
+	fuse_ops->init = ioc_ll_init;
+	fuse_ops->getattr = ioc_ll_getattr;
+	fuse_ops->lookup = ioc_ll_lookup;
+	fuse_ops->forget = ioc_ll_forget;
+	fuse_ops->statfs = ioc_ll_statfs;
 	return fuse_ops;
 }

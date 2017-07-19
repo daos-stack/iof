@@ -39,8 +39,11 @@
 #define __IOF_H__
 
 #include <fuse3/fuse.h>
+#include <fuse3/fuse_lowlevel.h>
 
 #include <gurt/list.h>
+#include <gurt/hash.h>
+
 #include "cnss_plugin.h"
 #include "ios_gah.h"
 #include "iof_atomic.h"
@@ -76,6 +79,8 @@ struct iof_stats {
 	ATOMIC unsigned int futimens;
 	ATOMIC unsigned int il_ioctl;
 	ATOMIC unsigned int fsync;
+	ATOMIC unsigned int lookup;
+	ATOMIC unsigned int forget;
 };
 
 /*For IOF Plugin*/
@@ -123,6 +128,7 @@ struct iof_projection_info {
 	char				*base_dir;
 	/* fuse client implementation */
 	struct fuse_operations		*fuse_ops;
+	struct fuse_lowlevel_ops	*fuse_ll_ops;
 	/* Feature Flags */
 	uint8_t				flags;
 	int				fs_id;
@@ -130,6 +136,7 @@ struct iof_projection_info {
 	struct iof_pool_type		*dh;
 	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
+	struct iof_pool_type		*lookup_pool;
 	struct iof_pool_type		*fh_pool;
 	struct iof_pool_type		*rb_pool_small;
 	struct iof_pool_type		*rb_pool_page;
@@ -140,6 +147,7 @@ struct iof_projection_info {
 	uint32_t			readdir_size;
 	/* If set to True then projection is off-line */
 	int				offline_reason;
+	struct d_chash_table		inode_ht;
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
@@ -147,6 +155,7 @@ struct iof_projection_info {
 int iof_is_mode_supported(uint8_t flags);
 
 struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
+struct fuse_lowlevel_ops *iof_get_fuse_ll_ops();
 
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
@@ -280,6 +289,10 @@ struct iof_file_handle {
 	char				*name;
 };
 
+/* inode.c */
+
+int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
+
 struct iof_projection_info *ioc_get_handle(void);
 
 /* Forward Declaration */
@@ -315,6 +328,21 @@ struct getattr_req {
 };
 
 #define IOF_REQ_FS_HANDLE(REQ) ((REQ)->reply.ctx.fs_handle)
+
+struct ioc_inode_entry {
+	struct ios_gah	gah;
+	d_list_t	list;
+	fuse_ino_t	ino;
+	ATOMIC uint	ref;
+};
+
+struct lookup_req {
+	struct iof_projection_info	*fs_handle;
+	struct crt_rpc			*rpc;
+	struct ioc_inode_entry		*ie;
+	d_list_t			 list;
+	fuse_req_t			 req;
+};
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.
  * If err is non-zero then use that, otherwise use rc.  Return negative numbers
@@ -391,6 +419,8 @@ int ioc_utimens(const char *, const struct timespec tv[2],
 
 int ioc_getattr(const char *, struct stat *, struct fuse_file_info *);
 
+int ioc_getattr_gah(struct iof_file_handle *, struct stat *);
+
 int ioc_truncate(const char *, off_t, struct fuse_file_info *);
 
 int ioc_rename(const char *, const char *, unsigned int);
@@ -419,5 +449,13 @@ int ioc_statfs(const char *, struct statvfs *);
 
 int ioc_ioctl(const char *, int, void *, struct fuse_file_info *,
 	      unsigned int, void *);
+
+void ioc_ll_lookup(fuse_req_t, fuse_ino_t, const char *);
+
+void ioc_ll_forget(fuse_req_t, fuse_ino_t, uint64_t);
+
+void ioc_ll_getattr(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_ll_statfs(fuse_req_t, fuse_ino_t);
 
 #endif

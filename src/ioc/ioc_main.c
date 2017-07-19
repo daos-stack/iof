@@ -354,6 +354,55 @@ static int attach_group(struct iof_state *iof_state,
 	return 0;
 }
 
+static bool ih_key_cmp(struct d_chash_table *htable, d_list_t *rlink,
+		       const void *key, unsigned int ksize)
+{
+	const struct ioc_inode_entry *ie;
+	const fuse_ino_t *ino = key;
+
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+
+	return *ino == ie->ino;
+}
+
+static void ih_addref(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ioc_inode_entry *ie;
+	int oldref;
+
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+	oldref = atomic_fetch_add(&ie->ref, 1);
+	IOF_LOG_DEBUG("addref(%p) to %u", ie, oldref + 1);
+}
+
+static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ioc_inode_entry *ie;
+	int oldref;
+
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+	oldref = atomic_fetch_sub(&ie->ref, 1);
+	IOF_LOG_DEBUG("decref(%p) to %u", ie, oldref - 1);
+	return oldref == 1;
+}
+
+static void ih_free(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ioc_inode_entry *ie;
+
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+
+	/* TODO: Send forget RPC */
+	IOF_LOG_DEBUG("Delete %p", ie);
+	free(ie);
+}
+
+d_chash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,
+			    .hop_rec_addref = ih_addref,
+			    .hop_rec_decref = ih_decref,
+			    .hop_rec_free = ih_free,
+};
+
 int dh_init(void *arg, void *handle)
 {
 	struct iof_dir_handle *dh = arg;
@@ -580,6 +629,72 @@ gh_release(void *arg)
 
 	crt_req_decref(req->rpc);
 	crt_req_decref(req->rpc);
+}
+
+static int
+lookup_init(void *arg, void *handle)
+{
+	struct lookup_req *req = arg;
+
+	req->fs_handle = handle;
+	return 0;
+}
+
+/* Clean, and prepare for use a getattr descriptor */
+static int
+lookup_clean(void *arg)
+{
+	struct lookup_req *req = arg;
+	int rc;
+
+	/* If this descriptor has previously been used the destroy the
+	 * existing RPC
+	 */
+	if (req->rpc) {
+		crt_req_decref(req->rpc);
+		crt_req_decref(req->rpc);
+		req->rpc = NULL;
+	}
+
+	if (!req->ie) {
+		req->ie = calloc(1, sizeof(*req->ie));
+		if (!req->ie)
+			return -1;
+		atomic_fetch_add(&req->ie->ref, 1);
+	}
+
+	/* Create a new RPC ready for later use.  Take an inital reference
+	 * to the RPC so that it is not cleaned up after a successful send.
+	 *
+	 * After calling send the getattr code will re-take the dropped
+	 * reference which means that on all subsequent calls to clean()
+	 * or release() the ref count will be two.
+	 *
+	 * This means that both descriptor creation and destruction are
+	 * done off the critical path.
+	 */
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx,
+			    NULL,
+			    FS_TO_OP(req->fs_handle, lookup), &req->rpc);
+	if (rc || !req->rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %d", rc);
+		free(req->ie);
+		return -1;
+	}
+	crt_req_addref(req->rpc);
+
+	return 0;
+}
+
+/* Destroy a descriptor which could be either getattr or getfattr */
+static void
+lookup_release(void *arg)
+{
+	struct lookup_req *req = arg;
+
+	crt_req_decref(req->rpc);
+	crt_req_decref(req->rpc);
+	free(req->ie);
 }
 
 static int
@@ -884,6 +999,14 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->flags = fs_info->flags;
 	IOF_LOG_INFO("Filesystem mode: Private");
 
+	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
+					   4, fs_handle, &hops,
+					   &fs_handle->inode_ht);
+	if (ret != 0) {
+		free(fs_handle);
+		return IOF_ERR_NOMEM;
+	}
+
 	fs_handle->max_read = query->max_read;
 	fs_handle->max_iov_read = query->max_iov_read;
 	fs_handle->max_write = query->max_write;
@@ -968,6 +1091,8 @@ static int initialize_projection(struct iof_state *iof_state,
 	REGISTER_STAT(read);
 	REGISTER_STAT(getfattr);
 	REGISTER_STAT(il_ioctl);
+	REGISTER_STAT(lookup);
+	REGISTER_STAT(forget);
 	REGISTER_STAT64(read_bytes);
 
 	if (writeable) {
@@ -995,9 +1120,6 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.grp = &group->grp;
 	fs_handle->proj.grp_id = group->grp.grp_id;
 	fs_handle->proj.crt_ctx = iof_state->crt_ctx;
-	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
-	if (!fs_handle->fuse_ops)
-		return IOF_ERR_NOMEM;
 
 	args.argc = 4;
 	if (!writeable)
@@ -1030,8 +1152,20 @@ static int initialize_projection(struct iof_state *iof_state,
 			return IOF_ERR_NOMEM;
 	}
 
+	if (writeable) {
+		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
+		if (!fs_handle->fuse_ops)
+			return IOF_ERR_NOMEM;
+	} else {
+		fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops();
+		if (!fs_handle->fuse_ll_ops)
+			return IOF_ERR_NOMEM;
+	}
+
 	ret = cb->register_fuse_fs(cb->handle,
-				   fs_handle->fuse_ops, NULL, &args,
+				   fs_handle->fuse_ops,
+				   fs_handle->fuse_ll_ops,
+				   &args,
 				   fs_handle->mount_point,
 				   fs_handle->flags & IOF_CNSS_MT,
 				   fs_handle);
@@ -1071,6 +1205,12 @@ static int initialize_projection(struct iof_state *iof_state,
 					    .release = gh_release,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
+		struct iof_pool_reg lookup_t = { .handle = fs_handle,
+						 .init = lookup_init,
+						 .clean = lookup_clean,
+						 .release = lookup_release,
+						 POOL_TYPE_INIT(lookup_req, list)};
+
 		struct iof_pool_reg rb_small = { .handle = fs_handle,
 						 .init = rb_small_init,
 						 .release = rb_release,
@@ -1096,6 +1236,11 @@ static int initialize_projection(struct iof_state *iof_state,
 
 		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
 		if (!fs_handle->fgh_pool)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool,
+							   &lookup_t);
+		if (!fs_handle->lookup_pool)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
@@ -1223,11 +1368,31 @@ static int iof_post_start(void *arg)
 static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
+	d_list_t *rlink = NULL;
+	int rc;
+
+	IOF_LOG_INFO("Draining inode table");
+	do {
+		rlink = d_chash_rec_first(&fs_handle->inode_ht);
+		IOF_LOG_INFO("rlink is %p", rlink);
+		if (rlink)
+			d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+	} while (rlink);
+
+	IOF_LOG_INFO("inode table empty");
+	rc = d_chash_table_destroy_inplace(&fs_handle->inode_ht, false);
+	if (rc)
+		IOF_LOG_WARNING("Failed to close inode handles");
 
 	iof_pool_destroy(&fs_handle->pool);
 
 	d_list_del(&fs_handle->link);
-	free(fs_handle->fuse_ops);
+
+	if (fs_handle->fuse_ops)
+		free(fs_handle->fuse_ops);
+	else
+		free(fs_handle->fuse_ll_ops);
+
 	free(fs_handle->base_dir);
 	free(fs_handle->mount_point);
 	free(fs_handle->stats);

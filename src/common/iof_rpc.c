@@ -62,6 +62,13 @@ struct crt_msg_field *string_out[] = {
 	&CMF_INT,
 };
 
+struct crt_msg_field *lookup_out[] = {
+	&CMF_GAH,
+	&CMF_IOVEC,
+	&CMF_INT,
+	&CMF_INT,
+};
+
 struct crt_msg_field *two_string_in[] = {
 	&CMF_STRING,
 	&CMF_STRING,
@@ -232,6 +239,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(utimens, utimens_in, status_out),
 	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	RPC_TYPE(statfs, gah_in, iov_pair),
+	RPC_TYPE(lookup, gah_string_in, lookup_out),
 };
 
 const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {

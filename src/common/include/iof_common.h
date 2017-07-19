@@ -158,6 +158,13 @@ struct iof_string_out {
 	int err;
 };
 
+struct iof_lookup_out {
+	struct ios_gah gah;
+	d_iov_t stat;
+	int rc;
+	int err;
+};
+
 struct iof_truncate_in {
 	d_string_t path;
 	uint64_t len;
@@ -345,6 +352,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, utimens),
 	DEF_RPC_TYPE(DEFAULT, utimens_gah),
 	DEF_RPC_TYPE(DEFAULT, statfs),
+	DEF_RPC_TYPE(DEFAULT, lookup),
 	IOF_DEFAULT_RPC_TYPES,
 };
 

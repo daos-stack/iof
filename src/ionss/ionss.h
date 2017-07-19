@@ -72,9 +72,16 @@ struct ios_base {
  * on the stack allowing for hash-table searching before creating
  * a larger ionss_file_handle struct.
  */
+
+enum ionss_fh_type {
+	open_handle,
+	inode_handle,
+};
+
 struct ionss_mini_file {
-	int			flags;
+	int			flags; /* File open flags */
 	ino_t			inode_no;
+	enum ionss_fh_type	type;
 };
 
 /* File descriptor for open file handles.
