@@ -46,6 +46,11 @@
  */
 #define CMF_GAH CMF_UUID
 
+struct crt_msg_field *gah_string_in[] = {
+	&CMF_GAH,
+	&CMF_STRING,
+};
+
 struct crt_msg_field *string_in[] = {
 	&CMF_STRING,
 	&CMF_INT,
@@ -203,7 +208,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(opendir, string_in, gah_pair),
 	RPC_TYPE(readdir, readdir_in, readdir_out),
 	RPC_TYPE(closedir, gah_in, NULL),
-	RPC_TYPE(getattr, string_in, iov_pair),
+	RPC_TYPE(getattr, gah_string_in, iov_pair),
 	RPC_TYPE(getattr_gah, gah_in, iov_pair),
 	RPC_TYPE(write_direct, write_direct, write_out),
 	RPC_TYPE(write_bulk, write_bulk, write_out),

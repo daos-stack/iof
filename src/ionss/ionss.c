@@ -264,23 +264,29 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 static void
 iof_getattr_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_gah_string_in *in = crt_req_get(rpc);
 	struct iof_getattr_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *parent;
 	struct stat stbuf = {0};
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
 	errno = 0;
-	rc = fstatat(base.projection_array[in->fs_id].dir_fd,
+	rc = fstatat(parent->fd,
 		     iof_get_rel_path(in->path), &stbuf,
 		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
 	/* Deny access if this path is a mount point for another file system*/
-	else if (base.projection_array[in->fs_id].dev_no != stbuf.st_dev)
+	else if (parent->projection->dev_no != stbuf.st_dev)
 		out->rc = EACCES;
 	else
 		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
@@ -293,6 +299,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 /*
@@ -1888,7 +1897,7 @@ static void iof_statfs_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = fstatvfs(base.projection_array[in->fs_id].dir_fd,
+	rc = fstatvfs(base.projection_array[in->fs_id].root->fd,
 		      &buf);
 
 	if (rc) {
@@ -2307,6 +2316,8 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
 
+	base.gs = ios_gah_init();
+
 	/*
 	 * Populate the projection_array with every projection.
 	 *
@@ -2320,12 +2331,23 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
-		char *full_path = realpath(argv[i + optind], NULL);
+		char *proj_path = argv[i + optind];
 		struct iof_pool_reg fhp = { .handle = projection,
 					    .init = fh_init,
 					    POOL_TYPE_INIT(ionss_file_handle,
 							   clist)};
+		int fd;
 		int rc;
+
+		fd = open(proj_path,
+			  O_DIRECTORY | O_PATH | O_NOATIME | O_RDONLY);
+		if (fd == -1) {
+			IOF_LOG_ERROR("Could not open export directory %s",
+				      proj_path);
+			err = 1;
+
+			continue;
+		}
 
 		projection->active = 0;
 		projection->base = &base;
@@ -2335,68 +2357,40 @@ int main(int argc, char **argv)
 		projection->max_read_count = 3;
 		CRT_INIT_LIST_HEAD(&projection->read_list);
 
-		if (!full_path) {
-			IOF_LOG_ERROR("Export path does not exist: %s",
-				      argv[i + optind]);
-			err = 1;
-			free(full_path);
-			continue;
-		}
-
-		rc = stat(full_path, &buf);
+		rc = fstat(fd, &buf);
 		if (rc) {
 			IOF_LOG_ERROR("Could not stat export path %s %d",
-				      full_path, errno);
+				      proj_path, errno);
 			err = 1;
-			free(full_path);
 			continue;
 		}
 
-		if (!S_ISDIR(buf.st_mode)) {
-			IOF_LOG_ERROR("Export path is not a directory %s",
-				      full_path);
-			err = 1;
-			free(full_path);
-			continue;
-		}
-
-		projection->dir = opendir(full_path);
-		if (!projection->dir) {
-			IOF_LOG_ERROR("Could not open export directory %s",
-				      full_path);
-			err = 1;
-			free(full_path);
-			continue;
-		}
-		projection->dir_fd = dirfd(projection->dir);
 		projection->dev_no = buf.st_dev;
-
-		if (strnlen(full_path, IOF_MAX_PATH_LEN - 1) ==
-			(IOF_MAX_PATH_LEN - 1)) {
-			IOF_LOG_ERROR("Export path is too deep %s",
-				      full_path);
-			err = 1;
-			free(full_path);
-			continue;
-		}
 
 		/* Set feature flags. These will be sent to the client */
 		projection->flags = IOF_FS_DEFAULT;
-		if (access(full_path, W_OK) == 0)
+		if (faccessat(fd, ".", W_OK, 0) == 0)
 			projection->flags |= IOF_WRITEABLE;
 
 		projection->fh_pool = iof_pool_register(&base.pool, &fhp);
 		if (!projection->fh_pool)
 			continue;
 
+		rc = ios_fh_alloc(projection, &projection->root);
+		if (rc != 0)
+			continue;
+
+		projection->root->fd = fd;
+		CRT_INIT_LIST_HEAD(&projection->root->clist);
+
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;
 
-		IOF_LOG_INFO("Projecting %s %#x", full_path,
+		IOF_LOG_INFO("Projecting %s %#x", proj_path,
 			     (int)projection->flags);
 
 		projection->active = 1;
-		projection->full_path = full_path;
+		projection->full_path = strdup(proj_path);
 		projection->id = i;
 	}
 	if (err) {
@@ -2413,6 +2407,7 @@ int main(int argc, char **argv)
 	/* Create a fs_list from the projection array */
 	for (i = 0; i < base.projection_count ; i++) {
 		base.fs_list[i].flags = base.projection_array[i].flags;
+		base.fs_list[i].gah = base.projection_array[i].root->gah;
 		base.fs_list[i].id = base.projection_array[i].id;
 		strncpy(base.fs_list[i].mnt, base.projection_array[i].full_path,
 			IOF_NAME_LEN_MAX);
@@ -2442,8 +2437,6 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 	ionss_register();
-
-	base.gs = ios_gah_init();
 
 	shutdown = 0;
 
@@ -2509,23 +2502,18 @@ int main(int argc, char **argv)
 
 	}
 
+cleanup:
 	/* TODO:
 	 *
 	 * This means a resource leak, or failed cleanup after client eviction.
 	 * We really should have the ability to iterate over any handles that
 	 * remain open at this point.
 	 */
-	ret = ios_gah_destroy(base.gs);
-	if (ret)
-		IOF_LOG_ERROR("Could not close GAH pool");
-
-	iof_pool_destroy(&base.pool);
 
 	ret = crt_finalize();
 	if (ret)
 		IOF_LOG_ERROR("Could not finalize cart");
 
-cleanup:
 	if (base.fs_list)
 		free(base.fs_list);
 
@@ -2538,12 +2526,17 @@ cleanup:
 
 			free(p->full_path);
 
-			if (p->dir)
-				closedir(p->dir);
+			ios_fh_decref(p->root, 1);
 		}
 
 		free(base.projection_array);
 	}
+
+	ret = ios_gah_destroy(base.gs);
+	if (ret)
+		IOF_LOG_ERROR("Could not close GAH pool");
+
+	iof_pool_destroy(&base.pool);
 
 	/* Memset base to zero to delete any dangling memory references so that
 	 * valgrind can better detect lost memory

@@ -430,7 +430,7 @@ static int
 gh_clean(void *arg)
 {
 	struct getattr_req *req = arg;
-	struct iof_string_in *in;
+	struct iof_gah_string_in *in;
 	int rc;
 
 	iof_tracker_init(&req->reply.tracker, 1);
@@ -462,7 +462,7 @@ gh_clean(void *arg)
 	}
 	crt_req_addref(req->rpc);
 	in = crt_req_get(req->rpc);
-	in->fs_id = req->fs_handle->fs_id;
+	in->gah = req->fs_handle->gah;
 
 	return 0;
 }
@@ -749,6 +749,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->max_iov_read = query->max_iov_read;
 	fs_handle->max_write = query->max_write;
 	fs_handle->readdir_size = query->readdir_size;
+	fs_handle->gah = fs_info->gah;
 
 	base_name = basename(fs_info->mnt);
 

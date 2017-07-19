@@ -123,6 +123,7 @@ struct iof_fs_info {
 	/*Associated mount point*/
 	char mnt[IOF_NAME_LEN_MAX];
 	/*id of filesystem*/
+	struct ios_gah gah;
 	int id;
 	/*Feature flags, as described above*/
 	uint8_t flags;
@@ -138,6 +139,11 @@ struct iof_psr_query {
 	crt_iov_t query_list;
 	uint32_t readdir_size;
 	uint32_t max_iov_read;
+};
+
+struct iof_gah_string_in {
+	struct ios_gah gah;
+	crt_string_t path;
 };
 
 struct iof_string_in {

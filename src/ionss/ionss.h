@@ -64,13 +64,22 @@ struct ios_base {
 	uint32_t		max_readdir;
 };
 
+struct ionss_file_handle {
+	struct ios_gah		gah;
+	struct ios_projection	*projection;
+	crt_list_t		clist;
+	uint			fd;
+	int			flags;
+	ATOMIC uint		ref;
+	ino_t			inode_no;
+};
+
 struct ios_projection {
 	struct ios_base		*base;
 	char			*full_path;
 	char			fs_type[IOF_MAX_FSTYPE_LEN];
-	DIR			*dir;
 	struct iof_pool_type	*fh_pool;
-	uint			dir_fd;
+	struct ionss_file_handle	*root;
 	uint			id;
 	uint			flags;
 	uint			active;
@@ -91,22 +100,12 @@ struct ios_projection {
 /* Convert from a fs_id to a directory fd.  Users of this macro should be
  * updated to use ID_TO_PROJECTION instead.
  */
-#define ID_TO_FD(ID) (base.projection_array[(ID)].dir_fd)
+#define ID_TO_FD(ID) (base.projection_array[(ID)].root->fd)
 
 struct ionss_dir_handle {
 	DIR	*h_dir;
 	uint	fd;
 	off_t	offset;
-};
-
-struct ionss_file_handle {
-	struct ios_gah		gah;
-	struct ios_projection	*projection;
-	crt_list_t		clist;
-	uint			fd;
-	int			flags;
-	ATOMIC uint		ref;
-	ino_t			inode_no;
 };
 
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)

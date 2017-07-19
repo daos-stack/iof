@@ -78,7 +78,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct getattr_req *req;
-	struct iof_string_in *in;
+	struct iof_gah_string_in *in;
 
 	int rc;
 

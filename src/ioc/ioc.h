@@ -107,6 +107,7 @@ struct iof_rb {
 struct iof_projection_info {
 	struct iof_projection		proj;
 	struct iof_state		*iof_state;
+	struct ios_gah			gah;
 	crt_list_t			link;
 	/* destination endpoint */
 	crt_endpoint_t			dest_ep;
