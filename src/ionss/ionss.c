@@ -94,7 +94,6 @@ static struct ios_base base;
 		if (!in->path) { \
 			IOF_LOG_ERROR("No input path"); \
 			out->err = IOF_ERR_CART; \
-			break; \
 		} \
 	} while (0)
 
@@ -109,7 +108,6 @@ static struct ios_base base;
 		if (!in->src || !in->dst) { \
 			IOF_LOG_ERROR("Missing inputs."); \
 			out->err = IOF_ERR_CART; \
-			break; \
 		} \
 	} while (0)
 
@@ -119,7 +117,6 @@ static struct ios_base base;
 		handle = ios_##handle_type##_find(&base, &in->gah); \
 		if (!handle) { \
 			out->err = IOF_GAH_INVALID; \
-			break; \
 		} \
 	} while (0)
 
