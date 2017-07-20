@@ -54,8 +54,6 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("file %s", file);
-
 	STAT_ADD(fs_handle->stats, utimens);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -66,8 +64,10 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 		return -EROFS;
 	}
 
+	IOF_LOG_INFO("file %s", file);
+
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, utimens), &rpc);
+		FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

@@ -326,13 +326,13 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 	struct iof_pool_type *pt;
 	int rc;
 
-	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(fs_handle->stats, read);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

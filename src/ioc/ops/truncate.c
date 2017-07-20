@@ -55,8 +55,6 @@ int ioc_truncate_name(const char *file, off_t len)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Truncate %s %#zx", file, len);
-
 	STAT_ADD(fs_handle->stats, truncate);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -67,8 +65,10 @@ int ioc_truncate_name(const char *file, off_t len)
 		return -EROFS;
 	}
 
+	IOF_LOG_INFO("truncate %s length to %#zx", file, len);
+
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, truncate), &rpc);
+		FS_TO_OP(fs_handle, truncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -109,9 +109,6 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Position %#zx " GAH_PRINT_STR, len,
-		     GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(fs_handle->stats, ftruncate);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -121,6 +118,9 @@ int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
+
+	IOF_LOG_INFO("truncate %#zx " GAH_PRINT_STR, len,
+		GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

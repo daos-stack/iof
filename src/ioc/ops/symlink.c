@@ -54,8 +54,6 @@ int ioc_symlink(const char *dst, const char *src)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
-
 	STAT_ADD(fs_handle->stats, symlink);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -66,8 +64,10 @@ int ioc_symlink(const char *dst, const char *src)
 		return -EROFS;
 	}
 
+	IOF_LOG_INFO("src %s dst %s", src, dst);
+
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-			    FS_TO_OP(fs_handle, symlink), &rpc);
+		FS_TO_OP(fs_handle, symlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, ret = %u",
 			      rc);

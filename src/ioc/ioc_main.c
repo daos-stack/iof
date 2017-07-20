@@ -846,6 +846,8 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	REGISTER_STAT(il_ioctl);
 
+	REGISTER_STAT(fsync);
+
 	IOF_LOG_INFO("Filesystem ID srv:%d cli:%d",
 		     fs_handle->fs_id,
 		     fs_handle->proj.cli_fs_id);

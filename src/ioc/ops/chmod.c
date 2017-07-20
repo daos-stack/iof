@@ -55,17 +55,17 @@ int ioc_chmod_name(const char *file, mode_t mode)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("chmod %s 0%o", file, mode);
-
 	STAT_ADD(fs_handle->stats, chmod);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
 
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
+	IOF_LOG_INFO("chmod %s 0%o", file, mode);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, chmod), &rpc);
@@ -109,18 +109,18 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("mode 0%o " GAH_PRINT_STR, mode,
-		     GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(fs_handle->stats, fchmod);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
 
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
+	IOF_LOG_INFO("mode 0%o " GAH_PRINT_STR, mode,
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

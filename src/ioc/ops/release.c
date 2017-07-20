@@ -78,8 +78,6 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	struct release_cb_r reply = {0};
 	int rc;
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(fs_handle->stats, release);
 
 	/* If the projection is off-line then drop the local handle.
@@ -91,6 +89,9 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		iof_pool_release(fs_handle->fh_pool, handle);
 		return -fs_handle->offline_reason;
 	}
+
+	IOF_LOG_INFO("release %s" GAH_PRINT_STR, file,
+		GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		IOF_LOG_INFO("Release with bad handle %p",

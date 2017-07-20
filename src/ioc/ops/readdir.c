@@ -301,13 +301,20 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	off_t next_offset = offset;
 	int ret;
 
-	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
-		     GAH_PRINT_VAL(dir_handle->gah), offset);
-
 	STAT_ADD(dir_handle->fs_handle->stats, readdir);
 
 	if (FS_IS_OFFLINE(dir_handle->fs_handle))
 		return -dir_handle->fs_handle->offline_reason;
+
+	IOF_LOG_INFO(GAH_PRINT_STR " offset %zi",
+		     GAH_PRINT_VAL(dir_handle->gah), offset);
+
+	if (!dir_handle->gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
 
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.

@@ -54,8 +54,6 @@ int ioc_rename(const char *src, const char *dst)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
-
 	STAT_ADD(fs_handle->stats, rename);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -65,6 +63,8 @@ int ioc_rename(const char *src, const char *dst)
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
+
+	IOF_LOG_INFO("src %s dst %s", src, dst);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, rename), &rpc);

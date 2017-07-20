@@ -82,12 +82,12 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 
 	int rc;
 
-	IOF_LOG_DEBUG("Path: %s", path);
-
 	STAT_ADD(fs_handle->stats, getattr);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	IOF_LOG_INFO("path %s", path);
 
 	req = iof_pool_acquire(fs_handle->gh_pool);
 	if (!req)
@@ -128,12 +128,12 @@ static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 	struct iof_gah_in *in;
 	int rc;
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(fs_handle->stats, getfattr);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

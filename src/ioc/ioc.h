@@ -75,6 +75,7 @@ struct iof_stats {
 	ATOMIC unsigned int futimens;
 #endif
 	ATOMIC unsigned int il_ioctl;
+	ATOMIC unsigned int fsync;
 };
 
 /*For IOF Plugin*/

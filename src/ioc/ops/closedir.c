@@ -73,10 +73,11 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 
 	STAT_ADD(fs_handle->stats, closedir);
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(dir_handle->gah));
-
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	IOF_LOG_INFO("close dir %s" GAH_PRINT_STR, dir,
+		GAH_PRINT_VAL(dir_handle->gah));
 
 	/* If the GAH has been reported as invalid by the server in the past
 	 * then do not attempt to do anything with it.

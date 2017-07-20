@@ -55,7 +55,7 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 	crt_opcode_t opcode;
 	int rc;
 
-	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
+	STAT_ADD(fs_handle->stats, fsync);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
@@ -64,6 +64,8 @@ int ioc_fsync(const char *path, int data, struct fuse_file_info *fi)
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
+
+	IOF_LOG_INFO("path %s data %d handle %p", handle->name, data, handle);
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

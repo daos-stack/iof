@@ -94,6 +94,8 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	struct opendir_cb_r reply = {0};
 	int rc;
 
+	STAT_ADD(fs_handle->stats, opendir);
+
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
@@ -105,8 +107,6 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	dir_handle->ep = fs_handle->dest_ep;
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
-
-	STAT_ADD(fs_handle->stats, opendir);
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(dir_handle->open_rpc);

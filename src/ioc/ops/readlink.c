@@ -106,9 +106,12 @@ int ioc_readlink(const char *link, char *target, size_t len)
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("link %s", link);
-
 	STAT_ADD(fs_handle->stats, readlink);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		return -fs_handle->offline_reason;
+
+	IOF_LOG_INFO("link %s", link);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, readlink), &rpc);

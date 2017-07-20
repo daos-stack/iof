@@ -218,9 +218,6 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	int rc;
 
-	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->common.gah));
-
 	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
@@ -230,6 +227,9 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
 	}
+
+	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
+		     GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
