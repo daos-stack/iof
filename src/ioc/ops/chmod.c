@@ -67,7 +67,7 @@ int ioc_chmod_name(const char *file, mode_t mode)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, chmod), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -130,7 +130,7 @@ int ioc_chmod_gah(mode_t mode, struct fuse_file_info *fi)
 	}
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    handle->common.ep,
+			    &handle->common.ep,
 			    FS_TO_OP(fs_handle, chmod_gah), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

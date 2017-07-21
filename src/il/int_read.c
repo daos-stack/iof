@@ -203,7 +203,7 @@ static int read_direct(char *buff, size_t len, off_t position,
 	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
-	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
 			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -266,7 +266,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
 
-	rc = crt_req_create(fs_handle->crt_ctx, grp->psr_ep,
+	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
 			    FS_TO_OP(f_info, read_bulk), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

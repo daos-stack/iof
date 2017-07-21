@@ -183,7 +183,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 
 	reply.query = query;
 
-	ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
+	ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
 			     QUERY_PSR_OP, query_rpc);
 	if (ret || (*query_rpc == NULL)) {
 		IOF_LOG_ERROR("failed to create query rpc request, ret = %d",
@@ -309,12 +309,12 @@ int dh_clean(void *arg)
 	if (dh->close_rpc)
 		crt_req_decref(dh->close_rpc);
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, dh->ep,
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, &dh->ep,
 			    FS_TO_OP(dh->fs_handle, opendir), &dh->open_rpc);
 	if (rc || !dh->open_rpc)
 		return -1;
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, dh->ep,
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, &dh->ep,
 			    FS_TO_OP(dh->fs_handle, closedir), &dh->close_rpc);
 	if (rc || !dh->close_rpc) {
 		crt_req_decref(dh->open_rpc);
@@ -376,19 +376,19 @@ fh_clean(void *arg)
 
 	fh->common.ep = fh->fs_handle->dest_ep;
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
 	if (rc || !fh->open_rpc)
 		return -1;
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
 	if (rc || !fh->creat_rpc) {
 		crt_req_decref(fh->open_rpc);
 		return -1;
 	}
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, fh->common.ep,
+	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
 	if (rc || !fh->release_rpc) {
 		crt_req_decref(fh->open_rpc);
@@ -454,7 +454,7 @@ gh_clean(void *arg)
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, req->ep,
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, &req->ep,
 			    FS_TO_OP(req->fs_handle, getattr), &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -482,7 +482,7 @@ fgh_clean(void *arg)
 		req->rpc = NULL;
 	}
 
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, req->ep,
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, &req->ep,
 			    FS_TO_OP(req->fs_handle, getattr_gah), &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
@@ -1115,7 +1115,7 @@ static void iof_finish(void *arg)
 		rpc = NULL;
 		group = &iof_state->groups[i];
 		/*send a detach RPC to IONSS*/
-		ret = crt_req_create(iof_state->crt_ctx, group->grp.psr_ep,
+		ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
 				     DETACH_OP, &rpc);
 		if (ret || !rpc) {
 			IOF_LOG_ERROR("Could not create detach req ret = %d",

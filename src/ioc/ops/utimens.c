@@ -66,7 +66,7 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 		return -EROFS;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, utimens), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
@@ -120,7 +120,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 		return -EIO;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, handle->common.ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

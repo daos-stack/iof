@@ -119,7 +119,7 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, statfs), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

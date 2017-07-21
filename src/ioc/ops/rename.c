@@ -66,7 +66,7 @@ int ioc_rename(const char *src, const char *dst)
 		return -EROFS;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, rename), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

@@ -66,7 +66,7 @@ int ioc_symlink(const char *dst, const char *src)
 		return -EROFS;
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
 			    FS_TO_OP(fs_handle, symlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, ret = %u",
