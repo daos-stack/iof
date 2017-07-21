@@ -696,6 +696,9 @@ int main(void)
 	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
 
 	ret = crt_finalize();
+
+	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
+
 	while (!crt_list_empty(&cnss_info->plugins)) {
 		struct plugin_entry *entry;
 
@@ -708,7 +711,6 @@ int main(void)
 		free(entry);
 	}
 
-	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
 
 	free(ctrl_prefix);
 	iof_log_close();
