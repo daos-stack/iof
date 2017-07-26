@@ -54,13 +54,18 @@ if [ "$os" = "Darwin" ]; then
     fi
 fi
 
-
 if [ -z "$SL_PREFIX" ]
 then
     SL_PREFIX=`pwd`/install
 fi
 
-export PATH=$SL_PREFIX/bin:${SL_OMPI_PREFIX}/bin:$PATH
+export PATH=$SL_PREFIX/bin:$PATH
+export PATH=$SL_OMPI_PREFIX/bin:$PATH
+export PATH=$SL_CART_PREFIX/bin:$PATH
+
+# Set this so that the test code knows where to find the CaRT valgrind
+# suppression files.
+export IOF_CART_PREFIX=$SL_CART_PREFIX
 
 # Set some ORTE runtime variables, use "orte-info --param all all" for help on
 # individual options.

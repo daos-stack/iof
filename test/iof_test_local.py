@@ -61,6 +61,11 @@ import subprocess
 import tempfile
 import logging
 import unittest
+#pylint: disable=import-error
+#pylint: disable=no-name-in-module
+from distutils.spawn import find_executable
+#pylint: enable=import-error
+#pylint: enable=no-name-in-module
 import iofcommontestsuite
 import common_methods
 
@@ -561,11 +566,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         mdtest_cmdstr = "/testbin/mdtest/bin/mdtest"
         if not os.path.exists(mdtest_cmdstr):
             mdtest_cmdstr = "mdtest"
-        try:
-            rtn = self.common_launch_cmd(mdtest_cmdstr, 'mdtest -h')
-            if rtn != 0:
-                self.skipTest('mdtest not installed')
-        except FileNotFoundError:
+        mdtest_cmdstr = find_executable(mdtest_cmdstr)
+        if not mdtest_cmdstr:
             self.skipTest('mdtest not installed')
         mdtest = [mdtest_cmdstr, '-d', topdir]
         short_run = list(mdtest)
@@ -622,6 +624,47 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         rtn = self.common_launch_cmd('dd', cmd)
         if rtn != 0:
             self.fail('DD returned error')
+    def test_self_test(self):
+        """Run self-test"""
+
+        self_test = find_executable('self_test')
+        if not self_test:
+            cart_prefix = os.getenv("IOF_CART_PREFIX", None)
+            if not cart_prefix:
+                self.fail('Could not find self_test binary')
+            self_test = os.path.join(cart_prefix, 'bin', 'self_test')
+            if not os.path.exists(self_test):
+                self.fail('Could not find self_test binary')
+        environ = os.environ
+        environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
+        environ['OFI_INTERFACE'] = self.ofi_interface
+        cmd = [self_test, '--singleton', '--path', self.import_dir,
+               '--group-name', 'IONSS', '-e' '0:0',
+               '-r', '1000', '-s' '0 0,0 128,128 0']
+
+        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"), \
+                                self.logdir_name())
+        if not os.path.exists(log_path):
+            os.makedirs(log_path)
+        cmdfileout = os.path.join(log_path, "self_test.out")
+        cmdfileerr = os.path.join(log_path, "self_test.err")
+        procrtn = -1
+        try:
+            with open(cmdfileout, mode='w') as outfile, \
+                open(cmdfileerr, mode='w') as errfile:
+                outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
+                    ("=" * 40), (" ".join(cmd)), ("=" * 40)))
+                outfile.flush()
+                procrtn = subprocess.call(cmd, timeout=180, env=environ,
+                                          stdout=outfile, stderr=errfile)
+        except (FileNotFoundError) as e:
+            self.logger.info("Testnss: %s", \
+                             e.strerror)
+        except (IOError) as e:
+            self.logger.info("Testnss: Error opening the log files: %s", \
+                             e.errno)
+        if procrtn != 0:
+            self.fail("IO interception test failed: %s" % procrtn)
 
     def go(self):
         """A wrapper method to invoke all methods as subTests"""
@@ -699,11 +742,6 @@ def local_launch(ioil_dir):
 
 if __name__ == '__main__':
     import argparse
-    #pylint: disable=import-error
-    #pylint: disable=no-name-in-module
-    from distutils.spawn import find_executable
-    #pylint: enable=import-error
-    #pylint: enable=no-name-in-module
 
     # Invoke testing if this command is run directly
     #
