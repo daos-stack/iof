@@ -38,9 +38,9 @@
 #ifndef __CTRL_FS_UTIL_TEST_H__
 #define __CTRL_FS_UTIL_TEST_H__
 
-#include "ctrl_fs_util.h"
+#include "iof_ctrl_util.h"
 
-int ctrl_fs_util_test_init(const char *ctrl_prefix);
-int ctrl_fs_util_test_finalize(void);
+int iof_ctrl_util_test_init(const char *ctrl_prefix);
+int iof_ctrl_util_test_finalize(void);
 
 #endif /* __CTRL_FS_UTIL_TEST_H__ */

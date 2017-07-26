@@ -48,7 +48,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <CUnit/Basic.h>
-#include "ctrl_fs_util.h"
+#include "iof_ctrl_util.h"
 #include "iof_ioctl.h"
 
 static const char *cnss_prefix;
@@ -56,7 +56,7 @@ static char *mount_dir;
 
 
 #define WRITE_LOG_VERBOSE(fmt2, fmt1, ...) \
-	ctrl_fs_write_strf("write_log", fmt1 fmt2, __VA_ARGS__)
+	iof_ctrl_write_strf("write_log", fmt1 fmt2, __VA_ARGS__)
 
 #define WRITE_LOG(...) \
 	WRITE_LOG_VERBOSE(" at %s:%d", __VA_ARGS__, __FILE__, __LINE__)
@@ -67,14 +67,14 @@ char big_string[BUF_SIZE];
 
 static int init_suite(void)
 {
-	char buf1[CTRL_FS_MAX_LEN];
-	char buf2[CTRL_FS_MAX_LEN];
+	char buf1[IOF_CTRL_MAX_LEN];
+	char buf2[IOF_CTRL_MAX_LEN];
 	FILE *fp;
 	int mnt_num = 0;
 	int rc = CUE_SUCCESS;
 	int id;
 
-	rc = ctrl_fs_util_init(&cnss_prefix, &id);
+	rc = iof_ctrl_util_init(&cnss_prefix, &id);
 	if (rc != 0) {
 		printf("ERROR: Could not find cnss\n");
 		return -1;
@@ -83,7 +83,7 @@ static int init_suite(void)
 
 	for (;;) {
 		sprintf(buf1, "iof/projections/%d/mount_point", mnt_num++);
-		rc = ctrl_fs_read_str(buf2, CTRL_FS_MAX_LEN, buf1);
+		rc = iof_ctrl_read_str(buf2, IOF_CTRL_MAX_LEN, buf1);
 
 		if (rc != 0) {
 			printf("ERROR: No writeable mount found\n");
@@ -115,7 +115,7 @@ static int clean_suite(void)
 	free(mount_dir);
 
 	WRITE_LOG("finalizing test");
-	ctrl_fs_util_finalize();
+	iof_ctrl_util_finalize();
 
 	return CUE_SUCCESS;
 }

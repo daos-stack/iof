@@ -98,12 +98,12 @@ static int check_destroy_foo(void *arg)
 static int check_file_read(const char *fname, const char *expected,
 			   const char *source, int line)
 {
-	char buf[CTRL_FS_MAX_LEN];
+	char buf[IOF_CTRL_MAX_LEN];
 	int rc;
 
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);
 
-	rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, fname);
+	rc = iof_ctrl_read_str(buf, IOF_CTRL_MAX_LEN, fname);
 
 	if (rc != 0) {
 		printf("Error reading %s at %s:%d.  (rc = %d, errno = %s)\n",
@@ -130,7 +130,7 @@ static int check_file_write(const char *fname, const char *value,
 
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);
 
-	rc = ctrl_fs_write_str(value, fname);
+	rc = iof_ctrl_write_str(value, fname);
 
 	if (rc != 0) {
 		printf("Error writing %s at %s:%d.  (rc = %d, errno = %s)\n",
@@ -149,7 +149,7 @@ static int check_file_read_##ext(const char *fname, type expected, \
 	type value;                                                           \
 	int rc;                                                               \
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);                   \
-	rc = ctrl_fs_read_##ext(&value, fname);                               \
+	rc = iof_ctrl_read_##ext(&value, fname);                              \
 	if (rc != 0) {                                                        \
 		printf("Error reading %s at %s:%d.  (rc = %d, errno = %s)\n", \
 		       fname, source, line, rc, strerror(errno));             \
@@ -176,7 +176,7 @@ static int check_file_write_##ext(const char *fname, type value,              \
 {                                                                             \
 	int rc;                                                               \
 	IOF_LOG_INFO("Run check at %s:%d\n", source, line);                   \
-	rc = ctrl_fs_write_##ext(value, fname);                               \
+	rc = iof_ctrl_write_##ext(value, fname);                              \
 	if (rc != 0) {                                                        \
 		printf("Error writing %s at %s:%d.  (rc = %d, errno = %s)\n", \
 		       fname, source, line, rc, strerror(errno));             \
@@ -224,7 +224,7 @@ static int run_tests(void)
 	num_failures += CHECK_FILE_WRITE("dump_log", "test");
 	num_failures += CHECK_FILE_WRITE("write_log", "test");
 
-	rc = ctrl_fs_get_tracker_id(&id, "client");
+	rc = iof_ctrl_get_tracker_id(&id, "client");
 	if (rc != 0 || id != 5) {
 		printf("Expected 5 from client file\n");
 		num_failures++;
@@ -298,12 +298,12 @@ int main(int argc, char **argv)
 
 	end = buf + strlen(buf);
 
-	printf("Testing ctrl_fs in %s\n", buf);
+	printf("Testing iof_ctrl in %s\n", buf);
 	strcpy(end, "/iof.log");
 
 	setenv("CRT_LOG_FILE", buf, 1);
 	setenv("CRT_LOG_MASK", "INFO,ctrl=DEBUG", 1);
-	iof_log_init("ctrl", "ctrl_fs_test", NULL);
+	iof_log_init("ctrl", "iof_ctrl_test", NULL);
 
 	strcpy(end, "/.ctrl");
 
@@ -324,11 +324,11 @@ int main(int argc, char **argv)
 	ctrl_register_constant_int64(NULL, "int", -1);
 	ctrl_register_constant_uint64(NULL, "uint", (uint64_t)-1);
 
-	ctrl_fs_util_test_init(buf);
+	iof_ctrl_util_test_init(buf);
 
 	num_failures = run_tests();
 	if (!interactive) { /* Invoke shutdown */
-		rc = ctrl_fs_write_int64(1, "shutdown");
+		rc = iof_ctrl_write_int64(1, "shutdown");
 		if (rc != 0) {
 			num_failures++;
 			printf("shutdown trigger failed: rc = %d\n", rc);
@@ -338,7 +338,7 @@ int main(int argc, char **argv)
 	wait_for_shutdown(&info);
 shutdown:
 
-	ctrl_fs_util_test_finalize();
+	iof_ctrl_util_test_finalize();
 
 	ctrl_fs_shutdown();
 

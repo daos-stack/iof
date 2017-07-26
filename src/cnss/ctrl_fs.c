@@ -63,7 +63,7 @@
 #define DEF_LOG_HANDLE ctrl_log_handle
 #include "log.h"
 #include "ctrl_fs.h"
-#include "ctrl_fs_util.h"
+#include "iof_ctrl_util.h"
 
 static int ctrl_log_handle;
 
@@ -92,7 +92,7 @@ struct ctrl_event {
 };
 
 struct ctrl_constant {
-	char buf[CTRL_FS_MAX_CONSTANT_LEN];
+	char buf[IOF_CTRL_MAX_CONSTANT_LEN];
 };
 
 struct ctrl_tracker {
@@ -216,7 +216,7 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 {
 	struct ctrl_node *newnode = NULL;
 	int rc;
-	size_t size = CTRL_FS_MAX_LEN;
+	size_t size = IOF_CTRL_MAX_LEN;
 	size_t dsize = 0;
 
 	*node = NULL;
@@ -660,7 +660,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	 * terminating NULL character
 	 */
 	len = strlen(value) + 1;
-	if (len >= CTRL_FS_MAX_CONSTANT_LEN) {
+	if (len >= IOF_CTRL_MAX_CONSTANT_LEN) {
 		IOF_LOG_ERROR("value too long for ctrl constant");
 		return -EINVAL;
 	}
@@ -1099,7 +1099,7 @@ static int ctrl_read(const char *fname,
 {
 	struct open_handle *handle = (struct open_handle *)finfo->fh;
 	struct ctrl_node *node = handle->node;
-	char mybuf[CTRL_FS_MAX_LEN];
+	char mybuf[IOF_CTRL_MAX_LEN];
 	const char *payload;
 	size_t len;
 	int rc;
@@ -1124,7 +1124,7 @@ static int ctrl_read(const char *fname,
 			IOF_LOG_ERROR("No callback reading ctrl variable");
 			return -EIO;
 		}
-		rc = read_cb(mybuf, CTRL_FS_MAX_LEN, cb_arg);
+		rc = read_cb(mybuf, IOF_CTRL_MAX_LEN, cb_arg);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Error reading ctrl variable");
 			return -ENOENT;
@@ -1165,7 +1165,7 @@ static int ctrl_write(const char *fname,
 {
 	struct open_handle *handle = (struct open_handle *)finfo->fh;
 	struct ctrl_node *node = handle->node;
-	char mybuf[CTRL_FS_MAX_LEN];
+	char mybuf[IOF_CTRL_MAX_LEN];
 	int rc;
 
 	IOF_LOG_INFO("ctrl fs write called for %s", node->name);
@@ -1198,8 +1198,8 @@ static int ctrl_write(const char *fname,
 		if (write_cb != NULL) {
 			size_t mylen = len;
 
-			if (len > (CTRL_FS_MAX_LEN - 1))
-				mylen = CTRL_FS_MAX_LEN - 1;
+			if (len > (IOF_CTRL_MAX_LEN - 1))
+				mylen = IOF_CTRL_MAX_LEN - 1;
 
 			memcpy(mybuf, buf, mylen);
 			mybuf[mylen] = 0;

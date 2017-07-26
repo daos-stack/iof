@@ -56,7 +56,7 @@
 #include "iof_ioctl.h"
 #include "iof_vector.h"
 #include "iof_common.h"
-#include "ctrl_fs_util.h"
+#include "iof_ctrl_util.h"
 
 FOREACH_INTERCEPT(IOIL_FORWARD_DECL)
 
@@ -108,7 +108,7 @@ int ioil_initialize_fd_table(int max_fds)
 
 static int find_projections(void)
 {
-	char buf[CTRL_FS_MAX_LEN];
+	char buf[IOF_CTRL_MAX_LEN];
 	char tmp[BUFSIZE];
 	int rc;
 	int i;
@@ -116,7 +116,7 @@ static int find_projections(void)
 	crt_rank_t rank;
 	uint32_t tag;
 
-	rc = ctrl_fs_read_uint32(&version, "iof/ioctl_version");
+	rc = iof_ctrl_read_uint32(&version, "iof/ioctl_version");
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not read ioctl version, rc = %d", rc);
 		return 1;
@@ -134,7 +134,7 @@ static int find_projections(void)
 		return 1;
 	}
 
-	rc = ctrl_fs_read_uint32(&ionss_count, "iof/ionss_count");
+	rc = iof_ctrl_read_uint32(&ionss_count, "iof/ionss_count");
 	if (rc != 0) {
 		IOF_LOG_INFO("Could not get ionss count, rc = %d", rc);
 		return 1;
@@ -146,7 +146,7 @@ static int find_projections(void)
 
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/name", i);
 
-		rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, tmp);
+		rc = iof_ctrl_read_str(buf, IOF_CTRL_MAX_LEN, tmp);
 		if (rc != 0) {
 			IOF_LOG_INFO("Could not get ionss name, rc = %d", rc);
 			return 1;
@@ -163,7 +163,7 @@ static int find_projections(void)
 		}
 
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);
-		rc = ctrl_fs_read_uint32(&rank, tmp);
+		rc = iof_ctrl_read_uint32(&rank, tmp);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not read psr_rank, rc = %d", rc);
 			return 1;
@@ -173,7 +173,7 @@ static int find_projections(void)
 		grp_info->grp_id = i;
 
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_tag", i);
-		rc = ctrl_fs_read_uint32(&tag, tmp);
+		rc = iof_ctrl_read_uint32(&tag, tmp);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not read psr_tag, rc = %d", rc);
 			return 1;
@@ -183,7 +183,7 @@ static int find_projections(void)
 		grp_info->enabled = true;
 	}
 
-	rc = ctrl_fs_read_uint32(&projection_count, "iof/projection_count");
+	rc = iof_ctrl_read_uint32(&projection_count, "iof/projection_count");
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not read projection count, rc = %d", rc);
 		return 1;
@@ -201,7 +201,7 @@ static int find_projections(void)
 		proj->cli_fs_id = i;
 		proj->crt_ctx = crt_ctx;
 		snprintf(tmp, BUFSIZE, "iof/projections/%d/group_id", i);
-		rc = ctrl_fs_read_uint32(&proj->grp_id, tmp);
+		rc = iof_ctrl_read_uint32(&proj->grp_id, tmp);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not read grp_id, rc = %d", rc);
 			return 1;
@@ -280,7 +280,7 @@ static ssize_t pwritev_rpc(struct fd_entry *entry, const struct iovec *iov,
 
 static __attribute__((constructor)) void ioil_init(void)
 {
-	char buf[CTRL_FS_MAX_LEN];
+	char buf[IOF_CTRL_MAX_LEN];
 	struct rlimit rlimit;
 	int rc;
 
@@ -303,7 +303,7 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = ctrl_fs_util_init(&cnss_prefix, &cnss_id);
+	rc = iof_ctrl_util_init(&cnss_prefix, &cnss_id);
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not find CNSS (rc = %d)."
@@ -311,7 +311,7 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = ctrl_fs_read_str(buf, CTRL_FS_MAX_LEN, "crt_protocol");
+	rc = iof_ctrl_read_str(buf, IOF_CTRL_MAX_LEN, "crt_protocol");
 	if (rc == 0)
 		setenv("CRT_PHY_ADDR_STR", buf, 1);
 
@@ -343,7 +343,7 @@ static __attribute__((constructor)) void ioil_init(void)
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not configure projections, rc = %d"
 			      " disabling kernel bypass", rc);
-		ctrl_fs_util_finalize();
+		iof_ctrl_util_finalize();
 		return;
 	}
 
@@ -364,7 +364,7 @@ static __attribute__((destructor)) void ioil_fini(void)
 			crt_group_detach(ionss_grps[i].dest_grp);
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
-		ctrl_fs_util_finalize();
+		iof_ctrl_util_finalize();
 		free(ionss_grps);
 		free(projections);
 	}

@@ -50,7 +50,7 @@
 #include "iof_atomic.h"
 #include "log.h"
 #include "iof_mntent.h"
-#include "ctrl_fs_util.h"
+#include "iof_ctrl_util.h"
 
 static char *cnss_prefix;
 static int ctrl_fd = -1;
@@ -65,12 +65,12 @@ static int open_for_read(int *fd, const char *path)
 	*fd = -1;
 
 	if (ctrl_fd == -1)
-		return -CTRL_FS_NOT_INITIALIZED;
+		return -IOF_CTRL_NOT_INITIALIZED;
 
 	*fd = openat(ctrl_fd, path, O_RDONLY);
 
 	if (*fd == -1)
-		return -CTRL_FS_OPEN_FAILED;
+		return -IOF_CTRL_OPEN_FAILED;
 
 	return 0;
 }
@@ -89,7 +89,7 @@ static int open_stream_for_read(FILE **fp, const char *path)
 	*fp = fdopen(fd, "r");
 	if (*fp == NULL) {
 		close(fd);
-		return -CTRL_FS_OPEN_FAILED;
+		return -IOF_CTRL_OPEN_FAILED;
 	}
 
 	return 0;
@@ -102,26 +102,26 @@ static int open_stream_for_write(FILE **fp, const char *path)
 	*fp = NULL;
 
 	if (ctrl_fd == -1)
-		return -CTRL_FS_NOT_INITIALIZED;
+		return -IOF_CTRL_NOT_INITIALIZED;
 
 	fd = openat(ctrl_fd, path, O_WRONLY);
 
 	if (fd == -1)
-		return -CTRL_FS_OPEN_FAILED;
+		return -IOF_CTRL_OPEN_FAILED;
 
 	*fp = fdopen(fd, "w");
 	if (*fp == NULL) {
 		close(fd);
-		return -CTRL_FS_OPEN_FAILED;
+		return -IOF_CTRL_OPEN_FAILED;
 	}
 
 	return 0;
 }
 
-int ctrl_fs_read_str(char *str, int len, const char *path)
+int iof_ctrl_read_str(char *str, int len, const char *path)
 {
 	char *last;
-	char buf[CTRL_FS_MAX_LEN];
+	char buf[IOF_CTRL_MAX_LEN];
 	ssize_t bytes_read;
 	int fd;
 	int ret;
@@ -131,14 +131,14 @@ int ctrl_fs_read_str(char *str, int len, const char *path)
 	if (ret != 0)
 		return ret;
 
-	bytes_read = read(fd, buf, CTRL_FS_MAX_LEN);
+	bytes_read = read(fd, buf, IOF_CTRL_MAX_LEN);
 
 	if (bytes_read == -1)
-		return -CTRL_FS_IO_FAILED;
-	buflen = CTRL_FS_MAX_LEN;
+		return -IOF_CTRL_IO_FAILED;
+	buflen = IOF_CTRL_MAX_LEN;
 	buf[buflen - 1] = 0;
 
-	if (bytes_read > 0 && bytes_read < CTRL_FS_MAX_LEN) {
+	if (bytes_read > 0 && bytes_read < IOF_CTRL_MAX_LEN) {
 		buflen = bytes_read + 1;
 		buf[bytes_read] = 0;
 		last = &buf[bytes_read - 1];
@@ -171,23 +171,23 @@ int ctrl_fs_read_str(char *str, int len, const char *path)
 		FILE *fp;                              \
 		int ret;                               \
 		if (path == NULL)                      \
-			return -CTRL_FS_INVALID_ARG;   \
+			return -IOF_CTRL_INVALID_ARG;  \
 		ret = open_stream_for_read(&fp, path); \
 		if (ret != 0)                          \
 			return ret;                    \
 		ret = fscanf(fp, format, val);         \
 		if (ret <= 0)                          \
-			return -CTRL_FS_IO_FAILED;     \
+			return -IOF_CTRL_IO_FAILED;    \
 		fclose(fp);                            \
 		return 0;                              \
 	}
 
-DECLARE_READ_FUNC(ctrl_fs_read_int64, int64_t *, "%" PRIi64)
-DECLARE_READ_FUNC(ctrl_fs_read_uint64, uint64_t *, "%" PRIu64)
-DECLARE_READ_FUNC(ctrl_fs_read_int32, int32_t *, "%i")
-DECLARE_READ_FUNC(ctrl_fs_read_uint32, uint32_t *, "%u")
+DECLARE_READ_FUNC(iof_ctrl_read_int64, int64_t *, "%" PRIi64)
+DECLARE_READ_FUNC(iof_ctrl_read_uint64, uint64_t *, "%" PRIu64)
+DECLARE_READ_FUNC(iof_ctrl_read_int32, int32_t *, "%i")
+DECLARE_READ_FUNC(iof_ctrl_read_uint32, uint32_t *, "%u")
 
-int ctrl_fs_write_strf(const char *path, const char *format, ...)
+int iof_ctrl_write_strf(const char *path, const char *format, ...)
 {
 	va_list ap;
 	FILE *fp;
@@ -195,7 +195,7 @@ int ctrl_fs_write_strf(const char *path, const char *format, ...)
 	int flags;
 
 	if (path == NULL)
-		return -CTRL_FS_INVALID_ARG;
+		return -IOF_CTRL_INVALID_ARG;
 
 	ret = open_stream_for_write(&fp, path);
 
@@ -215,33 +215,33 @@ int ctrl_fs_write_strf(const char *path, const char *format, ...)
 	fclose(fp);
 
 	if (ret <= 0)
-		return -CTRL_FS_IO_FAILED;
+		return -IOF_CTRL_IO_FAILED;
 
 	return 0;
 }
 
-int ctrl_fs_trigger(const char *path)
+int iof_ctrl_trigger(const char *path)
 {
 	int ret;
 
 	if (ctrl_fd == -1)
-		return -CTRL_FS_NOT_INITIALIZED;
+		return -IOF_CTRL_NOT_INITIALIZED;
 
 	ret = utimensat(ctrl_fd, path, NULL, 0);
 
 	if (ret == -1)
-		return -CTRL_FS_BAD_FILE;
+		return -IOF_CTRL_BAD_FILE;
 
 	return 0;
 }
 
-int ctrl_fs_get_tracker_id(int *val, const char *path)
+int iof_ctrl_get_tracker_id(int *val, const char *path)
 {
 	FILE *fp;
 	int ret;
 
 	if (val == NULL || path == NULL)
-		return -CTRL_FS_INVALID_ARG;
+		return -IOF_CTRL_INVALID_ARG;
 
 	ret = open_stream_for_read(&fp, path);
 	if (ret != 0)
@@ -301,7 +301,7 @@ static int check_mnt(struct mntent *entry, void *priv)
 		goto cleanup;
 	}
 
-	rc = ctrl_fs_read_int32(&cnss_id, "cnss_id");
+	rc = iof_ctrl_read_int32(&cnss_id, "cnss_id");
 	if (rc != 0) {
 		IOF_LOG_INFO("Could not read cnss id: rc = %d, errno = %s",
 			     rc, strerror(errno));
@@ -350,7 +350,7 @@ static void init_fs_util(void)
 		else
 			IOF_LOG_ERROR("Could not detect active CNSS");
 
-		init_rc = -CTRL_FS_NOT_FOUND;
+		init_rc = -IOF_CTRL_NOT_FOUND;
 		return;
 		/* If multiple users call init, we need to ensure
 		 * we only initialize once
@@ -360,10 +360,10 @@ static void init_fs_util(void)
 	init_rc = 0;
 }
 
-int ctrl_fs_util_init(const char **prefix, int *id)
+int iof_ctrl_util_init(const char **prefix, int *id)
 {
 	if (prefix == NULL || id == NULL)
-		return -CTRL_FS_INVALID_ARG;
+		return -IOF_CTRL_INVALID_ARG;
 
 	/* If multiple users call init, we need to ensure
 	 * we only initialize once but keep track of callers
@@ -385,7 +385,7 @@ int ctrl_fs_util_init(const char **prefix, int *id)
 	return 0;
 }
 
-int ctrl_fs_util_finalize(void)
+int iof_ctrl_util_finalize(void)
 {
 	int count;
 
@@ -404,18 +404,18 @@ int ctrl_fs_util_finalize(void)
 	return 0;
 }
 
-int ctrl_fs_util_test_init(const char *ctrl_path)
+int iof_ctrl_util_test_init(const char *ctrl_path)
 {
 	ctrl_fd = open(ctrl_path, O_RDONLY|O_DIRECTORY);
 	if (ctrl_fd == -1) {
 		IOF_LOG_ERROR("Could not open %s for ctrl fs",
 			      ctrl_path);
-		return -CTRL_FS_NOT_FOUND;
+		return -IOF_CTRL_NOT_FOUND;
 	}
 	return 0;
 }
 
-int ctrl_fs_util_test_finalize(void)
+int iof_ctrl_util_test_finalize(void)
 {
 	close(ctrl_fd);
 	return 0;
