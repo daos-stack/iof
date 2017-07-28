@@ -456,7 +456,7 @@ IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
 	SAVE_ERRNO(fd == -1);
 
 	/* Ignore O_APPEND files for now */
-	if (ioil_initialized && ((flags & O_APPEND) == 0))
+	if (ioil_initialized && ((flags & (O_PATH|O_APPEND)) == 0))
 		check_ioctl_on_open(fd, flags);
 
 	RESTORE_ERRNO(fd == -1);
