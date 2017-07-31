@@ -47,15 +47,22 @@
 #include "log.h"
 #include "ios_gah.h"
 
-int ioc_truncate_name(const char *file, off_t len)
+/*
+ * Send a RPC to call ftruncate.
+ *
+ * Currently there is no way for the server to reply with IOF_GAH_INVALID so an
+ * an opportunity to invalidate a local GAH could be missed here.
+ */
+int ioc_ftruncate(off_t len, struct fuse_file_info *fi)
 {
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_truncate_in *in;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_ftruncate_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	STAT_ADD(fs_handle->stats, truncate);
+	STAT_ADD(fs_handle->stats, ftruncate);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
@@ -65,10 +72,18 @@ int ioc_truncate_name(const char *file, off_t len)
 		return -EROFS;
 	}
 
-	IOF_LOG_INFO("truncate %s length to %#zx", file, len);
+	IOF_LOG_INFO("truncate %#zx " GAH_PRINT_STR, len,
+		GAH_PRINT_VAL(handle->common.gah));
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-		FS_TO_OP(fs_handle, truncate), &rpc);
+	if (!handle->common.gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		return -EIO;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
+			    FS_TO_OP(fs_handle, ftruncate), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -77,9 +92,8 @@ int ioc_truncate_name(const char *file, off_t len)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
+	in->gah = handle->common.gah;
 	in->len = len;
-	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -88,7 +102,15 @@ int ioc_truncate_name(const char *file, off_t len)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("fi %p rc %d", fi, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
+}
+
+int ioc_truncate(const char *file, off_t len, struct fuse_file_info *fi)
+{
+	if (fi)
+		return ioc_ftruncate(len, fi);
+	else
+		return ioc_truncate_name(file, len);
 }

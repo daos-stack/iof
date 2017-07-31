@@ -41,54 +41,74 @@
 #else
 #include <fuse/fuse.h>
 #endif
-
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"
-#include "ios_gah.h"
 
-int ioc_truncate_name(const char *file, off_t len)
+static int ioc_getattr_gah(struct stat *stbuf, struct fuse_file_info *fi)
 {
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_truncate_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct getattr_req *req;
+	struct iof_gah_in *in;
 	int rc;
 
-	STAT_ADD(fs_handle->stats, truncate);
+	STAT_ADD(fs_handle->stats, getfattr);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
 
-	IOF_LOG_INFO("truncate %s length to %#zx", file, len);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-		FS_TO_OP(fs_handle, truncate), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+	if (!handle->common.gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
 		return -EIO;
 	}
 
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
-	in->len = len;
-	in->fs_id = fs_handle->fs_id;
+	req = iof_pool_acquire(fs_handle->fgh_pool);
+	if (!req)
+		return -ENOMEM;
 
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
+	in = crt_req_get(req->rpc);
+	in->gah = handle->common.gah;
+	req->reply.stat = stbuf;
+
+	rc = crt_req_send(req->rpc, getattr_cb, &req->reply);
 	if (rc) {
 		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		iof_pool_release(fs_handle->gh_pool, req);
 		return -EIO;
 	}
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
+	iof_pool_restock(fs_handle->fgh_pool);
+	crt_req_addref(req->rpc);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
+	iof_fs_wait(&fs_handle->proj, &req->reply.tracker);
 
-	return IOC_STATUS_TO_RC(&reply);
+	if (req->reply.err == EHOSTDOWN)
+		ioc_mark_ep_offline(fs_handle, &req->rpc->cr_ep);
+
+	rc = IOC_STATUS_TO_RC(&req->reply);
+
+	/* Cache the inode number */
+	if (rc == 0)
+		handle->inode_no = stbuf->st_ino;
+
+	IOF_LOG_DEBUG(GAH_PRINT_STR " rc %d", GAH_PRINT_VAL(handle->common.gah),
+		      rc);
+
+	iof_pool_release(fs_handle->fgh_pool, req);
+
+	return rc;
+}
+
+int ioc_getattr(const char *path, struct stat *stbuf, struct fuse_file_info *fi)
+{
+	if (fi)
+		return ioc_getattr_gah(stbuf, fi);
+
+	if (!path)
+		return -EIO;
+	return ioc_getattr_name(path, stbuf);
 }

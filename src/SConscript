@@ -75,6 +75,10 @@ RPC_SRC = ['chmod',
            'unlink',
            'utimens',
            'write']
+FUSE3_RPC_SRC = ['fchmod',
+                 'fgetattr',
+                 'ftruncate',
+                 'futimens']
 IOFIL_SRC = ['int_posix.c', 'int_read.c', 'int_write.c']
 
 def build_common(env, files, is_shared):
@@ -215,6 +219,9 @@ def scons():
         cnss_obj += cenv.Object(os.path.join('ioc', src))
     for src in RPC_SRC:
         cnss_obj += cenv.Object(os.path.join('ioc', 'ops', '%s.c' % src))
+    if cenv.get('fuse3'):
+        for src in FUSE3_RPC_SRC:
+            cnss_obj += cenv.Object(os.path.join('ioc', 'ops', '%s.c' % src))
     progs = cenv.Program('cnss/cnss', common + cnss_obj)
 
     # Build the IONSS application
