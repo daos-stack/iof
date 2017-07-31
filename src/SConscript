@@ -199,6 +199,14 @@ def scons():
                               LIBS=['osxfuse'])
         else:
             cenv.AppendUnique(LIBS=['fuse'])
+        # Fuse2 has a number of bugs and doesn't support a number
+        # of RPC types so disable it and insist on fuse3 support.
+        # At some point in the future we'll make this the default
+        # and remove the need for an option but for now insist on
+        # fuse3 so there isn't a change in behaviour for the normal
+        # case.
+        print 'FUSE2 no longer supported, build with fuse3=Yes'
+        Exit(1)
 
     cnss_obj = []
     for src in CNSS_SRC:
