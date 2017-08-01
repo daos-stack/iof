@@ -680,6 +680,66 @@ static int online_write_cb(uint64_t value, void *arg)
 	return 0;
 }
 
+static int
+iof_check_complete(void *arg)
+{
+	struct iof_tracker *tracker = arg;
+
+	return iof_tracker_test(tracker);
+}
+
+static void *
+iof_thread(void *arg)
+{
+	struct iof_state *iof_state = arg;
+	int			rc;
+
+	iof_tracker_signal(&iof_state->thread_start_tracker);
+	do {
+		rc = crt_progress(iof_state->crt_ctx, 1, iof_check_complete,
+				  &iof_state->thread_stop_tracker);
+
+		if (rc != 0 && rc != -CER_TIMEDOUT)
+			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+		if (rc == -CER_TIMEDOUT)
+			sched_yield();
+
+	} while (!iof_tracker_test(&iof_state->thread_stop_tracker));
+
+	if (rc != 0)
+		IOF_LOG_ERROR("crt_progress error on shutdown rc: %d", rc);
+
+	iof_tracker_signal(&iof_state->thread_shutdown_tracker);
+	return NULL;
+}
+
+static int
+iof_thread_start(struct iof_state *iof_state)
+{
+	int rc;
+
+	rc = pthread_create(&iof_state->thread, NULL,
+			    iof_thread, iof_state);
+
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not start progress thread");
+		return 1;
+	}
+
+	iof_tracker_wait(&iof_state->thread_start_tracker);
+	return 0;
+}
+
+static void
+iof_thread_stop(struct iof_state *iof_state)
+{
+	IOF_LOG_INFO("Stopping CRT thread");
+	iof_tracker_signal(&iof_state->thread_stop_tracker);
+	iof_tracker_wait(&iof_state->thread_shutdown_tracker);
+	pthread_join(iof_state->thread, 0);
+	IOF_LOG_INFO("Stopped CRT thread");
+}
+
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
 		fs_handle->stats_dir,				\
 		#_STAT,						\
@@ -765,6 +825,7 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->fs_id = fs_info->id;
 	fs_handle->proj.cli_fs_id = id;
+	fs_handle->proj.progress_thread = 1;
 
 	fs_handle->stats = calloc(1, sizeof(*fs_handle->stats));
 	if (!fs_handle->stats)
@@ -1037,6 +1098,15 @@ static int iof_post_start(void *arg)
 		return IOF_ERR_CTRL_FS;
 	}
 
+	/* Start progress thread */
+	iof_tracker_init(&iof_state->thread_start_tracker, 1);
+	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
+	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
+	ret = iof_thread_start(iof_state);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create progress thread");
+		return 1;
+	}
 
 	for (grp_num = 0; grp_num < iof_state->num_groups; grp_num++) {
 		struct iof_group_info *group = &iof_state->groups[grp_num];
@@ -1149,6 +1219,9 @@ static void iof_finish(void *arg)
 				      ret);
 		free(group->grp_name);
 	}
+
+	/* Stop progress thread */
+	iof_thread_stop(iof_state);
 
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)

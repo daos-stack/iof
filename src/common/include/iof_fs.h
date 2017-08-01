@@ -41,6 +41,7 @@
 #include <cart/types.h>
 #include <iof_atomic.h>
 #include <ios_gah.h>
+#include <sched.h>
 
 struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */
@@ -56,6 +57,7 @@ struct iof_projection {
 	uint32_t			grp_id;    /* CNSS defined ionss id */
 	int				cli_fs_id; /* client projection id */
 	bool				enabled;   /* Projection enabled */
+	bool				progress_thread;   /* progress_thread */
 };
 
 /* Common data stored on open file handles */
@@ -114,11 +116,26 @@ static inline bool iof_tracker_test(struct iof_tracker *tracker)
 	return false;
 }
 
+static inline void iof_tracker_wait(struct iof_tracker *tracker)
+{
+	while (!iof_tracker_test(tracker))
+		sched_yield();
+}
+
 /* Progress until all events have signaled */
 void iof_wait(crt_context_t, struct iof_tracker *);
 
 /* Progress until all events have signaled */
-#define iof_fs_wait(fs_handle, event) \
-	iof_wait((fs_handle)->crt_ctx, event)
+static inline void iof_fs_wait(struct iof_projection *iof_state,
+			       struct iof_tracker *tracker)
+{
+	/* If there is no progress thread then call progress from within
+	 * this function, else just wait
+	 */
+	if (!iof_state->progress_thread)
+		return iof_wait(iof_state->crt_ctx, tracker);
+
+	iof_tracker_wait(tracker);
+}
 
 #endif

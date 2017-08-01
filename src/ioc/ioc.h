@@ -91,6 +91,13 @@ struct iof_state {
 	struct ctrl_dir			*projections_dir;
 	struct iof_group_info		*groups;
 	uint32_t			num_groups;
+
+	int progress_thread;
+
+	pthread_t			thread;
+	struct iof_tracker		thread_start_tracker;
+	struct iof_tracker		thread_stop_tracker;
+	struct iof_tracker		thread_shutdown_tracker;
 };
 
 struct iof_group_info {
@@ -136,7 +143,6 @@ struct iof_projection_info {
 	/* If set to True then projection is off-line */
 	int				offline_reason;
 };
-
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
 
