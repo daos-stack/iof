@@ -429,7 +429,7 @@ static bool drop_reference_if_disabled(int fd, struct fd_entry *entry)
 	return true;
 }
 
-IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
+IOF_PUBLIC int iof_open(const char *pathname, int flags, ...)
 {
 	int fd;
 	unsigned int mode; /* mode_t gets "promoted" to unsigned int
@@ -464,7 +464,7 @@ IOIL_PUBLIC int IOIL_DECL(open)(const char *pathname, int flags, ...)
 	return fd;
 }
 
-IOIL_PUBLIC int IOIL_DECL(creat)(const char *pathname, mode_t mode)
+IOF_PUBLIC int iof_creat(const char *pathname, mode_t mode)
 {
 	int fd;
 
@@ -483,7 +483,7 @@ IOIL_PUBLIC int IOIL_DECL(creat)(const char *pathname, mode_t mode)
 	return fd;
 }
 
-IOIL_PUBLIC int IOIL_DECL(close)(int fd)
+IOF_PUBLIC int iof_close(int fd)
 {
 	struct fd_entry *entry;
 	int rc;
@@ -502,7 +502,7 @@ IOIL_PUBLIC int IOIL_DECL(close)(int fd)
 	return __real_close(fd);
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
+IOF_PUBLIC ssize_t iof_read(int fd, void *buf, size_t len)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
@@ -527,8 +527,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(read)(int fd, void *buf, size_t len)
 	return bytes_read;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
-				     size_t len, off_t offset)
+IOF_PUBLIC ssize_t iof_pread(int fd, void *buf, size_t len, off_t offset)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
@@ -550,7 +549,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pread)(int fd, void *buf,
 	return bytes_read;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
+IOF_PUBLIC ssize_t iof_write(int fd, const void *buf, size_t len)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
@@ -575,8 +574,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(write)(int fd, const void *buf, size_t len)
 	return bytes_written;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
-				      size_t len, off_t offset)
+IOF_PUBLIC ssize_t iof_pwrite(int fd, const void *buf, size_t len, off_t offset)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
@@ -598,7 +596,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwrite)(int fd, const void *buf,
 	return bytes_written;
 }
 
-IOIL_PUBLIC off_t IOIL_DECL(lseek)(int fd, off_t offset, int whence)
+IOF_PUBLIC off_t iof_lseek(int fd, off_t offset, int whence)
 {
 	struct fd_entry *entry;
 	off_t new_offset = -1;
@@ -642,8 +640,7 @@ cleanup:
 	return new_offset;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
-				     int count)
+IOF_PUBLIC ssize_t iof_readv(int fd, const struct iovec *vector, int count)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
@@ -668,8 +665,8 @@ IOIL_PUBLIC ssize_t IOIL_DECL(readv)(int fd, const struct iovec *vector,
 	return bytes_read;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
-				      int count, off_t offset)
+IOF_PUBLIC ssize_t iof_preadv(int fd, const struct iovec *vector, int count,
+			      off_t offset)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_read;
@@ -690,8 +687,7 @@ IOIL_PUBLIC ssize_t IOIL_DECL(preadv)(int fd, const struct iovec *vector,
 	return bytes_read;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
-				      int count)
+IOF_PUBLIC ssize_t iof_writev(int fd, const struct iovec *vector, int count)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
@@ -716,8 +712,8 @@ IOIL_PUBLIC ssize_t IOIL_DECL(writev)(int fd, const struct iovec *vector,
 	return bytes_written;
 }
 
-IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
-					 int count, off_t offset)
+IOF_PUBLIC ssize_t iof_pwritev(int fd, const struct iovec *vector, int count,
+			       off_t offset)
 {
 	struct fd_entry *entry;
 	ssize_t bytes_written;
@@ -739,8 +735,8 @@ IOIL_PUBLIC ssize_t IOIL_DECL(pwritev)(int fd, const struct iovec *vector,
 	return bytes_written;
 }
 
-IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
-				    int flags, int fd, off_t offset)
+IOF_PUBLIC void *iof_mmap(void *address, size_t length, int protect, int flags,
+			  int fd, off_t offset)
 {
 	struct fd_entry *entry;
 	int rc;
@@ -762,7 +758,7 @@ IOIL_PUBLIC void *IOIL_DECL(mmap)(void *address, size_t length, int protect,
 	return __real_mmap(address, length, protect, flags, fd, offset);
 }
 
-IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
+IOF_PUBLIC int iof_fsync(int fd)
 {
 	struct fd_entry *entry;
 	int rc;
@@ -778,7 +774,7 @@ IOIL_PUBLIC int IOIL_DECL(fsync)(int fd)
 	return __real_fsync(fd);
 }
 
-IOIL_PUBLIC int IOIL_DECL(fdatasync)(int fd)
+IOF_PUBLIC int iof_fdatasync(int fd)
 {
 	struct fd_entry *entry;
 	int rc;
@@ -794,7 +790,7 @@ IOIL_PUBLIC int IOIL_DECL(fdatasync)(int fd)
 	return __real_fdatasync(fd);
 }
 
-IOIL_PUBLIC int IOIL_DECL(dup)(int fd)
+IOF_PUBLIC int iof_dup(int fd)
 {
 	struct fd_entry *entry = NULL;
 	int rc;
@@ -824,7 +820,7 @@ IOIL_PUBLIC int IOIL_DECL(dup)(int fd)
 	return newfd;
 }
 
-IOIL_PUBLIC int IOIL_DECL(dup2)(int old, int new)
+IOF_PUBLIC int iof_dup2(int old, int new)
 {
 	struct fd_entry *entry = NULL;
 	int newfd = __real_dup2(old, new);
@@ -854,7 +850,7 @@ IOIL_PUBLIC int IOIL_DECL(dup2)(int old, int new)
 	return newfd;
 }
 
-IOIL_PUBLIC FILE * IOIL_DECL(fdopen)(int fd, const char *mode)
+IOF_PUBLIC FILE * iof_fdopen(int fd, const char *mode)
 {
 	struct fd_entry *entry;
 	int rc;
@@ -876,7 +872,7 @@ IOIL_PUBLIC FILE * IOIL_DECL(fdopen)(int fd, const char *mode)
 	return __real_fdopen(fd, mode);
 }
 
-IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
+IOF_PUBLIC int iof_fcntl(int fd, int cmd, ...)
 {
 	va_list ap;
 	void *arg;
@@ -939,4 +935,5 @@ IOIL_PUBLIC int IOIL_DECL(fcntl)(int fd, int cmd, ...)
 	return newfd;
 }
 
-FOREACH_ALIASED_INTERCEPT(IOIL_DECLARE_ALIAS)
+FOREACH_INTERCEPT(IOIL_DECLARE_ALIAS)
+FOREACH_ALIASED_INTERCEPT(IOIL_DECLARE_ALIAS64)

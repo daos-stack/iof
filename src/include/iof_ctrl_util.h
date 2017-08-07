@@ -38,7 +38,7 @@
 #ifndef __IOF_CTRL_UTIL_H__
 #define __IOF_CTRL_UTIL_H__
 
-#include <inttypes.h>
+#include <iof_defines.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -48,8 +48,6 @@ extern "C" {
 #define IOF_CTRL_MAX_LEN 4096
 
 #define IOF_CTRL_MAX_CONSTANT_LEN 128
-
-#define IOF_PUBLIC __attribute__((visibility("default")))
 
 enum iof_ctrl_error {
 	IOF_CTRL_SUCCESS,

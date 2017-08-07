@@ -43,8 +43,7 @@
 #include "log.h"
 #include "ios_gah.h"
 #include "iof_fs.h"
-
-#define IOIL_PUBLIC __attribute__((visibility("default")))
+#include "iof_io.h"
 
 /* Low level I/O functions we intercept
  *
@@ -94,7 +93,10 @@
 #define IOIL_DECL(name) name
 
 #define IOIL_DECLARE_ALIAS(type, name, params) \
-	IOIL_PUBLIC type name##64 params __attribute__((weak, alias(#name)));
+	IOF_PUBLIC type name params __attribute__((weak, alias("iof_" #name)));
+
+#define IOIL_DECLARE_ALIAS64(type, name, params) \
+	IOF_PUBLIC type name##64 params __attribute__((weak, alias(#name)));
 
 /* Initialize the __real_##name function pointer */
 #define IOIL_FORWARD_MAP_OR_FAIL(type, name, params)                        \
@@ -118,9 +120,14 @@
 
 #define IOIL_FORWARD_MAP_OR_FAIL(type, name, params) (void)0;
 
-#define IOIL_DECLARE_ALIAS(type, name, params)                 \
-	IOIL_PUBLIC type __wrap_##name##64 params                \
+#define IOIL_DECLARE_ALIAS(type, name, params) \
+	IOF_PUBLIC type __wrap_##name params \
+		__attribute__((weak, alias("iof_" #name)));
+
+#define IOIL_DECLARE_ALIAS64(type, name, params)                \
+	IOF_PUBLIC type __wrap_##name##64 params                \
 		__attribute__((weak, alias("__wrap_" #name)));
+
 
 #endif /* IOIL_PRELOAD */
 
