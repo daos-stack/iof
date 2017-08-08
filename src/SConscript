@@ -37,7 +37,8 @@
 """Build ping test"""
 import os
 
-HEADERS = ['cnss_plugin.h', 'iof_ctrl_util.h', 'iof_io.h', 'iof_defines.h']
+HEADERS = ['cnss_plugin.h', 'iof_ctrl_util.h', 'iof_io.h', 'iof_defines.h',
+           'iof_api.h']
 COMMON_SRC = ['version.c',
               'ios_gah.c',
               'iof_fs.c',

@@ -16,3 +16,7 @@
 --wrap=dup
 --wrap=dup2
 --wrap=fdopen
+--wrap=fcntl
+--wrap=fclose
+--wrap=fopen
+--wrap=freopen

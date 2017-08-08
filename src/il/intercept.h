@@ -44,6 +44,7 @@
 #include "ios_gah.h"
 #include "iof_fs.h"
 #include "iof_io.h"
+#include "iof_api.h"
 
 /* Low level I/O functions we intercept
  *
@@ -59,6 +60,8 @@
  * fcntl (for now though we likely need for dup)
  */
 #define FOREACH_ALIASED_INTERCEPT(ACTION)                                     \
+	ACTION(FILE *,  fopen,     (const char *, const char *))              \
+	ACTION(FILE *,  freopen,   (const char *, const char *, FILE *))      \
 	ACTION(int,     open,      (const char *, int, ...))                  \
 	ACTION(ssize_t, pread,     (int, void *, size_t, off_t))              \
 	ACTION(ssize_t, pwrite,    (int, const void *, size_t, off_t))        \
@@ -68,6 +71,7 @@
 	ACTION(void *,  mmap,      (void *, size_t, int, int, int, off_t))
 
 #define FOREACH_SINGLE_INTERCEPT(ACTION)                                      \
+	ACTION(int,     fclose,    (FILE *))                                  \
 	ACTION(int,     close,     (int))                                     \
 	ACTION(ssize_t, read,      (int, void *, size_t))                     \
 	ACTION(ssize_t, write,     (int, const void *, size_t))               \
@@ -130,19 +134,6 @@
 
 
 #endif /* IOIL_PRELOAD */
-
-extern bool ioil_initialized;
-
-#define IOIL_LOG_(type, ...)                         \
-	do {                                         \
-		if (ioil_initialized)                \
-			IOF_LOG_##type(__VA_ARGS__); \
-	} while (0)
-
-#define IOIL_LOG_ERROR(...) IOIL_LOG_(ERROR, __VA_ARGS__)
-#define IOIL_LOG_WARNING(...) IOIL_LOG_(WARNING, __VA_ARGS__)
-#define IOIL_LOG_INFO(...) IOIL_LOG_(INFO, __VA_ARGS__)
-#define IOIL_LOG_DEBUG(...) IOIL_LOG_(DEBUG, __VA_ARGS__)
 
 ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
 		      struct iof_file_common *f_info, int *errcode);

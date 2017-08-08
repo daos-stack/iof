@@ -71,7 +71,8 @@ check_library libiof.so
 syms="open open64 read read64 write write64 pwrite pwrite64 "
 syms+="pread pread64 readv writev preadv preadv64 pwritev "
 syms+="pwritev64 mmap mmap64 lseek lseek64 close creat "
-syms+="dup dup2 fcntl fdatasync fsync fdopen"
+syms+="dup dup2 fcntl fdatasync fsync fdopen fopen fclose freopen "
+syms+="fopen64 freopen64"
 check_library libioil.so
 if [ ${RC} -ne 0 ]
 then
