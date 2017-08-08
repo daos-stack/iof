@@ -45,24 +45,25 @@ The results are placed in the testLogs/testRun_<date-time-stamp>/
 multi_test_nss/cleanup_iof/cleanup_iof_<node> directory.
 """
 
-import unittest
 import os
 import time
 import logging
 import shlex
 import subprocess
 
-class TestCleanUpIof(unittest.TestCase):
+class TestCleanUpIof():
     """Set up and start ctrl fs"""
 
-    startdir = None
-    ctrl_dir = None
-    logger = logging.getLogger("TestRunnerLogger")
-
-    def setUp(self):
-        """Set up the test"""
-        self.startdir = os.environ["CNSS_PREFIX"]
+    def __init__(self, test_info=None, log_base_path=None):
+        self.test_info = test_info
+        self.log_dir_base = log_base_path
+        self.logger = logging.getLogger("TestRunnerLogger")
+        self.startdir = self.test_info.get_defaultENV("CNSS_PREFIX")
         self.ctrl_dir = os.path.join(self.startdir, ".ctrl")
+
+    def useLogDir(self, log_path):
+        """create the log directory name"""
+        self.log_dir_base = log_path
 
     def launch_cmd(self, msg, cmdstr):
         """Launch a test"""
@@ -89,14 +90,12 @@ class TestCleanUpIof(unittest.TestCase):
                 i = i - 1
         return i
 
-
     def test_iofshutdown(self):
         """Shutdown iof"""
         shutdown_file = os.path.join(self.ctrl_dir, "shutdown")
         self.logger.info("Check for shutdown file: %s", shutdown_file)
-        f = open(shutdown_file, 'w')
-        f.write('1')
-        f.close()
+        with open(shutdown_file, 'w') as f:
+            f.write('1')
         cnssrtn = self.has_terminated("cnss")
         ionssrtn = self.has_terminated("ionss")
         self.logger.info("CNSS %d and IONSS %d", cnssrtn, ionssrtn)
@@ -108,7 +107,5 @@ class TestCleanUpIof(unittest.TestCase):
                         CNSS and IONSS processes have not terminated. \
                         CNSS return code: %d. IONSS return code: %d.\n", \
                         cnssrtn, ionssrtn)
-            self.fail("IOF Cleanup failed. \
-                        CNSS and IONSS processes have not terminated. \
-                        CNSS return code: %d. IONSS reutn code: %d." \
-                        % (cnssrtn, ionssrtn))
+            return 1
+        return 0

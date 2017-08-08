@@ -48,26 +48,32 @@ The results are placed in the testLogs/testRun_<date-time-stamp>/
 multi_test_nss/setup_iof/setup_iof_<node> directory.
 """
 
-import unittest
+#import unittest
 import os
 import time
 import logging
 from stat import S_ISREG
 
-class TestSetUpIof(unittest.TestCase):
+#class TestSetUpIof(unittest.TestCase):
+class TestSetUpIof():
     """Set up and start ctrl fs"""
 
-    logger = logging.getLogger("TestRunnerLogger")
-    start_dir = None
-    ctrl_dir = None
+    def __init__(self, test_info=None, log_base_path=None):
+        self.test_info = test_info
+        self.log_dir_base = log_base_path
+        self.logger = logging.getLogger("TestRunnerLogger")
+
+    def useLogDir(self, log_path):
+        """create the log directory name"""
+        self.log_dir_base = log_path
 
     def test_iof_started(self):
         """Wait for ctrl fs to start"""
-        start_dir = os.environ["CNSS_PREFIX"]
+        start_dir = self.test_info.get_defaultENV("CNSS_PREFIX")
         self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
         ctrl_dir = os.path.join(start_dir, ".ctrl")
-        self.assertTrue(os.path.isdir(start_dir), \
-            "prefix is not a directory %s" % start_dir)
+        assert os.path.isdir(start_dir), \
+               "prefix is not a directory %s" % start_dir
         filename = os.path.join(ctrl_dir, 'active')
         i = 10
         while i > 0:
@@ -78,8 +84,7 @@ class TestSetUpIof(unittest.TestCase):
             self.logger.info("Found active file: %s", filename)
 
             stat_obj = os.stat(filename)
-            self.assertTrue(S_ISREG(stat_obj.st_mode),
-                            "File type is not a regular file")
+            assert S_ISREG(stat_obj.st_mode), "File type is not a regular file"
             self.logger.info(stat_obj)
 
             fd = open(filename)
@@ -91,4 +96,4 @@ class TestSetUpIof(unittest.TestCase):
         self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
         # Log the error message. Fail the test with the same error message
         self.logger.info("Unable to detect file: %s", filename)
-        self.fail("Unable to detect file: %s" % filename)
+        return 1

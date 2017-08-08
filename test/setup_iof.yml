@@ -8,12 +8,15 @@ defaultENV:
 
 module:
     name: "setup_iof"
+    className: "TestSetUpIof"
     subLogKey: "IOF_TESTLOG"
 
 directives:
+    testMode: "python"
     renameTestRun: "no"
     printTestLogPath: "no"
 
 execStrategy:
-    - id: setup
+    - name: test_iof_started
+      type: setup
       setEnvVars:

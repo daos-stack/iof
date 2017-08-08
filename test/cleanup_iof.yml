@@ -8,12 +8,15 @@ defaultENV:
 
 module:
     name: "cleanup_iof"
+    className: "TestCleanUpIof"
     subLogKey: "IOF_TESTLOG"
 
 directives:
+    testMode: "python"
     renameTestRun: "no"
     printTestLogPath: "no"
 
 execStrategy:
-    - id: cleanup
+    - name: "test_iofshutdown"
+      type: cleanup
       setEnvVars:
