@@ -151,7 +151,7 @@ def scons():
     prereqs.preload(os.path.join(Dir('#').abspath,
                                  "scons_local",
                                  "components.py"),
-                    prebuild=["ompi", "cart"])
+                    prebuild=["ompi", "cart", "fuse"])
 
     Export('env prereqs IOF_VERSION')
 
@@ -162,6 +162,7 @@ def scons():
     env.Append(CFLAGS=['-g', '-Wall', '-std=gnu99'])
 
     opts.Add(BoolVariable('fuse3',
+                          'Option is deprecated and will be removed. '\
                           'Use libfuse3 from github',
                           True))
     opts.Add(EnumVariable('client_libs',
