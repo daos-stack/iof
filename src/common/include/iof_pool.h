@@ -41,7 +41,7 @@
 #define __IOF_POOL_H__
 
 #include <pthread.h>
-#include <crt_util/list.h>
+#include <pouch/list.h>
 
 /* A datastructure used to describe and register a type */
 struct iof_pool_reg {

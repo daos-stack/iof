@@ -42,7 +42,7 @@
 #include "iof_atomic.h"
 #include "ios_gah.h"
 #include "iof_pool.h"
-#include <crt_util/list.h>
+#include <pouch/list.h>
 
 #define IOF_MAX_FSTYPE_LEN 32
 

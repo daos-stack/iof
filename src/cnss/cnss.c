@@ -51,8 +51,8 @@
 #include <fuse/fuse_lowlevel.h>
 #endif
 #include <sys/xattr.h>
-#include <crt_api.h>
-#include <crt_util/common.h>
+#include <cart/api.h>
+#include <pouch/common.h>
 
 #include "cnss_plugin.h"
 #include "version.h"

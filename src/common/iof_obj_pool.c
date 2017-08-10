@@ -38,8 +38,8 @@
  * A simple, efficient pool for allocating objects of equal size
  */
 #include <pthread.h>
-#include <crt_util/common.h> /* container_of */
-#include <crt_util/list.h>
+#include <pouch/common.h> /* container_of */
+#include <pouch/list.h>
 #include "iof_obj_pool.h"
 
 /* A hack to assert that the sizeof obj_pool_t is large enough */

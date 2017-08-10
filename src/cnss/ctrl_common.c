@@ -38,7 +38,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
-#include <crt_util/clog.h>
+#include <pouch/clog.h>
 #include "ctrl_common.h"
 
 void ctrl_info_init(struct ctrl_info *ctrl_info)

@@ -38,7 +38,7 @@
 #ifndef __IOF_H__
 #define __IOF_H__
 
-#include <crt_util/list.h>
+#include <pouch/list.h>
 #include "cnss_plugin.h"
 #include "ios_gah.h"
 #include "iof_atomic.h"

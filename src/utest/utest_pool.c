@@ -38,7 +38,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <pthread.h>
-#include <crt_util/list.h>
+#include <pouch/list.h>
 #include <CUnit/Basic.h>
 
 #include <iof_obj_pool.h>
