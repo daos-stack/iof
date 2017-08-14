@@ -55,10 +55,19 @@ struct iof_pool_reg {
 
 	/* Called once at teardown */
 	void	(*release)(void *);
+	void	*handle;
 	int	size;
 	int	offset;
-	void	*handle;
+
+	/* Maximum number of descriptors to exist concurrently */
+	int	max_desc;
 };
+
+/* If max_desc is non-zero then at most max_desc descriptors can exist
+ * simultanously.  In this case restock() will not allocate new descriptors
+ * so all descriptors after startup will be created on the critical path,
+ * however once max_desc is reached no more descriptors will be created.
+ */
 
 #define POOL_TYPE_INIT(itype, imember) .size = sizeof(struct itype),	\
 		.offset = offsetof(struct itype, imember)

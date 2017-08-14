@@ -79,6 +79,7 @@ struct ios_projection {
 	char			*full_path;
 	char			fs_type[IOF_MAX_FSTYPE_LEN];
 	struct iof_pool_type	*fh_pool;
+	struct iof_pool_type	*ar_pool;
 	struct ionss_file_handle	*root;
 	uint			id;
 	uint			flags;
@@ -126,7 +127,7 @@ struct ionss_read_req_desc {
 	struct iof_read_bulk_out	*out;
 	struct iof_read_bulk_in         *in;
 	crt_size_t			req_len;
-	struct ionss_active_read_desc   *ard;
+	struct ionss_active_read	*ard;
 	crt_list_t			list;
 };
 
@@ -135,9 +136,11 @@ struct ionss_read_req_desc {
  * Used to descrive an in-progress read request.  These consume resources so
  * are limited to a fixed number.
  */
-struct ionss_active_read_desc {
+struct ionss_active_read {
+	struct ios_projection		*projection;
 	struct ionss_read_req_desc      *rrd;
 	void				*buf;
+	crt_list_t			list;
 	crt_size_t			buf_len;
 	crt_size_t			read_len;
 	crt_bulk_t			local_bulk_handle;

@@ -1047,67 +1047,14 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-static
-struct ionss_active_read_desc *ard_acquire(struct ios_projection *projection)
-{
-	struct ionss_active_read_desc *ard;
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
-	int rc;
-
-	ard = calloc(1, sizeof(*ard));
-	if (!ard)
-		return NULL;
-
-	rc = posix_memalign(&ard->buf, 4096, base.max_read);
-	if (rc || !ard->buf) {
-		free(ard);
-		return NULL;
-	}
-	ard->buf_len = base.max_read;
-
-	iov.iov_len = ard->buf_len;
-	iov.iov_buf = ard->buf;
-	iov.iov_buf_len = ard->buf_len;
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
-
-	rc = crt_bulk_create(projection->base->crt_ctx, &sgl, CRT_BULK_RO,
-			     &ard->local_bulk_handle);
-	if (rc) {
-		IOF_LOG_DEBUG("Failed to create bulk handle %d", rc);
-		free(ard->buf);
-		free(ard);
-		return NULL;
-	}
-
-	IOF_LOG_DEBUG("Allocated ard %p", ard);
-
-	return ard;
-}
-
-static void ard_release(struct ionss_active_read_desc *ard)
-{
-	if (!ard)
-		return;
-
-	IOF_LOG_DEBUG("Released ard %p", ard);
-
-	if (ard->buf)
-		free(ard->buf);
-
-	if (ard->local_bulk_handle)
-		crt_bulk_free(ard->local_bulk_handle);
-
-	free(ard);
-}
-
 static int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info);
-static void iof_process_read_bulk(struct ionss_read_req_desc *rrd);
+static void iof_process_read_bulk(struct ionss_active_read *ard,
+				  struct ionss_read_req_desc *rrd);
 
 void iof_read_check_and_send(struct ios_projection *projection)
 {
 	struct ionss_read_req_desc *rrd;
+	struct ionss_active_read *ard;
 
 	pthread_mutex_lock(&projection->lock);
 	if (crt_list_empty(&projection->read_list)) {
@@ -1115,6 +1062,16 @@ void iof_read_check_and_send(struct ios_projection *projection)
 		IOF_LOG_DEBUG("Dropping read slot (%d/%d)",
 			      projection->current_read_count,
 			      projection->max_read_count);
+		pthread_mutex_unlock(&projection->lock);
+		return;
+	}
+
+	ard = iof_pool_acquire(projection->ar_pool);
+	if (!ard) {
+		projection->current_read_count--;
+		IOF_LOG_WARNING("No ARD slot available (%d/%d)",
+				projection->current_read_count,
+				projection->max_read_count);
 		pthread_mutex_unlock(&projection->lock);
 		return;
 	}
@@ -1129,7 +1086,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 		      projection->max_read_count);
 
 	pthread_mutex_unlock(&projection->lock);
-	iof_process_read_bulk(rrd);
+	iof_process_read_bulk(ard, rrd);
 }
 
 /* Process a read request
@@ -1138,7 +1095,8 @@ void iof_read_check_and_send(struct ios_projection *projection)
  * the result of completes and frees the request
  */
 static void
-iof_process_read_bulk(struct ionss_read_req_desc *rrd)
+iof_process_read_bulk(struct ionss_active_read *ard,
+		      struct ionss_read_req_desc *rrd)
 {
 	struct ionss_file_handle *handle = rrd->handle;
 	struct ios_projection *projection = rrd->handle->projection;
@@ -1148,11 +1106,7 @@ iof_process_read_bulk(struct ionss_read_req_desc *rrd)
 
 	IOF_LOG_DEBUG("Processing read rrd %p", rrd);
 
-	rrd->ard = ard_acquire(handle->projection);
-	if (!rrd->ard) {
-		out->err = IOF_ERR_NOMEM;
-		goto out;
-	}
+	rrd->ard = ard;
 
 	IOF_LOG_DEBUG("Processing read rrd %p ard %p", rrd, rrd->ard);
 
@@ -1205,7 +1159,7 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
-	ard_release(rrd->ard);
+	iof_pool_release(projection->ar_pool, rrd->ard);
 	free(rrd);
 
 	ios_fh_decref(handle, 1);
@@ -1239,7 +1193,7 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
-	ard_release(rrd->ard);
+	iof_pool_release(projection->ar_pool, rrd->ard);
 	free(rrd);
 
 	iof_read_check_and_send(projection);
@@ -1259,6 +1213,7 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 	struct iof_read_bulk_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
 	struct ionss_read_req_desc *rrd = NULL;
+	struct ionss_active_read *ard;
 
 	struct ios_projection *projection;
 	int rc;
@@ -1294,13 +1249,18 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 	projection = handle->projection;
 
 	pthread_mutex_lock(&projection->lock);
-	if (projection->current_read_count < projection->max_read_count) {
+
+	/* Try and acquire a active read descriptor, if one is available then
+	 * start the read, else add it to the list
+	 */
+	ard = iof_pool_acquire(projection->ar_pool);
+	if (ard) {
 		projection->current_read_count++;
 		IOF_LOG_DEBUG("Injecting new read %p (%d/%d)", rrd,
 			      projection->current_read_count,
 			      projection->max_read_count);
 		pthread_mutex_unlock(&projection->lock);
-		iof_process_read_bulk(rrd);
+		iof_process_read_bulk(ard, rrd);
 	} else {
 		crt_list_add_tail(&rrd->list, &projection->read_list);
 		pthread_mutex_unlock(&projection->lock);
@@ -2184,6 +2144,62 @@ fh_init(void *arg, void *handle)
 	return 0;
 }
 
+static int
+ar_init(void *arg, void *handle)
+{
+	struct ionss_active_read *ard = arg;
+	struct ios_projection *projection = handle;
+	int rc;
+
+	ard->projection = projection;
+
+	ard->buf_len = projection->base->max_read;
+	rc = posix_memalign(&ard->buf, 4096, ard->buf_len);
+	if (rc || !ard->buf)
+		return -1;
+
+	return 0;
+}
+
+static int
+ar_clean(void *arg)
+{
+	struct ionss_active_read *ard = arg;
+	crt_sg_list_t sgl = {0};
+	crt_iov_t iov = {0};
+	int rc;
+
+	if (ard->local_bulk_handle)
+		crt_bulk_free(ard->local_bulk_handle);
+
+	iov.iov_len = ard->buf_len;
+	iov.iov_buf = ard->buf;
+	iov.iov_buf_len = ard->buf_len;
+	sgl.sg_iovs = &iov;
+	sgl.sg_nr.num = 1;
+
+	rc = crt_bulk_create(ard->projection->base->crt_ctx, &sgl, CRT_BULK_RO,
+			     &ard->local_bulk_handle);
+	if (rc) {
+		free(ard->buf);
+		return -1;
+	}
+	return 0;
+}
+
+static void
+ar_release(void *arg)
+{
+	struct ionss_active_read *ard = arg;
+	int rc;
+
+	rc = crt_bulk_free(ard->local_bulk_handle);
+
+	IOF_LOG_DEBUG("Bulk free %p %d", ard, rc);
+
+	free(ard->buf);
+}
+
 int main(int argc, char **argv)
 {
 	char *ionss_grp = IOF_DEFAULT_SET;
@@ -2404,15 +2420,6 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	/* Create a fs_list from the projection array */
-	for (i = 0; i < base.projection_count ; i++) {
-		base.fs_list[i].flags = base.projection_array[i].flags;
-		base.fs_list[i].gah = base.projection_array[i].root->gah;
-		base.fs_list[i].id = base.projection_array[i].id;
-		strncpy(base.fs_list[i].mnt, base.projection_array[i].full_path,
-			IOF_NAME_LEN_MAX);
-	}
-
 	/*initialize CaRT*/
 	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);
 	if (ret) {
@@ -2436,6 +2443,40 @@ int main(int argc, char **argv)
 		IOF_LOG_ERROR("Could not create context");
 		goto cleanup;
 	}
+
+	for (i = 0; i < base.projection_count; i++) {
+		struct ios_projection *projection = &base.projection_array[i];
+		struct iof_pool_reg arp = {.handle = projection,
+					   .init = ar_init,
+					   .clean = ar_clean,
+					   .release = ar_release,
+					   .max_desc = 3,
+					   POOL_TYPE_INIT(ionss_active_read,
+							  list)};
+
+		if (!projection->active)
+			continue;
+		projection->ar_pool = iof_pool_register(&base.pool, &arp);
+		if (!projection->ar_pool)
+			projection->active = 0;
+	}
+
+	/* Create a fs_list from the projection array */
+	for (i = 0; i < base.projection_count ; i++) {
+		struct ios_projection *projection = &base.projection_array[i];
+
+		if (!projection->active) {
+			IOF_LOG_WARNING("Not projecting %s",
+					projection->full_path);
+			continue;
+		}
+		base.fs_list[i].flags = projection->flags;
+		base.fs_list[i].gah = projection->root->gah;
+		base.fs_list[i].id = projection->id;
+		strncpy(base.fs_list[i].mnt, projection->full_path,
+			IOF_NAME_LEN_MAX);
+	}
+
 	ionss_register();
 
 	shutdown = 0;
@@ -2479,10 +2520,6 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
 
-	ret = crt_context_destroy(base.crt_ctx, 0);
-	if (ret)
-		IOF_LOG_ERROR("Could not destroy context");
-
 	/* After shutdown has been invoked close all files and free any memory,
 	 * in normal operation all files should be closed as a result of CNSS
 	 * requests prior to shutdown being triggered however perform a full
@@ -2499,8 +2536,27 @@ int main(int argc, char **argv)
 		release_projection_resources(projection);
 
 		pthread_mutex_destroy(&projection->lock);
-
 	}
+
+	for (i = 0 ; i < base.projection_count ; i++) {
+		struct ios_projection *p = &base.projection_array[i];
+
+		if (!p->active)
+			continue;
+
+		free(p->full_path);
+
+		ios_fh_decref(p->root, 1);
+		p->active = 0;
+	}
+
+	iof_pool_destroy(&base.pool);
+
+	ret = crt_context_destroy(base.crt_ctx, 0);
+	if (ret)
+		IOF_LOG_ERROR("Could not destroy context");
+
+	free(base.projection_array);
 
 cleanup:
 	/* TODO:
@@ -2517,26 +2573,9 @@ cleanup:
 	if (base.fs_list)
 		free(base.fs_list);
 
-	if (base.projection_array && base.projection_count > 0) {
-		for (i = 0 ; i < base.projection_count ; i++) {
-			struct ios_projection *p = &base.projection_array[i];
-
-			if (!p->active)
-				continue;
-
-			free(p->full_path);
-
-			ios_fh_decref(p->root, 1);
-		}
-
-		free(base.projection_array);
-	}
-
 	ret = ios_gah_destroy(base.gs);
 	if (ret)
 		IOF_LOG_ERROR("Could not close GAH pool");
-
-	iof_pool_destroy(&base.pool);
 
 	/* Memset base to zero to delete any dangling memory references so that
 	 * valgrind can better detect lost memory

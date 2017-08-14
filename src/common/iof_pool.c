@@ -266,7 +266,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 void *
 iof_pool_acquire(struct iof_pool_type *type)
 {
-	void *ptr;
+	void *ptr = NULL;
 	crt_list_t *entry;
 
 	pthread_mutex_lock(&type->lock);
@@ -287,8 +287,10 @@ iof_pool_acquire(struct iof_pool_type *type)
 		type->free_count--;
 		ptr = (void *)entry - type->reg.offset;
 	} else {
-		type->op_init++;
-		ptr = create(type);
+		if (!type->reg.max_desc || type->count < type->reg.max_desc) {
+			type->op_init++;
+			ptr = create(type);
+		}
 	}
 
 	pthread_mutex_unlock(&type->lock);
@@ -353,7 +355,8 @@ iof_pool_restock(struct iof_pool_type *type)
 	/* Move from pending to free list */
 	restock(type, type->no_restock_hwm + 1);
 
-	create_many(type);
+	if (!type->reg.max_desc)
+		create_many(type);
 
 	pthread_mutex_unlock(&type->lock);
 }
