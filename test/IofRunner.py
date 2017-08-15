@@ -216,8 +216,7 @@ class IofRunner():
         os.environ.pop("OFI_INTERFACE")
         os.environ.pop("D_LOG_MASK")
         self.logger.info("Testionss: - return code: %s\n", procrtn)
-        # Always return success for now
-        return 0
+        return procrtn
 
     def stop_cnss_ionss_processes(self, proc_name, node_type):
         """Kill the remote CNSS process and IONSS processes in case the
