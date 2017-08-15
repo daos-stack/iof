@@ -1059,8 +1059,8 @@ struct ionss_active_read_desc *ard_acquire(struct ios_projection *projection)
 	if (!ard)
 		return NULL;
 
-	ard->buf = malloc(base.max_read);
-	if (!ard->buf) {
+	rc = posix_memalign(&ard->buf, 4096, base.max_read);
+	if (rc || !ard->buf) {
 		free(ard);
 		return NULL;
 	}
@@ -1761,8 +1761,8 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 		goto out_decref;
 	}
 
-	iov.iov_buf = malloc(len);
-	if (!iov.iov_buf) {
+	rc = posix_memalign(&iov.iov_buf, 4096, len);
+	if (rc || !iov.iov_buf) {
 		out->err = IOF_ERR_NOMEM;
 		goto out_decref;
 	}

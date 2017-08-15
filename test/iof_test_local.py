@@ -603,6 +603,26 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         if rtn != 0:
             self.fail('DD bs=65k returned error')
 
+    def test_direct_read(self):
+        """Read a large file"""
+        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
+
+        if not os.path.exists(test_file):
+            self.skipTest('Input file does not exist')
+        cmd = 'dd if=%s of=/dev/null bs=4k iflag=direct' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
+
+    def test_direct_write(self):
+        """Write a large file"""
+        test_file = os.path.join(self.import_dir, 'exp', 'test_file')
+
+        cmd = 'dd if=/dev/zero of=%s bs=4k count=8 oflag=direct' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
+
     def go(self):
         """A wrapper method to invoke all methods as subTests"""
 
