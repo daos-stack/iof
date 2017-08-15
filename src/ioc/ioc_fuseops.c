@@ -156,7 +156,6 @@ static void ioc_show_flags(unsigned in)
 	SHOW_FLAG(in, FUSE_CAP_SPLICE_READ);
 	SHOW_FLAG(in, FUSE_CAP_FLOCK_LOCKS);
 	SHOW_FLAG(in, FUSE_CAP_IOCTL_DIR);
-#if IOF_USE_FUSE3
 	SHOW_FLAG(in, FUSE_CAP_AUTO_INVAL_DATA);
 	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS);
 	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS_AUTO);
@@ -166,7 +165,6 @@ static void ioc_show_flags(unsigned in)
 	SHOW_FLAG(in, FUSE_CAP_PARALLEL_DIROPS);
 	SHOW_FLAG(in, FUSE_CAP_POSIX_ACL);
 	SHOW_FLAG(in, FUSE_CAP_HANDLE_KILLPRIV);
-#endif
 #ifdef FUSE_CAP_BIG_WRITES
 	SHOW_FLAG(in, FUSE_CAP_BIG_WRITES);
 #endif
@@ -196,7 +194,6 @@ static void *ioc_init(struct fuse_conn_info *conn)
 		     fs_handle->fs_id, fs_handle->proj.cli_fs_id);
 
 	IOF_LOG_INFO("Proto %d %d", conn->proto_major, conn->proto_minor);
-#if IOF_USE_FUSE3
 
 	/* This value has to be set here to the same value passed to
 	 * register_fuse().  Fuse always sets this value to zero so
@@ -206,7 +203,6 @@ static void *ioc_init(struct fuse_conn_info *conn)
 	conn->max_write = fs_handle->max_write;
 
 	IOF_LOG_INFO("max read 0x%x", conn->max_read);
-#endif
 	IOF_LOG_INFO("max write 0x%x", conn->max_write);
 	IOF_LOG_INFO("readahead 0x%x", conn->max_readahead);
 
@@ -224,8 +220,6 @@ static void *ioc_init(struct fuse_conn_info *conn)
 
 	return fs_handle;
 }
-
-#if IOF_USE_FUSE3
 
 static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
@@ -259,7 +253,6 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 
 	return handle;
 }
-#endif
 
 /*
  * We may have different FUSE operation implementations depending on the
@@ -326,21 +319,12 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 			.fn_ptr = (fuse_func_t) (FN) \
 		}
 static struct operation default_ops[] = {
-#if IOF_USE_FUSE3
 	DECL_FUSE_OP(init, ioc_init_full),
 	DECL_FUSE_OP(getattr, ioc_getattr),
 	DECL_FUSE_OP(chmod, ioc_chmod),
 	DECL_FUSE_OP(truncate, ioc_truncate),
-	DECL_FUSE_OP(rename, ioc_rename3),
-	DECL_FUSE_OP(utimens, ioc_utimens),
-#else
-	DECL_FUSE_OP(init, ioc_init),
-	DECL_FUSE_OP(getattr, ioc_getattr_name),
-	DECL_FUSE_OP(chmod, ioc_chmod_name),
-	DECL_FUSE_OP(truncate, ioc_truncate_name),
 	DECL_FUSE_OP(rename, ioc_rename),
-	DECL_FUSE_OP(utimens, ioc_utimens_name),
-#endif
+	DECL_FUSE_OP(utimens, ioc_utimens),
 	DECL_FUSE_OP(opendir, ioc_opendir),
 	DECL_FUSE_OP(readdir, ioc_readdir),
 	DECL_FUSE_OP(releasedir, ioc_closedir),
@@ -422,11 +406,5 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, readlink);
 	SET_FUSE_OP(fuse_ops, client_ops, ioctl);
 	SET_FUSE_OP(fuse_ops, client_ops, statfs);
-#ifndef IOF_USE_FUSE3
-#ifndef __APPLE__
-	fuse_ops->flag_nullpath_ok = 1;
-	fuse_ops->flag_nopath = 1;
-#endif
-#endif
 	return fuse_ops;
 }

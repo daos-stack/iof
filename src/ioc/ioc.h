@@ -68,12 +68,10 @@ struct iof_stats {
 	ATOMIC unsigned int write;
 	ATOMIC uint64_t read_bytes;
 	ATOMIC uint64_t write_bytes;
-#ifdef IOF_USE_FUSE3
 	ATOMIC unsigned int ftruncate;
 	ATOMIC unsigned int getfattr;
 	ATOMIC unsigned int fchmod;
 	ATOMIC unsigned int futimens;
-#endif
 	ATOMIC unsigned int il_ioctl;
 	ATOMIC unsigned int fsync;
 };
@@ -323,7 +321,6 @@ int ioc_truncate_name(const char *, off_t);
 
 int ioc_utimens_name(const char *, const struct timespec tv[2]);
 
-#if IOF_USE_FUSE3
 int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 		struct fuse_file_info *, enum fuse_readdir_flags);
 
@@ -334,16 +331,9 @@ int ioc_getattr(const char *, struct stat *, struct fuse_file_info *);
 
 int ioc_truncate(const char *, off_t, struct fuse_file_info *);
 
-int ioc_rename3(const char *, const char *, unsigned int);
+int ioc_rename(const char *, const char *, unsigned int);
 
 int ioc_chmod(const char *, mode_t, struct fuse_file_info *);
-#else
-int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
-		struct fuse_file_info *);
-
-int ioc_rename(const char *, const char *);
-
-#endif
 
 int ioc_symlink(const char *, const char *);
 

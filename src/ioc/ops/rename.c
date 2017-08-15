@@ -46,7 +46,8 @@
 #include "ioc.h"
 #include "log.h"
 
-int ioc_rename(const char *src, const char *dst)
+static int
+ioc_rename_priv(const char *src, const char *dst)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_two_string_in *in;
@@ -92,13 +93,11 @@ int ioc_rename(const char *src, const char *dst)
 	return IOC_STATUS_TO_RC(&reply);
 }
 
-#if IOF_USE_FUSE3
-int ioc_rename3(const char *src, const char *dst, unsigned int flags)
+int ioc_rename(const char *src, const char *dst, unsigned int flags)
 {
 	if (flags) {
 		IOF_LOG_INFO("Unsupported rename flags %x", flags);
 		return -ENOTSUP;
 	}
-	return ioc_rename(src, dst);
+	return ioc_rename_priv(src, dst);
 }
-#endif

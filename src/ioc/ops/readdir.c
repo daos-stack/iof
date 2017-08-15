@@ -291,11 +291,8 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 }
 
 int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
-		off_t offset, struct fuse_file_info *fi
-#ifdef IOF_USE_FUSE3
-		, enum fuse_readdir_flags flags
-#endif
-	)
+		off_t offset, struct fuse_file_info *fi,
+		enum fuse_readdir_flags flags)
 {
 	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
 	off_t next_offset = offset;
@@ -368,11 +365,7 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 
 		ret = filler(buf, dir_reply->d_name,
 			     dir_reply->stat_rc == 0 ? &dir_reply->stat :  NULL,
-			     dir_reply->nextoff
-#ifdef IOF_USE_FUSE3
-			     , 0
-#endif
-			     );
+			     dir_reply->nextoff, 0);
 
 		IOF_LOG_DEBUG("New file off %zi %s %d", dir_reply->nextoff,
 			      dir_reply->d_name, ret);

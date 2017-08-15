@@ -753,12 +753,6 @@ iof_thread_stop(struct iof_state *iof_state)
 		NULL, NULL,					\
 		&fs_handle->stats->_STAT)
 
-#if IOF_USE_FUSE3
-#define REGISTER_STAT3(_STAT) REGISTER_STAT(_STAT)
-#else
-#define REGISTER_STAT3(_STAT) (void)0
-#endif
-
 static int initialize_projection(struct iof_state *iof_state,
 				 struct iof_group_info *group,
 				 struct iof_fs_info *fs_info,
@@ -773,12 +767,6 @@ static int initialize_projection(struct iof_state *iof_state,
 	char *read_option = NULL;
 	char const *opts[] = {"-o", "fsname=IOF",
 			      "-o", "subtype=pam",
-#if !IOF_USE_FUSE3
-			      "-o", "use_ino",
-			      "-o", "entry_timeout=0",
-			      "-o", "negative_timeout=0",
-			      "-o", "attr_timeout=0",
-#endif
 	};
 	int ret;
 
@@ -901,10 +889,10 @@ static int initialize_projection(struct iof_state *iof_state,
 	REGISTER_STAT64(read_bytes);
 	REGISTER_STAT64(write_bytes);
 
-	REGISTER_STAT3(getfattr);
-	REGISTER_STAT3(ftruncate);
-	REGISTER_STAT3(fchmod);
-	REGISTER_STAT3(futimens);
+	REGISTER_STAT(getfattr);
+	REGISTER_STAT(ftruncate);
+	REGISTER_STAT(fchmod);
+	REGISTER_STAT(futimens);
 
 	REGISTER_STAT(il_ioctl);
 
