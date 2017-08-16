@@ -116,7 +116,7 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 	/* If the projection has already migrated to another rank then
 	 * there is nothing to do
 	 */
-	if (ep->ep_rank != fs_handle->dest_ep.ep_rank) {
+	if (ep->ep_rank != fs_handle->proj.grp->psr_ep.ep_rank) {
 		IOF_LOG_INFO("EP %d already offline for %d",
 			     ep->ep_rank, fs_handle->fs_id);
 		return;
@@ -128,6 +128,87 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 			fs_handle->mount_point);
 
 	fs_handle->offline_reason = EHOSTDOWN;
+}
+
+/* A generic callback function to handle completion of RPCs sent from FUSE,
+ * and replay the RPC to a different end point in case the target has been
+ * evicted (denoted by an "Out Of Group" return code). For all other failures
+ * and in case of success, it invokes a custom handler (if defined).
+ */
+static void generic_cb(const struct crt_cb_info *cb_info)
+{
+	int rc;
+	crt_rpc_t *failover_rpc = NULL;
+	crt_rpc_t *rpc = cb_info->cci_rpc;
+	struct iof_rpc_ctx *ctx = cb_info->cci_arg;
+
+	IOF_LOG_INFO("cb_info ptr %p", &cb_info);
+	if (IOC_HOST_IS_DOWN(cb_info)) {
+		IOF_LOG_INFO("Request timed out for PSR: %u",
+			     rpc->cr_ep.ep_rank);
+		if ((rpc->cr_ep.ep_rank + 1) ==
+		    ctx->fs_handle->proj.grp->num_ranks) {
+			/* No more ranks to retry, so fail. */
+			IOF_LOG_ERROR("No more PSRs left for failover.");
+			ctx->err = EHOSTDOWN;
+		} else {
+			/* TODO: Make this atomic. */
+			ctx->fs_handle->proj.grp->psr_ep.ep_rank++;
+			rc = crt_req_create(rpc->cr_ctx,
+					    &ctx->fs_handle->proj.grp->psr_ep,
+					    rpc->cr_opc, &failover_rpc);
+			if (!rc) {
+				memcpy(failover_rpc->cr_input,
+				       rpc->cr_input,
+				       rpc->cr_input_size);
+				crt_req_decref(rpc);
+				crt_req_decref(rpc);
+
+				crt_req_addref(failover_rpc);
+				crt_req_addref(failover_rpc);
+				*((crt_rpc_t **)ctx->rpc_ptr) = failover_rpc;
+				IOF_LOG_INFO("Resending RPC to PSR Rank %d",
+					      failover_rpc->cr_ep.ep_rank);
+				rc = crt_req_send(failover_rpc,
+						  generic_cb, ctx);
+				if (rc) {
+					IOF_LOG_ERROR("Could not send "
+						      "rpc, rc = %u", rc);
+				} else
+					return;
+			} else
+				IOF_LOG_ERROR("Failed to create retry RPC");
+			if (rc)
+				ctx->err = EIO;
+		}
+	} else if (cb_info->cci_rc != 0)
+		ctx->err = EIO;
+	if (ctx->handler)
+		ctx->handler(ctx, crt_reply_get(rpc));
+	iof_tracker_signal(&ctx->tracker);
+}
+
+/*
+ * Wrapper function that is called from FUSE to send RPCs. The idea is to
+ * decouple the FUSE implementation from the actual sending of RPCs. The
+ * FUSE callbacks only need to specify the inputs and outputs for the RPC,
+ * without bothering about how RPCs are sent. This function is also intended
+ * for abstracting various other features related to RPCs such as fail-over
+ * and load balance, at the same time preventing code duplication.
+ */
+int iof_fs_send(void *request, struct iof_rpc_ctx *ctx)
+{
+	int rc;
+	crt_rpc_t *rpc = *((crt_rpc_t **)ctx->rpc_ptr);
+
+	rc = crt_req_send(rpc, generic_cb, ctx);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		iof_pool_release(ctx->mem_pool, request);
+		return -EIO;
+	}
+	iof_pool_restock(ctx->mem_pool);
+	return 0;
 }
 
 static void
@@ -244,6 +325,7 @@ static int attach_group(struct iof_state *iof_state,
 		return ret;
 	}
 
+	crt_group_size(group->grp.dest_grp, &group->grp.num_ranks);
 	/*initialize destination endpoint*/
 	group->grp.psr_ep.ep_grp = group->grp.dest_grp;
 	/*TODO: Use exported PSR from cart*/
@@ -252,6 +334,7 @@ static int attach_group(struct iof_state *iof_state,
 	group->grp.grp_id = id;
 
 	sprintf(buf, "%d", id);
+
 	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
 				     &ionss_dir);
 	if (ret != 0) {
@@ -276,7 +359,7 @@ int dh_init(void *arg, void *handle)
 	struct iof_dir_handle *dh = arg;
 
 	dh->fs_handle = handle;
-	dh->ep = dh->fs_handle->dest_ep;
+	dh->ep = dh->fs_handle->proj.grp->psr_ep;
 	return 0;
 }
 
@@ -367,7 +450,7 @@ fh_clean(void *arg)
 		fh->release_rpc = NULL;
 	}
 
-	fh->common.ep = fh->fs_handle->dest_ep;
+	fh->common.ep = fh->fs_handle->proj.grp->psr_ep;
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
@@ -413,8 +496,7 @@ gh_init(void *arg, void *handle)
 {
 	struct getattr_req *req = arg;
 
-	req->fs_handle = handle;
-	req->ep = req->fs_handle->dest_ep;
+	IOF_REQ_FS_HANDLE(req) = handle;
 	return 0;
 }
 
@@ -426,7 +508,7 @@ gh_clean(void *arg)
 	struct iof_gah_string_in *in;
 	int rc;
 
-	iof_tracker_init(&req->reply.tracker, 1);
+	iof_tracker_init(&req->reply.ctx.tracker, 1);
 
 	/* If this descriptor has previously been used the destroy the
 	 * existing RPC
@@ -447,15 +529,17 @@ gh_clean(void *arg)
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, &req->ep,
-			    FS_TO_OP(req->fs_handle, getattr), &req->rpc);
+	rc = crt_req_create(IOF_REQ_FS_HANDLE(req)->proj.crt_ctx,
+			    &IOF_REQ_FS_HANDLE(req)->proj.grp->psr_ep,
+			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr),
+			    &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -1;
 	}
 	crt_req_addref(req->rpc);
 	in = crt_req_get(req->rpc);
-	in->gah = req->fs_handle->gah;
+	in->gah = IOF_REQ_FS_HANDLE(req)->gah;
 
 	return 0;
 }
@@ -467,7 +551,7 @@ fgh_clean(void *arg)
 	struct getattr_req *req = arg;
 	int rc;
 
-	iof_tracker_init(&req->reply.tracker, 1);
+	iof_tracker_init(&req->reply.ctx.tracker, 1);
 
 	if (req->rpc) {
 		crt_req_decref(req->rpc);
@@ -475,8 +559,10 @@ fgh_clean(void *arg)
 		req->rpc = NULL;
 	}
 
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, &req->ep,
-			    FS_TO_OP(req->fs_handle, getattr_gah), &req->rpc);
+	rc = crt_req_create(IOF_REQ_FS_HANDLE(req)->proj.crt_ctx,
+			    &IOF_REQ_FS_HANDLE(req)->proj.grp->psr_ep,
+			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr_gah),
+			    &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
 		return -1;
@@ -642,6 +728,12 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	ret = crt_rpc_register(DETACH_OP, NULL);
 	if (ret) {
 		IOF_LOG_ERROR("Detach registration failed with ret: %d", ret);
+		return ret;
+	}
+
+	ret = crt_rpc_register(IOF_NO_OP, NULL);
+	if (ret) {
+		IOF_LOG_ERROR("No-op registration failed with ret: %d", ret);
 		return ret;
 	}
 
@@ -894,7 +986,6 @@ static int initialize_projection(struct iof_state *iof_state,
 		     fs_handle->proj.cli_fs_id);
 
 	fs_handle->proj.grp = &group->grp;
-	fs_handle->dest_ep = group->grp.psr_ep;
 	fs_handle->proj.grp_id = group->grp.grp_id;
 	fs_handle->proj.crt_ctx = iof_state->crt_ctx;
 	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
@@ -1071,8 +1162,54 @@ static int query_projections(struct iof_state *iof_state,
 	ret = crt_req_decref(query_rpc);
 	if (ret)
 		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
-
 	return 0;
+}
+
+static void
+ioc_noop_cb(const struct crt_cb_info *cb_info)
+{
+	struct status_cb_r *reply = cb_info->cci_arg;
+
+	if (cb_info->cci_rc != 0) {
+		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		reply->err = EIO;
+	}
+	iof_tracker_signal(&reply->tracker);
+}
+
+/* Preload URI Info */
+static int preload_uri_info(struct iof_state *iof_state,
+			    struct iof_group_info *group)
+{
+	int ret;
+	struct status_cb_r status = {0};
+	crt_rpc_t *rpc = NULL;
+	crt_endpoint_t failover_ep = group->grp.psr_ep;
+
+	iof_tracker_init(&status.tracker, 1);
+	failover_ep.ep_rank = (failover_ep.ep_rank + 1)
+			    % group->grp.num_ranks;
+	IOF_LOG_INFO("Loading URI for Failover PSR %d",
+		     failover_ep.ep_rank);
+	ret = crt_req_create(iof_state->crt_ctx,
+			    &failover_ep, IOF_NO_OP, &rpc);
+	if (ret || !rpc) {
+		IOF_LOG_ERROR("Could not create No-Op RPC rc = %d", ret);
+		goto end;
+	}
+	IOF_LOG_INFO("Sending No-Op to PSR %u", failover_ep.ep_rank);
+	ret = crt_req_send(rpc, ioc_noop_cb, &status);
+	if (ret) {
+		IOF_LOG_ERROR("Could not send No-Op RPC rc = %d", ret);
+		goto end;
+	}
+	iof_wait(iof_state->crt_ctx, &status.tracker);
+	IOF_LOG_INFO("Loaded URI Info for Failover PSR");
+	ret = status.err;
+	if (ret)
+		IOF_LOG_ERROR("Could not progress No-Op RPC rc = %d", ret);
+end:
+	return ret;
 }
 
 static int iof_post_start(void *arg)
@@ -1115,9 +1252,11 @@ static int iof_post_start(void *arg)
 			IOF_LOG_ERROR("Couldn't mount projections from %s",
 				      group->grp_name);
 			continue;
+		} else {
+			ret = preload_uri_info(iof_state, group);
 		}
-
 		active_projections += active;
+
 	}
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir,

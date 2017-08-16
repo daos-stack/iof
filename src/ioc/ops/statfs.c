@@ -113,8 +113,9 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 
 	IOF_LOG_INFO("path %s", path);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
-		FS_TO_OP(fs_handle, statfs), &rpc);
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
+			    FS_TO_OP(fs_handle, statfs), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

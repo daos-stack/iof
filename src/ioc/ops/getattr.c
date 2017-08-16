@@ -40,33 +40,15 @@
 #include "ioc.h"
 #include "log.h"
 
-void
-getattr_cb(const struct crt_cb_info *cb_info)
+void getattr_cb(struct iof_rpc_ctx *ctx, void *output)
 {
-	struct getattr_cb_r *reply = cb_info->cci_arg;
-	struct iof_getattr_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_getattr_out *out = output;
+	struct getattr_cb_r *reply = container_of(
+				     ctx, struct getattr_cb_r, ctx);
 
-	if (IOC_HOST_IS_DOWN(cb_info)) {
-		reply->err = EHOSTDOWN;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (cb_info->cci_rc != 0) {
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	reply->rc = out->rc;
-
-	if (out->err)
-		reply->err = EIO;
-
-	if (IOC_STATUS_TO_RC(reply) == 0)
+	IOC_RESOLVE_STATUS(ctx, out);
+	if (IOC_STATUS_TO_RC(ctx) == 0)
 		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
-
-	iof_tracker_signal(&reply->tracker);
 }
 
 int ioc_getattr_name(const char *path, struct stat *stbuf)
@@ -78,38 +60,18 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 	int rc;
 
 	STAT_ADD(fs_handle->stats, getattr);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
 	IOF_LOG_INFO("path %s", path);
-
-	req = iof_pool_acquire(fs_handle->gh_pool);
-	if (!req)
-		return -ENOMEM;
+	IOC_RPC_INIT(fs_handle->gh_pool, req, rpc, getattr_cb, rc);
+	if (rc)
+		return rc;
 
 	in = crt_req_get(req->rpc);
 	in->path = (d_string_t)path;
 	req->reply.stat = stbuf;
+	iof_fs_send(req, &(req)->reply.ctx);
 
-	rc = crt_req_send(req->rpc, getattr_cb, &req->reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		iof_pool_release(fs_handle->gh_pool, req);
-		return -EIO;
-	}
-	iof_pool_restock(fs_handle->gh_pool);
-	crt_req_addref(req->rpc);
-
-	iof_fs_wait(&fs_handle->proj, &req->reply.tracker);
-
-	if (req->reply.err == EHOSTDOWN)
-		ioc_mark_ep_offline(fs_handle, &req->ep);
-
-	rc = IOC_STATUS_TO_RC(&req->reply);
+	IOC_RPC_FINI(fs_handle->gh_pool, req, rc);
 	IOF_LOG_DEBUG("path %s rc %d", path, rc);
-
-	iof_pool_release(fs_handle->gh_pool, req);
-
 	return rc;
 }
+

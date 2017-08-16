@@ -107,7 +107,8 @@ int ioc_readlink(const char *link, char *target, size_t len)
 
 	IOF_LOG_INFO("link %s", link);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, readlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

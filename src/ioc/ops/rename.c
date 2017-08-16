@@ -61,7 +61,8 @@ ioc_rename_priv(const char *src, const char *dst)
 
 	IOF_LOG_INFO("src %s dst %s", src, dst);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &fs_handle->dest_ep,
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, rename), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",

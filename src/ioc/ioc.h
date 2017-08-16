@@ -116,8 +116,6 @@ struct iof_projection_info {
 	struct iof_state		*iof_state;
 	struct ios_gah			gah;
 	d_list_t			link;
-	/* destination endpoint */
-	crt_endpoint_t			dest_ep;
 	struct ctrl_dir			*fs_dir;
 	struct ctrl_dir			*stats_dir;
 	struct iof_stats		*stats;
@@ -214,6 +212,37 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
 #define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
 					O_EXCL)
 
+#define IOC_RPC_INIT(pool, req, rpc, hdlr, rc) \
+	do {\
+		struct iof_projection_info *fsh = (pool)->reg.handle; \
+		\
+		rc = 0; \
+		if (FS_IS_OFFLINE(fsh)) { \
+			rc = -fsh->offline_reason; \
+			break; \
+		} \
+		req = iof_pool_acquire(pool); \
+		if (!req) { \
+			rc = -ENOMEM; \
+			break; \
+		} \
+		(req)->reply.ctx.mem_pool = pool; \
+		(req)->reply.ctx.handler = hdlr; \
+		(req)->reply.ctx.rpc_ptr = &(req)->rpc; \
+		/* Defer clean up until the output is copied. */ \
+		rc = crt_req_addref((req)->rpc); \
+	} while (0)
+
+#define IOC_RPC_FINI(pool, req, rc) \
+	do {\
+		struct iof_projection_info *fsh = (pool)->reg.handle; \
+		struct iof_rpc_ctx *ctx = &((req)->reply.ctx); \
+		\
+		iof_fs_wait(&(fsh)->proj, &ctx->tracker); \
+		rc = IOC_STATUS_TO_RC(ctx); \
+		iof_pool_release(pool, req); \
+	} while (0)
+
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {
 	struct iof_projection_info	*fs_handle;
@@ -253,26 +282,39 @@ struct iof_file_handle {
 
 struct iof_projection_info *ioc_get_handle(void);
 
+/* Forward Declaration */
+struct iof_rpc_ctx;
+
+typedef void (*iof_fs_cb_t)(struct iof_rpc_ctx *ctx, void *output);
+
 struct status_cb_r {
+	int err; /** errno of any internal error */
+	int rc;  /** errno reported by remote POSIX operation */
+	struct iof_tracker tracker; /** Completion event tracker */
+};
+
+struct iof_rpc_ctx {
+	struct iof_projection_info *fs_handle;
+	struct iof_pool_type *mem_pool;
 	struct iof_tracker tracker; /** Completion event tracker */
 	int err; /** errno of any internal error */
 	int rc;  /** errno reported by remote POSIX operation */
+	void *rpc_ptr; /** RPC being sent */
+	iof_fs_cb_t handler; /** Request completion handler */
 };
 
 struct getattr_cb_r {
-	struct iof_tracker tracker;
-	int err;
-	int rc;
+	struct iof_rpc_ctx ctx;
 	struct stat *stat;
 };
 
 struct getattr_req {
 	struct getattr_cb_r		reply;
-	crt_endpoint_t			ep;
-	struct iof_projection_info	*fs_handle;
 	struct crt_rpc			*rpc;
 	d_list_t			list;
 };
+
+#define IOF_REQ_FS_HANDLE(REQ) ((REQ)->reply.ctx.fs_handle)
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.
  * If err is non-zero then use that, otherwise use rc.  Return negative numbers
@@ -284,6 +326,22 @@ struct getattr_req {
 #define IOC_STATUS_TO_RC(STATUS) \
 	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
 
+/* Correctly resolve the return codes and errors from the RPC response.
+ * If the error code was already non-zero, it means an error occurred on
+ * the client; do nothing. A non-zero error code in the RPC response
+ * denotes a server error, in which case, set the status error code to EIO.
+ *
+ * TODO: Unify the RPC output types so they can be processed without using
+ * this macro, since the 'err' and 'rc' fields are common in all of them.
+ */
+#define IOC_RESOLVE_STATUS(STATUS, OUT) \
+	do { \
+		if (!(STATUS)->err) { \
+			(STATUS)->rc = (OUT)->rc; \
+			if ((OUT)->err) \
+				(STATUS)->err = EIO; \
+		} \
+	} while (0)
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
  * for permanent failure of the remote ep.
  */
@@ -294,7 +352,9 @@ void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 
 void ioc_status_cb(const struct crt_cb_info *);
 
-void getattr_cb(const struct crt_cb_info *);
+void getattr_cb(struct iof_rpc_ctx *ctx, void *output);
+
+int iof_fs_send(void *request, struct iof_rpc_ctx *ctx);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
 

@@ -48,6 +48,7 @@
 struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */
 	crt_endpoint_t		psr_ep;    /* Server PSR endpoint */
+	uint32_t		num_ranks; /* Number of service ranks */
 	uint32_t		grp_id;    /* CNSS defined ionss id */
 	bool			enabled;   /* Indicates group is available */
 };

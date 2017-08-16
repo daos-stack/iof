@@ -98,7 +98,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 		return -ENOMEM;
 
 	dir_handle->fs_handle = fs_handle;
-	dir_handle->ep = fs_handle->dest_ep;
+	dir_handle->ep = fs_handle->proj.grp->psr_ep;
 
 	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
 
