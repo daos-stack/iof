@@ -45,7 +45,8 @@ execStrategy:
     - name: "iof_ompi_mdtest"
       nodeType: "IOF_TEST_CN"
       useNodes: "0"
+
+cleanupStrategy:
     - name: "cleanup_iof"
       type: cleanup
-      nodeType: "IOF_TEST_CN"
-      setConfigKeys:
+      nodeType: "all"

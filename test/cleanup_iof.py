@@ -73,12 +73,12 @@ class TestCleanUpIof():
         procrtn = subprocess.call(cmdarg, timeout=180)
         return procrtn
 
-    def has_terminated(self, proc):
+    def has_terminated(self, proc, waittime=30):
         """Check if the process has terminated
         Wait up to 60s for the process to die by itself,
         return non-zero or zero return code indicating
         success or failure respectively."""
-        i = 60
+        i = waittime
         while i > 0:
             msg = "Check if the %s process has terminated" % proc
             cmd = "pgrep -la %s" % proc
@@ -92,20 +92,48 @@ class TestCleanUpIof():
 
     def test_iofshutdown(self):
         """Shutdown iof"""
+        rtn = 1
+        nodetype = self.test_info.info.get_config('node_type', '', "")
+        if nodetype == "IOF_TEST_CN":
+            rtn = self.cnss_shutdown()
+        elif nodetype == "IOF_TEST_ION":
+            rtn = self.ionss_shutdown()
+        else:
+            self.logger.info("IOF Cleanup failed. \
+                        No node types match found \
+                        node type: %s.\n", \
+                        nodetype)
+        return rtn
+
+    def ionss_shutdown(self):
+        """Shutdown iof"""
+        self.logger.info("wait for ionss shutdown")
+        ionssrtn = self.has_terminated("ionss", 45)
+        if ionssrtn != 0:
+            self.logger.info("CNSS and IONSS processes have terminated.\n")
+        else:
+            # Log the error message. Fail the test with the same error message
+            self.logger.info("IOF Cleanup failed. \
+                        IONSS processes have not terminated. \
+                        IONSS return code: %d.\n", \
+                        ionssrtn)
+            return 1
+        return 0
+
+    def cnss_shutdown(self):
+        """Shutdown iof"""
         shutdown_file = os.path.join(self.ctrl_dir, "shutdown")
         self.logger.info("Check for shutdown file: %s", shutdown_file)
         with open(shutdown_file, 'w') as f:
             f.write('1')
         cnssrtn = self.has_terminated("cnss")
-        ionssrtn = self.has_terminated("ionss")
-        self.logger.info("CNSS %d and IONSS %d", cnssrtn, ionssrtn)
-        if cnssrtn != 0 and ionssrtn != 0:
-            self.logger.info("CNSS and IONSS processes have terminated.\n")
+        if cnssrtn != 0:
+            self.logger.info("CNSS processes have terminated.\n")
         else:
             # Log the error message. Fail the test with the same error message
             self.logger.info("IOF Cleanup failed. \
-                        CNSS and IONSS processes have not terminated. \
-                        CNSS return code: %d. IONSS return code: %d.\n", \
-                        cnssrtn, ionssrtn)
+                        CNSS processes have not terminated. \
+                        CNSS return code: %d.\n", \
+                        cnssrtn)
             return 1
         return 0

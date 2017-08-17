@@ -69,21 +69,17 @@ class TestMdtest(object):
         nodes = NodeControlRunner.NodeControlRunner(testlog, self.test_info)
         prefix = self.test_info.get_defaultENV('IOF_OMPI_BIN', "")
         cmd_list = nodes.start_cmd_list(self.log_dir_base, testname, prefix)
-        self.logger.debug("CMD: %s", str(cmd_list))
-        nodes.add_nodes(cmd_list, 'IOF_TEST_CN')
-        self.logger.debug("nodes added: %s", str(cmd_list))
+        cmd_list.add_nodes('IOF_TEST_CN')
         env_vars = {}
         env_vars['LD_LIBRARY_PATH'] = \
             self.test_info.get_defaultENV('LD_LIBRARY_PATH')
-        nodes.add_env_vars(cmd_list, env_vars)
-        self.logger.debug("env added: %s", str(cmd_list))
+        cmd_list.add_env_vars(env_vars)
         parameters = "-i 3 -I 10 -d {!s}/FS_1".format(
             self.test_info.get_defaultENV('CNSS_PREFIX'))
-        self.logger.debug("ready to go: %s", str(cmd_list))
         cmdstr = "{!s}/mdtest".format(
             self.test_info.parameters_one("{mdtest_path}"))
-        nodes.add_cmd(cmd_list, cmdstr, parameters)
-        proc = nodes.start_process(cmd_list)
-        if nodes.check_process(proc):
-            proc_rtn = nodes.wait_process(proc)
+        cmd_list.add_cmd(cmdstr, parameters)
+        cmd_list.start_process()
+        if cmd_list.check_process():
+            proc_rtn = cmd_list.wait_process()
         return proc_rtn

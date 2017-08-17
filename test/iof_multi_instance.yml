@@ -41,7 +41,9 @@ execStrategy:
     - name: "mdtest"
       nodeType: "IOF_TEST_CN"
       setConfigKeys:
+
+cleanupStrategy:
     - name: "cleanup_iof"
       type: cleanup
-      nodeType: "IOF_TEST_CN"
+      nodeType: "all"
       setConfigKeys:
