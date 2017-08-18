@@ -252,7 +252,7 @@ static int attach_group(struct iof_state *iof_state,
 	}
 
 	/*initialize destination endpoint*/
-	group->grp.psr_ep.ep_grp = 0; /*primary group*/
+	group->grp.psr_ep.ep_grp = group->grp.dest_grp;
 	/*TODO: Use exported PSR from cart*/
 	group->grp.psr_ep.ep_rank = 0;
 	group->grp.psr_ep.ep_tag = 0;

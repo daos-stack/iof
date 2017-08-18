@@ -172,6 +172,8 @@ static int find_projections(void)
 			return 1;
 		}
 
+		grp_info->psr_ep.ep_grp = grp_info->dest_grp;
+
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);
 		rc = iof_ctrl_read_uint32(&rank, tmp);
 		if (rc != 0) {
