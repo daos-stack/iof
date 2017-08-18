@@ -107,7 +107,7 @@ statfs_cb(const struct crt_cb_info *cb_info)
 int ioc_statfs(const char *path, struct statvfs *stat)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_string_in *in;
+	struct iof_gah_in *in;
 	struct statfs_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
@@ -129,8 +129,7 @@ int ioc_statfs(const char *path, struct statvfs *stat)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)path;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, statfs_cb, &reply);
 	if (rc) {

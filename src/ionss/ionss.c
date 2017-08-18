@@ -1847,18 +1847,18 @@ out:
 
 static void iof_statfs_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_data_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
 	struct statvfs buf;
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
 	if (out->err)
 		goto out;
 
 	errno = 0;
-	rc = fstatvfs(base.projection_array[in->fs_id].root->fd,
-		      &buf);
+	rc = fstatvfs(handle->fd, &buf);
 
 	if (rc) {
 		out->rc = errno;
@@ -1877,6 +1877,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(handle, 1);
 }
 
 static void iof_register_default_handlers(void)

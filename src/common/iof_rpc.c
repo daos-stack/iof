@@ -231,7 +231,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(chmod_gah, chmod_gah_in, status_out),
 	RPC_TYPE(utimens, utimens_in, status_out),
 	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
-	RPC_TYPE(statfs, string_in, iov_pair),
+	RPC_TYPE(statfs, gah_in, iov_pair),
 };
 
 const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
