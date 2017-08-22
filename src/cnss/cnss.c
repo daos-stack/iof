@@ -43,13 +43,8 @@
 #include <inttypes.h>
 #include <errno.h>
 #include <dlfcn.h>
-#ifdef IOF_USE_FUSE3
 #include <fuse3/fuse.h>
 #include <fuse3/fuse_lowlevel.h>
-#else
-#include <fuse/fuse.h>
-#include <fuse/fuse_lowlevel.h>
-#endif
 #include <sys/xattr.h>
 #include <cart/api.h>
 #include <pouch/common.h>
@@ -86,17 +81,14 @@ struct plugin_entry {
 };
 
 struct fs_info {
-	char *mnt;
-	struct fuse *fuse;
-#if !IOF_USE_FUSE3
-	struct fuse_chan *ch;
-#endif
-	pthread_t thread;
-	pthread_mutex_t lock;
-	void *private_data;
-	crt_list_t entries;
-	int running:1;
-	int mt:1;
+	char		*mnt;
+	struct fuse	*fuse;
+	pthread_t	thread;
+	pthread_mutex_t	lock;
+	void		*private_data;
+	crt_list_t	entries;
+	int		running:1,
+			mt:1;
 };
 
 #define FN_TO_PVOID(fn) (*((void **)&(fn)))
@@ -228,11 +220,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 	entry->dl_handle = dl_handle;
 
-#ifdef IOF_USE_FUSE3
 	entry->self_fns.fuse_version = 3;
-#else /* ! IOF_USE_FUSE3 */
-	entry->self_fns.fuse_version = 2;
-#endif /* IOF_USE_FUSE3 */
 
 	entry->self_fns.get_config_option = get_config_option;
 	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
@@ -293,11 +281,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 static void iof_fuse_umount(struct fs_info *info)
 {
-#if IOF_USE_FUSE3
 	fuse_unmount(info->fuse);
-#else
-	fuse_unmount(info->mnt, info->ch);
-#endif
 }
 
 static void *loop_fn(void *args)
@@ -311,11 +295,7 @@ static void *loop_fn(void *args)
 
 	/*Blocking*/
 	if (info->mt) {
-#if IOF_USE_FUSE3
 		ret = fuse_loop_mt(info->fuse, 0);
-#else
-		ret = fuse_loop_mt(info->fuse);
-#endif
 	} else
 		ret = fuse_loop(info->fuse);
 
@@ -323,12 +303,12 @@ static void *loop_fn(void *args)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
 	pthread_mutex_lock(&info->lock);
-	iof_fuse_umount(info);
 	fuse_destroy(info->fuse);
 	info->fuse = NULL;
 	info->running = 0;
 	pthread_mutex_unlock(&info->lock);
-	return NULL;
+
+	return (void *)(uintptr_t)ret;
 }
 
 /*
@@ -378,22 +358,9 @@ static int register_fuse(void *arg,
 		goto cleanup_no_mutex;
 	}
 
-#if !IOF_USE_FUSE3
-	info->ch = fuse_mount(info->mnt, args);
-	if (!info->ch) {
-		IOF_LOG_ERROR("Could not successfully mount %s", info->mnt);
-		goto cleanup;
-	}
-#endif
-
 	info->private_data = private_data;
-#if IOF_USE_FUSE3
 	info->fuse = fuse_new(args, ops,
 			sizeof(struct fuse_operations), private_data);
-#else
-	info->fuse = fuse_new(info->ch, args, ops,
-			sizeof(struct fuse_operations), private_data);
-#endif
 
 	if (!info->fuse) {
 		IOF_LOG_ERROR("Could not initialize fuse");
@@ -402,18 +369,12 @@ static int register_fuse(void *arg,
 		goto cleanup;
 	}
 
-#if IOF_USE_FUSE3
-	{
-		int rc;
-
-		rc = fuse_mount(info->fuse, info->mnt);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not successfully mount %s",
-				      info->mnt);
-			goto cleanup;
-		}
+	rc = fuse_mount(info->fuse, info->mnt);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not successfully mount %s",
+			      info->mnt);
+		goto cleanup;
 	}
-#endif
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
 	IOF_LOG_DEBUG("Private data %p threaded %d", private_data, threaded);
@@ -443,12 +404,16 @@ cleanup_no_mutex:
 	return 1;
 }
 
-static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
+static int
+deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 {
+	uintptr_t *rcp = NULL;
+	int rc;
+
 	pthread_mutex_lock(&info->lock);
 
 	if (info->running) {
-		char *val = "1";
+		struct fuse_session *session = fuse_get_session(info->fuse);
 
 		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
 
@@ -459,27 +424,27 @@ static int deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		 * will cause I/O activity and loop_fn() to deadlock with this
 		 * function.
 		 */
-		fuse_session_exit(fuse_get_session(info->fuse));
+		fuse_session_exit(session);
+		fuse_session_unmount(session);
 		pthread_mutex_unlock(&info->lock);
-#ifdef __APPLE__
-		setxattr(info->mnt, "user.exit", val, strlen(val), 0, 0);
-#else
-		setxattr(info->mnt, "user.exit", val, strlen(val), 0);
-#endif
 	} else {
 		pthread_mutex_unlock(&info->lock);
 	}
 
 	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
-	pthread_join(info->thread, 0);
+	pthread_join(info->thread, (void **)&rcp);
 	crt_list_del(&info->entries);
 
+	rc = (uintptr_t)rcp;
+
 	pthread_mutex_destroy(&info->lock);
+
 	free(info->mnt);
 	if (plugin->active && plugin->fns->deregister_fuse)
 		plugin->fns->deregister_fuse(info->private_data);
+
 	free(info);
-	return CNSS_SUCCESS;
+	return rc;
 }
 
 void shutdown_fs(struct cnss_info *cnss_info)
