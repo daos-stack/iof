@@ -37,6 +37,10 @@ execStrategy:
     - name: "mdtest"
       nodeType: "IOF_TEST_CN"
       setConfigKeys:
+    - name:     "iozone_iof"
+      nodeType: "IOF_TEST_CN"
+      setConfigKeys:
+      useNodes: "0"
 
 cleanupStrategy:
     - name: "cleanup_iof"
