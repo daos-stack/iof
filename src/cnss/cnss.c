@@ -83,6 +83,7 @@ struct plugin_entry {
 struct fs_info {
 	char		*mnt;
 	struct fuse	*fuse;
+	struct fuse_session *session;
 	pthread_t	thread;
 	pthread_mutex_t	lock;
 	void		*private_data;
@@ -192,6 +193,7 @@ static const char *get_config_option(const char *var)
 
 static int register_fuse(void *arg,
 			 struct fuse_operations *ops,
+			 struct fuse_lowlevel_ops *flo,
 			 struct fuse_args *args,
 			 const char *mnt,
 			 int threaded,
@@ -281,7 +283,35 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 static void iof_fuse_umount(struct fs_info *info)
 {
-	fuse_unmount(info->fuse);
+	if (info->session)
+		fuse_session_unmount(info->session);
+	else
+		fuse_unmount(info->fuse);
+}
+
+static void *ll_loop_fn(void *args)
+{
+	int ret;
+	struct fs_info *info = args;
+
+	pthread_mutex_lock(&info->lock);
+	info->running = 1;
+	pthread_mutex_unlock(&info->lock);
+
+	/*Blocking*/
+	if (info->mt)
+		ret = fuse_session_loop_mt(info->session, 0);
+	else
+		ret = fuse_session_loop(info->session);
+
+	if (ret != 0)
+		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
+
+	pthread_mutex_lock(&info->lock);
+	info->fuse = NULL;
+	info->running = 0;
+	pthread_mutex_unlock(&info->lock);
+	return NULL;
 }
 
 static void *loop_fn(void *args)
@@ -320,6 +350,7 @@ static void *loop_fn(void *args)
  */
 static int register_fuse(void *arg,
 			 struct fuse_operations *ops,
+			 struct fuse_lowlevel_ops *flo,
 			 struct fuse_args *args,
 			 const char *mnt,
 			 int threaded,
@@ -359,21 +390,36 @@ static int register_fuse(void *arg,
 	}
 
 	info->private_data = private_data;
-	info->fuse = fuse_new(args, ops,
-			sizeof(struct fuse_operations), private_data);
 
-	if (!info->fuse) {
-		IOF_LOG_ERROR("Could not initialize fuse");
-		fuse_opt_free_args(args);
-		iof_fuse_umount(info);
-		goto cleanup;
-	}
+	if (flo) {
+		int rc;
 
-	rc = fuse_mount(info->fuse, info->mnt);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Could not successfully mount %s",
-			      info->mnt);
-		goto cleanup;
+		info->session = fuse_session_new(args,
+						 flo,
+						 sizeof(*flo),
+						 private_data);
+		if (!info->session)
+			goto cleanup;
+
+		rc = fuse_session_mount(info->session, info->mnt);
+		if (rc != 0)
+			goto cleanup;
+	} else {
+		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
+
+		if (!info->fuse) {
+			IOF_LOG_ERROR("Could not initialize fuse");
+			fuse_opt_free_args(args);
+			iof_fuse_umount(info);
+			goto cleanup;
+		}
+
+		rc = fuse_mount(info->fuse, info->mnt);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not successfully mount %s",
+				info->mnt);
+			goto cleanup;
+		}
 	}
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
@@ -381,8 +427,13 @@ static int register_fuse(void *arg,
 
 	fuse_opt_free_args(args);
 
-	rc = pthread_create(&info->thread, NULL,
-			    loop_fn, info);
+	if (flo)
+		rc = pthread_create(&info->thread, NULL,
+				    ll_loop_fn, info);
+	else
+		rc = pthread_create(&info->thread, NULL,
+				    loop_fn, info);
+
 	if (rc) {
 		IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
 			      info->mnt);
@@ -413,7 +464,6 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	pthread_mutex_lock(&info->lock);
 
 	if (info->running) {
-		struct fuse_session *session = fuse_get_session(info->fuse);
 
 		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
 
@@ -424,8 +474,15 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		 * will cause I/O activity and loop_fn() to deadlock with this
 		 * function.
 		 */
-		fuse_session_exit(session);
-		fuse_session_unmount(session);
+		if (info->session) {
+			fuse_session_exit(info->session);
+			fuse_session_unmount(info->session);
+		} else {
+			struct fuse_session *session = fuse_get_session(info->fuse);
+
+			fuse_session_exit(session);
+			fuse_session_unmount(session);
+		}
 		pthread_mutex_unlock(&info->lock);
 	} else {
 		pthread_mutex_unlock(&info->lock);

@@ -922,7 +922,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	args.argv[1] = read_option;
 
 	ret = cb->register_fuse_fs(cb->handle,
-				   fs_handle->fuse_ops, &args,
+				   fs_handle->fuse_ops, NULL, &args,
 				   fs_handle->mount_point,
 				   fs_handle->flags & IOF_CNSS_MT,
 				   fs_handle);

@@ -61,6 +61,7 @@ extern "C" {
 
 
 struct fuse_operations;
+struct fuse_lowlevel_ops;
 struct fuse_args;
 struct ctrl_dir;
 
@@ -96,6 +97,7 @@ struct cnss_plugin_cb {
 
 	/* Launch FUSE mount.  Returns 0 on success */
 	int (*register_fuse_fs)(void *handle, struct fuse_operations*,
+				struct fuse_lowlevel_ops*,
 				struct fuse_args*,
 				const char *, int, void *);
 
