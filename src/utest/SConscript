@@ -35,9 +35,10 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """Unit tests"""
+import os
 
 CUNIT_SRC = ['utest_gah.c', 'test_ctrl_fs.c', 'utest_pool.c',
-             'utest_vector.c']
+             'utest_vector.c', 'utest_preload.c']
 VALGRIND_EXCLUSIONS = ['test_ctrl_fs.c']
 OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
         'utest_pool.c':['../common/iof_obj_pool$OBJSUFFIX'],
@@ -49,10 +50,12 @@ OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
                           '../common/iof_mntent$OBJSUFFIX',
                           '../common/log$OBJSUFFIX']
        }
+CFLAGS = {'utest_preload.c':['-fPIC']} #Required for weak symbols to work
 DEPS = {'test_ctrl_fs.c':['cart'],
         'utest_pool.c':['cart'],
         'utest_vector.c':['cart']}
-CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include']}
+CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include'],
+           'utest_preload.c':['../include', '../common/include', '../il']}
 LIBS = {'test_ctrl_fs.c':['pthread'],
         'utest_pool.c':['pthread'],
         'utest_vector.c':['pthread']}
@@ -72,6 +75,8 @@ def compile_tests(env, sources, prereqs):
         if test in DEPS:
             for dep in DEPS[test]:
                 prereqs.require(tenv, dep)
+        if test in CFLAGS:
+            tenv.AppendUnique(CFLAGS=CFLAGS[test])
         if test in CPPPATH:
             tenv.AppendUnique(CPPPATH=CPPPATH[test])
         if test in LIBS:
@@ -80,6 +85,24 @@ def compile_tests(env, sources, prereqs):
             tenv.AppendUnique(CPPDEFINES=DEFINES[test])
         tests += tenv.Program(src_list)
     return tests
+
+def create_preload_script(target, source, env):
+    """Builder for the script to run utest_preload with LD_PRELOAD"""
+    var_str = ""
+    environ = env["ENV"]
+    for var in environ.keys():
+        var_str += 'export %s="%s"\n' % (var, environ[var])
+
+    script = open(target[0].abspath, "w")
+    ioil = source[1].abspath
+    contents = """#!/bin/sh
+export CRT_LOG_MASK=CRIT
+export LD_PRELOAD=%s
+%s%s""" % (ioil, var_str, source[0].abspath)
+    script.write("%s\n" % contents)
+    script.close()
+    os.chmod(target[0].abspath, 0755)
+    return None
 
 def scons():
     """Scons function"""
@@ -119,6 +142,11 @@ def scons():
     cunit_env.AppendUnique(LIBS=['cunit'])
     tests = []
     tests += compile_tests(cunit_env, CUNIT_SRC, prereqs)
+    if GetOption('utest_mode') == 'native':
+        script = cunit_env.Command('utest_preload.sh',
+                                   ['utest_preload', '../il/libioil.so'],
+                                   create_preload_script)
+        tests.append(script)
 
     Default(tests)
 

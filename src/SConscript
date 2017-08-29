@@ -38,7 +38,7 @@
 import os
 
 HEADERS = ['cnss_plugin.h', 'iof_ctrl_util.h', 'iof_io.h', 'iof_defines.h',
-           'iof_api.h']
+           'iof_api.h', 'iof_preload.h']
 COMMON_SRC = ['version.c',
               'ios_gah.c',
               'iof_fs.c',
@@ -98,7 +98,7 @@ def build_common(env, files, is_shared):
 def build_client_libs_shared(env, version):
     """build the shared interception library"""
     to_build = env.get('client_libs')
-    if to_build == 'none' or to_build == 'static':
+    if to_build == 'none':
         return []
 
     ilenv = env.Clone()
@@ -122,6 +122,15 @@ def build_client_libs_shared(env, version):
 
     iof_lib = ilenv.SharedLibrary('common/libiof', common,
                                   SHLIBVERSION=version)
+
+    gen_script = ilenv.Program(['il/gen_script.c'])
+    script = ilenv.Command('il/check_ioil_syms', gen_script,
+                           "$SOURCE -s $TARGET")
+    env.Install('$PREFIX/TESTING/scripts', script)
+    if to_build != 'shared':
+        script = ilenv.Command('il/ioil-ld-opts', gen_script,
+                               '$SOURCE -l $TARGET')
+        env.Install('$PREFIX/share', script)
     env.InstallVersionedLib(os.path.join("$PREFIX", 'lib'), iof_lib,
                             SHLIBVERSION=version)
     return iof_lib + il_lib
@@ -143,7 +152,6 @@ def build_client_libs_static(env, common):
                            'objcopy --localize-hidden $SOURCE $TARGET')
 
     env.Install('$PREFIX/lib', il_lib)
-    env.Install('$PREFIX/share/ld-opts', 'il/ioil-ld-opts')
 
     # Now build the interception library
     iof_lib_src = ilenv.Library('common/libiof_source', common)

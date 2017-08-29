@@ -38,10 +38,12 @@
 #ifndef __IOF_FS_H__
 #define __IOF_FS_H__
 
+#include <stdbool.h>
+#include <uuid/uuid.h> /* Required by cart/types.h.  See CART-279 */
+#include <sched.h>
 #include <cart/types.h>
 #include <iof_atomic.h>
 #include <ios_gah.h>
-#include <sched.h>
 
 struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */

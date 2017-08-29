@@ -166,8 +166,8 @@ def scons():
                           'Use libfuse3 from github',
                           True))
     opts.Add(EnumVariable('client_libs',
-                          'Build the client libraries', 'shared',
-                          allowed_values=('none', 'shared', 'static', 'all'),
+                          'Build the client libraries', 'all',
+                          allowed_values=('none', 'shared', 'all'),
                           ignorecase=2))
 
     opts.Update(env)

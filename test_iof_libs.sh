@@ -42,12 +42,14 @@
 
 prefixes=iof_
 syms=
+weak=
 
 function check_library()
 {
     syms_copy="${syms} _init _fini __bss_start _end _edata"
 
-    cmd="nm -g ${SL_PREFIX}/lib/$1 | grep -v \" [Uw] \""
+    nm -g ${SL_PREFIX}/lib/$1 > symbols.txt
+    cmd="cat symbols.txt | grep -v \" [Uw] \""
     for prefix in $prefixes; do
         cmd+=" | grep -v \"[WTBD] $prefix\""
     done
@@ -61,6 +63,26 @@ function check_library()
         echo "Leaked symbols in $1"
         RC=1;
     fi
+
+    # Check that expected symbols are in library
+    for sym in $syms; do
+       cat symbols.txt | grep $sym >> /dev/null
+       if [ $? -ne 0 ]; then
+         echo "Missing symbol $sym"
+         RC=1
+       fi
+    done
+
+    # Check that expected symbols are weak
+    for sym in $weak; do
+       cat symbols.txt | grep $sym | grep " W " >> /dev/null
+       if [ $? -ne 0 ]; then
+         echo "Symbol $sym should be weak"
+         RC=1
+       fi
+    done
+
+    rm symbols.txt
 }
 
 # Check for symbol names in the library.  All symbol names should begin with
@@ -68,12 +90,9 @@ function check_library()
 RC=0
 echo Checking for symbol names.
 check_library libiof.so
-syms="open open64 read read64 write write64 pwrite pwrite64 "
-syms+="pread pread64 readv writev preadv preadv64 pwritev "
-syms+="pwritev64 mmap mmap64 lseek lseek64 close creat "
-syms+="dup dup2 fcntl fdatasync fsync fdopen fopen fclose freopen "
-syms+="fopen64 freopen64"
+source ${SL_PREFIX}/TESTING/scripts/check_ioil_syms
 check_library libioil.so
+
 if [ ${RC} -ne 0 ]
 then
     echo Fail: Incorrect symbols exist

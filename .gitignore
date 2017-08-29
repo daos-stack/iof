@@ -4,6 +4,7 @@
 .build_vars-*.py
 config-*.log
 /objects/
+symbols.txt
 /build/
 /test/output/
 /_build.external-*/

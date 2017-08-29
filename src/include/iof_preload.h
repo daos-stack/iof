@@ -35,19 +35,11 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#ifndef __IOF_DEFINES_H__
-#define __IOF_DEFINES_H__
+#ifndef __IOF_PRELOAD_H__
+#define __IOF_PRELOAD_H__
 
-#include <inttypes.h>
+#define IOF_DECLARE_WEAK
+#include <iof_api.h>
+#include <iof_io.h>
 
-#ifdef IOF_DECLARE_WEAK
-/* For LD_PRELOAD, declaring public symbols as weak allows 3rd
- * party libraries to use the headers without knowing beforehand
- * if the iof libraries will be present at runtime
- */
-#define IOF_PUBLIC __attribute__((visibility("default"), weak))
-#else
-#define IOF_PUBLIC __attribute__((visibility("default")))
-#endif
-
-#endif /* __IOF_DEFINES_H__ */
+#endif /* __IOF_PRELOAD_H__ */
