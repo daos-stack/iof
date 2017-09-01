@@ -38,7 +38,7 @@
 set -e
 
 # A list of tests to run as a single instance on Jenkins
-JENKINS_TEST_LIST=(scripts/iof_test_ionss.yml scripts/iof_test_local.yml)
+JENKINS_TEST_LIST=(scripts/iof_test_local.yml)
 
 # Run the tests from the install TESTING directory
 if [ -z "$IOF_TEST_MODE"  ]; then

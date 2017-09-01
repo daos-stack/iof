@@ -49,7 +49,82 @@ import logging
 import unittest
 import shutil
 
-class IonssChecks(unittest.TestCase):
+class IonssExport():
+    """These methods are for setting the files system that
+    will be projected/exported to the CNSS.
+    Note: all unittest methods start with export_ """
+    logger = logging.getLogger("TestRunnerLogger")
+    e_dir = None
+    export_dir = None
+
+    def export_file_copy_from(self):
+        """Copy a file into a projecton"""
+
+        src_file = os.path.join(self.export_dir, 'ls')
+        self.logger.info("export_file_copy_from %s", src_file)
+        shutil.copyfile('/bin/ls', src_file)
+
+        dst_file = os.path.join(self.export_dir, 'ls.2')
+        fd = open(dst_file, 'w+')
+        fd.close()
+
+    def export_file_open_existing(self):
+        """Export a file to test test_file_open_existing"""
+
+        tfile = os.path.join(self.export_dir, 'exist_file')
+        self.logger.info("export_file_open_existing %s", tfile)
+
+        fd = open(tfile, 'w')
+        fd.write("Hello")
+        fd.close()
+
+    def export_file_read(self):
+        """Export a file to test test_file_read"""
+
+        tfile = os.path.join(self.export_dir, 'read_file')
+        self.logger.info("export_file_read %s", tfile)
+
+        fd = open(tfile, 'w')
+        fd.write("Hello")
+        fd.close()
+
+    def export_ionss_link(self):
+        """Create a symlink to check the type returned by stat"""
+        # Make a directory 'b', create a symlink from 'a' to 'b'
+
+        self.logger.info("export_ionss_link %s", self.export_dir)
+        os.mkdir(os.path.join(self.export_dir, 'b'))
+        os.symlink('b', os.path.join(self.export_dir, 'a'))
+
+    def export_ionss_self_listdir(self):
+        """For list dir operation, create a dir on io node"""
+
+        test_dir = os.path.join(self.export_dir, 'test_dir')
+        self.logger.info("export_ionss_self_listdir %s", test_dir)
+        os.mkdir(test_dir)
+
+    def export_many_files(self):
+        """Create a dir to contain the files for test_many_files"""
+
+        many_dir = os.path.join(self.export_dir, 'many')
+        self.logger.info("export_many_files %s", many_dir)
+        os.mkdir(many_dir)
+
+    def export_read_symlink(self):
+        """Create a symlink to be read by the CN"""
+
+        rlink_source = os.path.join(self.export_dir, 'rlink_source')
+        self.logger.info("export_read_symlink %s", rlink_source)
+        os.symlink('rlink_target', rlink_source)
+
+    def export_zzzz_theEnd(self):
+        """mark the end"""
+        self.logger.info("*************************************************")
+        self.logger.info("\n\t\tWe are DONE\n")
+        self.logger.info("*************************************************")
+
+
+class IonssChecksSetup(unittest.TestCase, IonssExport):
 
     """These methods are invoked on the ION from where the files system
     will be projected/exported to the CNSS.
@@ -62,63 +137,9 @@ class IonssChecks(unittest.TestCase):
 
     This class imports from unittest to get access to the self.fail() method
     """
-
-    logger = logging.getLogger("TestRunnerLogger")
-    e_dir = None
-    export_dir = None
-
     def setUp(self):
         """Set up the export dir"""
         self.e_dir = os.environ["ION_TEMPDIR"]
-        self.export_dir = os.path.join(self.e_dir, 'FS_2')
-
-    def test_export_file_open_existing(self):
-        """Export a file to test test_file_open_existing"""
-
-        tfile = os.path.join(self.export_dir, 'exist_file')
-
-        fd = open(tfile, 'w')
-        fd.write("Hello")
-        fd.close()
-
-    def test_export_file_read(self):
-        """Export a file to test test_file_read"""
-
-        tfile = os.path.join(self.export_dir, 'read_file')
-
-        fd = open(tfile, 'w')
-        fd.write("Hello")
-        fd.close()
-
-    def test_export_file_copy_from(self):
-        """Copy a file into a projecton"""
-
-        src_file = os.path.join(self.export_dir, 'ls')
-        shutil.copyfile('/bin/ls', src_file)
-
-        dst_file = os.path.join(self.export_dir, 'ls.2')
-        fd = open(dst_file, 'w+')
-        fd.close()
-
-    def test_export_read_symlink(self):
-        """Create a symlink to be read by the CN"""
-
-        os.symlink('rlink_target', os.path.join(self.export_dir, \
-                                                'rlink_source'))
-
-    def test_export_ionss_link(self):
-        """Create a symlink to check the type returned by stat"""
-        # Make a directory 'b', create a symlink from 'a' to 'b'
-
-        os.mkdir(os.path.join(self.export_dir, 'b'))
-        os.symlink('b', os.path.join(self.export_dir, 'a'))
-
-    def test_export_ionss_self_listdir(self):
-        """For list dir operation, create a dir on io node"""
-
-        os.mkdir(os.path.join(self.export_dir, 'test_dir'))
-
-    def test_export_many_files(self):
-        """Create a dir to contain the files for test_many_files"""
-
-        os.mkdir(os.path.join(self.export_dir, 'many'))
+        self.export_dir = os.path.join(self.e_dir, 'exp')
+        self.logger.info("*************************************************")
+        self.logger.info("Starting for %s", self.id())

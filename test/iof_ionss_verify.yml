@@ -2,7 +2,6 @@ description: "ionss verify tests"
 
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
-    MCL_LOG_LEVEL: "4"
 
 module:
     name: "iof_ionss_verify"
@@ -18,4 +17,5 @@ directives:
 
 execStrategy:
     - id: "ionss_verify"
+      testMethodPrefix: "verify"
       setEnvVars:

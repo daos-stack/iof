@@ -18,4 +18,5 @@ directives:
 
 execStrategy:
     - id: "ionss_setup"
+      testMethodPrefix: "export"
       setEnvVars:

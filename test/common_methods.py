@@ -44,18 +44,27 @@ are invoked on both simple and multi-node launch
 """
 
 import os
-from socket import gethostname
+import subprocess
 import logging
 import tempfile
 import unittest
 import stat
 import shutil
+from socket import gethostname
 from decimal import getcontext, Decimal
 import time
+import iof_ionss_setup
+import iof_ionss_verify
+#pylint: disable=import-error
+#pylint: disable=no-name-in-module
+from distutils.spawn import find_executable
+#pylint: enable=import-error
+#pylint: enable=no-name-in-module
+
 
 IMPORT_MNT = None
-IMPORT_BASE = None
 CTRL_DIR = None
+
 
 def import_list():
     """Return a array of imports
@@ -83,8 +92,11 @@ def get_writeable_import():
 
 
 #pylint: disable=too-many-public-methods
+#pylint: disable=no-member
 
-class CnssChecks(unittest.TestCase):
+
+class CnssChecks(iof_ionss_verify.IonssVerify,
+                 iof_ionss_setup.IonssExport):
     """A object purely to define test methods.
 
     These methods are invoked on a node where projections are being imported,
@@ -101,7 +113,9 @@ class CnssChecks(unittest.TestCase):
 
     logger = logging.getLogger("TestRunnerLogger")
     import_dir = None
-    base_dir = None
+    export_dir = None
+    cnss_prefix = None
+    test_local = None
 
     @staticmethod
     def get_unique(parent):
@@ -113,65 +127,11 @@ class CnssChecks(unittest.TestCase):
         return tempfile.mkdtemp(dir=parent, prefix='%s_%d_' %
                                 (gethostname().split('.')[0], os.getpid()))
 
-    def test_mnt_path(self):
-        """Check that mount points do not contain dot characters"""
-
-        for mnt in import_list():
-            self.assertFalse('.' in mnt, 'mount point should not contain .')
-
-    def test_mkdir(self):
-        """Create a directory and check it exists
-
-        This test is also a bit of a nonsense as it makes a directory, however
-        it relies on mkdtemp() is get_unique() in order to launch, so if there
-        is a problem it'll be the setup which will fail, not the test.
-        """
-
-        ndir = os.path.join(self.base_dir, 'new_dir')
-
-        self.logger.info(self.id())
-
-        self.logger.info("Creating new directory at %s", ndir)
-
-        os.mkdir(ndir)
-
-        if not os.path.isdir(ndir):
-            self.fail("Newly created directory does not exist")
-
-        self.logger.info(os.listdir(ndir))
-
-        os.rmdir(ndir)
-
-    @unittest.skip("Test not complete")
-    def test_file_open(self):
-        """Open a file for reading
-
-        This is supposed to fail, as the file doesn't exist.
-        """
-
-        filename = os.path.join(self.import_dir, 'non_exist_file')
-
-        fd = open(filename, 'r')
-        fd.close()
-
-    def test_file_open_new(self):
-        """Create a new file"""
-
-        self.logger.info("Create a new file  at %s", self.base_dir)
-        filename = os.path.join(self.base_dir, 'test_file2')
-
-        fd = open(filename, 'w')
-        fd.close()
-
-        fstat = os.stat(filename)
-        if not stat.S_ISREG(fstat.st_mode):
-            self.fail("Failed to create a regular file")
-
     def test_chmod_file(self):
         """chmod a file"""
 
-        self.logger.info("Creating chmod file  at %s", self.base_dir)
-        filename = os.path.join(self.base_dir, 'chmod_file')
+        self.logger.info("Creating chmod file  at %s", self.import_dir)
+        filename = os.path.join(self.import_dir, 'chmod_file')
         init_mode = stat.S_IRUSR|stat.S_IWUSR
         fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
         os.close(fd)
@@ -199,8 +159,8 @@ class CnssChecks(unittest.TestCase):
     def test_fchmod(self):
         """Fchmod a file"""
 
-        self.logger.info("Creating fchmod file  at %s", self.base_dir)
-        filename = os.path.join(self.base_dir, 'fchmod_file')
+        self.logger.info("Creating fchmod file  at %s", self.import_dir)
+        filename = os.path.join(self.import_dir, 'fchmod_file')
         init_mode = stat.S_IRUSR|stat.S_IWUSR
         fd = os.open(filename, os.O_RDWR|os.O_CREAT, init_mode)
 
@@ -225,24 +185,81 @@ class CnssChecks(unittest.TestCase):
             self.fail("Mode is incorrect 0%o 0%o" % (actual_mode, new_mode))
         os.close(fd)
 
-    def test_file_truncate(self):
-        """Write to a file"""
+    def test_file_copy(self):
+        """Copy a file into a projecton
 
-        filename = os.path.join(self.base_dir, 'truncate_file')
+        Basic copy, using large I/O.  No permissions or metadata are used.
+        """
+
+        filename = os.path.join(self.import_dir, 'ls')
+
+        shutil.copyfile('/bin/ls', filename)
+        if self.test_local:
+            self.verify_file_copy()
+
+    def test_file_ftruncate(self):
+        """Truncate a file"""
+
+        filename = os.path.join(self.import_dir, 't_file')
+        self.logger.info("test_file_ftruncate %s", filename)
 
         fd = open(filename, 'w')
-        fd.write('World')
+        fd.truncate()
+
+        if os.stat(filename).st_size != 0:
+            self.fail("File truncate to 0 failed")
+
+        fd.truncate(100)
+        if os.stat(filename).st_size != 100:
+            self.fail("File truncate to 100 failed")
+
         fd.close()
+
+    def test_file_open_new(self):
+        """Create a new file"""
+
+        self.logger.info("Create a new file  at %s", self.import_dir)
+        filename = os.path.join(self.import_dir, 'test_file2')
 
         fd = open(filename, 'w')
-        fd.write('World')
         fd.close()
 
+        fstat = os.stat(filename)
+        if not stat.S_ISREG(fstat.st_mode):
+            self.fail("Failed to create a regular file")
+
+    @unittest.skip("Test not complete")
+    def test_file_open(self):
+        """Open a file for reading
+
+        This is supposed to fail, as the file doesn't exist.
+        """
+
+        filename = os.path.join(self.import_dir, 'non_exist_file')
+
+        fd = open(filename, 'r')
+        fd.close()
+
+    def test_file_read_empty(self):
+        """Read from a empty file"""
+
+        filename = os.path.join(self.import_dir, 'empty_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+
+        fd = open(filename, 'r')
+
+        if os.stat(filename).st_size != 0:
+            self.fail("File is not empty.")
+
+        fd.read()
+        fd.close()
 
     def test_file_read_zero(self):
         """Read 0 bytes from a file"""
 
-        tfile = os.path.join(self.base_dir, 'zero_file')
+        tfile = os.path.join(self.import_dir, 'zero_file')
 
         fd = os.open(tfile, os.O_RDWR|os.O_CREAT)
         ret = os.read(fd, 10)
@@ -250,10 +267,22 @@ class CnssChecks(unittest.TestCase):
             self.fail("Failed to return zero bytes"  %ret.decode())
         os.close(fd)
 
+    def test_file_rename(self):
+        """Write to a file"""
+
+        filename = os.path.join(self.import_dir, 'c_file')
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+        new_file = os.path.join(self.import_dir, 'd_file')
+        os.rename(filename, new_file)
+
     def test_file_sync(self):
         """Sync a file"""
 
-        filename = os.path.join(self.base_dir, 'sync_file')
+        filename = os.path.join(self.import_dir, 'sync_file')
 
         fd = os.open(filename, os.O_RDWR|os.O_CREAT)
         os.write(fd, bytes("Hello world", 'UTF-8'))
@@ -270,37 +299,61 @@ class CnssChecks(unittest.TestCase):
         os.ftruncate(fd, 100)
         os.close(fd)
 
-    def test_file_copy(self):
-        """Copy a file into a projecton
+    def test_file_truncate(self):
+        """Write to a file"""
 
-        Basic copy, using large I/O.  No permissions or metadata are used.
-        """
-
-        filename = os.path.join(self.base_dir, 'ls')
-
-        shutil.copyfile('/bin/ls', filename)
-
-    def test_file_ftruncate(self):
-        """Truncate a file"""
-
-        filename = os.path.join(self.base_dir, 't_file')
+        filename = os.path.join(self.import_dir, 'truncate_file')
 
         fd = open(filename, 'w')
-        fd.truncate()
-
-        if os.stat(filename).st_size != 0:
-            self.fail("File truncate to 0 failed")
-
-        fd.truncate(100)
-        if os.stat(filename).st_size != 100:
-            self.fail("File truncate to 100 failed")
-
+        fd.write('World')
         fd.close()
+
+        fd = open(filename, 'w')
+        fd.write('World')
+        fd.close()
+
+    def test_file_unlink(self):
+        """Create and remove a file"""
+
+        filename = os.path.join(self.import_dir, 'unlink_file')
+
+        fd = open(filename, 'w')
+        fd.close()
+        os.unlink(filename)
+
+    def test_mkdir(self):
+        """Create a directory and check it exists
+
+        This test is also a bit of a nonsense as it makes a directory, however
+        it relies on mkdtemp() is get_unique() in order to launch, so if there
+        is a problem it'll be the setup which will fail, not the test.
+        """
+
+        ndir = os.path.join(self.import_dir, 'new_dir')
+
+        self.logger.info(self.id())
+
+        self.logger.info("Creating new directory at %s", ndir)
+
+        os.mkdir(ndir)
+
+        if not os.path.isdir(ndir):
+            self.fail("Newly created directory does not exist")
+
+        self.logger.info(os.listdir(ndir))
+
+        os.rmdir(ndir)
+
+    def test_mnt_path(self):
+        """Check that mount points do not contain dot characters"""
+
+        for mnt in import_list():
+            self.assertFalse('.' in mnt, 'mount point should not contain .')
 
     def test_rmdir(self):
         """Remove a directory"""
 
-        ndir = os.path.join(self.base_dir, 'my_dir')
+        ndir = os.path.join(self.import_dir, 'my_dir')
 
         os.mkdir(ndir)
 
@@ -309,31 +362,10 @@ class CnssChecks(unittest.TestCase):
 
         os.rmdir(ndir)
 
-    def test_file_rename(self):
-        """Write to a file"""
-
-        filename = os.path.join(self.base_dir, 'c_file')
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
-        new_file = os.path.join(self.base_dir, 'd_file')
-        os.rename(filename, new_file)
-
-    def test_file_unlink(self):
-        """Create and remove a file"""
-
-        filename = os.path.join(self.base_dir, 'unlink_file')
-
-        fd = open(filename, 'w')
-        fd.close()
-        os.unlink(filename)
-
     def test_set_time(self):
         """Set the time of a file"""
 
-        filename = os.path.join(self.base_dir, 'time_file')
+        filename = os.path.join(self.import_dir, 'time_file')
 
         fd = open(filename, 'w')
         fd.close()
@@ -347,99 +379,76 @@ class CnssChecks(unittest.TestCase):
         self.logger.info("Stat results after setting time (sleep for 2s):")
         self.logger.info(stat_info)
 
+    # These methods have both multi node and iof_test_local component
 
-    def test_file_read_empty(self):
-        """Read from a empty file"""
-
-        filename = os.path.join(self.base_dir, 'empty_file')
-
-        fd = open(filename, 'w')
-        fd.close()
-
-        fd = open(filename, 'r')
-
-        if os.stat(filename).st_size != 0:
-            self.fail("File is not empty.")
-
-        fd.read()
-        fd.close()
-
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
-    def test_file_write(self):
-        """Write to a file"""
-
-        filename = os.path.join(self.base_dir, 'write_file')
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
-    def test_file_open_existing(self):
-        """Open a existing file for reading"""
-
-        filename = os.path.join(self.import_dir, 'exist_file')
-
-        fd = open(filename, 'r')
-        fd.close()
-
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
-    def test_file_read(self):
-        """Read from a file"""
-
-        filename = os.path.join(self.import_dir, 'read_file')
-
-        fd = open(filename, 'r')
-        data = fd.read()
-        fd.close()
-
-        if data != 'Hello':
-            self.fail('File contents wrong %s %s' % ('Hello', data))
-        else:
-            self.logger.info("Contents from file read: %s %s", 'Hello', data)
-
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
     def test_file_copy_from(self):
         """Copy a file into a projection
 
         Basic copy, using large I/O.  No permissions or metadata are used.
         """
 
+        if self.test_local:
+            self.export_file_copy_from()
+
         filename = os.path.join(self.import_dir, 'ls')
-        dst_file = os.path.join(self.base_dir, 'ls.2')
+        dst_file = os.path.join(self.export_dir, 'ls.2')
+        self.logger.info("test_file_copy_from %s", filename)
+        self.logger.info("test_file_copy_from to: %s", dst_file)
 
         shutil.copyfile(filename, dst_file)
+        if self.test_local:
+            self.verify_file_copy_from()
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
-    def test_read_symlink(self):
-        """Read a symlink"""
+    def test_file_open_existing(self):
+        """Open a existing file for reading"""
 
-        self.logger.info("List the files on CN")
-        self.logger.info(os.listdir(self.import_dir))
+        if self.test_local:
+            self.export_file_open_existing()
 
-        self.logger.info(os.lstat(os.path.join(self.import_dir,
-                                               'rlink_source')))
+        filename = os.path.join(self.import_dir, 'exist_file')
+        self.logger.info("test_file_open_existing %s", filename)
+        fd = open(filename, 'r')
+        fd.close()
 
-        result = os.readlink(os.path.join(self.import_dir, 'rlink_source'))
-        if result != 'rlink_target':
-            self.fail("Link target is wrong '%s'" % result)
+    def test_file_read(self):
+        """Read from a file"""
+
+        if self.test_local:
+            self.export_file_read()
+
+        filename = os.path.join(self.import_dir, 'read_file')
+        self.logger.info("test_file_read %s", filename)
+        with open(filename, 'r') as fd:
+            data = fd.read()
+
+        if data != 'Hello':
+            self.fail('File contents wrong %s %s' % ('Hello', data))
         else:
-            self.logger.info("Verified read on link target with source")
+            self.logger.info("Contents from file read: %s %s", 'Hello', data)
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
-    def test_make_symlink(self):
-        """Make a symlink"""
+    def test_file_write(self):
+        """Write to a file"""
 
-        os.symlink('mlink_target', os.path.join(self.base_dir, 'mlink_source'))
+        filename = os.path.join(self.import_dir, 'write_file')
+        with open(filename, 'w') as fd:
+            fd.write('World')
 
-        self.logger.info(os.listdir(self.base_dir))
+        if self.test_local:
+            self.verify_file_write()
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
     def test_ionss_link(self):
-        """Verify stat does not dereference symlinks"""
+        """CORFSHIP-336 Check that stat does not deference symlinks"""
+        # Make a directory 'b', create a symlink from 'a' to 'b'
+        # and then stat() it to see what type it is
+
+        if self.test_local:
+            self.export_ionss_link()
 
         e_b = os.lstat(os.path.join(self.import_dir, 'a'))
+        if self.test_local:
+            self.verify_clean_up_ionss_link()
 
+        self.logger.info("test_ionss_link %s", e_b)
         self.logger.info(e_b)
         if stat.S_ISLNK(e_b.st_mode):
             self.logger.info("It's a link")
@@ -449,20 +458,34 @@ class CnssChecks(unittest.TestCase):
         else:
             self.fail("Not a directory or a link")
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
     def test_ionss_self_listdir(self):
         """Perform a simple listdir operation"""
+        if self.test_local:
+            self.export_ionss_self_listdir()
 
         dirs = os.listdir(self.import_dir)
 
         self.logger.info(dirs)
+        if self.test_local:
+            self.verify_clean_up_ionss_self_listdir()
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
+    def test_make_symlink(self):
+        """Make a symlink"""
+
+        os.symlink('mlink_target',
+                   os.path.join(self.import_dir, 'mlink_source'))
+        self.logger.info(os.listdir(self.import_dir))
+
+        if self.test_local:
+            self.verify_make_symlink()
+
     def test_many_files(self):
         """Create lots of files, and then perform readdir"""
 
-        test_dir = os.path.join(self.import_dir, 'many')
+        if self.test_local:
+            self.export_many_files()
 
+        test_dir = os.path.join(self.import_dir, 'many')
         files = []
         for x in range(0, 100):
             this_file = 'file_%d' % x
@@ -472,22 +495,96 @@ class CnssChecks(unittest.TestCase):
             files.append(this_file)
 
         import_list_files = os.listdir(test_dir)
-        self.logger.info(sorted(files))
-        self.logger.info(sorted(import_list_files))
-
+        self.logger.info("test_many_files files %s", sorted(files))
+        self.logger.info("test_many_files import_list_files %s",
+                         sorted(import_list_files))
+        # create a list of files to be checked in ionss verify
         file_list = os.path.join(self.import_dir, 'file_list')
         with open(file_list, 'w') as f:
             for item in sorted(files):
                 f.write(item + '\n')
 
+        if self.test_local:
+            self.verify_many_files()
+
         if sorted(files) != sorted(import_list_files):
             self.fail("Import Directory contents are wrong")
 
-    @unittest.skipUnless(os.getenv("MULTI_INSTANCE_TESTS") == "yes", "no")
+    def test_read_symlink(self):
+        """Read a symlink"""
+
+        self.logger.info("List the files on CN")
+        self.logger.info(os.listdir(self.import_dir))
+
+        if self.test_local:
+            self.export_read_symlink()
+
+        rlink_source = os.path.join(self.import_dir, 'rlink_source')
+        self.logger.info("stat rlink_source %s", os.lstat(rlink_source))
+        result = os.readlink(rlink_source)
+        self.logger.info("read rlink_source %s", result)
+
+        if result != 'rlink_target':
+            self.fail("Link target is wrong '%s'" % result)
+        else:
+            self.logger.info("Verified read on link target with source")
+
+    def test_self_test(self):
+        """Run self-test"""
+
+        self_test = find_executable('self_test')
+        if not self_test:
+            cart_prefix = os.getenv("IOF_CART_PREFIX", None)
+            if not cart_prefix:
+                self.fail('Could not find self_test binary')
+            self_test = os.path.join(cart_prefix, 'bin', 'self_test')
+            if not os.path.exists(self_test):
+                self.fail('Could not find self_test binary %s', self_test)
+        environ = os.environ
+        environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
+        environ['OFI_INTERFACE'] = self.ofi_interface
+        cmd = [self_test, '--singleton', '--path', self.cnss_prefix,
+               '--group-name', 'IONSS', '-e' '0:0',
+               '-r', '1000', '-s' '0 0,0 128,128 0']
+
+        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"), \
+                                self.logdir_name())
+        if not os.path.exists(log_path):
+            os.makedirs(log_path)
+        cmdfileout = os.path.join(log_path, "self_test.out")
+        cmdfileerr = os.path.join(log_path, "self_test.err")
+        procrtn = -1
+        try:
+            with open(cmdfileout, mode='w') as outfile, \
+                open(cmdfileerr, mode='w') as errfile:
+                outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
+                    ("=" * 40), (" ".join(cmd)), ("=" * 40)))
+                outfile.flush()
+                procrtn = subprocess.call(cmd, timeout=180, env=environ,
+                                          stdout=outfile, stderr=errfile)
+        except (FileNotFoundError) as e:
+            self.logger.info("Testnss: %s", \
+                             e.strerror)
+        except (IOError) as e:
+            self.logger.info("Testnss: Error opening the log files: %s", \
+                             e.errno)
+        if procrtn != 0:
+            self.fail("cart self test failed: %s" % procrtn)
+
+    @staticmethod
+    def test_statfs():
+        """Invoke statfs"""
+
+        #for test_dir in common_methods.import_list():
+        for test_dir in import_list():
+            cmd = ['df', test_dir]
+            os.system(' '.join(cmd))
+
     def test_use_ino(self):
         """Test that stat returns correct information"""
 
-        filename = os.path.join(self.base_dir, 'test_ino_file')
+        filename = os.path.join(self.import_dir, 'test_ino_file')
+        self.logger.info("test_use_ino %s", filename)
 
         fd = open(filename, 'w')
         fd.close()
@@ -498,18 +595,19 @@ class CnssChecks(unittest.TestCase):
         # so currently there are differences
 
         stat_file = os.path.join(self.import_dir, 'a_stat_output')
-        fd_stat = open(stat_file, 'w')
-        getcontext().prec = 7
+        with open(stat_file, 'w') as fd_stat:
+            getcontext().prec = 7
 
-        for key in dir(a):
-            if not key.startswith('st_'):
-                continue
+            for key in dir(a):
+                if not key.startswith('st_'):
+                    continue
 
-            fd_stat.write("Key %s " % key)
-            fd_stat.write(str(Decimal(getattr(a, key))))
-            fd_stat.write('\n')
+                fd_stat.write("Key %s " % key)
+                fd_stat.write(str(Decimal(getattr(a, key))))
+                fd_stat.write('\n')
 
-            if key == 'st_dev':
-                continue
+                if key == 'st_dev':
+                    continue
 
-        fd_stat.close()
+        if self.test_local:
+            self.verify_use_ino()

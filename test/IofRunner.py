@@ -41,13 +41,14 @@ import tempfile
 
 class IofRunner():
     """Simple test runner"""
-    fs_list = []
 
     def __init__(self, dir_path, test_info, node_control):
         self.dir_path = dir_path
         self.test_info = test_info
         self.node_control = node_control
         self.logger = logging.getLogger("TestRunnerLogger")
+        self.fs_list = []
+        self.use_fs_list = []
         self.proc = None
 
     def create_cnss_dir(self):
@@ -83,8 +84,10 @@ class IofRunner():
             self.logger.error(
                 "TestIOF: Failed to create the IONSS dirs. Error code: %d\n",
                 procrtn)
-        for i in (2, 1):
-            fs = "FS_%s" % i
+        self.use_fs_list = \
+            self.test_info.get_test_info(keyname='fsList',
+                                         default=['exp', 'FS_2', 'FS_1'])
+        for fs in self.use_fs_list:
             abs_path = os.path.join(ion_dir, fs)
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "mkdir -p %s" % abs_path
@@ -238,7 +241,8 @@ class IofRunner():
         cnss_dir = self.test_info.get_passToConfig('CNSS_PREFIX')
         ionss_dir = self.test_info.get_passToConfig('ION_TEMPDIR')
         testmsg = "Unmount CNSS dirs"
-        for mount in ['.ctrl', 'FS_1', 'FS_2']:
+        self.use_fs_list.append('.ctrl')
+        for mount in self.use_fs_list:
             cnss_mp = os.path.join(cnss_dir, mount)
             cmdstr = "fusermount -u %s" % cnss_mp
             try:

@@ -65,29 +65,10 @@ By default the output is displayed on the screen.
 #pylint: disable=too-many-locals
 #pylint: disable=broad-except
 import os
-import unittest
 import shlex
 import subprocess
 import time
-import getpass
-import tempfile
 import logging
-
-def commonSetUpModule():
-    """ set up test environment """
-
-    print("\nTestnss: module setup begin")
-    export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
-    tempdir = tempfile.mkdtemp(prefix="tmp_iof_cnss_",
-                               dir=export_tmp_dir)
-    os.environ["CNSS_PREFIX"] = tempdir
-    cts = CommonTestSuite()
-    allnode_cmd = cts.common_get_all_cn_cmd()
-    testmsg = "create %s on all CNs" % tempdir
-    cmdstr = "%smkdir -p %s " % (allnode_cmd, tempdir)
-    cts.common_launch_cmd(testmsg, cmdstr)
-    cts.common_manage_ionss_dir()
-    print("Testnss: module setup end\n\n")
 
 def valgrind_suffix(log_path, pmix=True):
     """Return the commands required to launch valgrind"""
@@ -146,45 +127,13 @@ def valgrind_suffix(log_path, pmix=True):
         return cmd
     return []
 
-class CommonTestSuite(unittest.TestCase):
+class CommonTestSuite():
     """Attributes common to the IOF tests"""
-    fs_list = []
     logger = logging.getLogger("TestRunnerLogger")
 
-    @staticmethod
-    def common_get_all_cn_cmd():
-        """Get prefix to run command to run all all CNs"""
-        cn = os.getenv('IOF_TEST_CN')
-        if cn:
-            return "pdsh -S -R ssh -w %s " % cn
-        return ""
-
-    @staticmethod
-    def common_get_all_ion_cmd():
-        """Get prefix to run command on all CNs"""
-        ion = os.getenv('IOF_TEST_ION')
-        if ion:
-            return "pdsh -S -R ssh -w %s " % ion
-        return ""
-
-    def common_manage_ionss_dir(self):
-        """create dirs for IONSS backend"""
-        export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
-        _ion_dir = tempfile.mkdtemp(prefix='tmp_iof_ionss_',
-                                    dir=export_tmp_dir)
-        allnode_cmd = self.common_get_all_ion_cmd()
-        testmsg = "create base ION dirs %s" % _ion_dir
-        cmdstr = "%smkdir -p %s " % (allnode_cmd, _ion_dir)
-        self.common_launch_cmd(testmsg, cmdstr)
-        i = 2
-        while i > 0:
-            fs = "FS_%s" % i
-            abs_path = os.path.join(_ion_dir, fs)
-            self.fs_list.append(abs_path)
-            testmsg = "creating dirs to be used as Filesystem backend"
-            cmdstr = "%smkdir -p %s" % (allnode_cmd, abs_path)
-            self.common_launch_cmd(testmsg, cmdstr)
-            i = i - 1
+    def logdir_name(self):
+        """create the log directory name"""
+        pass
 
     def common_launch_cmd(self, msg, cmdstr):
         """Launch a test and wait for it to complete"""
@@ -319,70 +268,3 @@ class CommonTestSuite(unittest.TestCase):
 
         self.logger.info("Test: return code: %s\n", procrtn)
         return procrtn
-
-    def logdir_name(self):
-        """create the log directory name"""
-
-        # Append the test case to the log directory to get unique names.
-        # Do this in a way that matches the dump_error_messages() logic
-        # in the test runner so that on failure only failing methods are
-        # shown.
-
-        parts = self.id().split('.')
-        method = parts[2]
-        if method.startswith('test_'):
-            method = method[5:]
-        return os.path.join(parts[1], method)
-
-    def common_add_prefix_logdir(self):
-        """add the log directory to the prefix"""
-        ompi_bin = os.getenv('IOF_OMPI_BIN', "")
-        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"),
-                                self.logdir_name())
-        os.makedirs(log_path, exist_ok=True)
-
-        if os.getenv('TR_USE_URI', ""):
-            dvmfile = " --hnp file:%s " % os.getenv('TR_USE_URI')
-        else:
-            dvmfile = " "
-        if getpass.getuser() == "root":
-            allow_root = " --allow-run-as-root"
-        else:
-            allow_root = ""
-        cmdstr = "%sorterun%s--output-filename %s%s" % \
-                 (ompi_bin, dvmfile, log_path, allow_root)
-
-        prefix = ' '.join(valgrind_suffix(log_path))
-        return (cmdstr, prefix)
-
-    @staticmethod
-    def common_add_server_client():
-        """create the server and client prefix"""
-        cn = os.getenv('IOF_TEST_CN')
-        if cn:
-            local_cn = " -H %s -n 1 " % cn
-        else:
-            local_cn = " -np 1 "
-        ion = os.getenv('IOF_TEST_ION')
-        if ion:
-            local_ion = " -H %s -n 1 " % ion
-        else:
-            local_ion = " -np 1"
-
-        return (local_cn, local_ion)
-
-    def commonTearDownModule(self):
-        """teardown module for test"""
-
-        print("Testnss: module tearDown begin")
-        allnode_cmd = self.common_get_all_cn_cmd()
-        cnss_prefix = os.environ.pop("CNSS_PREFIX")
-        testmsg = "remove %s on all CNs" % cnss_prefix
-        cmdstr = "%srm -rf %s " % (allnode_cmd, cnss_prefix)
-        self.common_launch_cmd(testmsg, cmdstr)
-        if self.fs_list:
-            iondir = os.path.dirname(self.fs_list[0])
-            testmsg = "remove %s on all IONs" % iondir
-            cmdstr = "%srm -rf %s " % (allnode_cmd, iondir)
-            self.common_launch_cmd(testmsg, cmdstr)
-        print("Testnss: module tearDown end\n\n")

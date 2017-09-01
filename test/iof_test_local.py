@@ -48,13 +48,9 @@ python3 -m unittest -c iof_test_local.Testlocal.test_ionss_link
 
 """
 
-#pylint: disable=too-many-public-methods
-#pylint: disable=too-many-statements
-
 import os
 import sys
 import time
-import stat
 import shutil
 import getpass
 import subprocess
@@ -69,12 +65,18 @@ from distutils.spawn import find_executable
 import iofcommontestsuite
 import common_methods
 
-
+#pylint: disable=too-many-public-methods
+#pylint: disable=too-many-statements
 #pylint: disable=too-many-instance-attributes
-class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
+
+
+class Testlocal(unittest.TestCase,
+                common_methods.CnssChecks,
+                iofcommontestsuite.CommonTestSuite):
     """Local test"""
 
     proc = None
+    cnss_prefix = None
     import_dir = None
     export_dir = None
     shutdown_file = None
@@ -83,6 +85,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     log_mask = ""
     crt_phy_addr = ""
     ofi_interface = ""
+    test_local = True
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -100,6 +103,20 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             return True
         return False
 
+    def logdir_name(self):
+        """create the log directory name"""
+
+        # Append the test case to the log directory to get unique names.
+        # Do this in a way that matches the dump_error_messages() logic
+        # in the test runner so that on failure only failing methods are
+        # shown.
+
+        parts = self.id().split('.')
+        method = parts[2]
+        if method.startswith('test_'):
+            method = method[5:]
+        return os.path.join(parts[1], method)
+
     def setUp(self):
         """set up the test"""
 
@@ -110,14 +127,16 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
 
         self.logger.info("Starting for %s", self.id())
 
+        # set the standalone test flag
+        self.test_local = True
         # Allow the use of a custom temp directory.  This can be needed on
         # docker when /tmp is an overlay fs.
         export_tmp_dir = os.getenv("IOF_TMP_DIR", '/tmp')
 
-        self.import_dir = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
-                                           dir=export_tmp_dir)
-        self.base_dir = os.path.join(self.import_dir, 'exp')
-        common_methods.CTRL_DIR = os.path.join(self.import_dir, '.ctrl')
+        self.cnss_prefix = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
+                                            dir=export_tmp_dir)
+        self.import_dir = os.path.join(self.cnss_prefix, 'exp')
+        common_methods.CTRL_DIR = os.path.join(self.cnss_prefix, '.ctrl')
         self.shutdown_file = os.path.join(common_methods.CTRL_DIR, 'shutdown')
         self.active_file = os.path.join(common_methods.CTRL_DIR, 'active')
         self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
@@ -166,7 +185,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                     '-x', 'CRT_LOG_MASK=%s' % self.log_mask,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
-                    '-x', 'CNSS_PREFIX=%s' % self.import_dir])
+                    '-x', 'CNSS_PREFIX=%s' % self.cnss_prefix])
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
@@ -201,7 +220,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def mark_log(self, msg):
         """Log a message to stdout and to the CNSS logs"""
 
-        log_file = os.path.join(self.import_dir, '.ctrl', 'write_log')
+        log_file = os.path.join(self.cnss_prefix, '.ctrl', 'write_log')
         print(msg)
         with open(log_file, 'w')  as fd:
             fd.write(msg)
@@ -209,7 +228,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
     def show_stats(self):
         """Display projection statistics to stdout"""
 
-        proj_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
+        proj_dir = os.path.join(self.cnss_prefix, '.ctrl', 'iof',
                                 'projections')
 
         for idx in os.listdir(proj_dir):
@@ -258,7 +277,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         # Call fusermount on mount points in case there are stale mounts.
         # Remove the mount directories
         for mount in ['.ctrl', 'usr', 'exp']:
-            mp = os.path.join(self.import_dir, mount)
+            mp = os.path.join(self.cnss_prefix, mount)
             try:
                 self.common_launch_cmd("", "fusermount -q -u %s" % mp)
             except FileNotFoundError:
@@ -266,8 +285,8 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             os.rmdir(mp)
 
         # Finally, remove any temporary files created.
-        os.unlink("%s/IONSS.attach_info_tmp" % self.import_dir)
-        os.rmdir(self.import_dir)
+        os.unlink("%s/IONSS.attach_info_tmp" % self.cnss_prefix)
+        os.rmdir(self.cnss_prefix)
         shutil.rmtree(self.export_dir)
         os.rmdir(self.e_dir)
 
@@ -278,207 +297,70 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         elif procrtn != 0:
             self.fail("Non-zero exit code from orterun %d" % procrtn)
 
-    def test_ionss_link(self):
-        """CORFSHIP-336 Check that stat does not deference symlinks"""
+    def test_direct_read(self):
+        """Read a large file"""
+        test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', 'python')
 
-        # Make a directory 'b', create a symlink from 'a' to 'b'
-        # and then stat() it to see what type it is
+        if not os.path.exists(test_file):
+            self.skipTest('Input file does not exist')
+        cmd = 'dd if=%s of=/dev/null bs=4k iflag=direct' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
 
-        os.mkdir(os.path.join(self.export_dir, 'b'))
-        os.symlink('b', os.path.join(self.export_dir, 'a'))
+    def test_direct_write(self):
+        """Write a large file"""
+        test_file = os.path.join(self.import_dir, 'test_file')
 
-        e_b = os.lstat(os.path.join(self.import_dir, 'exp', 'a'))
-        os.unlink(os.path.join(self.export_dir, 'a'))
-        os.rmdir(os.path.join(self.export_dir, 'b'))
+        cmd = 'dd if=/dev/zero of=%s bs=4k count=8 oflag=direct' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
+    def test_large_read(self):
+        """Read a large file"""
+        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
 
-        self.logger.info(e_b)
-        if stat.S_ISLNK(e_b.st_mode):
-            self.logger.info("It's a link")
-        elif stat.S_ISDIR(e_b.st_mode):
-            self.logger.info("It's a dir")
-            self.fail("File should be a link")
-        else:
-            self.fail("Not a directory or a link")
+        if not os.path.exists(test_file):
+            self.skipTest('Input file does not exist')
+        cmd = 'dd if=%s of=/dev/null bs=4k' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD returned error')
 
-    # pylint: disable=no-self-use
-    def test_statfs(self):
-        """Invoke statfs"""
+        cmd = 'dd if=%s of=/dev/null bs=65k' % test_file
+        rtn = self.common_launch_cmd('dd', cmd)
+        if rtn != 0:
+            self.fail('DD bs=65k returned error')
 
-        for test_dir in common_methods.import_list():
-            cmd = ['df', test_dir]
-            os.system(' '.join(cmd))
+    @unittest.skip("Fails on FUSE2")
+    def test_file_read_rename(self):
+        """Read from a file which has been renamed on the backend"""
 
-    def test_ionss_self_listdir(self):
-        """Perform a simple listdir operation"""
-
-        os.mkdir(os.path.join(self.export_dir, 'test_dir'))
-
-        dirs = os.listdir(os.path.join(self.import_dir, 'exp'))
-
-        self.logger.info(dirs)
-
-        os.rmdir(os.path.join(self.export_dir, 'test_dir'))
-
-    def test_use_ino(self):
-        """Test that stat returns correct information"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'test_file')
-
-        fd = open(filename, 'w')
-        fd.close()
-
-        a = os.stat(filename)
-        b = os.stat(os.path.join(self.export_dir, 'test_file'))
-
-        self.logger.info(a)
-        self.logger.info(b)
-
-        # Currently the FUSE plugin does not correctly report inodes
-        # so currently there are differences
-
-        if a != b:
-            self.logger.info("File stat data is different")
-
-        diffs = []
-
-        for key in dir(a):
-            if not key.startswith('st_'):
-                continue
-            av = getattr(a, key)
-            bv = getattr(b, key)
-            self.logger.info("Key %s import %s export %s", key, av, bv)
-            if key == 'st_dev':
-                continue
-            if av != bv:
-                self.logger.error("Keys are differnet")
-                diffs.append(key)
-
-        if diffs:
-            self.fail("Stat attributes are different %s" % diffs)
-
-    def test_many_files(self):
-        """Create lots of files, and then perform readdir"""
-
-        test_dir = os.path.join(self.import_dir, 'exp', 'many')
-
-        os.mkdir(os.path.join(self.export_dir, 'many'))
-
-        files = []
-        for x in range(0, 100):
-            this_file = 'file_%d' % x
-            filename = os.path.join(test_dir, this_file)
-            fd = open(filename, 'w')
-            fd.close()
-            files.append(this_file)
-
-        export_list = os.listdir(os.path.join(self.export_dir, 'many'))
-        import_list = os.listdir(test_dir)
-
-        self.logger.info(sorted(files))
-        self.logger.info(sorted(export_list))
-        self.logger.info(sorted(import_list))
-
-        if sorted(files) != sorted(export_list):
-            self.fail("Export directory contents are wrong")
-
-        if sorted(files) != sorted(import_list):
-            self.fail("Import Directory contents are wrong")
-
-    def test_file_open_existing(self):
-        """Open a existing file for reading"""
-
+        # Create a file on the export location.
         tfile = os.path.join(self.export_dir, 'a_file')
 
         fd = open(tfile, 'w')
         fd.write("Hello")
         fd.close()
 
-        filename = os.path.join(self.import_dir, 'exp', 'a_file')
-
+        # Open it through the projection
+        filename = os.path.join(self.import_dir, 'a_file')
         fd = open(filename, 'r')
-        fd.close()
 
-    def test_file_read(self):
-        """Read from a file"""
+        # Rename it on the backend, so any FUSE cache is out of sync
+        os.rename(tfile, os.path.join(self.export_dir, 'b_file'))
 
-        tfile = os.path.join(self.export_dir, 'a_file')
-
-        fd = open(tfile, 'w')
-        fd.write("Hello")
-        fd.close()
-
-        filename = os.path.join(self.import_dir, 'exp', 'a_file')
-
-        fd = open(filename, 'r')
+        # Now read and check the data.
         data = fd.read()
         fd.close()
 
         if data != 'Hello':
             self.fail('File contents wrong %s %s' % ('Hello', data))
 
-    def test_file_write(self):
-        """Write to a file"""
-
-        filename = os.path.join(self.import_dir, 'exp', 'write_file')
-
-        fd = open(filename, 'w')
-        fd.write('World')
-        fd.close()
-
-        tfile = os.path.join(self.export_dir, 'write_file')
-
-        fd = open(tfile, 'r')
-        data = fd.read()
-        fd.close()
-
-        if data != 'World':
-            self.fail('File contents wrong %s %s' % ('Hello', data))
-
-    def test_file_copy_from(self):
-        """Copy a file into a projecton
-
-        Basic copy, using large I/O.  No permissions or metadata are used.
-        """
-
-        src_file = os.path.join(self.export_dir, 'ls')
-        shutil.copyfile('/bin/ls', src_file)
-
-        filename = os.path.join(self.import_dir, 'exp', 'ls')
-        dst_file = os.path.join(self.export_dir, 'ls.2')
-
-        shutil.copyfile(filename, dst_file)
-
-    def test_read_symlink(self):
-        """Read a symlink"""
-
-        os.symlink('target', os.path.join(self.export_dir, 'source'))
-
-        self.logger.info(os.listdir(os.path.join(self.import_dir, 'exp')))
-
-        self.logger.info(os.lstat(os.path.join(self.import_dir,
-                                               'exp',
-                                               'source')))
-
-        result = os.readlink(os.path.join(self.import_dir, 'exp', 'source'))
-        if result != 'target':
-            self.fail("Link target is wrong '%s'" % result)
-
-    def test_make_symlink(self):
-        """Make a symlink"""
-
-        os.symlink('target', os.path.join(self.import_dir, 'exp', 'source'))
-
-        self.logger.info(os.listdir(os.path.join(self.import_dir, 'exp')))
-
-        self.logger.info(os.lstat(os.path.join(self.export_dir, 'source')))
-        result = os.readlink(os.path.join(self.export_dir, 'source'))
-        if result != 'target':
-            self.fail("Link target is wrong '%s'" % result)
-
     def test_ioil(self):
         """Run the interception library test"""
         # Check the value of il_ioctl before execution
-        stats_dir = os.path.join(self.import_dir, '.ctrl', 'iof',
+        stats_dir = os.path.join(self.cnss_prefix, '.ctrl', 'iof',
                                  'projections', '0', 'stats')
 
         if not os.path.exists(stats_dir):
@@ -502,7 +384,7 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
                                      'TESTING', 'tests')
 
         environ = os.environ
-        environ['CNSS_PREFIX'] = self.import_dir
+        environ['CNSS_PREFIX'] = self.cnss_prefix
         environ['CRT_LOG_MASK'] = self.log_mask
         environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
         environ['OFI_INTERFACE'] = self.ofi_interface
@@ -534,34 +416,9 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
             self.fail("IO interception library failed to attach," + \
                 " il_ioctl: %s" % final_il_ioctl)
 
-    @unittest.skip("Fails on FUSE2")
-    def test_file_read_rename(self):
-        """Read from a file which has been renamed on the backend"""
-
-        # Create a file on the export location.
-        tfile = os.path.join(self.export_dir, 'a_file')
-
-        fd = open(tfile, 'w')
-        fd.write("Hello")
-        fd.close()
-
-        # Open it through the projection
-        filename = os.path.join(self.import_dir, 'exp', 'a_file')
-        fd = open(filename, 'r')
-
-        # Rename it on the backend, so any FUSE cache is out of sync
-        os.rename(tfile, os.path.join(self.export_dir, 'b_file'))
-
-        # Now read and check the data.
-        data = fd.read()
-        fd.close()
-
-        if data != 'Hello':
-            self.fail('File contents wrong %s %s' % ('Hello', data))
-
     def test_mdtest(self):
         """Run mdtest"""
-        topdir = os.path.join(self.import_dir, 'exp')
+        topdir = self.import_dir
 
         mdtest_cmdstr = "/testbin/mdtest/bin/mdtest"
         if not os.path.exists(mdtest_cmdstr):
@@ -588,83 +445,6 @@ class Testlocal(iofcommontestsuite.CommonTestSuite, common_methods.CnssChecks):
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
             self.skipTest("Mdtest exited badly")
-
-    def test_large_read(self):
-        """Read a large file"""
-        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
-
-        if not os.path.exists(test_file):
-            self.skipTest('Input file does not exist')
-        cmd = 'dd if=%s of=/dev/null bs=4k' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
-        if rtn != 0:
-            self.fail('DD returned error')
-
-        cmd = 'dd if=%s of=/dev/null bs=65k' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
-        if rtn != 0:
-            self.fail('DD bs=65k returned error')
-
-    def test_direct_read(self):
-        """Read a large file"""
-        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
-
-        if not os.path.exists(test_file):
-            self.skipTest('Input file does not exist')
-        cmd = 'dd if=%s of=/dev/null bs=4k iflag=direct' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
-        if rtn != 0:
-            self.fail('DD returned error')
-
-    def test_direct_write(self):
-        """Write a large file"""
-        test_file = os.path.join(self.import_dir, 'exp', 'test_file')
-
-        cmd = 'dd if=/dev/zero of=%s bs=4k count=8 oflag=direct' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
-        if rtn != 0:
-            self.fail('DD returned error')
-    def test_self_test(self):
-        """Run self-test"""
-
-        self_test = find_executable('self_test')
-        if not self_test:
-            cart_prefix = os.getenv("IOF_CART_PREFIX", None)
-            if not cart_prefix:
-                self.fail('Could not find self_test binary')
-            self_test = os.path.join(cart_prefix, 'bin', 'self_test')
-            if not os.path.exists(self_test):
-                self.fail('Could not find self_test binary')
-        environ = os.environ
-        environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
-        environ['OFI_INTERFACE'] = self.ofi_interface
-        cmd = [self_test, '--singleton', '--path', self.import_dir,
-               '--group-name', 'IONSS', '-e' '0:0',
-               '-r', '1000', '-s' '0 0,0 128,128 0']
-
-        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"), \
-                                self.logdir_name())
-        if not os.path.exists(log_path):
-            os.makedirs(log_path)
-        cmdfileout = os.path.join(log_path, "self_test.out")
-        cmdfileerr = os.path.join(log_path, "self_test.err")
-        procrtn = -1
-        try:
-            with open(cmdfileout, mode='w') as outfile, \
-                open(cmdfileerr, mode='w') as errfile:
-                outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
-                    ("=" * 40), (" ".join(cmd)), ("=" * 40)))
-                outfile.flush()
-                procrtn = subprocess.call(cmd, timeout=180, env=environ,
-                                          stdout=outfile, stderr=errfile)
-        except (FileNotFoundError) as e:
-            self.logger.info("Testnss: %s", \
-                             e.strerror)
-        except (IOError) as e:
-            self.logger.info("Testnss: Error opening the log files: %s", \
-                             e.errno)
-        if procrtn != 0:
-            self.fail("IO interception test failed: %s" % procrtn)
 
     def go(self):
         """A wrapper method to invoke all methods as subTests"""
@@ -721,9 +501,9 @@ def local_launch(ioil_dir):
     fs.setUp()
 
     print("IOF projections up and running")
-    print(fs.import_dir)
+    print(fs.cnss_prefix)
     print("Ctrl-C to shutdown or run")
-    print("echo 1 > %s/.ctrl/shutdown" % fs.import_dir)
+    print("echo 1 > %s/.ctrl/shutdown" % fs.cnss_prefix)
     print("")
     print("To use the interception library, set ")
     print("LD_PRELOAD=%s/libioil.so or " % ioil_dir)

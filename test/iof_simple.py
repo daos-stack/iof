@@ -48,6 +48,7 @@ multi_test_nss/iof_simple/iof_simple_<node> directory.
 import os
 import common_methods
 import logging
+import unittest
 from stat import S_ISDIR
 
 def setUpModule():
@@ -56,12 +57,21 @@ def setUpModule():
     startdir = os.environ["CNSS_PREFIX"]
     common_methods.CTRL_DIR = os.path.join(startdir, ".ctrl")
     common_methods.IMPORT_MNT = common_methods.get_writeable_import()
-    common_methods.IMPORT_BASE = TestIof.get_unique(common_methods.IMPORT_MNT)
 
-class TestIof(common_methods.CnssChecks):
+class TestIof(unittest.TestCase, common_methods.CnssChecks):
     """IOF filesystem tests in private access mode"""
 
     logger = logging.getLogger("TestRunnerLogger")
+    test_local = False
+    log_mask = ""
+    crt_phy_addr = ""
+    ofi_interface = ""
+    cnss_prefix = ""
+
+    @staticmethod
+    def logdir_name():
+        """create the log directory name"""
+        return ""
 
     def setUp(self):
         """Set up the test"""
@@ -70,11 +80,17 @@ class TestIof(common_methods.CnssChecks):
         # iof_test_local and iof_simple. The former requires the variables
         # to be set up and torn down for each test. The latter requires the
         # variables to be set only once for each run.
+        self.test_local = False
         self.import_dir = common_methods.IMPORT_MNT
-        self.base_dir = common_methods.IMPORT_BASE
+        self.export_dir = self.import_dir
+        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO,CTRL=WARN")
+        self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
+        self.ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
+        self.cnss_prefix = os.getenv("CNSS_PREFIX")
         self.logger.info("\n")
         self.logger.info("*************************************************")
         self.logger.info("Starting for %s", self.id())
+        self.logger.info("import directory %s", self.import_dir)
 
     def test_iof_fs(self):
         """Test private access mount points"""
@@ -93,3 +109,10 @@ class TestIof(common_methods.CnssChecks):
             self.logger.info(stat_obj)
             self.assertTrue(S_ISDIR(stat_obj.st_mode), "File type is \
                 not a directory")
+
+    def test_zzzz_theEnd(self):
+        """mark the end"""
+        self.logger.info("*************************************************")
+        self.logger.info("\n\t\tWe are DONE\n")
+        self.logger.info("*************************************************")
+        self.logger.info("\n")

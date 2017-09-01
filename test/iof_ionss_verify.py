@@ -50,64 +50,34 @@ import unittest
 from decimal import getcontext, Decimal
 from socket import gethostname
 
-class IonssVerify(unittest.TestCase):
+#pylint: disable=no-member
+
+
+class IonssVerify():
     """A object purely to verify the outcome of the tests carried out
-    on the CN.
-
-    These methods are invoked on the ION from where the files system
-    will be projected/exported to the CNSS.
-
-    This class imports from unittest to get access to the self.fail() method
-    """
-
+    on the CN."""
     logger = logging.getLogger("TestRunnerLogger")
-    e_dir = None
-    export_dir = None
-    exp_dir = None
-    ion = None
+    export_dir = ""
 
-    def setUp(self):
-        """Set up the export dir"""
+    def verify_clean_up_ionss_link(self):
+        """Clean up the link created to test"""
 
-        self.ion = os.environ["IOF_TEST_ION"].split(',')
-        curr_host = gethostname().split('.')[0]
-        if curr_host != self.ion[0]:
-            self.skipTest('The current ION list containts more than one node.\
-                           The tests cannot run on more that one ION.')
+        self.logger.info("verify_clean_up_ionss_link %s", self.export_dir)
+        os.unlink(os.path.join(self.export_dir, 'a'))
+        os.rmdir(os.path.join(self.export_dir, 'b'))
 
-        self.e_dir = os.environ["ION_TEMPDIR"]
-        self.export_dir = os.path.join(self.e_dir, 'FS_2')
-        for filename in os.listdir(self.export_dir):
-            if filename.startswith("wolf"):
-                self.exp_dir = os.path.join(self.export_dir, filename)
-            else:
-                continue
+    def verify_clean_up_ionss_self_listdir(self):
+        """Clean up after the list dir"""
 
-        self.logger.info("\n")
-        self.logger.info("*************************************************")
-        self.logger.info("Starting for %s", self.id())
+        test_dir = os.path.join(self.export_dir, 'test_dir')
+        self.logger.info("verify_clean_up_ionss_self_listdir %s", test_dir)
+        os.rmdir(test_dir)
 
-    def test_verify_file_write(self):
-        """Verify the file written on the projected FS"""
-
-        filename = os.path.join(self.exp_dir, 'write_file')
-
-        fd = open(filename, 'r')
-        data = fd.read()
-        fd.close()
-
-        if data != 'World':
-            self.fail('File contents wrong %s %s' % ('Hello', data))
-        else:
-            self.logger.info("Contents from file written to: %s %s", \
-                              'Hello', data)
-
-        os.unlink(filename)
-
-    def test_verify_file_copy(self):
+    def verify_file_copy(self):
         """Verify the file has been copied on the projection"""
 
-        filename = os.path.join(self.exp_dir, 'ls')
+        filename = os.path.join(self.export_dir, 'ls')
+        self.logger.info("verify_file_copy %s", filename)
 
         if not os.path.isfile(filename) or not os.access(filename, os.R_OK):
             self.fail("Failed to copy file into the projection")
@@ -116,10 +86,24 @@ class IonssVerify(unittest.TestCase):
 
         os.unlink(filename)
 
-    def test_verify_file_rename(self):
+    def verify_file_copy_from(self):
+        """Verify the copy of the file made into the projection"""
+
+        filename = os.path.join(self.export_dir, 'ls.2')
+        self.logger.info("verify_file_copy_from %s", filename)
+
+        if not os.path.isfile(filename) or not os.access(filename, os.R_OK):
+            self.fail("Failed to copy file into the projection")
+        else:
+            self.logger.info("Copied file exists in the projection")
+
+        os.unlink(filename)
+
+    def verify_file_rename(self):
         """Verify the contents of the renamed file"""
 
-        filename = os.path.join(self.exp_dir, 'd_file')
+        filename = os.path.join(self.export_dir, 'd_file')
+        self.logger.info("verify_file_rename %s", filename)
 
         fd = open(filename, 'r')
         data = fd.read()
@@ -133,12 +117,41 @@ class IonssVerify(unittest.TestCase):
 
         os.unlink(filename)
 
-    def test_verify_make_symlink(self):
+    def verify_file_write(self):
+        """Verify the file written on the projected FS"""
+
+        filename = os.path.join(self.export_dir, 'write_file')
+        self.logger.info("verify_file_write %s", filename)
+
+        fd = open(filename, 'r')
+        data = fd.read()
+        fd.close()
+
+        if data != 'World':
+            self.fail('File contents wrong %s %s' % ('Hello', data))
+        else:
+            self.logger.info("Contents from file written to: %s %s", \
+                              'Hello', data)
+
+        os.unlink(filename)
+
+    def verify_file_unlink(self):
+        """Verify the file has been removed"""
+
+        filename = os.path.join(self.export_dir, 'unlink_file')
+        self.logger.info("verify_file_unlink %s", filename)
+        if os.path.exists(filename):
+            self.fail("File unlink failed.")
+        else:
+            self.logger.info("File unlinked.")
+
+    def verify_make_symlink(self):
         """Verify the symlink created on the projection"""
 
         self.logger.info("List the files on ION")
-        self.logger.info(os.listdir(self.exp_dir))
-        filename = os.path.join(self.exp_dir, 'mlink_source')
+        self.logger.info(os.listdir(self.export_dir))
+        filename = os.path.join(self.export_dir, 'mlink_source')
+        self.logger.info("verify_make_symlink %s", filename)
 
         self.logger.info(os.lstat(filename))
         result = os.readlink(filename)
@@ -149,17 +162,35 @@ class IonssVerify(unittest.TestCase):
 
         os.unlink(filename)
 
-    def test_verify_file_copy_from(self):
-        """Verify the copy of the file made into the projection"""
+    def verify_many_files(self):
+        """Verify the collection of files created"""
 
-        filename = os.path.join(self.exp_dir, 'ls.2')
+        many_dir = os.path.join(self.export_dir, 'many')
+        self.logger.info("verify_many_files %s", many_dir)
 
-        if not os.path.isfile(filename) or not os.access(filename, os.R_OK):
-            self.fail("Failed to copy file into the projection")
+        export_list = os.listdir(many_dir)
+        self.logger.info("verify_many_files export_list %s",
+                         sorted(export_list))
+
+        with open(os.path.join(self.export_dir, 'file_list'), 'r') as f:
+            files = [line.rstrip('\n') for line in f]
+
+        self.logger.info("verify_many_files file_list %s", sorted(files))
+
+        if sorted(files) != sorted(export_list):
+            self.fail("Export Directory contents are wrong")
         else:
-            self.logger.info("Copied file exists in the projection")
+            self.logger.info("Import and Export directory contents match")
 
-        os.unlink(filename)
+    def verify_rmdir(self):
+        """Verify the dir has been removed"""
+
+        my_dir = os.path.join(self.export_dir, 'my_dir')
+        self.logger.info("verify_rmdir %s", my_dir)
+        if os.path.exists(my_dir):
+            self.fail("Directory has been removed.")
+        else:
+            self.logger.info("Directory removed.")
 
     @staticmethod
     def file_length(fname):
@@ -167,10 +198,11 @@ class IonssVerify(unittest.TestCase):
         num_lines = sum(1 for line in open(fname))
         return num_lines
 
-    def test_verify_use_ino(self):
+    def verify_use_ino(self):
         """Compare and verify the stat results on a file from CN and ION"""
 
-        filename = os.path.join(self.exp_dir, 'test_ino_file')
+        filename = os.path.join(self.export_dir, 'test_ino_file')
+        self.logger.info("verify_use_ino %s", filename)
         b = os.stat(filename)
         os.unlink(filename)
 
@@ -212,47 +244,41 @@ class IonssVerify(unittest.TestCase):
         os.unlink(b_stat_file)
         os.unlink(a_stat_file)
 
-    def test_verify_file_unlink(self):
-        """Verify the file has been removed"""
+    def verify_zzzz_theEnd(self):
+        """mark the end"""
+        self.logger.info("*************************************************")
+        self.logger.info("\n\t\tWe are verify\n")
+        self.logger.info("*************************************************")
 
-        if os.path.exists(os.path.join(self.exp_dir, 'unlink_file')):
-            self.fail("File unlink failed.")
-        else:
-            self.logger.info("File unlinked.")
 
-    def test_verify_rmdir(self):
-        """Verify the dir has been removed"""
+class IonssCheckVerify(unittest.TestCase, IonssVerify):
+    """A object purely to verify the outcome of the tests carried out
+    on the CN.
+    These methods are invoked on the ION from where the files system
+    will be projected/exported to the CNSS.
 
-        if os.path.exists(os.path.join(self.exp_dir, 'my_dir')):
-            self.fail("Directory has been removed.")
-        else:
-            self.logger.info("Directory removed.")
+    This class imports from unittest to get access to the self.fail() method
+    """
+    logger = logging.getLogger("TestRunnerLogger")
+    export_dir = ""
 
-    def test_verify_many_files(self):
-        """Verify the collection of files created"""
+    def setUp(self):
+        """Set up the export dir"""
 
-        many_dir = os.path.join(self.export_dir, 'many')
+        self.ion = os.environ["IOF_TEST_ION"].split(',')
+        curr_host = gethostname().split('.')[0]
+        if curr_host != self.ion[0]:
+            self.skipTest('The current ION list containts more than one node.\
+                           The tests cannot run on more that one ION.')
 
-        export_list = os.listdir(many_dir)
-        self.logger.info(sorted(export_list))
+        self.e_dir = os.environ["ION_TEMPDIR"]
+        self.export_dir = os.path.join(self.e_dir, 'exp')
+        #for filename in os.listdir(self.export_dir):
+        #    if filename.startswith("wolf"):
+        #        self.export_dir = os.path.join(self.export_dir, filename)
+        #    else:
+        #        continue
 
-        with open(os.path.join(self.export_dir, 'file_list'), 'r') as f:
-            files = [line.rstrip('\n') for line in f]
-
-        self.logger.info(sorted(files))
-
-        if sorted(files) != sorted(export_list):
-            self.fail("Export Directory contents are wrong")
-        else:
-            self.logger.info("Import and Export directory contents match")
-
-    def test_clean_up_ionss_self_listdir(self):
-        """Clean up after the list dir"""
-
-        os.rmdir(os.path.join(self.export_dir, 'test_dir'))
-
-    def test_clean_up_ionss_link(self):
-        """Clean up the link created to test"""
-
-        os.unlink(os.path.join(self.export_dir, 'a'))
-        os.rmdir(os.path.join(self.export_dir, 'b'))
+        self.logger.info("\n")
+        self.logger.info("*************************************************")
+        self.logger.info("Starting for %s", self.id())

@@ -17,6 +17,8 @@ directives:
     copyHostList: "no"
     usePython: "python3"
 
+fsList: ['exp', 'FS_2', 'FS_1']
+
 use_daemon:
     name: "IofRunner"
 
