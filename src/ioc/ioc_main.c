@@ -759,16 +759,12 @@ static int initialize_projection(struct iof_state *iof_state,
 				 struct iof_psr_query *query,
 				 int id)
 {
-	struct iof_projection_info *fs_handle;
-	struct cnss_plugin_cb *cb;
-	struct fuse_args args = {0};
-	void *argv;
-	char *base_name;
-	char *read_option = NULL;
-	char const *opts[] = {"-o", "fsname=IOF",
-			      "-o", "subtype=pam",
-	};
-	int ret;
+	struct iof_projection_info	*fs_handle;
+	struct cnss_plugin_cb		*cb;
+	struct fuse_args		args = {0};
+	bool				writeable = false;
+	char				*base_name;
+	int				ret;
 
 	cb = iof_state->cb;
 
@@ -777,6 +773,9 @@ static int initialize_projection(struct iof_state *iof_state,
 	 */
 	if (!iof_is_mode_supported(fs_info->flags))
 		return IOF_NOT_SUPP;
+
+	if (fs_info->flags & IOF_WRITEABLE)
+		writeable = true;
 
 	fs_handle = calloc(1,
 			   sizeof(struct iof_projection_info));
@@ -869,34 +868,33 @@ static int initialize_projection(struct iof_state *iof_state,
 	REGISTER_STAT(readdir);
 	REGISTER_STAT(closedir);
 	REGISTER_STAT(getattr);
-	REGISTER_STAT(chmod);
-	REGISTER_STAT(create);
 	REGISTER_STAT(readlink);
-	REGISTER_STAT(rmdir);
-	REGISTER_STAT(mkdir);
 	REGISTER_STAT(statfs);
-	REGISTER_STAT(unlink);
 	REGISTER_STAT(ioctl);
 	REGISTER_STAT(open);
 	REGISTER_STAT(release);
-	REGISTER_STAT(symlink);
-	REGISTER_STAT(rename);
-	REGISTER_STAT(truncate);
-	REGISTER_STAT(utimens);
 	REGISTER_STAT(read);
-	REGISTER_STAT(write);
-
-	REGISTER_STAT64(read_bytes);
-	REGISTER_STAT64(write_bytes);
-
 	REGISTER_STAT(getfattr);
-	REGISTER_STAT(ftruncate);
-	REGISTER_STAT(fchmod);
-	REGISTER_STAT(futimens);
-
 	REGISTER_STAT(il_ioctl);
+	REGISTER_STAT64(read_bytes);
 
-	REGISTER_STAT(fsync);
+	if (writeable) {
+		REGISTER_STAT(chmod);
+		REGISTER_STAT(create);
+		REGISTER_STAT(rmdir);
+		REGISTER_STAT(mkdir);
+		REGISTER_STAT(unlink);
+		REGISTER_STAT(symlink);
+		REGISTER_STAT(rename);
+		REGISTER_STAT(truncate);
+		REGISTER_STAT(utimens);
+		REGISTER_STAT(write);
+		REGISTER_STAT(ftruncate);
+		REGISTER_STAT(fchmod);
+		REGISTER_STAT(futimens);
+		REGISTER_STAT(fsync);
+		REGISTER_STAT64(write_bytes);
+	}
 
 	IOF_LOG_INFO("Filesystem ID srv:%d cli:%d",
 		     fs_handle->fs_id,
@@ -907,19 +905,39 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.grp_id = group->grp.grp_id;
 	fs_handle->proj.crt_ctx = iof_state->crt_ctx;
 	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
+	if (!fs_handle->fuse_ops)
+		return IOF_ERR_NOMEM;
 
-	args.argc = (sizeof(opts) / sizeof(*opts)) + 2;
+	args.argc = 4;
+	if (!writeable)
+		args.argc++;
+
+	args.allocated = 1;
 	args.argv = calloc(args.argc, sizeof(char *));
-	argv = args.argv;
-	args.argv[0] = (char *)&"";
-	memcpy(&args.argv[2], opts, sizeof(opts));
+	if (!args.argv)
+		return IOF_ERR_NOMEM;
 
-	ret = asprintf(&read_option, "-omax_read=%u",
-		       fs_handle->max_read);
+	ret = asprintf(&args.argv[0], "%s", "");
 	if (ret == -1)
 		return IOF_ERR_NOMEM;
 
-	args.argv[1] = read_option;
+	ret = asprintf(&args.argv[1], "-ofsname=IOF");
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	ret = asprintf(&args.argv[2], "-osubtype=pam");
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	ret = asprintf(&args.argv[3], "-omax_read=%u", fs_handle->max_read);
+	if (ret == -1)
+		return IOF_ERR_NOMEM;
+
+	if (!writeable) {
+		ret = asprintf(&args.argv[4], "-oro");
+		if (ret == -1)
+			return IOF_ERR_NOMEM;
+	}
 
 	ret = cb->register_fuse_fs(cb->handle,
 				   fs_handle->fuse_ops, NULL, &args,
@@ -931,9 +949,6 @@ static int initialize_projection(struct iof_state *iof_state,
 		free(fs_handle);
 		return 1;
 	}
-
-	free(read_option);
-	free(argv);
 
 	{
 		/* Register the directory handle type
