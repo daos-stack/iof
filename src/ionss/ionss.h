@@ -42,7 +42,9 @@
 #include "iof_atomic.h"
 #include "ios_gah.h"
 #include "iof_pool.h"
+
 #include <pouch/list.h>
+#include <pouch/hash.h>
 
 #define IOF_MAX_FSTYPE_LEN 32
 
@@ -64,14 +66,24 @@ struct ios_base {
 	uint32_t		max_readdir;
 };
 
+/* A minature struct that describes a file handle, this is used
+ * in a couple of ways, firsly as the key to the file_handle
+ * hash table but also as a small struct which can be created
+ * on the stack allowing for hash-table searching before creating
+ * a larger ionss_file_handle struct.
+ */
+struct ionss_mini_file {
+	int			flags;
+	ino_t			inode_no;
+};
+
 struct ionss_file_handle {
 	struct ios_gah		gah;
 	struct ios_projection	*projection;
 	crt_list_t		clist;
+	struct ionss_mini_file	mf;
 	uint			fd;
-	int			flags;
 	ATOMIC uint		ref;
-	ino_t			inode_no;
 };
 
 struct ios_projection {
@@ -81,11 +93,11 @@ struct ios_projection {
 	struct iof_pool_type	*fh_pool;
 	struct iof_pool_type	*ar_pool;
 	struct ionss_file_handle	*root;
+	struct chash_table	file_ht;
 	uint			id;
 	uint			flags;
 	uint			active;
 	uint64_t		dev_no;
-	crt_list_t		files;
 	pthread_mutex_t		lock;
 	int			current_read_count;
 	int			max_read_count;

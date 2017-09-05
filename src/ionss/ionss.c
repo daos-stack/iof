@@ -222,6 +222,33 @@ cnss_detach_handler(crt_rpc_t *rpc)
 		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
 }
 
+static bool
+fh_compare(struct chash_table *htable, crt_list_t *rlink,
+	   const void *key, unsigned int ksize)
+{
+	struct ionss_file_handle *fh = container_of(rlink,
+						    struct ionss_file_handle,
+						    clist);
+	const struct ionss_mini_file *mf = key;
+
+	if (fh->mf.inode_no != mf->inode_no)
+		return false;
+
+	return (fh->mf.flags == mf->flags);
+}
+
+static	uint32_t
+fh_hash(struct chash_table *htable, const void *key, unsigned int ksize)
+{
+	const struct ionss_mini_file *mf = key;
+
+	return mf->inode_no;
+}
+
+static chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
+				 .hop_key_hash = fh_hash,
+};
+
 /* Convert an absolute path into a real one, returning a pointer
  * to a string.
  *
@@ -693,12 +720,13 @@ iof_closedir_handler(crt_rpc_t *rpc)
 static void
 iof_open_handler(crt_rpc_t *rpc)
 {
-	struct iof_open_in *in = crt_req_get(rpc);
-	struct iof_open_out *out = crt_reply_get(rpc);
+	struct iof_open_in	*in = crt_req_get(rpc);
+	struct iof_open_out	*out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
-	struct ionss_file_handle *tmp_handle = NULL;
-	struct ios_projection *projection = NULL;
-	struct stat stbuf = {0};
+	struct ios_projection	*projection = NULL;
+	struct ionss_mini_file	mf;
+	struct stat		stbuf = {0};
+	crt_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -745,22 +773,16 @@ iof_open_handler(crt_rpc_t *rpc)
 	 * If the handle can be re-used then close the new file descriptor
 	 * and take a reference on the existing GAH.
 	 */
-	crt_list_for_each_entry(tmp_handle, &projection->files, clist) {
-		if (stbuf.st_ino != tmp_handle->inode_no)
-			continue;
+	mf.flags = in->flags;
+	mf.inode_no = stbuf.st_ino;
 
-		if (in->flags != tmp_handle->flags)
-			continue;
+	rlink = chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	if (rlink) {
+		handle = container_of(rlink, struct ionss_file_handle, clist);
 
-		IOF_LOG_INFO("Subsequent open, reusing GAH " GAH_PRINT_STR,
-			     GAH_PRINT_VAL(tmp_handle->gah));
-
-		handle = tmp_handle;
 		close(fd);
-
 		atomic_fetch_add(&handle->ref, 1);
 
-		break;
 	}
 
 	if (!handle) {
@@ -774,10 +796,14 @@ iof_open_handler(crt_rpc_t *rpc)
 
 		handle->fd = fd;
 		handle->projection = projection;
-		handle->flags = in->flags;
-		handle->inode_no = stbuf.st_ino;
+		handle->mf.flags = mf.flags;
+		handle->mf.inode_no = mf.inode_no;
 
-		crt_list_add(&handle->clist, &projection->files);
+		chash_rec_insert(&projection->file_ht,
+				 &mf,
+				 sizeof(mf),
+				 &handle->clist,
+				 0);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -803,12 +829,13 @@ out:
 static void
 iof_create_handler(crt_rpc_t *rpc)
 {
-	struct iof_create_in *in = crt_req_get(rpc);
-	struct iof_open_out *out = crt_reply_get(rpc);
+	struct iof_create_in	*in = crt_req_get(rpc);
+	struct iof_open_out	*out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle = NULL;
-	struct ionss_file_handle *tmp_handle = NULL;
-	struct ios_projection *projection = NULL;
-	struct stat stbuf = {0};
+	struct ios_projection	*projection = NULL;
+	struct ionss_mini_file	mf;
+	struct stat		stbuf = {0};
+	crt_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -854,22 +881,16 @@ iof_create_handler(crt_rpc_t *rpc)
 	 * If the handle can be re-used then close the new file descriptor
 	 * and take a reference on the existing GAH.
 	 */
-	crt_list_for_each_entry(tmp_handle, &projection->files, clist) {
-		if (stbuf.st_ino != tmp_handle->inode_no)
-			continue;
+	mf.flags = in->flags;
+	mf.inode_no = stbuf.st_ino;
 
-		if (in->flags != tmp_handle->flags)
-			continue;
+	rlink = chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	if (rlink) {
+		handle = container_of(rlink, struct ionss_file_handle, clist);
 
-		IOF_LOG_INFO("Subsequent open, reusing GAH " GAH_PRINT_STR,
-			     GAH_PRINT_VAL(tmp_handle->gah));
-
-		handle = tmp_handle;
 		close(fd);
-
 		atomic_fetch_add(&handle->ref, 1);
 
-		break;
 	}
 
 	if (!handle) {
@@ -883,10 +904,14 @@ iof_create_handler(crt_rpc_t *rpc)
 
 		handle->fd = fd;
 		handle->projection = projection;
-		handle->flags = in->flags;
-		handle->inode_no = stbuf.st_ino;
+		handle->mf.flags = mf.flags;
+		handle->mf.inode_no = mf.inode_no;
 
-		crt_list_add(&handle->clist, &projection->files);
+		chash_rec_insert(&projection->file_ht,
+				 &mf,
+				 sizeof(mf),
+				 &handle->clist,
+				 0);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -2007,20 +2032,45 @@ static void *progress_thread(void *arg)
 	pthread_exit(NULL);
 }
 
+/* Find an entry in the hash table.
+ *
+ * As chash_table_traverse() does not support removal from the callback function
+ * save a pointer in *arg and return 1 to terminate the traverse.  This way we
+ * can iterate over the entries in the hash table and delete every one.
+ */
+static int ioc_ht_find(crt_list_t *rlink, void *arg)
+{
+	crt_list_t **p = arg;
+
+	*p = rlink;
+	return 1;
+}
+
 /* Close all file handles associated with a projection, and release all GAH
  * which are currently in use.
  */
 static void release_projection_resources(struct ios_projection *projection)
 {
-	struct ionss_file_handle *handle, *next;
+	int rc;
+	bool found;
 
-	crt_list_for_each_entry_safe(handle, next, &projection->files, clist) {
+	do {
+		crt_list_t *rlink = NULL;
 
-		IOF_LOG_INFO("Closing handle %p fd %d " GAH_PRINT_STR,
-			     handle, handle->fd, GAH_PRINT_VAL(handle->gah));
+		found = false;
 
-		ios_fh_decref(handle, handle->ref);
-	}
+		rc = chash_table_traverse(&projection->file_ht,
+					  ioc_ht_find,
+					  &rlink);
+		if (rc > 0 && rlink) {
+			struct ionss_file_handle *fh = container_of(rlink,
+								    struct ionss_file_handle,
+								    clist);
+
+			found = true;
+			ios_fh_decref(fh, fh->ref);
+		}
+	} while (found);
 }
 
 int fslookup_entry(struct mntent *entry, void *priv)
@@ -2370,7 +2420,12 @@ int main(int argc, char **argv)
 
 		projection->active = 0;
 		projection->base = &base;
-		CRT_INIT_LIST_HEAD(&projection->files);
+		rc = chash_table_create_inplace(DHASH_FT_RWLOCK, 5, NULL,
+						&hops, &projection->file_ht);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not create hash table");
+			continue;
+		}
 		pthread_mutex_init(&projection->lock, NULL);
 
 		projection->max_read_count = 3;
@@ -2400,7 +2455,12 @@ int main(int argc, char **argv)
 			continue;
 
 		projection->root->fd = fd;
-		CRT_INIT_LIST_HEAD(&projection->root->clist);
+		projection->root->mf.inode_no = buf.st_ino;
+		chash_rec_insert(&projection->file_ht,
+				 &projection->root->mf,
+				 sizeof(projection->root->mf),
+				 &projection->root->clist,
+				 0);
 
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;
@@ -2543,6 +2603,7 @@ int main(int argc, char **argv)
 
 	for (i = 0 ; i < base.projection_count ; i++) {
 		struct ios_projection *p = &base.projection_array[i];
+		int rc;
 
 		if (!p->active)
 			continue;
@@ -2551,6 +2612,10 @@ int main(int argc, char **argv)
 
 		ios_fh_decref(p->root, 1);
 		p->active = 0;
+
+		rc = chash_table_destroy_inplace(&p->file_ht, false);
+		if (rc != 0)
+			IOF_LOG_ERROR("Failed to destroy hash table");
 	}
 
 	iof_pool_destroy(&base.pool);

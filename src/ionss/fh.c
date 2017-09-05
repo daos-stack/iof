@@ -96,7 +96,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	projection = fh->projection;
 	base = projection->base;
 
-	crt_list_del(&fh->clist);
+	chash_rec_delete_at(&projection->file_ht, &fh->clist);
 
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
