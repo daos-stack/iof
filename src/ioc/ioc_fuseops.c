@@ -374,6 +374,9 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	struct operation client_ops[OP_TYPES];
 	struct fuse_operations *fuse_ops = calloc(1, sizeof(*fuse_ops));
 
+	if (!fuse_ops)
+		return NULL;
+
 	/* Temporary: Copy default_ops directly into client_ops. In future,
 	 * client_ops will be constructed dynamically by selecting the
 	 * correct implementations based on feature flags being set or unset.
