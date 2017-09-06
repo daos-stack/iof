@@ -111,9 +111,17 @@ restock(struct iof_pool_type *type, int count)
 	if (type->free_count >= count)
 		return 0;
 
+	if (type->reg.max_free_desc != 0 &&
+	    type->free_count >= type->reg.max_free_desc) {
+		IOF_TRACE_DEBUG(type, "free_count %d, max_free_desc %d, "
+				"cannot append.",
+				type->free_count, type->reg.max_free_desc);
+		return 0;
+	}
+
 	d_list_for_each_safe(entry, enext, &type->pending_list) {
 		void *ptr = (void *)entry - type->reg.offset;
-		int rc;
+		int rc = 0;
 
 		IOF_TRACE_DEBUG(ptr, "Resetting");
 
@@ -124,20 +132,23 @@ restock(struct iof_pool_type *type, int count)
 			type->reset_count++;
 			reset_calls++;
 			rc = type->reg.reset(ptr);
-			if (rc == 0) {
-				d_list_add(entry, &type->free_list);
-				type->free_count++;
-			} else {
-				IOF_TRACE_DEBUG(ptr, "entry failed reset");
-				type->count--;
-				free(ptr);
-			}
-		} else {
+		}
+		if (rc == 0) {
 			d_list_add(entry, &type->free_list);
 			type->free_count++;
+		} else {
+			IOF_TRACE_DEBUG(ptr, "entry failed reset");
+			type->count--;
+			free(ptr);
 		}
+
 		if (type->free_count == count)
 			return reset_calls;
+
+		if (type->reg.max_free_desc != 0 &&
+		    type->free_count >= type->reg.max_free_desc)
+			return reset_calls;
+
 	}
 	return reset_calls;
 }
@@ -227,8 +238,15 @@ static void
 create_many(struct iof_pool_type *type)
 {
 	while (type->free_count < (type->no_restock_hwm + 1)) {
-		void *ptr = create(type);
-		d_list_t *entry = ptr + type->reg.offset;
+		void *ptr;
+		d_list_t *entry;
+
+		if (type->reg.max_free_desc != 0 &&
+		    type->free_count >= type->reg.max_free_desc)
+			break;
+
+		ptr = create(type);
+		entry = ptr + type->reg.offset;
 
 		if (!ptr)
 			return;

@@ -61,6 +61,8 @@ struct iof_pool_reg {
 
 	/* Maximum number of descriptors to exist concurrently */
 	int	max_desc;
+	/* Maximum number of descriptors to exist on the free_list */
+	int	max_free_desc;
 };
 
 /* If max_desc is non-zero then at most max_desc descriptors can exist
