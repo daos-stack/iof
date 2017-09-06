@@ -2046,31 +2046,41 @@ static int ioc_ht_find(crt_list_t *rlink, void *arg)
 	return 1;
 }
 
+/* Return the first entry in a hash table.  Do this by traversing the table, and
+ * returning the first rlink value provided to the callback.
+ * Returns rlink on success, or NULL on error or if the hash table is empty.
+ */
+static crt_list_t *chash_table_first(struct chash_table *ht)
+{
+	crt_list_t *rlink = NULL;
+	int rc;
+
+	rc = chash_table_traverse(ht, ioc_ht_find, &rlink);
+	if (rc < 0)
+		return NULL;
+
+	return rlink;
+}
+
 /* Close all file handles associated with a projection, and release all GAH
  * which are currently in use.
  */
 static void release_projection_resources(struct ios_projection *projection)
 {
-	int rc;
-	bool found;
+	struct ionss_file_handle *fh;
 
 	do {
-		crt_list_t *rlink = NULL;
+		crt_list_t *rlink;
 
-		found = false;
+		fh = NULL;
 
-		rc = chash_table_traverse(&projection->file_ht,
-					  ioc_ht_find,
-					  &rlink);
-		if (rc > 0 && rlink) {
-			struct ionss_file_handle *fh = container_of(rlink,
-								    struct ionss_file_handle,
-								    clist);
-
-			found = true;
+		rlink = chash_table_first(&projection->file_ht);
+		if (rlink) {
+			fh = container_of(rlink, struct ionss_file_handle,
+					  clist);
 			ios_fh_decref(fh, fh->ref);
 		}
-	} while (found);
+	} while (fh);
 }
 
 int fslookup_entry(struct mntent *entry, void *priv)
