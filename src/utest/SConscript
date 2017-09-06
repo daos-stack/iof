@@ -127,6 +127,7 @@ def scons():
         config.Finish()
 
     test_env = env.Clone()
+    test_env.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
     if test_env.get('fuse3'):
         DEPS['test_ctrl_fs.c'].append('fuse')
         DEFINES['test_ctrl_fs.c'] = ['IOF_USE_FUSE3=1']

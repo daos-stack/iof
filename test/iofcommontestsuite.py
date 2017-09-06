@@ -77,7 +77,9 @@ def commonSetUpModule():
     """ set up test environment """
 
     print("\nTestnss: module setup begin")
-    tempdir = tempfile.mkdtemp(prefix="tmp_iof_cnss_")
+    export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
+    tempdir = tempfile.mkdtemp(prefix="tmp_iof_cnss_",
+                               dir=export_tmp_dir)
     os.environ["CNSS_PREFIX"] = tempdir
     cts = CommonTestSuite()
     allnode_cmd = cts.common_get_all_cn_cmd()
@@ -167,7 +169,9 @@ class CommonTestSuite(unittest.TestCase):
 
     def common_manage_ionss_dir(self):
         """create dirs for IONSS backend"""
-        _ion_dir = tempfile.mkdtemp(prefix='tmp_iof_ionss_')
+        export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
+        _ion_dir = tempfile.mkdtemp(prefix='tmp_iof_ionss_',
+                                    dir=export_tmp_dir)
         allnode_cmd = self.common_get_all_ion_cmd()
         testmsg = "create base ION dirs %s" % _ion_dir
         cmdstr = "%smkdir -p %s " % (allnode_cmd, _ion_dir)

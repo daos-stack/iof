@@ -54,7 +54,9 @@ class IofRunner():
         """Create the CNSS dir on all CNs"""
         procrtn = None
         testmsg = "Create the CNSS dir on all CNs"
-        tempdir = tempfile.mkdtemp()
+        export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
+        tempdir = tempfile.mkdtemp(prefix="tmp_iof_runner",
+                                   dir=export_tmp_dir)
         self.test_info.set_passToConfig('CNSS_PREFIX', tempdir)
         os.environ['CNSS_PREFIX'] = tempdir
         cmdstr = "mkdir -p %s " % tempdir
@@ -69,7 +71,9 @@ class IofRunner():
         """Create dirs for IONSS backend"""
         procrtn = None
         testmsg = "create dirs for IONSS backend"
-        ion_dir = tempfile.mkdtemp()
+        export_tmp_dir = os.getenv("IOF_TMP_DIR", "/tmp")
+        ion_dir = tempfile.mkdtemp(prefix="tmp_iof_ionss_",
+                                   dir=export_tmp_dir)
         self.test_info.set_passToConfig('ION_TEMPDIR', ion_dir)
         os.environ['ION_TEMPDIR'] = ion_dir
         cmdstr = "mkdir -p %s " % ion_dir

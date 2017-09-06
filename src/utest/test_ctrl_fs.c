@@ -258,10 +258,11 @@ static int track_close(int value, void *cb_arg)
 
 int main(int argc, char **argv)
 {
-	char *prefix;
-	char buf[32];
+	char *tmp_dir = NULL;
+	char *prefix = NULL;
+	char *buf = NULL;
 	char cmd_buf[32];
-	char *end;
+	char *tmp_name = NULL;
 	int rc;
 	int foo = 0;
 	int opt;
@@ -287,7 +288,20 @@ int main(int argc, char **argv)
 		}
 	}
 
-	strcpy(buf, "/tmp/iofXXXXXX");
+	tmp_dir = getenv("IOF_TMP_DIR");
+	if (tmp_dir == NULL) {
+		buf = strdup("/tmp/iofXXXXXX");
+		if (buf == NULL) {
+			printf("Could not allocate memory for CNSS_PREFIX\n");
+			return -1;
+		}
+	} else {
+		rc = asprintf(&buf, "%s/iofXXXXXX", tmp_dir);
+		if (rc == -1) {
+			printf("Could not allocate memory for CNSS_PREFIX\n");
+			return -1;
+		}
+	 }
 
 	prefix = mkdtemp(buf);
 
@@ -296,18 +310,27 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	end = buf + strlen(buf);
+	printf("Testing iof_ctrl in %s\n", prefix);
+	rc = asprintf(&tmp_name, "%s/iof.log", prefix);
+	if (rc == -1) {
+		printf("Could not allocate memory for log file name\n");
+		free(buf);
+		return -1;
+	}
 
-	printf("Testing iof_ctrl in %s\n", buf);
-	strcpy(end, "/iof.log");
-
-	setenv("CRT_LOG_FILE", buf, 1);
+	setenv("CRT_LOG_FILE", tmp_name, 1);
+	free(tmp_name);
 	setenv("CRT_LOG_MASK", "INFO,ctrl=DEBUG", 1);
 	iof_log_init("ctrl", "iof_ctrl_test", NULL);
 
-	strcpy(end, "/.ctrl");
+	rc = asprintf(&tmp_name, "%s/.ctrl", prefix);
+	if (rc == -1) {
+		printf("Could not allocate memory for ctrl prefix\n");
+		free(buf);
+		return -1;
+	}
 
-	ctrl_fs_start(buf);
+	ctrl_fs_start(tmp_name);
 
 	ctrl_info_init(&info);
 	if (register_cnss_controls(&info) != 0)
@@ -324,7 +347,7 @@ int main(int argc, char **argv)
 	ctrl_register_constant_int64(NULL, "int", -1);
 	ctrl_register_constant_uint64(NULL, "uint", (uint64_t)-1);
 
-	iof_ctrl_util_test_init(buf);
+	iof_ctrl_util_test_init(tmp_name);
 
 	num_failures = run_tests();
 	if (!interactive) { /* Invoke shutdown */
@@ -359,11 +382,12 @@ shutdown:
 	iof_log_close();
 
 	if (!interactive) { /* Delete the temporary directory */
-		*end = 0;
 		sprintf(cmd_buf, "rm -rf %s", prefix);
 		system(cmd_buf);
 	}
 
+	free(tmp_name);
+	free(buf);
 
 	return num_failures;
 }
