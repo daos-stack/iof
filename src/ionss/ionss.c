@@ -2068,6 +2068,7 @@ static crt_list_t *chash_table_first(struct chash_table *ht)
 static void release_projection_resources(struct ios_projection *projection)
 {
 	struct ionss_file_handle *fh;
+	int rc;
 
 	do {
 		crt_list_t *rlink;
@@ -2081,6 +2082,10 @@ static void release_projection_resources(struct ios_projection *projection)
 			ios_fh_decref(fh, fh->ref);
 		}
 	} while (fh);
+
+	rc = chash_table_destroy_inplace(&projection->file_ht, false);
+	if (rc != 0)
+		IOF_LOG_ERROR("Failed to destroy hash table");
 }
 
 int fslookup_entry(struct mntent *entry, void *priv)
@@ -2201,9 +2206,9 @@ void show_help(const char *prog)
 static int
 fh_init(void *arg, void *handle)
 {
-	struct ionss_file_handle *dh = arg;
+	struct ionss_file_handle *fh = arg;
 
-	dh->projection = handle;
+	fh->projection = handle;
 	return 0;
 }
 
@@ -2601,6 +2606,9 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 
+		if (!projection->active)
+			continue;
+
 		/* Close all file handles associated with a projection.
 		 *
 		 * No locks are held here because at this point all progression
@@ -2609,23 +2617,8 @@ int main(int argc, char **argv)
 		release_projection_resources(projection);
 
 		pthread_mutex_destroy(&projection->lock);
-	}
 
-	for (i = 0 ; i < base.projection_count ; i++) {
-		struct ios_projection *p = &base.projection_array[i];
-		int rc;
-
-		if (!p->active)
-			continue;
-
-		free(p->full_path);
-
-		ios_fh_decref(p->root, 1);
-		p->active = 0;
-
-		rc = chash_table_destroy_inplace(&p->file_ht, false);
-		if (rc != 0)
-			IOF_LOG_ERROR("Failed to destroy hash table");
+		free(projection->full_path);
 	}
 
 	iof_pool_destroy(&base.pool);
