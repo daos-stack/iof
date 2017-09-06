@@ -569,8 +569,10 @@ int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
 
 	rc = add_ctrl_file(name, &node, mode, CTRL_VARIABLE);
 
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_LOG_ERROR("Bad file %s specified", name);
+		return rc;
+	}
 
 	SET_DATA(node, var, cb_arg, cb_arg);
 	SET_DATA(node, var, read_cb, read_cb);
@@ -615,8 +617,10 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
 
 	rc = add_ctrl_file(name, &node, mode, CTRL_EVENT);
 
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_LOG_ERROR("Bad file %s specified", name);
+		return rc;
+	}
 
 	SET_DATA(node, evnt, cb_arg, cb_arg);
 	SET_DATA(node, evnt, trigger_cb, trigger_cb);
@@ -672,8 +676,10 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 
 	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_CONSTANT);
 
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_LOG_ERROR("Bad file %s specified", name);
+		return rc;
+	}
 
 	memcpy(GET_DATA(node, con, buf), value, len);
 
@@ -740,8 +746,10 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 
 	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_TRACKER);
 
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_LOG_ERROR("Bad ctrl file %s", name);
+		return rc;
+	}
 
 	SET_DATA(node, tckr, cb_arg, cb_arg);
 	SET_DATA(node, tckr, open_cb, open_cb);
