@@ -500,6 +500,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	if (plugin->active && plugin->fns->deregister_fuse)
 		plugin->fns->deregister_fuse(info->private_data);
 
+	if (info->session)
+		fuse_session_destroy(info->session);
+
 	free(info);
 	return rc;
 }

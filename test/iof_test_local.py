@@ -50,6 +50,7 @@ python3 -m unittest -c iof_test_local.Testlocal.test_ionss_link
 
 import os
 import sys
+import stat
 import time
 import shutil
 import getpass
@@ -297,13 +298,64 @@ class Testlocal(unittest.TestCase,
         elif procrtn != 0:
             self.fail("Non-zero exit code from orterun %d" % procrtn)
 
+    def test_ro_stat(self):
+        """Test that stat works on read-only projections"""
+
+        filename = os.path.join(self.cnss_prefix, 'usr', 'bin')
+
+        b = os.stat(os.path.join('/usr', 'bin'))
+        a = os.stat(filename)
+
+        self.logger.info(a)
+        self.logger.info(b)
+
+        diffs = []
+
+        for key in dir(a):
+            if not key.startswith('st_'):
+                continue
+            av = getattr(a, key)
+            bv = getattr(b, key)
+            self.logger.info("Key %s import %s export %s", key, av, bv)
+            if key == 'st_dev':
+                continue
+            if av != bv:
+                self.logger.error("Keys are differnet")
+                diffs.append(key)
+
+        if diffs:
+            self.fail("Stat attributes are different %s" % diffs)
+
     def test_direct_read(self):
         """Read a large file"""
-        test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', 'python')
 
-        if not os.path.exists(test_file):
-            self.skipTest('Input file does not exist')
-        cmd = 'dd if=%s of=/dev/null bs=4k iflag=direct' % test_file
+        # Find the smallest file in the range of 1MB to 8MB.
+        target_file = None
+        target_file_size = 1024 * 1024 * 8
+        u_stat = os.stat('/usr')
+        bin_files = sorted(os.listdir('/usr/bin'))
+        for bfile in bin_files:
+            fname = os.path.join('/usr/bin/', bfile)
+            s = os.lstat(fname)
+            if s.st_dev != u_stat.st_dev:
+                self.skipTest("Inconsistent device for /usr files")
+            if not stat.S_ISREG(s.st_mode):
+                continue
+            if not os.access(fname, os.R_OK):
+                continue
+            if s.st_size < 1024 * 1024:
+                continue
+            if s.st_size < target_file_size:
+                target_file = bfile
+                target_file_size = s.st_size
+
+        if target_file is None:
+            self.fail("Could not find file in /usr/bin")
+
+        self.logger.info('Test file is %s %d', target_file, target_file_size)
+        test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', target_file)
+
+        cmd = 'dd if=%s of=/dev/null bs=64k iflag=direct' % test_file
         rtn = self.common_launch_cmd('dd', cmd)
         if rtn != 0:
             self.fail('DD returned error')
@@ -316,12 +368,36 @@ class Testlocal(unittest.TestCase,
         rtn = self.common_launch_cmd('dd', cmd)
         if rtn != 0:
             self.fail('DD returned error')
+
     def test_large_read(self):
         """Read a large file"""
-        test_file = os.path.join(self.import_dir, 'usr', 'bin', 'python')
 
-        if not os.path.exists(test_file):
-            self.skipTest('Input file does not exist')
+        # Find the smallest file in the range of 1MB to 8MB.
+        target_file = None
+        target_file_size = 1024 * 1024 * 8
+        u_stat = os.stat('/usr')
+        bin_files = sorted(os.listdir('/usr/bin'))
+        for bfile in bin_files:
+            fname = os.path.join('/usr/bin/', bfile)
+            s = os.lstat(fname)
+            if s.st_dev != u_stat.st_dev:
+                self.skipTest("Inconsistent device for /usr files")
+            if not stat.S_ISREG(s.st_mode):
+                continue
+            if not os.access(fname, os.R_OK):
+                continue
+            if s.st_size < 1024 * 1024:
+                continue
+            if s.st_size < target_file_size:
+                target_file = bfile
+                target_file_size = s.st_size
+
+        if target_file is None:
+            self.fail("Could not find file in /usr/bin")
+
+        self.logger.info('Test file is %s %d', target_file, target_file_size)
+        test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', target_file)
+
         cmd = 'dd if=%s of=/dev/null bs=4k' % test_file
         rtn = self.common_launch_cmd('dd', cmd)
         if rtn != 0:
