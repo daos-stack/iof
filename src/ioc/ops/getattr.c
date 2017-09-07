@@ -89,7 +89,7 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 		return -ENOMEM;
 
 	in = crt_req_get(req->rpc);
-	in->path = (crt_string_t)path;
+	in->path = (d_string_t)path;
 	req->reply.stat = stbuf;
 
 	rc = crt_req_send(req->rpc, getattr_cb, &req->reply);

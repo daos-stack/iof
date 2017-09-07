@@ -40,7 +40,7 @@
 
 #include <sys/stat.h>
 #include <cart/api.h>
-#include <pouch/common.h>
+#include <gurt/common.h>
 
 #include <ios_gah.h>
 
@@ -137,29 +137,29 @@ struct iof_fs_info {
 struct iof_psr_query {
 	uint32_t max_read;
 	uint32_t max_write;
-	crt_iov_t query_list;
+	d_iov_t query_list;
 	uint32_t readdir_size;
 	uint32_t max_iov_read;
 };
 
 struct iof_gah_string_in {
 	struct ios_gah gah;
-	crt_string_t path;
+	d_string_t path;
 };
 
 struct iof_string_in {
-	crt_string_t path;
+	d_string_t path;
 	uint32_t fs_id;
 };
 
 struct iof_string_out {
-	crt_string_t path;
+	d_string_t path;
 	int rc;
 	int err;
 };
 
 struct iof_truncate_in {
-	crt_string_t path;
+	d_string_t path;
 	uint64_t len;
 	uint32_t fs_id;
 };
@@ -170,26 +170,26 @@ struct iof_ftruncate_in {
 };
 
 struct iof_two_string_in {
-	crt_string_t src;
-	crt_string_t dst;
+	d_string_t src;
+	d_string_t dst;
 	uint32_t fs_id;
 };
 
 struct iof_create_in {
-	crt_string_t path;
+	d_string_t path;
 	uint32_t fs_id;
 	uint32_t mode;
 	uint32_t flags;
 };
 
 struct iof_open_in {
-	crt_string_t path;
+	d_string_t path;
 	uint32_t fs_id;
 	uint32_t flags;
 };
 
 struct iof_getattr_out {
-	crt_iov_t stat;
+	d_iov_t stat;
 	int rc;
 	int err;
 };
@@ -217,7 +217,7 @@ struct iof_readdir_reply {
 };
 
 struct iof_readdir_out {
-	crt_iov_t replies;
+	d_iov_t replies;
 	int last;
 	int iov_count;
 	int bulk_count;
@@ -244,7 +244,7 @@ struct iof_read_bulk_in {
 };
 
 struct iof_read_bulk_out {
-	crt_iov_t data;
+	d_iov_t data;
 	uint32_t bulk_len;
 	uint32_t iov_len;
 	int rc;
@@ -252,7 +252,7 @@ struct iof_read_bulk_out {
 };
 
 struct iof_data_out {
-	crt_iov_t data;
+	d_iov_t data;
 	int rc;
 	int err;
 };
@@ -268,7 +268,7 @@ struct iof_gah_in {
 
 struct iof_write_in {
 	struct ios_gah gah;
-	crt_iov_t data;
+	d_iov_t data;
 	uint64_t base;
 };
 
@@ -285,7 +285,7 @@ struct iof_write_out {
 };
 
 struct iof_chmod_in {
-	crt_string_t path;
+	d_string_t path;
 	uint32_t fs_id;
 	int mode;
 };
@@ -296,15 +296,15 @@ struct iof_chmod_gah_in {
 };
 
 struct iof_time_in {
-	crt_string_t path;
-	crt_iov_t time;
+	d_string_t path;
+	d_iov_t time;
 	uint32_t fs_id;
 
 };
 
 struct iof_time_gah_in {
 	struct ios_gah gah;
-	crt_iov_t time;
+	d_iov_t time;
 };
 
 extern struct crt_req_format QUERY_RPC_FMT;

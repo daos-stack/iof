@@ -43,8 +43,8 @@
 #include "ios_gah.h"
 #include "iof_pool.h"
 
-#include <pouch/list.h>
-#include <pouch/hash.h>
+#include <gurt/list.h>
+#include <gurt/hash.h>
 
 #define IOF_MAX_FSTYPE_LEN 32
 
@@ -56,7 +56,7 @@ struct ios_base {
 	struct iof_pool		pool;
 	uint			projection_count;
 	crt_group_t		*primary_group;
-	crt_rank_t		my_rank;
+	d_rank_t		my_rank;
 	uint32_t		num_ranks;
 	uint			poll_interval;
 	crt_context_t		crt_ctx;
@@ -80,7 +80,7 @@ struct ionss_mini_file {
 struct ionss_file_handle {
 	struct ios_gah		gah;
 	struct ios_projection	*projection;
-	crt_list_t		clist;
+	d_list_t		clist;
 	struct ionss_mini_file	mf;
 	uint			fd;
 	ATOMIC uint		ref;
@@ -101,7 +101,7 @@ struct ios_projection {
 	pthread_mutex_t		lock;
 	int			current_read_count;
 	int			max_read_count;
-	crt_list_t		read_list;
+	d_list_t		read_list;
 };
 
 /* Convert from a fs_id as received over the network to a projection pointer.
@@ -138,9 +138,9 @@ struct ionss_read_req_desc {
 	struct ionss_file_handle	*handle;
 	struct iof_read_bulk_out	*out;
 	struct iof_read_bulk_in         *in;
-	crt_size_t			req_len;
+	d_size_t			req_len;
 	struct ionss_active_read	*ard;
-	crt_list_t			list;
+	d_list_t			list;
 };
 
 /* Active read descriptor
@@ -152,9 +152,9 @@ struct ionss_active_read {
 	struct ios_projection		*projection;
 	struct ionss_read_req_desc      *rrd;
 	void				*buf;
-	crt_list_t			list;
-	crt_size_t			buf_len;
-	crt_size_t			read_len;
+	d_list_t			list;
+	d_size_t			buf_len;
+	d_size_t			read_len;
 	crt_bulk_t			local_bulk_handle;
 
 };

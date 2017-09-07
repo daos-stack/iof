@@ -40,7 +40,7 @@
 
 #include <fuse3/fuse.h>
 
-#include <pouch/list.h>
+#include <gurt/list.h>
 #include "cnss_plugin.h"
 #include "ios_gah.h"
 #include "iof_atomic.h"
@@ -84,7 +84,7 @@ struct iof_state {
 	size_t				cb_size;
 	/* cart context */
 	crt_context_t			crt_ctx;
-	crt_list_t			fs_list;
+	d_list_t			fs_list;
 	/* CNSS Prefix */
 	char				*cnss_prefix;
 	struct ctrl_dir			*ionss_dir;
@@ -108,14 +108,14 @@ struct iof_group_info {
 
 struct iof_rb {
 	struct fuse_bufvec	buf;
-	crt_list_t		list;
+	d_list_t		list;
 };
 
 struct iof_projection_info {
 	struct iof_projection		proj;
 	struct iof_state		*iof_state;
 	struct ios_gah			gah;
-	crt_list_t			link;
+	d_list_t			link;
 	/* destination endpoint */
 	crt_endpoint_t			dest_ep;
 	struct ctrl_dir			*fs_dir;
@@ -234,7 +234,7 @@ struct iof_dir_handle {
 	/* Set to 0 if the server rejects the GAH at any point */
 	int				gah_valid;
 	crt_endpoint_t			ep;
-	crt_list_t			list;
+	d_list_t			list;
 	/* The name of the directory */
 	char				*name;
 };
@@ -246,7 +246,7 @@ struct iof_file_handle {
 	crt_rpc_t			*open_rpc;
 	crt_rpc_t			*creat_rpc;
 	crt_rpc_t			*release_rpc;
-	crt_list_t			list;
+	d_list_t			list;
 	ino_t				inode_no;
 	char				*name;
 };
@@ -271,7 +271,7 @@ struct getattr_req {
 	crt_endpoint_t			ep;
 	struct iof_projection_info	*fs_handle;
 	struct crt_rpc			*rpc;
-	crt_list_t			list;
+	d_list_t			list;
 };
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.

@@ -71,8 +71,8 @@ ioc_rename_priv(const char *src, const char *dst)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->src = (crt_string_t)src;
-	in->dst = (crt_string_t)dst;
+	in->src = (d_string_t)src;
+	in->dst = (d_string_t)dst;
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

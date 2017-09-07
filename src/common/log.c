@@ -45,8 +45,8 @@ static int iof_log_allocfacility(const char *shortname, const char *longname)
 {
 	int handle;
 
-	handle = crt_log_allocfacility(shortname, longname);
-	crt_log_sync_mask();
+	handle = d_log_allocfacility(shortname, longname);
+	d_log_sync_mask();
 
 	return handle;
 }
@@ -55,7 +55,7 @@ void iof_log_init(const char *shortname, const char *longname, int *handle)
 {
 	int new_handle;
 
-	crt_log_init();
+	d_log_init();
 	new_handle = iof_log_allocfacility(shortname, longname);
 
 	pthread_mutex_lock(&lock);
@@ -74,5 +74,5 @@ void iof_log_init(const char *shortname, const char *longname, int *handle)
 
 void iof_log_close(void)
 {
-	crt_log_fini();
+	d_log_fini();
 }

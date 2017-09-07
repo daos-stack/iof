@@ -38,35 +38,35 @@
  * A simple, efficient pool for allocating objects of equal size
  */
 #include <pthread.h>
-#include <pouch/common.h> /* container_of */
-#include <pouch/list.h>
+#include <gurt/common.h> /* container_of */
+#include <gurt/list.h>
 #include "iof_obj_pool.h"
 
 /* A hack to assert that the sizeof obj_pool_t is large enough */
 struct tpv_data {
 	struct obj_pool *pool;
-	crt_list_t free_entries;
-	crt_list_t allocated_blocks;
-	crt_list_t link;
+	d_list_t free_entries;
+	d_list_t allocated_blocks;
+	d_list_t link;
 };
 
 struct pool_entry {
 	union {
-		crt_list_t link; /* Free list link */
+		d_list_t link; /* Free list link */
 		char data[0];    /* Data */
 	};
 };
 
 struct obj_pool {
-	pthread_key_t key;           /* key to threadprivate data */
-	pthread_mutex_t lock;        /* lock thread events */
-	crt_list_t free_entries;     /* entries put in pool by dead thread */
-	crt_list_t allocated_blocks; /* blocks allocated by dead thread */
-	crt_list_t tpv_list;         /* Threadprivate data */
-	size_t obj_size;             /* size of objects in pool */
-	size_t padded_size;          /* real size of objects in pool */
-	size_t block_size;           /* allocation size */
-	int magic;                   /* magic number for sanity */
+	pthread_key_t key;         /* key to threadprivate data */
+	pthread_mutex_t lock;      /* lock thread events */
+	d_list_t free_entries;     /* entries put in pool by dead thread */
+	d_list_t allocated_blocks; /* blocks allocated by dead thread */
+	d_list_t tpv_list;         /* Threadprivate data */
+	size_t obj_size;           /* size of objects in pool */
+	size_t padded_size;        /* real size of objects in pool */
+	size_t block_size;         /* allocation size */
+	int magic;                 /* magic number for sanity */
 };
 
 #define PAD8(size) ((size + 7) & ~7)
@@ -83,13 +83,13 @@ static void save_free_entries(void *tpv_data)
 	struct tpv_data *tpv = (struct tpv_data *)tpv_data;
 	struct obj_pool *pool = tpv->pool;
 
-	if (crt_list_empty(&tpv->free_entries))
+	if (d_list_empty(&tpv->free_entries))
 		return;
 
 	pthread_mutex_lock(&pool->lock);
-	crt_list_splice(&tpv->free_entries, &pool->free_entries);
-	crt_list_splice(&tpv->allocated_blocks, &pool->allocated_blocks);
-	crt_list_del(&tpv->link);
+	d_list_splice(&tpv->free_entries, &pool->free_entries);
+	d_list_splice(&tpv->allocated_blocks, &pool->allocated_blocks);
+	d_list_del(&tpv->link);
 	pthread_setspecific(pool->key, NULL);
 	free(tpv);
 	pthread_mutex_unlock(&pool->lock);
@@ -122,9 +122,9 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 	if (rc != 0)
 		return PERR_NOMEM;
 
-	CRT_INIT_LIST_HEAD(&real_pool->free_entries);
-	CRT_INIT_LIST_HEAD(&real_pool->allocated_blocks);
-	CRT_INIT_LIST_HEAD(&real_pool->tpv_list);
+	D_INIT_LIST_HEAD(&real_pool->free_entries);
+	D_INIT_LIST_HEAD(&real_pool->allocated_blocks);
+	D_INIT_LIST_HEAD(&real_pool->tpv_list);
 
 	real_pool->obj_size = obj_size;
 	obj_size = sizeof(struct pool_entry) > obj_size ?
@@ -156,14 +156,14 @@ int obj_pool_destroy(obj_pool_t *pool)
 
 	pthread_key_delete(real_pool->key);
 
-	crt_list_for_each_entry_safe(block, tmpblock,
-				     &real_pool->allocated_blocks, link) {
+	d_list_for_each_entry_safe(block, tmpblock,
+				   &real_pool->allocated_blocks, link) {
 		free(block);
 	}
-	crt_list_for_each_entry_safe(tpv, tmptpv,
-				     &real_pool->tpv_list, link) {
-		crt_list_for_each_entry_safe(block, tmpblock,
-					     &tpv->allocated_blocks, link) {
+	d_list_for_each_entry_safe(tpv, tmptpv,
+				   &real_pool->tpv_list, link) {
+		d_list_for_each_entry_safe(block, tmpblock,
+					   &tpv->allocated_blocks, link) {
 			free(block);
 		}
 		free(tpv);
@@ -183,16 +183,16 @@ static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
 		if (tpv_data == NULL)
 			return PERR_NOMEM;
 
-		CRT_INIT_LIST_HEAD(&tpv_data->free_entries);
-		CRT_INIT_LIST_HEAD(&tpv_data->allocated_blocks);
+		D_INIT_LIST_HEAD(&tpv_data->free_entries);
+		D_INIT_LIST_HEAD(&tpv_data->allocated_blocks);
 		tpv_data->pool = pool;
 
 		pthread_mutex_lock(&pool->lock);
-		crt_list_add(&tpv_data->link, &pool->tpv_list);
+		d_list_add(&tpv_data->link, &pool->tpv_list);
 		/* Steal entries left by a dead thread */
-		if (!crt_list_empty(&pool->free_entries))
-			crt_list_splice_init(&pool->free_entries,
-					     &tpv_data->free_entries);
+		if (!d_list_empty(&pool->free_entries))
+			d_list_splice_init(&pool->free_entries,
+					   &tpv_data->free_entries);
 		pthread_mutex_unlock(&pool->lock);
 
 		pthread_setspecific(pool->key, tpv_data);
@@ -217,10 +217,10 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 		return rc;
 	}
 
-	if (!crt_list_empty(&tpv_data->free_entries)) {
-		*entry = crt_list_entry(tpv_data->free_entries.next,
-					struct pool_entry, link);
-		crt_list_del(tpv_data->free_entries.next);
+	if (!d_list_empty(&tpv_data->free_entries)) {
+		*entry = d_list_entry(tpv_data->free_entries.next,
+				      struct pool_entry, link);
+		d_list_del(tpv_data->free_entries.next);
 		goto zero;
 	}
 
@@ -238,10 +238,10 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 	for (cursor = block + (pool->padded_size * 2);
 	     cursor != (block + pool->block_size);
 	     cursor += pool->padded_size) {
-		crt_list_add((crt_list_t *)cursor, &tpv_data->free_entries);
+		d_list_add((d_list_t *)cursor, &tpv_data->free_entries);
 	}
 
-	crt_list_add((crt_list_t *)block, &tpv_data->allocated_blocks);
+	d_list_add((d_list_t *)block, &tpv_data->allocated_blocks);
 zero:
 	memset(*entry, 0, pool->padded_size);
 
@@ -290,12 +290,12 @@ int obj_pool_put(obj_pool_t *pool, void *item)
 
 	if (rc != 0) {
 		pthread_mutex_lock(&real_pool->lock);
-		crt_list_add(&entry->link, &real_pool->free_entries);
+		d_list_add(&entry->link, &real_pool->free_entries);
 		pthread_mutex_unlock(&real_pool->lock);
 		return rc;
 	}
 
-	crt_list_add(&entry->link, &tpv_data->free_entries);
+	d_list_add(&entry->link, &tpv_data->free_entries);
 
 	return 0;
 }

@@ -43,7 +43,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
-#include <pouch/common.h> /* container_of */
+#include <gurt/common.h> /* container_of */
 #include "iof_atomic.h"
 #include "iof_obj_pool.h"
 #include "iof_vector.h"

@@ -70,7 +70,7 @@ int ioc_rmdir(const char *file)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
+	in->path = (d_string_t)file;
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

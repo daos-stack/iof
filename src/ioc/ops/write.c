@@ -118,7 +118,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
-	crt_iov_set(&in->data, (void *)buff, len);
+	d_iov_set(&in->data, (void *)buff, len);
 	in->base = position;
 
 	reply.handle = handle;
@@ -148,8 +148,8 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	crt_bulk_t bulk;
 	struct write_cb_r reply = {0};
 
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
 

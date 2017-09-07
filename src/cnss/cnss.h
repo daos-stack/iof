@@ -42,10 +42,10 @@
 #include "ctrl_fs.h"
 #include "ctrl_common.h"
 
-#include <pouch/list.h>
+#include <gurt/list.h>
 
 struct cnss_info {
-	crt_list_t              plugins;
+	d_list_t                plugins;
 	struct ctrl_info	info;
 };
 

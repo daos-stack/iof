@@ -97,7 +97,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	struct readdir_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk = 0;
-	crt_iov_t iov = {0};
+	d_iov_t iov = {0};
 	size_t len = fs_handle->readdir_size;
 	int ret = 0;
 	int rc;
@@ -120,7 +120,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	iov.iov_buf = malloc(len);
 
 	if (iov.iov_buf) {
-		crt_sg_list_t sgl = {0};
+		d_sg_list_t sgl = {0};
 
 		sgl.sg_iovs = &iov;
 		sgl.sg_nr.num = 1;

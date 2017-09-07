@@ -70,8 +70,8 @@ int ioc_utimens_name(const char *file, const struct timespec tv[2])
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
-	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
+	in->path = (d_string_t)file;
+	d_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

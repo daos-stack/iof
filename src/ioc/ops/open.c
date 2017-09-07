@@ -120,7 +120,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(handle->open_rpc);
-	in->path = (crt_string_t)file;
+	in->path = (d_string_t)file;
 
 	in->fs_id = fs_handle->fs_id;
 	in->flags = fi->flags;

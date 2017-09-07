@@ -49,7 +49,7 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <string.h>
-#include <pouch/list.h>
+#include <gurt/list.h>
 #include <cart/api.h>
 #include "iof_mntent.h"
 #include "intercept.h"
@@ -123,7 +123,7 @@ static int find_projections(void)
 	int rc;
 	int i;
 	uint32_t version;
-	crt_rank_t rank;
+	d_rank_t rank;
 	uint32_t tag;
 
 	rc = iof_ctrl_read_uint32(&version, "iof/ioctl_version");

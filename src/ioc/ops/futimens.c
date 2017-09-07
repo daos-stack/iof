@@ -77,7 +77,7 @@ int ioc_utimens_gah(const struct timespec tv[2], struct fuse_file_info *fi)
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
-	crt_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
+	d_iov_set(&in->time, (void *)tv, sizeof(struct timespec) * 2);
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {

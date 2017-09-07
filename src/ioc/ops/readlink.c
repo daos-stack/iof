@@ -117,7 +117,7 @@ int ioc_readlink(const char *link, char *target, size_t len)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)link;
+	in->path = (d_string_t)link;
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_readlink_cb, &reply);

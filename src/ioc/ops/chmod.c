@@ -71,7 +71,7 @@ int ioc_chmod_name(const char *file, mode_t mode)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)file;
+	in->path = (d_string_t)file;
 	in->mode = mode;
 	in->fs_id = fs_handle->fs_id;
 

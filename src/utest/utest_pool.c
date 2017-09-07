@@ -38,7 +38,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <pthread.h>
-#include <pouch/list.h>
+#include <gurt/list.h>
 #include <CUnit/Basic.h>
 
 #include <iof_obj_pool.h>
@@ -56,7 +56,7 @@ int clean_suite(void)
 #define ENTRIES 20000
 
 struct item {
-	crt_list_t link;
+	d_list_t link;
 	int value;
 };
 
@@ -64,13 +64,13 @@ struct item {
 static void test_iof_obj_pool(void)
 {
 	obj_pool_t pool;
-	crt_list_t head;
+	d_list_t head;
 	struct item *item;
 	struct item *tmp;
 	int sum = 0;
 	int i;
 
-	CRT_INIT_LIST_HEAD(&head);
+	D_INIT_LIST_HEAD(&head);
 
 	CU_ASSERT(obj_pool_initialize(&pool, 4) == 0);
 	CU_ASSERT(obj_pool_destroy(&pool) == 0);
@@ -81,13 +81,13 @@ static void test_iof_obj_pool(void)
 		CU_ASSERT(obj_pool_get(&pool, &item) == 0);
 		if (item != NULL) {
 			item->value = i + 1;
-			crt_list_add(&item->link, &head);
+			d_list_add(&item->link, &head);
 		}
 	}
 
-	crt_list_for_each_entry_safe(item, tmp, &head, link) {
+	d_list_for_each_entry_safe(item, tmp, &head, link) {
 		sum += item->value;
-		crt_list_del(&item->link);
+		d_list_del(&item->link);
 		CU_ASSERT(obj_pool_put(&pool, item) == 0);
 	}
 
@@ -97,7 +97,7 @@ static void test_iof_obj_pool(void)
 #define NUM_THREADS 64
 
 struct thread_info {
-	crt_list_t entries;
+	d_list_t entries;
 	int tid;
 	pthread_barrier_t *barrier;
 	obj_pool_t *pool;
@@ -107,7 +107,7 @@ struct thread_info {
 static uint64_t magic_number = 0xdeadbeefbaadf00d;
 struct entry {
 	uint64_t magic;
-	crt_list_t link;
+	d_list_t link;
 	int value;
 };
 
@@ -146,18 +146,18 @@ static void *thread_func(void *arg)
 
 		entry->value = tpd->tid;
 		entry->magic = magic_number;
-		crt_list_add(&entry->link, &tpd->entries);
+		d_list_add(&entry->link, &tpd->entries);
 	}
 
 	if (tpd->tid & 1) {
-		crt_list_for_each_entry_safe(entry, tmp, &tpd->entries, link) {
-			crt_list_del(&entry->link);
+		d_list_for_each_entry_safe(entry, tmp, &tpd->entries, link) {
+			d_list_del(&entry->link);
 			rc = obj_pool_put(tpd->pool, entry);
 			COUNT_FAILS(count, rc == 0);
 		}
 
 		LOCKED_ASSERT(count == 0);
-		LOCKED_ASSERT(crt_list_empty(&tpd->entries));
+		LOCKED_ASSERT(d_list_empty(&tpd->entries));
 	} else {
 		/* Allocate more entries */
 		for (i = 0; i < ENTRIES; i++) {
@@ -166,7 +166,7 @@ static void *thread_func(void *arg)
 
 			entry->value = tpd->tid;
 			entry->magic = magic_number;
-			crt_list_add(&entry->link, &tpd->entries);
+			d_list_add(&entry->link, &tpd->entries);
 		}
 	}
 
@@ -176,13 +176,11 @@ static void *thread_func(void *arg)
 		othertpd = &tpd->global_info[i];
 
 		if (i & 1)
-			COUNT_FAILS(count, crt_list_empty(&othertpd->entries));
+			COUNT_FAILS(count, d_list_empty(&othertpd->entries));
 		else {
 			COUNT_FAILS(count,
-				    !crt_list_empty(&othertpd->entries));
-			crt_list_for_each_entry(entry,
-						&othertpd->entries,
-						link) {
+				    !d_list_empty(&othertpd->entries));
+			d_list_for_each_entry(entry, &othertpd->entries, link) {
 				COUNT_FAILS(count,
 					    entry->value == othertpd->tid);
 				COUNT_FAILS(count,
@@ -193,8 +191,8 @@ static void *thread_func(void *arg)
 
 	pthread_barrier_wait(tpd->barrier);
 
-	crt_list_for_each_entry_safe(entry, tmp, &tpd->entries, link) {
-		crt_list_del(&entry->link);
+	d_list_for_each_entry_safe(entry, tmp, &tpd->entries, link) {
+		d_list_del(&entry->link);
 		rc = obj_pool_put(tpd->pool, entry);
 		COUNT_FAILS(count, rc == 0);
 	}
@@ -202,7 +200,7 @@ static void *thread_func(void *arg)
 	pthread_barrier_wait(tpd->barrier);
 
 	LOCKED_ASSERT(count == 0);
-	LOCKED_ASSERT(crt_list_empty(&tpd->entries));
+	LOCKED_ASSERT(d_list_empty(&tpd->entries));
 
 	return NULL;
 }
@@ -222,7 +220,7 @@ static void test_iof_obj_pool_threaded(void)
 
 	for (i = 0; i < NUM_THREADS; i++) {
 		tpd[i].tid = i;
-		CRT_INIT_LIST_HEAD(&tpd[i].entries);
+		D_INIT_LIST_HEAD(&tpd[i].entries);
 		tpd[i].barrier = &barrier;
 		tpd[i].pool = &pool;
 		tpd[i].global_info = &tpd[0];

@@ -41,7 +41,7 @@
 #define __IOF_POOL_H__
 
 #include <pthread.h>
-#include <pouch/list.h>
+#include <gurt/list.h>
 
 /* A datastructure used to describe and register a type */
 struct iof_pool_reg {
@@ -77,9 +77,9 @@ struct iof_pool_reg {
  */
 struct iof_pool_type {
 	struct iof_pool_reg	reg;
-	crt_list_t		type_list;
-	crt_list_t		free_list;
-	crt_list_t		pending_list;
+	d_list_t		type_list;
+	d_list_t		free_list;
+	d_list_t		pending_list;
 	pthread_mutex_t		lock;
 
 	/* Counters for current number of objects */
@@ -101,7 +101,7 @@ struct iof_pool_type {
 };
 
 struct iof_pool {
-	crt_list_t		list;
+	d_list_t		list;
 	pthread_mutex_t		lock;
 };
 

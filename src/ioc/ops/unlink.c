@@ -70,7 +70,7 @@ int ioc_unlink(const char *path)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (crt_string_t)path;
+	in->path = (d_string_t)path;
 	in->fs_id = fs_handle->fs_id;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

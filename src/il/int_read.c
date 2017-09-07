@@ -259,8 +259,8 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	struct read_bulk_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
 	int rc;
 
 	fs_handle = f_info->projection;

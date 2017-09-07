@@ -64,7 +64,7 @@ int
 iof_pool_init(struct iof_pool *pool)
 {
 	IOF_LOG_DEBUG("Created a pool at %p", pool);
-	CRT_INIT_LIST_HEAD(&pool->list);
+	D_INIT_LIST_HEAD(&pool->list);
 
 	pthread_mutex_init(&pool->lock, NULL);
 	return 0;
@@ -76,12 +76,12 @@ iof_pool_destroy(struct iof_pool *pool)
 {
 	struct iof_pool_type *type, *tnext;
 
-	crt_list_for_each_entry(type, &pool->list, type_list) {
+	d_list_for_each_entry(type, &pool->list, type_list) {
 		debug_dump(type);
 	}
 
 	iof_pool_reclaim(pool);
-	crt_list_for_each_entry_safe(type, tnext, &pool->list, type_list) {
+	d_list_for_each_entry_safe(type, tnext, &pool->list, type_list) {
 		IOF_LOG_DEBUG("Freeing type %p", type);
 		if (type->count != 0)
 			IOF_LOG_WARNING("Freeing type with active objects");
@@ -99,19 +99,19 @@ iof_pool_destroy(struct iof_pool *pool)
 static int
 restock(struct iof_pool_type *type, int count)
 {
-	crt_list_t *entry, *enext;
+	d_list_t *entry, *enext;
 	int clean_calls = 0;
 
 	if (type->free_count >= count)
 		return 0;
 
-	crt_list_for_each_safe(entry, enext, &type->pending_list) {
+	dlist_for_each_safe(entry, enext, &type->pending_list) {
 		void *ptr = (void *)entry - type->reg.offset;
 		int rc;
 
 		IOF_LOG_DEBUG("Cleaning %p", ptr);
 
-		crt_list_del(entry);
+		d_list_del(entry);
 		type->pending_count--;
 
 		if (type->reg.clean) {
@@ -119,7 +119,7 @@ restock(struct iof_pool_type *type, int count)
 			clean_calls++;
 			rc = type->reg.clean(ptr);
 			if (rc == 0) {
-				crt_list_add(entry, &type->free_list);
+				d_list_add(entry, &type->free_list);
 				type->free_count++;
 			} else {
 				IOF_LOG_DEBUG("entry failed clean %p", ptr);
@@ -127,7 +127,7 @@ restock(struct iof_pool_type *type, int count)
 				free(ptr);
 			}
 		} else {
-			crt_list_add(entry, &type->free_list);
+			d_list_add(entry, &type->free_list);
 			type->free_count++;
 		}
 		if (type->free_count == count)
@@ -143,8 +143,8 @@ iof_pool_reclaim(struct iof_pool *pool)
 	struct iof_pool_type *type;
 
 	pthread_mutex_lock(&pool->lock);
-	crt_list_for_each_entry(type, &pool->list, type_list) {
-		crt_list_t *entry, *enext;
+	d_list_for_each_entry(type, &pool->list, type_list) {
+		d_list_t *entry, *enext;
 
 		IOF_LOG_DEBUG("Cleaning type %p", type);
 
@@ -156,7 +156,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 		 */
 		restock(type, type->count);
 
-		crt_list_for_each_safe(entry, enext, &type->free_list) {
+		dlist_for_each_safe(entry, enext, &type->free_list) {
 			void *ptr = (void *)entry - type->reg.offset;
 
 			if (type->reg.release) {
@@ -165,7 +165,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 			}
 
 			IOF_LOG_INFO("Destroying object at %p", ptr);
-			crt_list_del(entry);
+			d_list_del(entry);
 			free(ptr);
 			type->free_count--;
 			type->count--;
@@ -221,12 +221,12 @@ create_many(struct iof_pool_type *type)
 {
 	while (type->free_count < (type->no_restock_hwm + 1)) {
 		void *ptr = create(type);
-		crt_list_t *entry = ptr + type->reg.offset;
+		d_list_t *entry = ptr + type->reg.offset;
 
 		if (!ptr)
 			return;
 
-		crt_list_add_tail(entry, &type->free_list);
+		d_list_add_tail(entry, &type->free_list);
 		type->free_count++;
 	}
 }
@@ -244,8 +244,8 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	IOF_LOG_DEBUG("Pool %p create a type at %p", pool, type);
 
 	pthread_mutex_init(&type->lock, NULL);
-	CRT_INIT_LIST_HEAD(&type->free_list);
-	CRT_INIT_LIST_HEAD(&type->pending_list);
+	D_INIT_LIST_HEAD(&type->free_list);
+	D_INIT_LIST_HEAD(&type->pending_list);
 
 	type->count = 0;
 	memcpy(&type->reg, reg, sizeof(*reg));
@@ -253,7 +253,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	create_many(type);
 
 	pthread_mutex_lock(&pool->lock);
-	crt_list_add_tail(&type->type_list, &pool->list);
+	d_list_add_tail(&type->type_list, &pool->list);
 	pthread_mutex_unlock(&pool->lock);
 
 	return type;
@@ -268,7 +268,7 @@ void *
 iof_pool_acquire(struct iof_pool_type *type)
 {
 	void *ptr = NULL;
-	crt_list_t *entry;
+	d_list_t *entry;
 
 	pthread_mutex_lock(&type->lock);
 
@@ -280,9 +280,9 @@ iof_pool_acquire(struct iof_pool_type *type)
 		type->op_clean += count;
 	}
 
-	if (!crt_list_empty(&type->free_list)) {
+	if (!d_list_empty(&type->free_list)) {
 		entry = type->free_list.next;
-		crt_list_del(entry);
+		d_list_del(entry);
 		entry->next = NULL;
 		entry->prev = NULL;
 		type->free_count--;
@@ -312,12 +312,12 @@ iof_pool_acquire(struct iof_pool_type *type)
 void
 iof_pool_release(struct iof_pool_type *type, void *ptr)
 {
-	crt_list_t *entry = ptr + type->reg.offset;
+	d_list_t *entry = ptr + type->reg.offset;
 
 	IOF_LOG_DEBUG("Releasing %p", ptr);
 	pthread_mutex_lock(&type->lock);
 	type->pending_count++;
-	crt_list_add_tail(entry, &type->pending_list);
+	d_list_add_tail(entry, &type->pending_list);
 	pthread_mutex_unlock(&type->lock);
 }
 

@@ -226,8 +226,8 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	char *buff = rb->buf.buf[0].mem;
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
 	int rc;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,

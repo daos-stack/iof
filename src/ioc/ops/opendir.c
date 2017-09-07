@@ -104,7 +104,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(dir_handle->open_rpc);
-	in->path = (crt_string_t)dir;
+	in->path = (d_string_t)dir;
 	in->fs_id = fs_handle->fs_id;
 
 	reply.dh = dir_handle;

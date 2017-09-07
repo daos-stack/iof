@@ -207,10 +207,10 @@ int iof_ctrl_write_strf(const char *path, const char *format, ...)
 	va_start(ap, format);
 	ret = vfprintf(fp, format, ap);
 	va_end(ap);
-	flags = crt_log_check(DEF_LOG_HANDLE | CLOG_INFO);
+	flags = d_log_check(DEF_LOG_HANDLE | DLOG_INFO);
 	if (flags != 0) {
 		va_start(ap, format);
-		crt_vlog(flags, format, ap);
+		d_vlog(flags, format, ap);
 		va_end(ap);
 	}
 

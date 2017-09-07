@@ -579,7 +579,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return IOF_ERR_NOMEM;
 	}
 
-	CRT_INIT_LIST_HEAD(&iof_state->fs_list);
+	D_INIT_LIST_HEAD(&iof_state->fs_list);
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ionss_count", 1);
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "ionss",
@@ -1023,7 +1023,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	IOF_LOG_DEBUG("Fuse mount installed at: %s",
 		      fs_handle->mount_point);
 
-	crt_list_add_tail(&fs_handle->link, &iof_state->fs_list);
+	d_list_add_tail(&fs_handle->link, &iof_state->fs_list);
 
 	return 0;
 }
@@ -1139,7 +1139,7 @@ static void iof_deregister_fuse(void *arg)
 
 	iof_pool_destroy(&fs_handle->pool);
 
-	crt_list_del(&fs_handle->link);
+	d_list_del(&fs_handle->link);
 	free(fs_handle->fuse_ops);
 	free(fs_handle->base_dir);
 	free(fs_handle->mount_point);
@@ -1154,7 +1154,7 @@ static void iof_stop(void *arg)
 
 	IOF_LOG_INFO("Called iof_stop");
 
-	crt_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
 		IOF_LOG_INFO("Setting projection %d offline %s",
 			     fs_handle->fs_id, fs_handle->mount_point);
 		fs_handle->offline_reason = EACCES;

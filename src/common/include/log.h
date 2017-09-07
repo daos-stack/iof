@@ -41,7 +41,7 @@
 #include <stdio.h>
 
 #include <inttypes.h>
-#include <pouch/clog.h>
+#include <gurt/dlog.h>
 
 /* Allow changing the default so these macros can be
  * used by files that don't log to the default facility
@@ -52,9 +52,9 @@
 
 #define IOF_LOG_FAC(fac, type, fmt, ...)				\
 	do {								\
-		crt_log(fac | CLOG_##type, "%s:%d %s() " fmt "\n",	\
-			__FILE__,  __LINE__, __func__,			\
-			## __VA_ARGS__);				\
+		d_log(fac | DLOG_##type, "%s:%d %s() " fmt "\n",	\
+		      __FILE__,  __LINE__, __func__,			\
+		      ## __VA_ARGS__);					\
 	} while (0)
 
 #define IOF_LOG_WARNING(...)	\

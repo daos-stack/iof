@@ -40,7 +40,7 @@
 #include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
-#include <pouch/clog.h>
+#include <gurt/dlog.h>
 #include "ctrl_common.h"
 
 void ctrl_info_init(struct ctrl_info *ctrl_info)
@@ -104,7 +104,7 @@ static int shutdown_write_cb(uint64_t value, void *arg)
 static int write_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/
-	crt_log(DEF_LOG_HANDLE | CLOG_INFO, "%s\n", buf);
+	d_log(DEF_LOG_HANDLE | DLOG_INFO, "%s\n", buf);
 
 	return 0;
 }
@@ -112,7 +112,7 @@ static int write_log_write_cb(const char *buf, void *arg)
 static int dump_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/
-	crt_log(DEF_LOG_HANDLE | CLOG_INFO, "%s\n", buf);
+	d_log(DEF_LOG_HANDLE | DLOG_INFO, "%s\n", buf);
 
 	return cnss_dump_log(arg);
 }
@@ -144,7 +144,7 @@ static int log_mask_cb(const char *mask,  void *cb_arg)
 		IOF_LOG_INFO("Setting log mask to %s", newmask);
 	}
 
-	crt_log_setmasks(newmask, strlen(newmask));
+	d_log_setmasks(newmask, strlen(newmask));
 
 	return 0;
 }

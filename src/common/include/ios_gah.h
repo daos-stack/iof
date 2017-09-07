@@ -39,7 +39,7 @@
 #define __IOF_GAH_H__
 
 #include <inttypes.h>
-#include <pouch/list.h>
+#include <gurt/list.h>
 
 enum ios_return {
 	IOS_SUCCESS = 0,
@@ -69,7 +69,7 @@ struct ios_gah {
 /** metadata associated with the file */
 struct ios_gah_ent {
 	void *internal;
-	crt_list_t list;
+	d_list_t list;
 	uint64_t in_use;
 	uint64_t revision;
 	uint64_t fid;	/**< The file id of the file*/
@@ -89,7 +89,7 @@ struct ios_gah_store {
 	struct ios_gah_ent **ptr_array;
 
 	/** list of available file entries */
-	crt_list_t free_list;
+	d_list_t free_list;
 };
 
 /**

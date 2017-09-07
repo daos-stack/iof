@@ -184,8 +184,8 @@ cnss_detach_handler(crt_rpc_t *rpc)
 {
 	int rc;
 	crt_rpc_t *rpc_bcast = NULL;
-	crt_rank_list_t exclude_me = {  .rl_nr = { 1, 1 },
-					.rl_ranks = &base.my_rank };
+	d_rank_list_t exclude_me = {  .rl_nr = { 1, 1 },
+				      .rl_ranks = &base.my_rank };
 
 	IOF_LOG_DEBUG("CNSS detach received (attached: %d)", cnss_count);
 	rc = crt_reply_send(rpc);
@@ -224,7 +224,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 }
 
 static bool
-fh_compare(struct chash_table *htable, crt_list_t *rlink,
+fh_compare(struct chash_table *htable, d_list_t *rlink,
 	   const void *key, unsigned int ksize)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
@@ -317,7 +317,7 @@ iof_getattr_handler(crt_rpc_t *rpc)
 	else if (parent->projection->dev_no != stbuf.st_dev)
 		out->rc = EACCES;
 	else
-		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+		d_iov_set(&out->stat, &stbuf, sizeof(struct stat));
 
 out:
 
@@ -362,7 +362,7 @@ iof_getattr_gah_handler(crt_rpc_t *rpc)
 	if (rc)
 		out->rc = errno;
 	else
-		crt_iov_set(&out->stat, &stbuf, sizeof(struct stat));
+		d_iov_set(&out->stat, &stbuf, sizeof(struct stat));
 
 out:
 	IOF_LOG_DEBUG("result err %d rc %d",
@@ -435,8 +435,8 @@ out:
 int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
 	struct iof_readdir_out *out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
-	crt_iov_t iov = {0};
-	crt_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
 	int rc;
 
 	if (cb_info->bci_rc) {
@@ -491,9 +491,9 @@ iof_readdir_handler(crt_rpc_t *rpc)
 	struct dirent *dir_entry;
 	struct crt_bulk_desc bulk_desc = {0};
 	crt_bulk_t local_bulk_hdl = {0};
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
-	crt_size_t len = 0;
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
+	d_size_t len = 0;
 	int reply_idx = 0;
 	int rc;
 
@@ -627,8 +627,8 @@ out:
 		return;
 	} else if (reply_idx) {
 		out->iov_count = reply_idx;
-		crt_iov_set(&out->replies, &replies[0],
-			    sizeof(struct iof_readdir_reply) * reply_idx);
+		d_iov_set(&out->replies, &replies[0],
+			  sizeof(struct iof_readdir_reply) * reply_idx);
 	}
 
 	rc = crt_reply_send(rpc);
@@ -727,7 +727,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	struct ios_projection	*projection = NULL;
 	struct ionss_mini_file	mf;
 	struct stat		stbuf = {0};
-	crt_list_t		*rlink;
+	d_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -836,7 +836,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	struct ios_projection	*projection = NULL;
 	struct ionss_mini_file	mf;
 	struct stat		stbuf = {0};
-	crt_list_t		*rlink;
+	d_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -908,11 +908,8 @@ iof_create_handler(crt_rpc_t *rpc)
 		handle->mf.flags = mf.flags;
 		handle->mf.inode_no = mf.inode_no;
 
-		chash_rec_insert(&projection->file_ht,
-				 &mf,
-				 sizeof(mf),
-				 &handle->clist,
-				 0);
+		chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
+				  &handle->clist, 0);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -1058,7 +1055,7 @@ iof_read_handler(crt_rpc_t *rpc)
 	if (bytes_read == -1)
 		out->rc = errno;
 	else
-		crt_iov_set(&out->data, data, bytes_read);
+		d_iov_set(&out->data, data, bytes_read);
 
 out:
 	rc = crt_reply_send(rpc);
@@ -1083,7 +1080,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 	struct ionss_active_read *ard;
 
 	pthread_mutex_lock(&projection->lock);
-	if (crt_list_empty(&projection->read_list)) {
+	if (d_list_empty(&projection->read_list)) {
 		projection->current_read_count--;
 		IOF_LOG_DEBUG("Dropping read slot (%d/%d)",
 			      projection->current_read_count,
@@ -1102,10 +1099,10 @@ void iof_read_check_and_send(struct ios_projection *projection)
 		return;
 	}
 
-	rrd = crt_list_entry(projection->read_list.next,
+	rrd = d_list_entry(projection->read_list.next,
 			     struct ionss_read_req_desc, list);
 
-	crt_list_del(&rrd->list);
+	d_list_del(&rrd->list);
 
 	IOF_LOG_DEBUG("Submiting new read %p (%d/%d)", rrd,
 		      projection->current_read_count,
@@ -1146,7 +1143,7 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 		goto out;
 	} else if (rrd->ard->read_len <= base.max_iov_read) {
 		out->iov_len = rrd->ard->read_len;
-		crt_iov_set(&out->data, rrd->ard->buf, rrd->ard->read_len);
+		d_iov_set(&out->data, rrd->ard->buf, rrd->ard->read_len);
 		goto out;
 	}
 
@@ -1288,7 +1285,7 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 		pthread_mutex_unlock(&projection->lock);
 		iof_process_read_bulk(ard, rrd);
 	} else {
-		crt_list_add_tail(&rrd->list, &projection->read_list);
+		d_list_add_tail(&rrd->list, &projection->read_list);
 		pthread_mutex_unlock(&projection->lock);
 	}
 
@@ -1420,7 +1417,7 @@ iof_readlink_handler(crt_rpc_t *rpc)
 	if (rc < 0)
 		out->rc = errno;
 	else
-		out->path = (crt_string_t)reply;
+		out->path = (d_string_t)reply;
 
 out:
 	rc = crt_reply_send(rpc);
@@ -1653,8 +1650,8 @@ int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 	struct iof_write_out *out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
 	size_t bytes_written;
 	struct ionss_file_handle *handle = NULL;
-	crt_iov_t iov = {0};
-	crt_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
 
 	int rc;
 
@@ -1721,9 +1718,9 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *handle;
 	struct crt_bulk_desc bulk_desc = {0};
 	crt_bulk_t local_bulk_hdl = {0};
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
-	crt_size_t len;
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
+	d_size_t len;
 
 	int rc;
 
@@ -1897,7 +1894,7 @@ static void iof_statfs_handler(crt_rpc_t *rpc)
 	buf.f_favail = 0;
 	buf.f_fsid = 0;
 	buf.f_flag = 0;
-	crt_iov_set(&out->data, &buf, sizeof(buf));
+	d_iov_set(&out->data, &buf, sizeof(buf));
 
 out:
 	rc = crt_reply_send(rpc);
@@ -1958,8 +1955,8 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	query->max_write = base.max_write;
 	query->readdir_size = base.max_readdir;
 
-	crt_iov_set(&query->query_list, base.fs_list,
-		    base.projection_count * sizeof(struct iof_fs_info));
+	d_iov_set(&query->query_list, base.fs_list,
+		  base.projection_count * sizeof(struct iof_fs_info));
 
 	ret = crt_reply_send(query_rpc);
 	if (ret)
@@ -2039,9 +2036,9 @@ static void *progress_thread(void *arg)
  * save a pointer in *arg and return 1 to terminate the traverse.  This way we
  * can iterate over the entries in the hash table and delete every one.
  */
-static int ioc_ht_find(crt_list_t *rlink, void *arg)
+static int ioc_ht_find(d_list_t *rlink, void *arg)
 {
-	crt_list_t **p = arg;
+	d_list_t **p = arg;
 
 	*p = rlink;
 	return 1;
@@ -2051,9 +2048,9 @@ static int ioc_ht_find(crt_list_t *rlink, void *arg)
  * returning the first rlink value provided to the callback.
  * Returns rlink on success, or NULL on error or if the hash table is empty.
  */
-static crt_list_t *chash_table_first(struct chash_table *ht)
+static d_list_t *chash_table_first(struct chash_table *ht)
 {
-	crt_list_t *rlink = NULL;
+	d_list_t *rlink = NULL;
 	int rc;
 
 	rc = chash_table_traverse(ht, ioc_ht_find, &rlink);
@@ -2072,7 +2069,7 @@ static void release_projection_resources(struct ios_projection *projection)
 	int rc;
 
 	do {
-		crt_list_t *rlink;
+		d_list_t *rlink;
 
 		fh = NULL;
 
@@ -2234,8 +2231,8 @@ static int
 ar_clean(void *arg)
 {
 	struct ionss_active_read *ard = arg;
-	crt_sg_list_t sgl = {0};
-	crt_iov_t iov = {0};
+	d_sg_list_t sgl = {0};
+	d_iov_t iov = {0};
 	int rc;
 
 	if (ard->local_bulk_handle)
@@ -2436,7 +2433,7 @@ int main(int argc, char **argv)
 
 		projection->active = 0;
 		projection->base = &base;
-		rc = chash_table_create_inplace(DHASH_FT_RWLOCK, 5, NULL,
+		rc = chash_table_create_inplace(D_HASH_FT_RWLOCK, 5, NULL,
 						&hops, &projection->file_ht);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not create hash table");
@@ -2445,7 +2442,7 @@ int main(int argc, char **argv)
 		pthread_mutex_init(&projection->lock, NULL);
 
 		projection->max_read_count = 3;
-		CRT_INIT_LIST_HEAD(&projection->read_list);
+		D_INIT_LIST_HEAD(&projection->read_list);
 
 		rc = fstat(fd, &buf);
 		if (rc) {
@@ -2472,11 +2469,9 @@ int main(int argc, char **argv)
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
-		chash_rec_insert(&projection->file_ht,
-				 &projection->root->mf,
-				 sizeof(projection->root->mf),
-				 &projection->root->clist,
-				 0);
+		chash_rec_insert(&projection->file_ht, &projection->root->mf,
+				  sizeof(projection->root->mf),
+				  &projection->root->clist, 0);
 
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;
