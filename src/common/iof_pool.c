@@ -38,6 +38,7 @@
  * A simple, efficient pool for allocating objects of equal size
  */
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "iof_pool.h"

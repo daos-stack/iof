@@ -38,13 +38,8 @@
 
 #include <stdio.h>
 #include <string.h>
-#ifdef IOF_USE_FUSE3
-#include <fuse3/fuse.h>
+
 #include <fuse3/fuse_lowlevel.h>
-#else
-#include <fuse/fuse.h>
-#include <fuse/fuse_lowlevel.h>
-#endif
 
 #include "iof_common.h"
 #include "ioc.h"
@@ -64,7 +59,6 @@ enum op_type {
 	DEF_FUSE_OP(opendir),
 	DEF_FUSE_OP(readdir),
 	DEF_FUSE_OP(releasedir),
-	DEF_FUSE_OP(setxattr),
 	DEF_FUSE_OP(open),
 	DEF_FUSE_OP(release),
 	DEF_FUSE_OP(create),
@@ -85,55 +79,6 @@ struct operation {
 	enum op_type op_type;
 	fuse_func_t fn_ptr;
 };
-
-struct fuse_impl {
-	int count;
-	struct operation *ops;
-};
-
-static int string_to_bool(const char *str, int *value)
-{
-	if (strcmp(str, "1") == 0) {
-		*value = 1;
-		return 1;
-	} else if (strcmp(str, "0") == 0) {
-		*value = 0;
-		return 1;
-	}
-	return 0;
-}
-
-/*
- * Temporary way of shutting down. This fuse callback is currently not going to
- * IONSS
- */
-#ifdef __APPLE__
-
-static int ioc_setxattr(const char *path,  const char *name, const char *value,
-			size_t size, int options, uint32_t position)
-#else
-static int ioc_setxattr(const char *path, const char *name, const char *value,
-			size_t size, int flags)
-#endif
-{
-	struct fuse_context *context;
-	int ret;
-
-	context = fuse_get_context();
-	if (strcmp(name, "user.exit") == 0) {
-		if (string_to_bool(value, &ret)) {
-			if (ret) {
-				IOF_LOG_INFO("Exiting fuse loop");
-				fuse_session_exit(
-					fuse_get_session(context->fuse));
-				return -EINTR;
-			} else
-				return 0;
-		}
-		return -EINVAL;
-	}
-	return -ENOTSUP;
-}
 
 #define SHOW_FLAG(FLAGS, FLAG) do {					\
 		if (FLAGS & FLAG)					\
@@ -328,7 +273,6 @@ static struct operation default_ops[] = {
 	DECL_FUSE_OP(opendir, ioc_opendir),
 	DECL_FUSE_OP(readdir, ioc_readdir),
 	DECL_FUSE_OP(releasedir, ioc_closedir),
-	DECL_FUSE_OP(setxattr, ioc_setxattr),
 	DECL_FUSE_OP(open, ioc_open),
 	DECL_FUSE_OP(release, ioc_release),
 	DECL_FUSE_OP(create, ioc_create),
@@ -395,7 +339,6 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, opendir);
 	SET_FUSE_OP(fuse_ops, client_ops, readdir);
 	SET_FUSE_OP(fuse_ops, client_ops, releasedir);
-	SET_FUSE_OP(fuse_ops, client_ops, setxattr);
 	SET_FUSE_OP(fuse_ops, client_ops, open);
 	SET_FUSE_OP(fuse_ops, client_ops, release);
 	SET_FUSE_OP(fuse_ops, client_ops, create);

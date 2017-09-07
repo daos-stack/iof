@@ -38,6 +38,8 @@
 #ifndef __IOF_H__
 #define __IOF_H__
 
+#include <fuse3/fuse.h>
+
 #include <pouch/list.h>
 #include "cnss_plugin.h"
 #include "ios_gah.h"

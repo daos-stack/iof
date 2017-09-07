@@ -39,6 +39,7 @@
  */
 #ifndef __IOF_ATOMIC_H__
 #define __IOF_ATOMIC_H__
+
 #if HAVE_STDATOMIC
 
 #include <stdatomic.h>

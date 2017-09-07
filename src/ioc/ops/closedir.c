@@ -36,12 +36,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef IOF_USE_FUSE3
-#include <fuse3/fuse.h>
-#else
-#include <fuse/fuse.h>
-#endif
-
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"

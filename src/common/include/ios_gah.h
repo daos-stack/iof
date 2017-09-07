@@ -38,11 +38,7 @@
 #ifndef __IOF_GAH_H__
 #define __IOF_GAH_H__
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <inttypes.h>
-#include <sys/types.h>
 #include <pouch/list.h>
 
 enum ios_return {

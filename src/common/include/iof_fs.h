@@ -134,8 +134,10 @@ static inline void iof_fs_wait(struct iof_projection *iof_state,
 	/* If there is no progress thread then call progress from within
 	 * this function, else just wait
 	 */
-	if (!iof_state->progress_thread)
-		return iof_wait(iof_state->crt_ctx, tracker);
+	if (!iof_state->progress_thread) {
+		iof_wait(iof_state->crt_ctx, tracker);
+		return;
+	}
 
 	iof_tracker_wait(tracker);
 }
