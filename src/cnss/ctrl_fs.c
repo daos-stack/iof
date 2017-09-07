@@ -1261,7 +1261,7 @@ static int ctrl_release(const char *fname,
 static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
 	struct fuse_context *context = fuse_get_context();
-	void *handle = (void *)context->private_data;
+	void *handle = context->private_data;
 
 	IOF_LOG_INFO("Fuse configuration for ctrl fs");
 

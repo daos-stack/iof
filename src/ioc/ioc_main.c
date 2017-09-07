@@ -60,7 +60,7 @@ struct iof_projection_info *ioc_get_handle(void)
 {
 	struct fuse_context *context = fuse_get_context();
 
-	return (struct iof_projection_info *)context->private_data;
+	return context->private_data;
 }
 
 /*

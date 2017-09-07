@@ -111,13 +111,14 @@ static struct ios_base base;
 		} \
 	} while (0)
 
-#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) \
-	do {\
-		IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah)); \
-		handle = ios_##handle_type##_find(&base, &in->gah); \
-		if (!handle) { \
-			out->err = IOF_GAH_INVALID; \
-		} \
+#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) do {	\
+		IOF_LOG_INFO("rpc(%p) " GAH_PRINT_STR,			\
+			rpc,						\
+			GAH_PRINT_VAL(in->gah));			\
+		handle = ios_##handle_type##_find(&base, &in->gah);	\
+		if (!handle) {						\
+			out->err = IOF_GAH_INVALID;			\
+		}							\
 	} while (0)
 
 #define VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle) \
