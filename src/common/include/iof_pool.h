@@ -64,7 +64,7 @@ struct iof_pool_reg {
 };
 
 /* If max_desc is non-zero then at most max_desc descriptors can exist
- * simultanously.  In this case restock() will not allocate new descriptors
+ * simultaneously.  In this case restock() will not allocate new descriptors
  * so all descriptors after startup will be created on the critical path,
  * however once max_desc is reached no more descriptors will be created.
  */

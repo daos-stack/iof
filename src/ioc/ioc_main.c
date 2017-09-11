@@ -437,7 +437,7 @@ gh_clean(void *arg)
 		req->rpc = NULL;
 	}
 
-	/* Create a new RPC ready for later use.  Take an inital reference
+	/* Create a new RPC ready for later use.  Take an initial reference
 	 * to the RPC so that it is not cleaned up after a successful send.
 	 *
 	 * After calling send the getattr code will re-take the dropped

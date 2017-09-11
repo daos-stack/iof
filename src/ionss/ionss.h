@@ -66,7 +66,7 @@ struct ios_base {
 	uint32_t		max_readdir;
 };
 
-/* A minature struct that describes a file handle, this is used
+/* A miniature struct that describes a file handle, this is used
  * in a couple of ways, firsly as the key to the file_handle
  * hash table but also as a small struct which can be created
  * on the stack allowing for hash-table searching before creating
