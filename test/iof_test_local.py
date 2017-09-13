@@ -408,7 +408,6 @@ class Testlocal(unittest.TestCase,
         if rtn != 0:
             self.fail('DD bs=65k returned error')
 
-    @unittest.skip("Fails on FUSE2")
     def test_file_read_rename(self):
         """Read from a file which has been renamed on the backend"""
 
