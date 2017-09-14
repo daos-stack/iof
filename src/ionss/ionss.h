@@ -93,7 +93,7 @@ struct ios_projection {
 	struct iof_pool_type	*fh_pool;
 	struct iof_pool_type	*ar_pool;
 	struct ionss_file_handle	*root;
-	struct chash_table	file_ht;
+	struct d_chash_table	file_ht;
 	uint			id;
 	uint			flags;
 	uint			active;

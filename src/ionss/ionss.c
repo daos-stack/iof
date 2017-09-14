@@ -224,7 +224,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 }
 
 static bool
-fh_compare(struct chash_table *htable, d_list_t *rlink,
+fh_compare(struct d_chash_table *htable, d_list_t *rlink,
 	   const void *key, unsigned int ksize)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
@@ -239,15 +239,15 @@ fh_compare(struct chash_table *htable, d_list_t *rlink,
 }
 
 static	uint32_t
-fh_hash(struct chash_table *htable, const void *key, unsigned int ksize)
+fh_hash(struct d_chash_table *htable, const void *key, unsigned int ksize)
 {
 	const struct ionss_mini_file *mf = key;
 
 	return mf->inode_no;
 }
 
-static chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
-				 .hop_key_hash = fh_hash,
+static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
+				   .hop_key_hash = fh_hash,
 };
 
 /* Convert an absolute path into a real one, returning a pointer
@@ -777,7 +777,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	mf.flags = in->flags;
 	mf.inode_no = stbuf.st_ino;
 
-	rlink = chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
 	if (rlink) {
 		handle = container_of(rlink, struct ionss_file_handle, clist);
 
@@ -800,11 +800,8 @@ iof_open_handler(crt_rpc_t *rpc)
 		handle->mf.flags = mf.flags;
 		handle->mf.inode_no = mf.inode_no;
 
-		chash_rec_insert(&projection->file_ht,
-				 &mf,
-				 sizeof(mf),
-				 &handle->clist,
-				 0);
+		d_chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
+				   &handle->clist, 0);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -885,7 +882,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	mf.flags = in->flags;
 	mf.inode_no = stbuf.st_ino;
 
-	rlink = chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
 	if (rlink) {
 		handle = container_of(rlink, struct ionss_file_handle, clist);
 
@@ -908,8 +905,8 @@ iof_create_handler(crt_rpc_t *rpc)
 		handle->mf.flags = mf.flags;
 		handle->mf.inode_no = mf.inode_no;
 
-		chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
-				  &handle->clist, 0);
+		d_chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
+				   &handle->clist, 0);
 	}
 
 	pthread_mutex_unlock(&projection->lock);
@@ -2032,9 +2029,10 @@ static void *progress_thread(void *arg)
 
 /* Find an entry in the hash table.
  *
- * As chash_table_traverse() does not support removal from the callback function
- * save a pointer in *arg and return 1 to terminate the traverse.  This way we
- * can iterate over the entries in the hash table and delete every one.
+ * As d_chash_table_traverse() does not support removal from the callback
+ * function save a pointer in *arg and return 1 to terminate the traverse.
+ * This way we can iterate over the entries in the hash table and delete every
+ * one.
  */
 static int ioc_ht_find(d_list_t *rlink, void *arg)
 {
@@ -2048,12 +2046,12 @@ static int ioc_ht_find(d_list_t *rlink, void *arg)
  * returning the first rlink value provided to the callback.
  * Returns rlink on success, or NULL on error or if the hash table is empty.
  */
-static d_list_t *chash_table_first(struct chash_table *ht)
+static d_list_t *d_chash_table_first(struct d_chash_table *ht)
 {
 	d_list_t *rlink = NULL;
 	int rc;
 
-	rc = chash_table_traverse(ht, ioc_ht_find, &rlink);
+	rc = d_chash_table_traverse(ht, ioc_ht_find, &rlink);
 	if (rc < 0)
 		return NULL;
 
@@ -2073,7 +2071,7 @@ static void release_projection_resources(struct ios_projection *projection)
 
 		fh = NULL;
 
-		rlink = chash_table_first(&projection->file_ht);
+		rlink = d_chash_table_first(&projection->file_ht);
 		if (rlink) {
 			fh = container_of(rlink, struct ionss_file_handle,
 					  clist);
@@ -2081,7 +2079,7 @@ static void release_projection_resources(struct ios_projection *projection)
 		}
 	} while (fh);
 
-	rc = chash_table_destroy_inplace(&projection->file_ht, false);
+	rc = d_chash_table_destroy_inplace(&projection->file_ht, false);
 	if (rc != 0)
 		IOF_LOG_ERROR("Failed to destroy hash table");
 }
@@ -2433,8 +2431,8 @@ int main(int argc, char **argv)
 
 		projection->active = 0;
 		projection->base = &base;
-		rc = chash_table_create_inplace(D_HASH_FT_RWLOCK, 5, NULL,
-						&hops, &projection->file_ht);
+		rc = d_chash_table_create_inplace(D_HASH_FT_RWLOCK, 5, NULL,
+						  &hops, &projection->file_ht);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not create hash table");
 			continue;
@@ -2469,9 +2467,9 @@ int main(int argc, char **argv)
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
-		chash_rec_insert(&projection->file_ht, &projection->root->mf,
-				  sizeof(projection->root->mf),
-				  &projection->root->clist, 0);
+		d_chash_rec_insert(&projection->file_ht, &projection->root->mf,
+				   sizeof(projection->root->mf),
+				   &projection->root->clist, 0);
 
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;

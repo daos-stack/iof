@@ -657,7 +657,7 @@ int main(void)
 		/* Need to dump the CNSS attach info for singleton
 		 * CNSS clients (e.g. libcppr)
 		 */
-		ret = crt_group_config_save(NULL);
+		ret = crt_group_config_save(NULL, false);
 		if (ret != 0) {
 			IOF_LOG_ERROR("Could not save attach info for CNSS");
 			ret = CNSS_ERR_CART;

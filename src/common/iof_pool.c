@@ -105,7 +105,7 @@ restock(struct iof_pool_type *type, int count)
 	if (type->free_count >= count)
 		return 0;
 
-	dlist_for_each_safe(entry, enext, &type->pending_list) {
+	d_list_for_each_safe(entry, enext, &type->pending_list) {
 		void *ptr = (void *)entry - type->reg.offset;
 		int rc;
 
@@ -156,7 +156,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 		 */
 		restock(type, type->count);
 
-		dlist_for_each_safe(entry, enext, &type->free_list) {
+		d_list_for_each_safe(entry, enext, &type->free_list) {
 			void *ptr = (void *)entry - type->reg.offset;
 
 			if (type->reg.release) {

@@ -237,7 +237,7 @@ static int attach_group(struct iof_state *iof_state,
 		return ret;
 	}
 
-	ret = crt_group_config_save(group->grp.dest_grp);
+	ret = crt_group_config_save(group->grp.dest_grp, true);
 	if (ret) {
 		IOF_LOG_ERROR("crt_group_config_save failed for ionss "
 			      "with ret = %d", ret);
