@@ -51,7 +51,7 @@ OBJS = {'utest_gah.c':['../common/ios_gah$OBJSUFFIX'],
                           '../common/log$OBJSUFFIX']
        }
 CFLAGS = {'utest_preload.c':['-fPIC']} #Required for weak symbols to work
-DEPS = {'test_ctrl_fs.c':['cart'],
+DEPS = {'test_ctrl_fs.c':['cart', 'fuse'],
         'utest_pool.c':['cart'],
         'utest_vector.c':['cart']}
 CPPPATH = {'test_ctrl_fs.c':['../cnss', '../include'],
@@ -128,15 +128,7 @@ def scons():
 
     test_env = env.Clone()
     test_env.AppendUnique(CPPDEFINES=['_GNU_SOURCE'])
-    if test_env.get('fuse3'):
-        DEPS['test_ctrl_fs.c'].append('fuse')
-        DEFINES['test_ctrl_fs.c'] = ['IOF_USE_FUSE3=1']
-    else:
-        if test_env.get('PLATFORM') == 'darwin':
-            CPPPATH['test_ctrl_fs.c'].append('/usr/local/include/osxfuse')
-            LIBS['test_ctrl_fs.c'].append('osxfuse')
-        else:
-            LIBS['test_ctrl_fs.c'].append('fuse')
+
     test_env.AppendUnique(CPPPATH=['../common/include'])
     prereqs.require(test_env, 'cart')
     cunit_env = test_env.Clone()

@@ -58,7 +58,11 @@ IONSS_SRC = ['ionss.c', 'fh.c']
 RPC_SRC = ['chmod',
            'closedir',
            'create',
+           'fchmod',
+           'fgetattr',
            'fsync',
+           'ftruncate',
+           'futimens',
            'getattr',
            'ioctl',
            'mkdir',
@@ -76,10 +80,7 @@ RPC_SRC = ['chmod',
            'unlink',
            'utimens',
            'write']
-FUSE3_RPC_SRC = ['fchmod',
-                 'fgetattr',
-                 'ftruncate',
-                 'futimens']
+
 IOFIL_SRC = ['int_posix.c', 'int_read.c', 'int_write.c']
 
 def build_common(env, files, is_shared):
@@ -203,23 +204,7 @@ def scons():
     if env.get('PLATFORM') != 'darwin':
         cenv.AppendUnique(LIBS='dl')
 
-    if cenv.get('fuse3'):
-        prereqs.require(cenv, 'fuse')
-        cenv.AppendUnique(CPPDEFINES=['IOF_USE_FUSE3=1'])
-    else:
-        if env.get('PLATFORM') == 'darwin':
-            cenv.AppendUnique(CPPPATH=['/usr/local/include/osxfuse'],
-                              LIBS=['osxfuse'])
-        else:
-            cenv.AppendUnique(LIBS=['fuse'])
-        # Fuse2 has a number of bugs and doesn't support a number
-        # of RPC types so disable it and insist on fuse3 support.
-        # At some point in the future we'll make this the default
-        # and remove the need for an option but for now insist on
-        # fuse3 so there isn't a change in behaviour for the normal
-        # case.
-        print 'FUSE2 no longer supported, build with fuse3=Yes'
-        Exit(1)
+    prereqs.require(cenv, 'fuse')
 
     cnss_obj = []
     for src in CNSS_SRC:
@@ -228,9 +213,6 @@ def scons():
         cnss_obj += cenv.Object(os.path.join('ioc', src))
     for src in RPC_SRC:
         cnss_obj += cenv.Object(os.path.join('ioc', 'ops', '%s.c' % src))
-    if cenv.get('fuse3'):
-        for src in FUSE3_RPC_SRC:
-            cnss_obj += cenv.Object(os.path.join('ioc', 'ops', '%s.c' % src))
     progs = cenv.Program('cnss/cnss', common + cnss_obj)
 
     # Build the IONSS application

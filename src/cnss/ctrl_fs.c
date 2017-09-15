@@ -52,13 +52,8 @@
 #else /* !__APPLE__ */
 # include <linux/limits.h>
 #endif /* __APPLE__ */
-#ifdef IOF_USE_FUSE3
+
 # include <fuse3/fuse.h>
-# include <fuse3/fuse_lowlevel.h>
-#else
-# include <fuse/fuse.h>
-# include <fuse/fuse_lowlevel.h>
-#endif
 
 #define DEF_LOG_HANDLE ctrl_log_handle
 #include "log.h"
@@ -145,9 +140,6 @@ struct data_node {
 struct ctrl_fs_data {
 	char *prefix;
 	struct fuse *fuse;
-#if !IOF_USE_FUSE3
-	struct fuse_chan *ch;
-#endif
 	int next_inode;
 	int startup_rc;
 	pthread_t thread;
@@ -835,12 +827,7 @@ static void *ctrl_thread_func(void *arg)
 	if (rc)
 		IOF_LOG_ERROR("Fuse loop exited with %d", rc);
 
-#ifdef IOF_USE_FUSE3
 	fuse_unmount(ctrl_fs.fuse);
-#else
-	if (ctrl_fs.ch)
-		fuse_unmount(ctrl_fs.prefix, ctrl_fs.ch);
-#endif
 	IOF_LOG_INFO("Fuse destroy called");
 	fuse_destroy(ctrl_fs.fuse);
 	IOF_LOG_INFO("ctrl_fs thread exit");
@@ -918,14 +905,9 @@ int ctrl_opendir(const char *path, struct fuse_file_info *finfo)
 	return 0;
 }
 
-#ifdef IOF_USE_FUSE3
 static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			off_t offset, struct fuse_file_info *finfo,
 			enum fuse_readdir_flags flags)
-#else
-static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-			off_t offset, struct fuse_file_info *finfo)
-#endif
 {
 	struct open_handle *handle = (struct open_handle *)finfo->fh;
 	struct ctrl_node *node = handle->node;
@@ -942,11 +924,7 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		if (item->initialized == 0)
 			continue;
 
-		if (filler(buf, item->name, &item->stat_info, 0
-#ifdef IOF_USE_FUSE3
-			   , 0
-#endif
-			   ))
+		if (filler(buf, item->name, &item->stat_info, 0, 0))
 			break;
 	}
 
@@ -984,7 +962,6 @@ static int ctrl_getattr(const char *fname, struct stat *stat)
 	return 0;
 }
 
-#ifdef IOF_USE_FUSE3
 static int ctrl_getattr3(const char *fname, struct stat *stat,
 			 struct fuse_file_info *finfo)
 {
@@ -1006,7 +983,6 @@ static int ctrl_getattr3(const char *fname, struct stat *stat,
 	return 0;
 
 }
-#endif
 
 static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 {
@@ -1088,7 +1064,6 @@ static int ctrl_truncate(const char *fname, off_t size)
 	return 0;
 }
 
-#if IOF_USE_FUSE3
 static int ctrl_truncate3(const char *fname, off_t size,
 			  struct fuse_file_info *fi)
 {
@@ -1097,7 +1072,6 @@ static int ctrl_truncate3(const char *fname, off_t size,
 
 	return ctrl_truncate(fname, size);
 }
-#endif
 
 static int ctrl_read(const char *fname,
 		     char *buf,
@@ -1257,7 +1231,6 @@ static int ctrl_release(const char *fname,
 	return 0;
 }
 
-#if IOF_USE_FUSE3
 static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
 	struct fuse_context *context = fuse_get_context();
@@ -1277,17 +1250,11 @@ static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 
 	return handle;
 }
-#endif
 
 static struct fuse_operations fuse_ops = {
-#if IOF_USE_FUSE3
 	.init = ctrl_init,
 	.getattr = ctrl_getattr3,
 	.truncate = ctrl_truncate3,
-#else
-	.getattr = ctrl_getattr,
-	.truncate = ctrl_truncate,
-#endif
 	.open = ctrl_open,
 	.read = ctrl_read,
 	.write = ctrl_write,
@@ -1342,7 +1309,6 @@ int ctrl_fs_start(const char *prefix)
 		return -ENOMEM;
 	}
 
-#ifdef IOF_USE_FUSE3
 	ctrl_fs.fuse = fuse_new(&args, &fuse_ops, sizeof(fuse_ops),
 				NULL);
 	if (ctrl_fs.fuse == NULL) {
@@ -1357,22 +1323,6 @@ int ctrl_fs_start(const char *prefix)
 		ctrl_fs.startup_rc = -EIO;
 		goto out;
 	}
-#else
-	ctrl_fs.ch = fuse_mount(ctrl_fs.prefix, &args);
-	if (ctrl_fs.ch == NULL) {
-		IOF_LOG_ERROR("Could not mount ctrl fs");
-		ctrl_fs.startup_rc = -EIO;
-		goto out;
-	}
-
-	ctrl_fs.fuse = fuse_new(ctrl_fs.ch, &args, &fuse_ops, sizeof(fuse_ops),
-				NULL);
-	if (ctrl_fs.fuse == NULL) {
-		IOF_LOG_ERROR("Could not initialize ctrl fs");
-		ctrl_fs.startup_rc = -EIO;
-		goto out;
-	}
-#endif
 	fuse_opt_free_args(&args);
 
 	rc = pthread_create(&ctrl_fs.thread, NULL,
