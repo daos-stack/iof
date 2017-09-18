@@ -510,7 +510,7 @@ class Testlocal(unittest.TestCase,
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
             self.skipTest("Mdtest exited badly")
-        if elapsed > 5:
+        if elapsed > 5 or self.test_valgrind:
             return
         long_run = list(mdtest)
         long_run.extend(['-i', '5', '-I', '1000'])

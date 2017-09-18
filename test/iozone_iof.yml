@@ -35,8 +35,8 @@ execStrategy:
     - name:       "iof_iozone_write"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 0 -t 1 -c –e –r 1024k –s 25g -+n -F \
-                   {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
+      parameters: "-i 0 -t 1 -c -e -r 1024k -s 1g -+n \
+                   -F {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Generate test.bin for iozone read test.
     # NOTE: test.bin contains 0x3a (supported by older version of iozone) or
@@ -44,15 +44,15 @@ execStrategy:
     - name:       "iof_dd_pipe_tr"
       exe:        "/usr/bin/dd"
       type:       exe
-      parameters: "status=none bs=1 count=512k if=/dev/zero | \
+      parameters: "status=none bs=512k count=1 if=/dev/zero | \
                    tr \'\\0\' \'\\72\' > {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Iozone read test.
     - name:       "iof_iozone_read"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 1 -t 1 -c –e –r 1024k –s 25g -+n -F \
-                   {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
+      parameters: "-i 1 -t 1 -c -e -r 1024k -s 1g -+n \
+                   -F {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Generate test.bin for iozone random (read/write) test.
     # NOTE: test.bin contains 0x3a (supported by older version of iozone) or
@@ -60,7 +60,7 @@ execStrategy:
     - name:       "iof_dd_pipe_tr"
       exe:        "/usr/bin/dd"
       type:       exe
-      parameters: "status=none bs=1 count=512k if=/dev/zero | \
+      parameters: "status=none bs=512k count=1 if=/dev/zero | \
                    tr \'\\0\' \'\\72\' > {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Generate test.bin for iozone random (read/write) test.
@@ -76,5 +76,5 @@ execStrategy:
     - name:       "iof_iozone_random"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 2 -t 1 -c –e –r 1024k –s 25g -+n -F \
-                   {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
+      parameters: "-i 2 -t 1 -c -e -r 1024k -s 1g -+n \
+                   -F {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
