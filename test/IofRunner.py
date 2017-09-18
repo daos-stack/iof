@@ -105,7 +105,7 @@ class IofRunner():
         log_path = os.path.join(self.dir_path, "ionss")
         os.makedirs(log_path, exist_ok=True)
         if self.test_info.get_defaultENV('TR_USE_URI'):
-            dvmfile = " --hnp file:%s " % \
+            dvmfile = " --ompi-server file:%s " % \
                       self.test_info.get_defaultENV('TR_USE_URI')
         else:
             dvmfile = " "
