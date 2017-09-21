@@ -287,8 +287,8 @@ struct getattr_req {
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
  * for permanent failure of the remote ep.
  */
-#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -CER_TIMEDOUT) || \
-					((CB_INFO)->cci_rc == -CER_OOG))
+#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_TIMEDOUT) || \
+					((CB_INFO)->cci_rc == -DER_OOG))
 
 void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 

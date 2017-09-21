@@ -62,7 +62,7 @@ opendir_cb(const struct crt_cb_info *cb_info)
 		 * TODO: Handle target eviction here
 		 */
 		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		if (cb_info->cci_rc == -CER_TIMEDOUT)
+		if (cb_info->cci_rc == -DER_TIMEDOUT)
 			reply->rc = EAGAIN;
 		else
 			reply->rc = EIO;

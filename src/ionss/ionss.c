@@ -2015,7 +2015,7 @@ static void *progress_thread(void *arg)
 	do {
 		rc = crt_progress(b->crt_ctx, b->poll_interval,
 				  check_shutdown, &shutdown);
-		if (rc != 0 && rc != -CER_TIMEDOUT) {
+		if (rc != 0 && rc != -DER_TIMEDOUT) {
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 			break;
 		}
@@ -2559,7 +2559,7 @@ int main(int argc, char **argv)
 		do {
 			rc = crt_progress(base.crt_ctx, base.poll_interval,
 					  check_shutdown, &shutdown);
-			if (rc != 0 && rc != -CER_TIMEDOUT) {
+			if (rc != 0 && rc != -DER_TIMEDOUT) {
 				IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 				break;
 			}

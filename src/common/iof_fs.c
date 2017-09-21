@@ -62,7 +62,7 @@ void iof_wait(crt_context_t crt_ctx, struct iof_tracker *tracker)
 		 * audit of cart code, it seems like this would only happen
 		 * under somewhat catostrophic circumstances.
 		 */
-		if (rc != 0 && rc != -CER_TIMEDOUT)
+		if (rc != 0 && rc != -DER_TIMEDOUT)
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 	}
 }

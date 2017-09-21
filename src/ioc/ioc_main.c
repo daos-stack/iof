@@ -692,9 +692,9 @@ iof_thread(void *arg)
 		rc = crt_progress(iof_state->crt_ctx, 1, iof_check_complete,
 				  &iof_state->thread_stop_tracker);
 
-		if (rc != 0 && rc != -CER_TIMEDOUT)
+		if (rc != 0 && rc != -DER_TIMEDOUT)
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
-		if (rc == -CER_TIMEDOUT)
+		if (rc == -DER_TIMEDOUT)
 			sched_yield();
 
 	} while (!iof_tracker_test(&iof_state->thread_stop_tracker));
