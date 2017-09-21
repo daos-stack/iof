@@ -1,0 +1,85 @@
+# To be able to execute the standalone fio test do the following:
+#
+# Please look in "iof_fio_main.yml".
+
+description: "IOF FIO test cmds."
+
+defaultENV:
+
+    CRT_LOG_MASK: "INFO"
+
+module:
+
+    name:        "iof_fio"
+    logBaseName: "iof_fio"
+    path:        "$PWD/scripts"
+    setKeyFromInfo:
+        - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
+        - [IOF_TEST_BIN, PREFIX, "/bin"]
+    appendKeyFromInfo:
+        - [LD_LIBRARY_PATH, "/lib", [OMPI_PREFIX]]
+
+directives:
+
+    testMode: "scripts"
+
+subList:
+
+    nodename: node
+    test_exe: "/usr/bin/fio"
+    test_timeout: "300"
+
+execStrategy:
+
+    # FIO help.
+    - name:       "iof_fio_help"
+      exe:        "{test_exe}"
+      type:       exe
+      parameters: "-h"
+
+    # Make the test directory, i.e. value of "{CNSS_PREFIX}/FS_2/{nodename}".
+    - name:       "iof_mkdir"
+      exe:        "/usr/bin/mkdir"
+      type:       exe
+      parameters: "-vp {CNSS_PREFIX}/FS_2/{nodename}"
+
+    - name:       "iof_fio_cmds_read"
+      exe:        "{test_exe}"
+      type:       exe
+      parameters: "--directory={CNSS_PREFIX}/FS_2/{nodename} \
+                   --size=1m --runtime={test_timeout} \
+                   --ioengine=libaio --iodepth=8 \
+                   --invalidate=1 --direct=1 \
+                   --name=random-read --rw=randread --bs=4k --thinktime=40"
+
+    - name:       "iof_fio_cmds_write"
+      exe:        "{test_exe}"
+      type:       exe
+      parameters: "--directory={CNSS_PREFIX}/FS_2/{nodename} \
+                   --size=1m --runtime={test_timeout}  \
+                   --ioengine=libaio --iodepth=8 \
+                   --invalidate=1 --direct=1 \
+                   --name=random-write --rw=randwrite --bs=4k --thinktime=40"
+
+    - name:       "iof_fio_cmds_random"
+      exe:        "{test_exe}"
+      type:       exe
+      parameters: "--directory={CNSS_PREFIX}/FS_2/{nodename} \
+                   --size=1m --runtime={test_timeout} \
+                   --ioengine=libaio --iodepth=8 \
+                   --invalidate=1 --direct=1 \
+                   --name=random-read-write --rw=randrw --bs=4k --thinktime=40"
+
+    - name:       "iof_fio_cmds_mixed"
+      exe:        "{test_exe}"
+      type:       exe
+      parameters: "--directory={CNSS_PREFIX}/FS_2/{nodename} \
+                   --size=1m --runtime={test_timeout} \
+                   --ioengine=libaio --iodepth=8 \
+                   --invalidate=1 --direct=1 \
+                   --name=random-read --rw=randread:8 \
+                   --rw_sequencer=sequential --size=1500k \
+                   --name=random-write --rwmixread=30 \
+                   --rwmixwrite=70 --iodepth=32 \
+                   --name=random-read-write --rw=randrw \
+                   --iodepth=16 --thinktime=40 --size=1200k"
