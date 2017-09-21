@@ -54,7 +54,7 @@ static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_cb_r *reply = cb_info->cci_arg;
-	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_readx_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
 
 
@@ -115,8 +115,8 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	      struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_read_bulk_in *in;
-	struct iof_read_bulk_out *out;
+	struct iof_readx_in *in;
+	struct iof_readx_out *out;
 	struct read_cb_r reply = {0};
 	char *buff = rb->buf->buf[0].mem;
 	crt_rpc_t *rpc = NULL;
@@ -126,7 +126,7 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	int rc;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, read_bulk), &rpc);
+			    FS_TO_OP(fs_handle, readx), &rpc);
 	if (rc || !rpc) {
 		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
 			      rc);
@@ -136,8 +136,8 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	IOF_TRACE_LINK(rpc, handle, "read_bulk_rpc");
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
-	in->base = position;
-	in->len = len;
+	in->xtvec.xt_off = position;
+	in->xtvec.xt_len = len;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
@@ -146,14 +146,14 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	sgl.sg_nr.num = 1;
 
 	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
-			     &in->bulk);
+			     &in->data_bulk);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
 				rc);
 		return -EIO;
 	}
 
-	bulk = in->bulk;
+	bulk = in->data_bulk;
 
 	iof_tracker_init(&reply.tracker, 1);
 	reply.handle = handle;

@@ -1228,8 +1228,9 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 		      struct ionss_read_req_desc *rrd)
 {
 	struct ionss_file_handle *handle = rrd->handle;
+	struct iof_readx_in *in = crt_req_get(rrd->rpc);
+	struct iof_readx_out *out = crt_reply_get(rrd->rpc);
 	struct ios_projection *projection = rrd->handle->projection;
-	struct iof_read_bulk_out *out = rrd->out;
 	struct crt_bulk_desc bulk_desc = {0};
 	int rc;
 
@@ -1243,7 +1244,8 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 
 	errno = 0;
 	rrd->ard->read_len = pread(handle->fd, rrd->ard->local_bulk.buf,
-				   rrd->req_len, rrd->in->base);
+				   in->xtvec.xt_len,
+				   in->xtvec.xt_off);
 	if (rrd->ard->read_len == -1) {
 		out->rc = errno;
 		goto out;
@@ -1256,12 +1258,12 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 
 	bulk_desc.bd_rpc = rrd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
-	bulk_desc.bd_remote_hdl = rrd->in->bulk;
+	bulk_desc.bd_remote_hdl = in->data_bulk;
 	bulk_desc.bd_local_hdl = rrd->ard->local_bulk.handle;
 	bulk_desc.bd_len = rrd->ard->read_len;
 
 	IOF_LOG_DEBUG("Sending bulk " GAH_PRINT_STR,
-		      GAH_PRINT_VAL(rrd->in->gah));
+		      GAH_PRINT_VAL(in->gah));
 
 	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rrd, NULL);
 	if (rc) {
@@ -1278,7 +1280,6 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 	ios_fh_decref(handle, 1);
 
 	return;
-
 out:
 
 	rc = crt_reply_send(rrd->rpc);
@@ -1308,13 +1309,14 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
 	struct ionss_read_req_desc *rrd = cb_info->bci_arg;
 	struct ios_projection *projection = rrd->handle->projection;
+	struct iof_readx_out *out = crt_reply_get(rrd->rpc);
 	int rc;
 
 	if (cb_info->bci_rc) {
-		rrd->out->err = IOF_ERR_CART;
+		out->err = IOF_ERR_CART;
 		rrd->ard->failed = true;
 	} else {
-		rrd->out->bulk_len = rrd->ard->read_len;
+		out->bulk_len = rrd->ard->read_len;
 	}
 
 	rc = crt_reply_send(rrd->rpc);
@@ -1340,10 +1342,10 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
  * active read count and either submits the read or queues it for later.
  */
 static void
-iof_read_bulk_handler(crt_rpc_t *rpc)
+iof_readx_handler(crt_rpc_t *rpc)
 {
-	struct iof_read_bulk_in *in = crt_req_get(rpc);
-	struct iof_read_bulk_out *out = crt_reply_get(rpc);
+	struct iof_readx_in *in = crt_req_get(rpc);
+	struct iof_readx_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
 	struct ionss_read_req_desc *rrd = NULL;
 	struct ionss_active_read *ard;
@@ -1355,7 +1357,8 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (in->len > base.max_read) {
+	/* TODO: Fix this so that we read max_read at a time */
+	if (in->xtvec.xt_len > base.max_read) {
 		IOF_LOG_WARNING("Invalid read, too large");
 		out->err = IOF_ERR_INTERNAL;
 		goto out;
@@ -1368,9 +1371,6 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 	}
 
 	rrd->rpc = rpc;
-	rrd->in = in;
-	rrd->out = out;
-	rrd->req_len = in->len;
 	rrd->handle = handle;
 
 	rc = crt_req_addref(rpc);
@@ -2093,7 +2093,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(chmod_gah, iof_chmod_gah_handler),
 		DECL_RPC_HANDLER(rmdir, iof_rmdir_handler),
 		DECL_RPC_HANDLER(rename, iof_rename_handler),
-		DECL_RPC_HANDLER(read_bulk, iof_read_bulk_handler),
+		DECL_RPC_HANDLER(readx, iof_readx_handler),
 		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
 		DECL_RPC_HANDLER(open, iof_open_handler),
 		DECL_RPC_HANDLER(create, iof_create_handler),

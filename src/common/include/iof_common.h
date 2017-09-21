@@ -42,7 +42,8 @@
 #include <cart/api.h>
 #include <gurt/common.h>
 
-#include <ios_gah.h>
+#include "ios_gah.h"
+#include "iof_ext.h"
 
 #define IOF_SUCCESS		0
 #define IOF_ERR_MOUNT		1
@@ -238,16 +239,19 @@ struct iof_open_out {
 	int err;
 };
 
-struct iof_read_bulk_in {
+
+struct iof_readx_in {
 	struct ios_gah gah;
-	crt_bulk_t bulk;
-	uint64_t base;
-	uint32_t len;
+	struct iof_xtvec xtvec;
+	uint64_t xtvec_len;
+	uint64_t bulk_len;
+	crt_bulk_t xtvec_bulk;
+	crt_bulk_t data_bulk;
 };
 
-struct iof_read_bulk_out {
+struct iof_readx_out {
 	d_iov_t data;
-	uint32_t bulk_len;
+	uint64_t bulk_len;
 	uint32_t iov_len;
 	int rc;
 	int err;
@@ -331,7 +335,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, ftruncate),
 	DEF_RPC_TYPE(DEFAULT, rmdir),
 	DEF_RPC_TYPE(DEFAULT, rename),
-	DEF_RPC_TYPE(DEFAULT, read_bulk),
+	DEF_RPC_TYPE(DEFAULT, readx),
 	DEF_RPC_TYPE(DEFAULT, unlink),
 	DEF_RPC_TYPE(DEFAULT, open),
 	DEF_RPC_TYPE(DEFAULT, create),

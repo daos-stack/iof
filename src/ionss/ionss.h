@@ -173,16 +173,13 @@ struct ionss_dir_handle {
 struct ionss_read_req_desc {
 	crt_rpc_t			*rpc;
 	struct ionss_file_handle	*handle;
-	struct iof_read_bulk_out	*out;
-	struct iof_read_bulk_in         *in;
-	size_t				req_len;
 	struct ionss_active_read	*ard;
 	d_list_t			list;
 };
 
 /* Active read descriptor
  *
- * Used to descrive an in-progress read request.  These consume resources so
+ * Used to describe an in-progress read request.  These consume resources so
  * are limited to a fixed number.
  */
 struct ionss_active_read {
@@ -193,7 +190,6 @@ struct ionss_active_read {
 	size_t				buf_len;
 	size_t				read_len;
 	bool				failed;
-
 };
 
 /* From fs.c */

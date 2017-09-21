@@ -123,19 +123,22 @@ struct crt_msg_field *psr_out[] = {
 	&CMF_UINT32,
 };
 
-struct crt_msg_field *read_bulk_in[] = {
-	&CMF_GAH,
-	&CMF_BULK,
-	&CMF_UINT64,
-	&CMF_UINT32,
+struct crt_msg_field *readx_in[] = {
+	&CMF_GAH,	/* gah */
+	&CMF_UINT64,	/* base */
+	&CMF_UINT64,	/* len */
+	&CMF_UINT64,	/* xtvec_len */
+	&CMF_UINT64,	/* bulk_len */
+	&CMF_BULK,	/* xtvec_bulk */
+	&CMF_BULK,	/* data_bulk */
 };
 
-struct crt_msg_field *read_bulk_out[] = {
-	&CMF_IOVEC,
-	&CMF_UINT32,
-	&CMF_UINT32,
-	&CMF_INT,
-	&CMF_INT
+struct crt_msg_field *readx_out[] = {
+	&CMF_IOVEC,	/* data */
+	&CMF_UINT64,	/* bulk_len */
+	&CMF_UINT32,	/* iov_len */
+	&CMF_INT,	/* rc */
+	&CMF_INT,	/* err */
 };
 
 struct crt_msg_field *truncate_in[] = {
@@ -217,7 +220,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(ftruncate, ftruncate_in, status_out),
 	RPC_TYPE(rmdir, string_in, status_out),
 	RPC_TYPE(rename, two_string_in, status_out),
-	RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
+	RPC_TYPE(readx, readx_in, readx_out),
 	RPC_TYPE(unlink, gah_string_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
 	RPC_TYPE(create, create_in, gah_pair),
