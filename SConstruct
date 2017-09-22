@@ -161,10 +161,6 @@ def scons():
     env.Replace(CFLAGS='')
     env.Append(CFLAGS=['-g', '-Wall', '-std=gnu99'])
 
-    opts.Add(BoolVariable('fuse3',
-                          'Option is deprecated and will be removed. '\
-                          'Use libfuse3 from github',
-                          True))
     opts.Add(EnumVariable('client_libs',
                           'Build the client libraries', 'all',
                           allowed_values=('none', 'shared', 'all'),
