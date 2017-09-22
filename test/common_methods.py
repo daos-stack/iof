@@ -50,8 +50,9 @@ import tempfile
 import unittest
 import stat
 import shutil
+import json
 from socket import gethostname
-from decimal import getcontext, Decimal
+from decimal import Decimal
 import time
 import iof_ionss_setup
 import iof_ionss_verify
@@ -594,20 +595,18 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         # Currently the FUSE plugin does not correctly report inodes
         # so currently there are differences
 
-        stat_file = os.path.join(self.import_dir, 'a_stat_output')
-        with open(stat_file, 'w') as fd_stat:
-            getcontext().prec = 7
+        cn_stats = {}
+        for key in dir(a):
+            if not key.startswith('st_'):
+                continue
+            elif key == 'st_dev':
+                continue
 
-            for key in dir(a):
-                if not key.startswith('st_'):
-                    continue
+            cn_stats[key] = str(Decimal(getattr(a, key)))
 
-                fd_stat.write("Key %s " % key)
-                fd_stat.write(str(Decimal(getattr(a, key))))
-                fd_stat.write('\n')
-
-                if key == 'st_dev':
-                    continue
+        stat_file = os.path.join(self.import_dir, 'cn_stat_output')
+        with open(stat_file, 'w') as fd:
+            json.dump(cn_stats, fd, indent=4, skipkeys=True)
 
         if self.test_local:
             self.verify_use_ino()

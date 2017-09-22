@@ -47,7 +47,8 @@ iof_simple_test.
 import os
 import logging
 import unittest
-from decimal import getcontext, Decimal
+import json
+from decimal import Decimal
 from socket import gethostname
 
 #pylint: disable=no-member
@@ -203,51 +204,42 @@ class IonssVerify():
 
         filename = os.path.join(self.export_dir, 'test_ino_file')
         self.logger.info("verify_use_ino %s", filename)
-        b = os.stat(filename)
+        ion_stats = os.stat(filename)
         os.unlink(filename)
 
         # Currently the FUSE plugin does not correctly report inodes
         # so currently there are differences.
 
-        b_stat_file = os.path.join(self.export_dir, 'b_stat_output')
-        fd_stat = open(b_stat_file, 'w')
-        getcontext().prec = 7
+        diffs = []
+        # Compare the stat values recorded on the CN and ION
+        cn_stat_file = os.path.join(self.export_dir, 'cn_stat_output')
+        with open(cn_stat_file, 'r') as fd:
+            cn_stats = json.load(fd)
 
-        for key in dir(b):
+        for key in dir(ion_stats):
             if not key.startswith('st_'):
                 continue
-
-            fd_stat.write("Key %s " % key)
-            fd_stat.write(str(Decimal(getattr(b, key))))
-            fd_stat.write('\n')
-
-            if key == 'st_dev':
+            elif key == 'st_dev':
                 continue
+            ionv = str(Decimal(getattr(ion_stats, key)))
+            cnv = cn_stats.get(key, "")
+            self.logger.error("Key %s ion: %s cn: %s",
+                              key, ionv, cnv)
 
-        fd_stat.close()
+            if cnv != ionv:
+                self.logger.error("Keys %s are differnet ion: %s cn: %s",
+                                  key, ionv, cnv)
+                diffs.append(key)
 
-        # Compare the stat values recorded on the CN and ION
-        a_stat_file = os.path.join(self.export_dir, 'a_stat_output')
-        with open(a_stat_file, 'r') as f1:
-            a_num_lines = self.file_length(a_stat_file)
-            with open(b_stat_file, 'r') as f2:
-                same = set(f1).intersection(f2)
-                b_num_lines = self.file_length(b_stat_file)
+        if diffs:
+            self.fail("Stat attributes are different %s" % diffs)
 
-        same.discard('\n')
-
-        if len(same) == a_num_lines == b_num_lines:
-            self.logger.info("Stat attributes are same %s", same)
-        else:
-            self.logger.info("Stat attributes are different %s", same)
-
-        os.unlink(b_stat_file)
-        os.unlink(a_stat_file)
+        os.unlink(cn_stat_file)
 
     def verify_zzzz_theEnd(self):
         """mark the end"""
         self.logger.info("*************************************************")
-        self.logger.info("\n\t\tWe are verify\n")
+        self.logger.info("\n\t\tWe are verified\n")
         self.logger.info("*************************************************")
 
 
