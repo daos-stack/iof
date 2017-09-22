@@ -43,6 +43,10 @@ execStrategy:
       nodeType: "IOF_TEST_ION"
       setConfigKeys:
       useNodes: "0"
+    - name: "iof_iozone_cmds"
+      nodeType: "IOF_TEST_CN"
+      setConfigKeys:
+      useNodes: "0"
 
 cleanupStrategy:
     - name: "cleanup_iof"
