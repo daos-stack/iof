@@ -61,8 +61,8 @@ class IofRunner():
         self.test_info.set_passToConfig('CNSS_PREFIX', tempdir)
         os.environ['CNSS_PREFIX'] = tempdir
         cmdstr = "mkdir -p %s " % tempdir
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_CN', testmsg)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       'IOF_TEST_CN', testmsg)
         if procrtn:
             self.logger.error(
                 "TestIOF: Failed to create the CNSS dirs. \
@@ -78,8 +78,8 @@ class IofRunner():
         self.test_info.set_passToConfig('ION_TEMPDIR', ion_dir)
         os.environ['ION_TEMPDIR'] = ion_dir
         cmdstr = "mkdir -p %s " % ion_dir
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_ION', testmsg)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       'IOF_TEST_ION', testmsg)
         if procrtn:
             self.logger.error(
                 "TestIOF: Failed to create the IONSS dirs. Error code: %d\n",
@@ -92,8 +92,10 @@ class IofRunner():
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "mkdir -p %s" % abs_path
             self.fs_list.append(abs_path)
-            procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                    'IOF_TEST_ION', testmsg)
+            procrtn = self.node_control.execute_remote_cmd(cmdstr,
+                                                           self.dir_path,
+                                                           'IOF_TEST_ION',
+                                                           testmsg)
             if procrtn:
                 self.logger.error(
                     """"TestIOF: Failed to create dirs for Filesystem
@@ -223,16 +225,16 @@ class IofRunner():
         command on the remote nodes specified by the node_type."""
         testmsg = "check for any %s processes" % proc_name
         cmdstr = "pgrep -la %s" % proc_name
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                node_type, testmsg)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       node_type, testmsg)
         if not procrtn:
             self.logger.error(
                 "TestIOF: the %s process was still running. \
                  Error code: %d ", proc_name, procrtn)
             testmsg = "terminate any %s processes" % proc_name
             cmdstr = "pkill %s" % proc_name
-            self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                          node_type, testmsg)
+            self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                 node_type, testmsg)
 
     def remove_cnss_ionss_dir(self):
         """ Call fusermount to unmount the stale mounts.
@@ -246,25 +248,29 @@ class IofRunner():
             cnss_mp = os.path.join(cnss_dir, mount)
             cmdstr = "fusermount -u %s" % cnss_mp
             try:
-                procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                        'IOF_TEST_CN', testmsg)
+                procrtn = self.node_control.execute_remote_cmd(cmdstr,
+                                                               self.dir_path,
+                                                               'IOF_TEST_CN',
+                                                               testmsg)
             except FileNotFoundError:
                 pass
             testmsg = "Remove CNSS sub dirs"
             cmdstr = "rmdir %s" % cnss_mp
-            procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                    'IOF_TEST_CN', testmsg)
+            procrtn = self.node_control.execute_remote_cmd(cmdstr,
+                                                           self.dir_path,
+                                                           'IOF_TEST_CN',
+                                                           testmsg)
         testmsg = "Remove IONSS dirs"
         cmdstr = "rm -rf " + ionss_dir
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_ION', testmsg)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       'IOF_TEST_ION', testmsg)
         if procrtn:
             self.logger.error(
                 "TestIOF: Failed to remove IONSS dirs. Error code: %d", procrtn)
         testmsg = "Remove CNSS dirs"
         cmdstr = "rm -rf " + cnss_dir
-        procrtn = self.node_control.execute_cmd(cmdstr, self.dir_path,
-                                                'IOF_TEST_CN', testmsg)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       'IOF_TEST_CN', testmsg)
         if procrtn:
             self.logger.error(
                 "TestIOF: Failed to remove CNSS dirs. Error code: %d", procrtn)

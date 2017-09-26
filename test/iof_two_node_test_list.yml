@@ -2,4 +2,4 @@
 # the file path is relative the TESTING direcory
 
 test_list:
-  - "scripts/iof_test_local.yml"
+  - "scripts/iof_multi_two_node.yml"
