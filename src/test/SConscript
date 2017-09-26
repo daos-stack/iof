@@ -88,27 +88,18 @@ def build_shim(env):
     env.Install('$PREFIX/TESTING/scripts', lib)
     Default(lib)
 
-#pylint: disable=too-many-statements
 def scons():
     """Scons function"""
 
     Import('env prereqs')
 
-    if not env.GetOption('clean'):
-        # Run config in a new environment so the environment isn't polluted
-        # causing tests to be rebuilt when utest target is used
-        config_env = env.Clone()
-        config = Configure(config_env)
-        if not config.CheckHeader('CUnit/Basic.h') or \
-           not config.CheckLib('cunit'):
-            print "\n************************************************"
-            print "CUnit packages must be installed to enable tests"
-            print "************************************************\n"
-            # Just returning is the desired behavior here.  The utest target
-            # has yet to be defined so the build will just fail.
-            config.Finish()
-            return
-        config.Finish()
+    if not prereqs.check_component('cunit'):
+        print "\n************************************************"
+        print "CUnit packages must be installed to enable tests"
+        print "************************************************\n"
+        # Just returning is the desired behavior here.  The utest target
+        # has yet to be defined so the build will just fail.
+        return
 
     # Set options which are used throughout the src.
     tenv = env.Clone()
@@ -117,10 +108,9 @@ def scons():
     tenv.AppendUnique(CPPPATH=['../common/include'])
     tenv.AppendUnique(CPPPATH=['../include'])
     tenv.AppendUnique(LIBPATH='../il')
-    tenv.AppendUnique(LIBS=['cunit'])
     tenv.AppendUnique(RPATH='$PREFIX/lib')
 
-    prereqs.require(tenv, 'cart')
+    prereqs.require(tenv, 'cart', 'cunit')
 
     print tenv.subst("CPPPATH = $CPPPATH")
 
@@ -148,16 +138,14 @@ def scons():
 
     tenv.Install('$PREFIX/TESTING/tests', il_test)
 
-    shim_config = Configure(env)
-    if not shim_config.CheckHeader('python3.4m/Python.h'):
-        print "\n*************************************"
-        print "Python/C Shim not enabled - needs python3.4m/Python.h"
-        print "**************************************\n"
-    else:
-        menv = env.Clone()
-        build_shim(menv)
-    shim_config.Finish()
-#pylint: enable=too-many-statements
+    if not prereqs.check_component('python34_devel'):
+        print "\n********************************************************"
+        print "Python/C Shim not enabled - needs python34-devel package"
+        print "********************************************************\n"
+        return
+
+    menv = env.Clone()
+    build_shim(menv)
 
 if __name__ == "SCons.Script":
     scons()
