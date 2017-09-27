@@ -246,7 +246,42 @@ fh_hash(struct d_chash_table *htable, const void *key, unsigned int ksize)
 	return mf->inode_no;
 }
 
+static void fh_addref(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ionss_file_handle *fh = container_of(rlink,
+						    struct ionss_file_handle,
+						    clist);
+	int oldref = atomic_fetch_add(&fh->ht_ref, 1);
+
+	IOF_LOG_DEBUG("ht_ref(%p) addref to %d", fh, oldref + 1);
+};
+
+static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ionss_file_handle *fh = container_of(rlink,
+						struct ionss_file_handle,
+						clist);
+	int oldref = atomic_fetch_sub(&fh->ht_ref, 1);
+
+	IOF_LOG_DEBUG("ht_ref(%p) decref to %d", fh, oldref - 1);
+
+	return (oldref == 1);
+}
+
+static void fh_free(struct d_chash_table *htable, d_list_t *rlink)
+{
+	struct ionss_file_handle *fh = container_of(rlink,
+						    struct ionss_file_handle,
+						    clist);
+
+	IOF_LOG_DEBUG("ht_ref(%p) is %d", fh, fh->ht_ref);
+	ios_fh_decref(fh, 1);
+}
+
 static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
+				   .hop_rec_addref = fh_addref,
+				   .hop_rec_decref = fh_decref,
+				   .hop_rec_free = fh_free,
 				   .hop_key_hash = fh_hash,
 };
 
@@ -718,16 +753,79 @@ iof_closedir_handler(crt_rpc_t *rpc)
 			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
 	} while (0)
 
+/* Take a newly opened file and locate or create a handle for it.
+ *
+ * If the file is already opened then take a reference on the existing
+ * hash table entry and re-use the current GAH, if the file is new then
+ * allcoate a new handle.
+ */
+static void find_and_insert(struct ios_projection *projection,
+			    int fd,
+			    uint32_t flags,
+			    struct iof_open_out *out)
+{
+	struct ionss_file_handle	*handle = NULL;
+	d_list_t			*rlink;
+	struct stat			 stbuf = {0};
+	struct ionss_mini_file		 mf;
+	int				rc;
+
+	rc = fstat(fd, &stbuf);
+	if (rc) {
+		out->rc = errno;
+		close(fd);
+		return;
+	}
+
+	/* Firstly create the key on the stack and use it to search for a
+	 * descriptor, using this if found.  rec_find() will take a reference
+	 * so there is no additional step needed here.
+	 */
+	mf.flags = flags;
+	mf.inode_no = stbuf.st_ino;
+
+	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
+	if (rlink) {
+		handle = container_of(rlink, struct ionss_file_handle, clist);
+		close(fd);
+		out->gah = handle->gah;
+		return;
+	}
+
+	/* If the file was not already open then allocate a new descriptor,
+	 * fill it out and attempt to insert it.  If succsssful the
+	 * rec_insert() will take a reference.
+	 */
+	rc = ios_fh_alloc(projection, &handle);
+	if (rc || !handle) {
+		out->err = IOF_ERR_NOMEM;
+		close(fd);
+		return;
+	}
+
+	handle->fd = fd;
+	handle->projection = projection;
+	handle->mf.flags = mf.flags;
+	handle->mf.inode_no = mf.inode_no;
+	atomic_fetch_add(&handle->ht_ref, 1);
+
+	rlink = d_chash_rec_find_insert(&projection->file_ht, &mf, sizeof(mf),
+					&handle->clist);
+	if (rlink != &handle->clist) {
+		IOF_LOG_DEBUG("Competing inserts for %p", handle);
+		ios_fh_decref(handle, 1);
+		handle = container_of(rlink, struct ionss_file_handle, clist);
+	}
+
+	out->gah = handle->gah;
+}
+
 static void
 iof_open_handler(crt_rpc_t *rpc)
 {
 	struct iof_open_in	*in = crt_req_get(rpc);
 	struct iof_open_out	*out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle = NULL;
 	struct ios_projection	*projection = NULL;
-	struct ionss_mini_file	mf;
-	struct stat		stbuf = {0};
-	d_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -756,65 +854,15 @@ iof_open_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = fstat(fd, &stbuf);
-	if (rc) {
-		out->rc = errno;
-		close(fd);
-		goto out;
-	}
-
-	pthread_mutex_lock(&projection->lock);
-
-	/* Check if a pre-existing GAH can be reused for this open call.
-	 *
-	 * To be re-used the file must be the same (inode number must match),
-	 * some of the open flags must match.  Currently this code checks all
-	 * flags however this could be relaxed in future.
-	 *
-	 * If the handle can be re-used then close the new file descriptor
-	 * and take a reference on the existing GAH.
-	 */
-	mf.flags = in->flags;
-	mf.inode_no = stbuf.st_ino;
-
-	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
-	if (rlink) {
-		handle = container_of(rlink, struct ionss_file_handle, clist);
-
-		close(fd);
-		atomic_fetch_add(&handle->ref, 1);
-
-	}
-
-	if (!handle) {
-		rc = ios_fh_alloc(projection, &handle);
-		if (rc || !handle) {
-			out->err = IOF_ERR_NOMEM;
-			close(fd);
-			pthread_mutex_unlock(&projection->lock);
-			goto out;
-		}
-
-		handle->fd = fd;
-		handle->projection = projection;
-		handle->mf.flags = mf.flags;
-		handle->mf.inode_no = mf.inode_no;
-
-		d_chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
-				   &handle->clist, 0);
-	}
-
-	pthread_mutex_unlock(&projection->lock);
-
-	out->gah = handle->gah;
+	find_and_insert(projection, fd, in->flags, out);
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o ", in->path, in->flags);
 
-	LOG_FLAGS(handle, in->flags);
+	LOG_FLAGS(rpc, in->flags);
 
 	IOF_LOG_INFO("%p path %s result err %d rc %d",
-		     handle, in->path, out->err, out->rc);
+		     rpc, in->path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -829,11 +877,7 @@ iof_create_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in	*in = crt_req_get(rpc);
 	struct iof_open_out	*out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle = NULL;
 	struct ios_projection	*projection = NULL;
-	struct ionss_mini_file	mf;
-	struct stat		stbuf = {0};
-	d_list_t		*rlink;
 	int fd;
 	int rc;
 
@@ -861,67 +905,17 @@ iof_create_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = fstat(fd, &stbuf);
-	if (rc) {
-		out->rc = errno;
-		close(fd);
-		goto out;
-	}
-
-	pthread_mutex_lock(&projection->lock);
-
-	/* Check if a pre-existing GAH can be reused for this open call.
-	 *
-	 * To be re-used the file must be the same (inode number must match),
-	 * some of the open flags must match.  Currently this code checks all
-	 * flags however this could be relaxed in future.
-	 *
-	 * If the handle can be re-used then close the new file descriptor
-	 * and take a reference on the existing GAH.
-	 */
-	mf.flags = in->flags;
-	mf.inode_no = stbuf.st_ino;
-
-	rlink = d_chash_rec_find(&projection->file_ht, &mf, sizeof(mf));
-	if (rlink) {
-		handle = container_of(rlink, struct ionss_file_handle, clist);
-
-		close(fd);
-		atomic_fetch_add(&handle->ref, 1);
-
-	}
-
-	if (!handle) {
-		rc = ios_fh_alloc(projection, &handle);
-		if (rc || !handle) {
-			out->err = IOF_ERR_NOMEM;
-			close(fd);
-			pthread_mutex_unlock(&projection->lock);
-			goto out;
-		}
-
-		handle->fd = fd;
-		handle->projection = projection;
-		handle->mf.flags = mf.flags;
-		handle->mf.inode_no = mf.inode_no;
-
-		d_chash_rec_insert(&projection->file_ht, &mf, sizeof(mf),
-				   &handle->clist, 0);
-	}
-
-	pthread_mutex_unlock(&projection->lock);
-
-	out->gah = handle->gah;
+	find_and_insert(projection, fd, in->flags, out);
 
 out:
 	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o 0%o", in->path, in->flags,
 		      in->mode & S_IFREG, in->mode & ~S_IFREG);
 
-	LOG_FLAGS(handle, in->flags);
-	LOG_MODES(handle, in->mode);
+	LOG_FLAGS(rpc, in->flags);
+	LOG_MODES(rpc, in->mode);
 
 	IOF_LOG_INFO("%p path %s result err %d rc %d",
-		     handle, in->path, out->err, out->rc);
+		     rpc, in->path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -948,8 +942,11 @@ iof_close_handler(crt_rpc_t *rpc)
 
 	handle = ios_fh_find(&base, &in->gah);
 
-	if (handle)
-		ios_fh_decref(handle, 2);
+	if (!handle)
+		return;
+
+	ios_fh_decref(handle, 1);
+	d_chash_rec_decref(&handle->projection->file_ht, &handle->clist);
 }
 
 static void
@@ -2063,21 +2060,14 @@ static d_list_t *d_chash_table_first(struct d_chash_table *ht)
  */
 static void release_projection_resources(struct ios_projection *projection)
 {
-	struct ionss_file_handle *fh;
+	d_list_t *rlink;
 	int rc;
 
 	do {
-		d_list_t *rlink;
-
-		fh = NULL;
-
 		rlink = d_chash_table_first(&projection->file_ht);
-		if (rlink) {
-			fh = container_of(rlink, struct ionss_file_handle,
-					  clist);
-			ios_fh_decref(fh, fh->ref);
-		}
-	} while (fh);
+		if (rlink)
+			d_chash_rec_decref(&projection->file_ht, rlink);
+	} while (rlink);
 
 	rc = d_chash_table_destroy_inplace(&projection->file_ht, false);
 	if (rc != 0)
@@ -2431,8 +2421,9 @@ int main(int argc, char **argv)
 
 		projection->active = 0;
 		projection->base = &base;
-		rc = d_chash_table_create_inplace(D_HASH_FT_RWLOCK, 5, NULL,
-						  &hops, &projection->file_ht);
+		rc = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
+						  5, NULL, &hops,
+						  &projection->file_ht);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not create hash table");
 			continue;
@@ -2467,6 +2458,7 @@ int main(int argc, char **argv)
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
+		atomic_fetch_add(&projection->root->ht_ref, 1);
 		d_chash_rec_insert(&projection->file_ht, &projection->root->mf,
 				   sizeof(projection->root->mf),
 				   &projection->root->clist, 0);

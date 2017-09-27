@@ -77,13 +77,39 @@ struct ionss_mini_file {
 	ino_t			inode_no;
 };
 
+/* File descriptor for open file handles.
+ *
+ * This structure exists from open-to-close for all open files, and is shared
+ * across all clients which opened the same file (as tested by inode number)
+ * with the same open flags.
+ *
+ * When handling RPCs the pointer is retrieved from the GAH code using a lookup
+ * table, however descriptors are also kept in the file_ht consistent hash
+ * table which is checked on open to allow sharing of descriptors across
+ * clients.
+ *
+ * Hash table reference counting is used to keep track of client access, the
+ * reference count is simply the number of clients who hold a copy of the GAH.
+ * No reference count is held for the hash table entry itself, and the decref()
+ * function will remove the descriptor from the hash table when the count
+ * decreases to zero.
+ *
+ * File handle reference counting is performed as well, and this counts one
+ * entry for the hash table reference, plus one for every locall thread
+ * currently performing operations on the file.
+ *
+ * The last instance of file close will result in decref to zero in the ht which
+ * will then call fh_decref(), which will then release the GAH and recycle the
+ * descriptor.
+ */
 struct ionss_file_handle {
-	struct ios_gah		gah;
+	struct ios_gah		 gah;
 	struct ios_projection	*projection;
-	d_list_t		clist;
-	struct ionss_mini_file	mf;
-	uint			fd;
-	ATOMIC uint		ref;
+	d_list_t		 clist;
+	struct ionss_mini_file	 mf;
+	uint			 fd;
+	ATOMIC uint		 ht_ref;
+	ATOMIC uint		 ref;
 };
 
 struct ios_projection {
