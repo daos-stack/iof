@@ -63,7 +63,6 @@
 
 #define QUERY_PSR_OP	(0x201)
 #define DETACH_OP	(0x202)
-#define IOF_NO_OP	(0x203)
 
 #define IOF_DEFAULT_SET "IONSS"
 

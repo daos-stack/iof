@@ -637,6 +637,8 @@ rb_release(void *arg)
 	free(rb->buf.buf[0].mem);
 }
 
+static int iof_thread_start(struct iof_state *iof_state);
+
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = arg;
@@ -648,6 +650,21 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	int i;
 
 	iof_state->cb = cb;
+
+	ret = crt_context_create(NULL, &iof_state->crt_ctx);
+	if (ret) {
+		IOF_LOG_ERROR("Context not created");
+		return 1;
+	}
+
+	iof_tracker_init(&iof_state->thread_start_tracker, 1);
+	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
+	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
+	ret = iof_thread_start(iof_state);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Failed to create progress thread");
+		return 1;
+	}
 
 	/* Hard code only the default group now */
 	iof_state->num_groups = 1;
@@ -701,10 +718,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
 					  IOF_IOCTL_VERSION);
 
-	ret = crt_context_create(NULL, &iof_state->crt_ctx);
-	if (ret)
-		IOF_LOG_ERROR("Context not created");
-
 	prefix = getenv("CNSS_PREFIX");
 	iof_state->cnss_prefix = realpath(prefix, NULL);
 	prefix_dir = opendir(iof_state->cnss_prefix);
@@ -728,12 +741,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	ret = crt_rpc_register(DETACH_OP, NULL);
 	if (ret) {
 		IOF_LOG_ERROR("Detach registration failed with ret: %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_register(IOF_NO_OP, NULL);
-	if (ret) {
-		IOF_LOG_ERROR("No-op registration failed with ret: %d", ret);
 		return ret;
 	}
 
@@ -1165,52 +1172,6 @@ static int query_projections(struct iof_state *iof_state,
 	return 0;
 }
 
-static void
-ioc_noop_cb(const struct crt_cb_info *cb_info)
-{
-	struct status_cb_r *reply = cb_info->cci_arg;
-
-	if (cb_info->cci_rc != 0) {
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		reply->err = EIO;
-	}
-	iof_tracker_signal(&reply->tracker);
-}
-
-/* Preload URI Info */
-static int preload_uri_info(struct iof_state *iof_state,
-			    struct iof_group_info *group)
-{
-	int ret;
-	struct status_cb_r status = {0};
-	crt_rpc_t *rpc = NULL;
-	crt_endpoint_t failover_ep = group->grp.psr_ep;
-
-	iof_tracker_init(&status.tracker, 1);
-	failover_ep.ep_rank = (failover_ep.ep_rank + 1)
-			    % group->grp.num_ranks;
-	IOF_LOG_INFO("Loading URI for Failover PSR %d",
-		     failover_ep.ep_rank);
-	ret = crt_req_create(iof_state->crt_ctx,
-			    &failover_ep, IOF_NO_OP, &rpc);
-	if (ret || !rpc) {
-		IOF_LOG_ERROR("Could not create No-Op RPC rc = %d", ret);
-		goto end;
-	}
-	IOF_LOG_INFO("Sending No-Op to PSR %u", failover_ep.ep_rank);
-	ret = crt_req_send(rpc, ioc_noop_cb, &status);
-	if (ret) {
-		IOF_LOG_ERROR("Could not send No-Op RPC rc = %d", ret);
-		goto end;
-	}
-	iof_wait(iof_state->crt_ctx, &status.tracker);
-	IOF_LOG_INFO("Loaded URI Info for Failover PSR");
-	ret = status.err;
-	if (ret)
-		IOF_LOG_ERROR("Could not progress No-Op RPC rc = %d", ret);
-end:
-	return ret;
-}
 
 static int iof_post_start(void *arg)
 {
@@ -1231,16 +1192,6 @@ static int iof_post_start(void *arg)
 		return IOF_ERR_CTRL_FS;
 	}
 
-	/* Start progress thread */
-	iof_tracker_init(&iof_state->thread_start_tracker, 1);
-	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
-	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
-	ret = iof_thread_start(iof_state);
-	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create progress thread");
-		return 1;
-	}
-
 	for (grp_num = 0; grp_num < iof_state->num_groups; grp_num++) {
 		struct iof_group_info *group = &iof_state->groups[grp_num];
 		int active;
@@ -1252,11 +1203,8 @@ static int iof_post_start(void *arg)
 			IOF_LOG_ERROR("Couldn't mount projections from %s",
 				      group->grp_name);
 			continue;
-		} else {
-			ret = preload_uri_info(iof_state, group);
 		}
 		active_projections += active;
-
 	}
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir,

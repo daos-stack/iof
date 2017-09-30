@@ -134,18 +134,6 @@ static void (*register_handlers
 	iof_register_default_handlers
 };
 
-/*
- * No-op used by clients at start-up for URI Lookup.
- */
-static void noop_handler(crt_rpc_t *rpc)
-{
-	int rc = 0;
-
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-}
-
 void shutdown_impl(void)
 {
 	IOF_LOG_DEBUG("Shutting Down");
@@ -1988,13 +1976,6 @@ int ionss_register(void)
 	ret = crt_rpc_srv_register(DETACH_OP, NULL, cnss_detach_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Cannot register CNSS detach"
-				" RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(IOF_NO_OP, NULL, noop_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Cannot register No-Op"
 				" RPC, ret = %d", ret);
 		return ret;
 	}
