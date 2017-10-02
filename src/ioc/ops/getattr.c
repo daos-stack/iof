@@ -40,37 +40,58 @@
 #include "ioc.h"
 #include "log.h"
 
-void getattr_cb(struct iof_rpc_ctx *ctx, void *output)
-{
-	struct iof_getattr_out *out = output;
-	struct getattr_cb_r *reply = container_of(
-				     ctx, struct getattr_cb_r, ctx);
+#define REQ_NAME request
+#define POOL_NAME gh_pool
+#define TYPE_NAME getattr_req
+#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
 
-	IOC_RESOLVE_STATUS(ctx, out);
-	if (IOC_STATUS_TO_RC(ctx) == 0)
-		memcpy(reply->stat, out->stat.iov_buf, sizeof(struct stat));
+static struct iof_projection_info
+*get_fs_handle(struct ioc_request *req)
+{
+	return CONTAINER(req)->fs_handle;
 }
+
+static void post_send(struct ioc_request *req)
+{
+	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
+}
+
+void ioc_getattr_cb(struct ioc_request *request)
+{
+	struct iof_getattr_out *out = IOC_GET_RESULT(request);
+
+	IOC_RESOLVE_STATUS(request, out);
+	if (IOC_STATUS_TO_RC(request) == 0)
+		memcpy(request->ptr, out->stat.iov_buf, sizeof(struct stat));
+}
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= ioc_getattr_cb,
+	.on_evict	= ioc_simple_resend
+};
 
 int ioc_getattr_name(const char *path, struct stat *stbuf)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct getattr_req *req;
+	struct getattr_req *req = NULL;
 	struct iof_gah_string_in *in;
 
 	int rc;
 
 	STAT_ADD(fs_handle->stats, getattr);
-	IOC_RPC_INIT(fs_handle->gh_pool, req, rpc, getattr_cb, rc);
+	IOF_LOG_INFO("path %s", path);
+	IOC_RPC_INIT(req, request, fs_handle->gh_pool, api, rc);
 	if (rc)
 		return rc;
 
-	IOF_TRACE_INFO(req, "path %s", path);
-	in = crt_req_get(req->rpc);
+	req->request.ptr = stbuf;
+	in = crt_req_get(req->request.rpc);
 	in->path = (d_string_t)path;
-	req->reply.stat = stbuf;
-	iof_fs_send(req, &(req)->reply.ctx);
-
-	IOC_RPC_FINI(fs_handle->gh_pool, req, rc);
+	iof_fs_send(&req->request);
+	IOC_RPC_WAIT(req, request, fs_handle, rc);
+	iof_pool_release(fs_handle->gh_pool, req);
 	IOF_TRACE_DEBUG(req, "path %s rc %d", path, rc);
 	return rc;
 }

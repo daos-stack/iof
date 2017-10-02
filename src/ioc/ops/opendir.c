@@ -41,98 +41,74 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct opendir_cb_r {
-	struct iof_dir_handle *dh;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
+#define REQ_NAME open_req
+#define POOL_NAME dh_pool
+#define TYPE_NAME iof_dir_handle
+#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
+
+static struct iof_projection_info
+*get_fs_handle(struct ioc_request *req)
+{
+	return CONTAINER(req)->fs_handle;
+}
+
+static void post_send(struct ioc_request *req)
+{
+	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
+}
 
 static void
-opendir_cb(const struct crt_cb_info *cb_info)
+opendir_cb(struct ioc_request *request)
 {
-	struct opendir_cb_r *reply = cb_info->cci_arg;
-	struct iof_opendir_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_opendir_out *out = IOC_GET_RESULT(request);
+	struct iof_dir_handle *dh = CONTAINER(request);
 
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		if (cb_info->cci_rc == -DER_TIMEDOUT)
-			reply->rc = EAGAIN;
-		else
-			reply->rc = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
+	IOC_RESOLVE_STATUS(request, out);
+	if (IOC_STATUS_TO_RC(request) == 0) {
+		dh->gah = out->gah;
+		dh->gah_valid = 1;
+		dh->handle_valid = 1;
+		dh->ep = dh->fs_handle->proj.grp->psr_ep;
 	}
-
-	if (out->err == 0 && out->rc == 0) {
-		reply->dh->gah = out->gah;
-		reply->dh->gah_valid = 1;
-		reply->dh->handle_valid = 1;
-	}
-	reply->err = out->err;
-	reply->rc = out->rc;
-	iof_tracker_signal(&reply->tracker);
 }
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= opendir_cb,
+	.on_evict	= ioc_simple_resend
+};
 
 int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_dir_handle *dir_handle;
+	struct iof_dir_handle *dh = NULL;
 	struct iof_gah_string_in *in;
-	struct opendir_cb_r reply = {0};
 	int rc;
 
 	STAT_ADD(fs_handle->stats, opendir);
+	IOC_RPC_INIT(dh, REQ_NAME, fs_handle->POOL_NAME, api, rc);
+	if (rc)
+		goto out;
+	IOF_LOG_INFO("dir %s handle %p", dir, dh);
 
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	dir_handle = iof_pool_acquire(fs_handle->dh);
-	if (!dir_handle)
-		return -ENOMEM;
-
-	dir_handle->fs_handle = fs_handle;
-	dir_handle->ep = fs_handle->proj.grp->psr_ep;
-
-	IOF_LOG_INFO("dir %s handle %p", dir, dir_handle);
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(dir_handle->open_rpc);
+	in = crt_req_get(dh->REQ_NAME.rpc);
 	in->path = (d_string_t)dir;
 	in->gah = fs_handle->gah;
+	rc = iof_fs_send(&dh->REQ_NAME);
+	if (rc)
+		goto out;
+	IOC_RPC_WAIT(dh, REQ_NAME, fs_handle, rc);
+	dh->name = strdup(dir);
+	IOF_LOG_DEBUG("path %s rc %d", dir, rc);
 
-	reply.dh = dir_handle;
-
-	rc = crt_req_send(dir_handle->open_rpc, opendir_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		iof_pool_release(fs_handle->dh, dir_handle);
-		return -EIO;
-	}
-	dir_handle->open_rpc = NULL;
-	dir_handle->name = strdup(dir);
-	iof_pool_restock(fs_handle->dh);
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (reply.err == 0 && reply.rc == 0) {
-
-		fi->fh = (uint64_t)dir_handle;
-
-		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, dir_handle,
-			     GAH_PRINT_FULL_VAL(dir_handle->gah));
+out:
+	if (rc == 0) {
+		fi->fh = (uint64_t)dh;
+		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, dh,
+			     GAH_PRINT_FULL_VAL(dh->gah));
 	} else {
-		iof_pool_release(fs_handle->dh, dir_handle);
+		iof_pool_release(fs_handle->POOL_NAME, dh);
 	}
-
-	IOF_LOG_DEBUG("path %s rc %d",
-		      dir, reply.err == 0 ? -reply.rc : -EIO);
-
-	return reply.err == 0 ? -reply.rc : -EIO;
+	return rc;
 }

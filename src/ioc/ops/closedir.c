@@ -41,37 +41,35 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct closedir_cb_r {
-	struct iof_tracker tracker;
-};
+#define REQ_NAME close_req
+#define POOL_NAME dh_pool
+#define TYPE_NAME iof_dir_handle
+#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
 
-static void
-closedir_cb(const struct crt_cb_info *cb_info)
+static struct iof_projection_info
+*get_fs_handle(struct ioc_request *req)
 {
-	struct closedir_cb_r *reply = cb_info->cci_arg;
-
-	/* There is no error handling needed here, as all client state will be
-	 * destroyed on return anyway.
-	 */
-
-	iof_tracker_signal(&reply->tracker);
+	return CONTAINER(req)->fs_handle;
 }
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	/* No event handlers necessary */
+};
 
 int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 {
-	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
+	struct iof_dir_handle *dh = (struct iof_dir_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = dh->fs_handle;
 	struct iof_gah_in *in;
-	struct closedir_cb_r reply = {0};
 	int rc;
 
 	STAT_ADD(fs_handle->stats, closedir);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
+	IOC_RPC_INIT(dh, REQ_NAME, fs_handle->POOL_NAME, api, rc);
+	if (rc)
+		return rc;
 	IOF_LOG_INFO("close dir %s" GAH_PRINT_STR, dir,
-		GAH_PRINT_VAL(dir_handle->gah));
+		GAH_PRINT_VAL(dh->gah));
 
 	/* If the GAH has been reported as invalid by the server in the past
 	 * then do not attempt to do anything with it.
@@ -79,33 +77,18 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	 * However, even if the local handle has been reported invalid then
 	 * still continue to release the GAH on the server side.
 	 */
-	if (!dir_handle->gah_valid) {
-		rc = EIO;
+	if (!dh->gah_valid) {
+		rc = -EIO;
 		goto out;
 	}
 
-	in = crt_req_get(dir_handle->close_rpc);
-	in->gah = dir_handle->gah;
-	iof_tracker_init(&reply.tracker, 1);
-
-	rc = crt_req_send(dir_handle->close_rpc, closedir_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		rc = EIO;
+	in = crt_req_get(dh->REQ_NAME.rpc);
+	in->gah = dh->gah;
+	rc = iof_fs_send(&dh->REQ_NAME);
+	if (rc)
 		goto out;
-	}
-
-	dir_handle->close_rpc = NULL;
-
-	iof_pool_release(fs_handle->dh, dir_handle);
-	iof_pool_restock(fs_handle->dh);
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	return 0;
+	IOC_RPC_WAIT(dh, REQ_NAME, fs_handle, rc);
 out:
-
-	iof_pool_release(fs_handle->dh, dir_handle);
-
-	return -rc;
+	iof_pool_release(fs_handle->POOL_NAME, dh);
+	return rc;
 }

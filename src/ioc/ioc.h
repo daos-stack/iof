@@ -133,7 +133,7 @@ struct iof_projection_info {
 	uint8_t				flags;
 	int				fs_id;
 	struct iof_pool			pool;
-	struct iof_pool_type		*dh;
+	struct iof_pool_type		*dh_pool;
 	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*lookup_pool;
@@ -220,35 +220,29 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops();
 #define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
 					O_EXCL)
 
-#define IOC_RPC_INIT(pool, req, rpc, hdlr, rc) \
+#define IOC_RPC_INIT(src, req, pool, api, rc) \
 	do {\
-		struct iof_projection_info *fsh = (pool)->reg.handle; \
-		\
+		struct iof_projection_info *fsh = pool->reg.handle; \
 		rc = 0; \
 		if (FS_IS_OFFLINE(fsh)) { \
-			rc = -fsh->offline_reason; \
+			rc = -(fsh)->offline_reason; \
 			break; \
 		} \
-		req = iof_pool_acquire(pool); \
-		if (!req) { \
+		/* Acquire new object only if NULL */ \
+		if (!src) \
+			src = iof_pool_acquire(pool); \
+		if (!src) { \
 			rc = -ENOMEM; \
 			break; \
 		} \
-		(req)->reply.ctx.mem_pool = pool; \
-		(req)->reply.ctx.handler = hdlr; \
-		(req)->reply.ctx.rpc_ptr = &(req)->rpc; \
-		/* Defer clean up until the output is copied. */ \
-		rc = crt_req_addref((req)->rpc); \
+		(src)->req.cb = &api; \
+		iof_tracker_init(&(src)->req.tracker, 1); \
 	} while (0)
 
-#define IOC_RPC_FINI(pool, req, rc) \
+#define IOC_RPC_WAIT(src, req, fsh, rc) \
 	do {\
-		struct iof_projection_info *fsh = (pool)->reg.handle; \
-		struct iof_rpc_ctx *ctx = &((req)->reply.ctx); \
-		\
-		iof_fs_wait(&(fsh)->proj, &ctx->tracker); \
-		rc = IOC_STATUS_TO_RC(ctx); \
-		iof_pool_release(pool, req); \
+		iof_fs_wait(&(fsh)->proj, &(src)->req.tracker); \
+		rc = IOC_STATUS_TO_RC(&(src)->req); \
 	} while (0)
 
 #define IOF_FUSE_REPLY_ERR(req, status)					\
@@ -279,15 +273,34 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops();
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
+struct ioc_request;
+
+struct ioc_request_api {
+	struct iof_projection_info	*(*get_fsh)(struct ioc_request *req);
+	void				(*on_send)(struct ioc_request *req);
+	void				(*on_result)(struct ioc_request *req);
+	int				(*on_evict)(struct ioc_request *req);
+};
+
+struct ioc_request {
+	int				rc;
+	int				err;
+	crt_rpc_t			*rpc;
+	struct iof_tracker		tracker;
+	void				*ptr;
+	const struct ioc_request_api	*cb;
+};
+
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {
+	struct ioc_request		open_req;
+	struct ioc_request		close_req;
+	struct ioc_request		read_req;
 	struct iof_projection_info	*fs_handle;
 	/* The handle for accessing the directory on the IONSS */
 	struct ios_gah			gah;
 	/* Any RPC reference held across readdir() calls */
 	crt_rpc_t			*rpc;
-	crt_rpc_t			*open_rpc;
-	crt_rpc_t			*close_rpc;
 	/* Pointer to any retreived data from readdir() RPCs */
 	struct iof_readdir_reply	*replies;
 	int				reply_count;
@@ -325,35 +338,15 @@ int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 
 struct iof_projection_info *ioc_get_handle(void);
 
-/* Forward Declaration */
-struct iof_rpc_ctx;
-
-typedef void (*iof_fs_cb_t)(struct iof_rpc_ctx *ctx, void *output);
-
 struct status_cb_r {
 	int err; /** errno of any internal error */
 	int rc;  /** errno reported by remote POSIX operation */
 	struct iof_tracker tracker; /** Completion event tracker */
 };
 
-struct iof_rpc_ctx {
-	struct iof_projection_info *fs_handle;
-	struct iof_pool_type *mem_pool;
-	struct iof_tracker tracker; /** Completion event tracker */
-	int err; /** errno of any internal error */
-	int rc;  /** errno reported by remote POSIX operation */
-	void *rpc_ptr; /** RPC being sent */
-	iof_fs_cb_t handler; /** Request completion handler */
-};
-
-struct getattr_cb_r {
-	struct iof_rpc_ctx ctx;
-	struct stat *stat;
-};
-
 struct getattr_req {
-	struct getattr_cb_r		reply;
-	struct crt_rpc			*rpc;
+	struct ioc_request		request;
+	struct iof_projection_info	*fs_handle;
 	d_list_t			list;
 };
 
@@ -384,6 +377,8 @@ struct lookup_req {
 #define IOC_STATUS_TO_RC(STATUS) \
 	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
 
+#define IOC_GET_RESULT(REQ) crt_reply_get((REQ)->rpc)
+
 /* Correctly resolve the return codes and errors from the RPC response.
  * If the error code was already non-zero, it means an error occurred on
  * the client; do nothing. A non-zero error code in the RPC response
@@ -410,11 +405,13 @@ void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 
 void ioc_status_cb(const struct crt_cb_info *);
 
-void getattr_cb(struct iof_rpc_ctx *ctx, void *output);
+int iof_fs_send(struct ioc_request *request);
+
+int ioc_simple_resend(struct ioc_request *request);
 
 void ioc_ll_gen_cb(const struct crt_cb_info *);
 
-int iof_fs_send(void *request, struct iof_rpc_ctx *ctx);
+void ioc_getattr_cb(struct ioc_request *request);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
 

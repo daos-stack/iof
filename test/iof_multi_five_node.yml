@@ -12,8 +12,8 @@ module:
         - [IOF_TEST_BIN, PREFIX, "/bin"]
     hostConfig:
         type: buildList
-        numServers: 2
-        numClients: 3
+        numServers: 1
+        numClients: 4
 
 directives:
     renameTestRun: "no"

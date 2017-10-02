@@ -40,10 +40,33 @@
 #include "ioc.h"
 #include "log.h"
 
+#define REQ_NAME request
+#define POOL_NAME fgh_pool
+#define TYPE_NAME getattr_req
+#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
+
+static struct iof_projection_info
+*get_fs_handle(struct ioc_request *req)
+{
+	return CONTAINER(req)->fs_handle;
+}
+
+static void post_send(struct ioc_request *req)
+{
+	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
+}
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= ioc_getattr_cb,
+	.on_evict	= ioc_simple_resend
+};
+
 int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct getattr_req *req;
+	struct getattr_req *req = NULL;
 	struct iof_gah_in *in;
 	int rc;
 
@@ -56,16 +79,16 @@ int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
 		 */
 		return -EIO;
 	}
-	IOC_RPC_INIT(fs_handle->fgh_pool, req, rpc, getattr_cb, rc);
+	IOC_RPC_INIT(req, request, fs_handle->fgh_pool, api, rc);
 	if (rc)
 		return rc;
 
-	in = crt_req_get(req->rpc);
+	req->request.ptr = stbuf;
+	in = crt_req_get(req->request.rpc);
 	in->gah = handle->common.gah;
-	req->reply.stat = stbuf;
-
-	iof_fs_send(req, &(req)->reply.ctx);
-	IOC_RPC_FINI(fs_handle->fgh_pool, req, rc);
+	iof_fs_send(&req->request);
+	IOC_RPC_WAIT(req, request, fs_handle, rc);
+	iof_pool_release(fs_handle->fgh_pool, req);
 	/* Cache the inode number */
 	if (rc == 0)
 		handle->inode_no = stbuf->st_ino;

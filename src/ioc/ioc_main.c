@@ -147,6 +147,29 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 	fs_handle->offline_reason = EHOSTDOWN;
 }
 
+int ioc_simple_resend(struct ioc_request *request)
+{
+	int rc;
+	crt_rpc_t *resend_rpc;
+
+	rc = crt_req_create(request->rpc->cr_ctx, NULL,
+			    request->rpc->cr_opc, &resend_rpc);
+	if (rc) {
+		IOF_TRACE_ERROR(request, "Failed to create retry RPC");
+		return EIO;
+	}
+	memcpy(resend_rpc->cr_input,
+	       request->rpc->cr_input,
+	       request->rpc->cr_input_size);
+	/* Clean up old RPC */
+	crt_req_decref(request->rpc);
+	crt_req_decref(request->rpc);
+	request->rpc = resend_rpc;
+	/* Second addref is called in iof_fs_send */
+	crt_req_addref(request->rpc);
+	return iof_fs_send(request);
+}
+
 /* A generic callback function to handle completion of RPCs sent from FUSE,
  * and replay the RPC to a different end point in case the target has been
  * evicted (denoted by an "Out Of Group" return code). For all other failures
@@ -155,57 +178,82 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 static void generic_cb(const struct crt_cb_info *cb_info)
 {
 	int rc;
-	crt_rpc_t *failover_rpc = NULL;
-	crt_rpc_t *rpc = cb_info->cci_rpc;
-	struct iof_rpc_ctx *ctx = cb_info->cci_arg;
+	d_rank_list_t *psr_list = NULL;
+	struct ioc_request *request = cb_info->cci_arg;
+	struct iof_projection_info *fs_handle =
+			request->cb->get_fsh(request);
 
-	if (IOC_HOST_IS_DOWN(cb_info)) {
-		IOF_TRACE_INFO(ctx, "Request timed out for PSR: %u",
-			       rpc->cr_ep.ep_rank);
-		if ((rpc->cr_ep.ep_rank + 1) ==
-		    ctx->fs_handle->proj.grp->num_ranks) {
-			/* No more ranks to retry, so fail. */
-			IOF_TRACE_ERROR(ctx, "No more PSRs left for failover.");
-			ctx->err = EHOSTDOWN;
-		} else {
-			/* TODO: Make this atomic. */
-			ctx->fs_handle->proj.grp->psr_ep.ep_rank++;
-			rc = crt_req_create(rpc->cr_ctx,
-					    &ctx->fs_handle->proj.grp->psr_ep,
-					    rpc->cr_opc, &failover_rpc);
-			if (!rc) {
-				memcpy(failover_rpc->cr_input,
-				       rpc->cr_input,
-				       rpc->cr_input_size);
-				crt_req_decref(rpc);
-				crt_req_decref(rpc);
-
-				crt_req_addref(failover_rpc);
-				crt_req_addref(failover_rpc);
-				IOF_TRACE_LINK(failover_rpc, ctx,
-					       "failover_rpc");
-				*((crt_rpc_t **)ctx->rpc_ptr) = failover_rpc;
-				IOF_TRACE_INFO(ctx, "Resending RPC to PSR "
-					       "Rank %d",
-					       failover_rpc->cr_ep.ep_rank);
-				rc = crt_req_send(failover_rpc,
-						  generic_cb, ctx);
-				if (rc) {
-					IOF_TRACE_ERROR(ctx, "Could not send "
-							"rpc, rc = %u", rc);
-				} else
-					return;
-			} else
-				IOF_TRACE_ERROR(ctx, "Failed to create retry "
-						"RPC");
-			if (rc)
-				ctx->err = EIO;
+	do {
+		/* No Error */
+		if (!cb_info->cci_rc)
+			break;
+		/* Errors other than timeouts */
+		if (!IOC_HOST_IS_DOWN(cb_info)) {
+			request->err = EIO;
+			break;
 		}
-	} else if (cb_info->cci_rc != 0)
-		ctx->err = EIO;
-	if (ctx->handler)
-		ctx->handler(ctx, crt_reply_get(rpc));
-	iof_tracker_signal(&ctx->tracker);
+
+		if (cb_info->cci_rc == -DER_TIMEDOUT) {
+			/*
+			 * Retry if this is a timeout. In the ideal case,
+			 * we shouldn't have to handle timeouts -- either
+			 * handle eviction or wait indefinitely.
+			 */
+			IOF_TRACE_INFO(request, "Request timed out for PSR %u",
+				     request->rpc->cr_ep.ep_rank);
+			rc = ioc_simple_resend(request);
+			if (rc)
+				break;
+			/* Return on success */
+			else
+				return;
+		}
+
+		IOF_TRACE_INFO(request, "PSR %u has been evicted",
+			     request->rpc->cr_ep.ep_rank);
+
+		if (!IOF_HAS_FAILOVER(fs_handle->flags)) {
+			/* Failover feature not available, so fail. */
+			IOF_TRACE_ERROR(request,
+					"Failover feature not available");
+			request->err = EHOSTDOWN;
+			break;
+		}
+
+		rc = crt_lm_group_psr(fs_handle->proj.grp->dest_grp,
+				      &psr_list);
+		IOF_TRACE_INFO(request, "ListPtr: %p, List: %p, Ranks: %d",
+			       psr_list, psr_list ? psr_list->rl_ranks : 0,
+			       psr_list ? psr_list->rl_nr.num : -1);
+		/* Sanity Check */
+		if (rc || !psr_list || !psr_list->rl_ranks) {
+			IOF_TRACE_ERROR(request, "Unable to access "
+					"fail-over rank list, ret = %d", rc);
+			request->err = EHOSTDOWN;
+			break;
+		}
+		if (psr_list->rl_nr.num == 0) {
+			/* No more ranks to retry, so fail. */
+			IOF_TRACE_ERROR(request, "No more PSRs"
+					" remaining for failover.");
+			request->err = EHOSTDOWN;
+			break;
+		}
+		/* TODO: Make this atomic. */
+		fs_handle->proj.grp->psr_ep.ep_rank = psr_list->rl_ranks[0];
+		d_rank_list_free(psr_list);
+		if (request->cb->on_evict) {
+			rc = request->cb->on_evict(request);
+			if (rc)
+				break;
+			/* Return on success */
+			else
+				return;
+		}
+	} while (0);
+	if (request->cb->on_result)
+		request->cb->on_result(request);
+	iof_tracker_signal(&request->tracker);
 }
 
 /*
@@ -215,20 +263,34 @@ static void generic_cb(const struct crt_cb_info *cb_info)
  * without bothering about how RPCs are sent. This function is also intended
  * for abstracting various other features related to RPCs such as fail-over
  * and load balance, at the same time preventing code duplication.
+ *
+ * TODO: Deferred Execution: Check for PSR eviction and add requests
+ * on open handles to a queue if migration of handles is in progress.
  */
-int iof_fs_send(void *request, struct iof_rpc_ctx *ctx)
+int iof_fs_send(struct ioc_request *request)
 {
 	int rc;
-	crt_rpc_t *rpc = *((crt_rpc_t **)ctx->rpc_ptr);
+	struct iof_projection_info *fs_handle =
+			request->cb->get_fsh(request);
 
-	rc = crt_req_send(rpc, generic_cb, ctx);
-	if (rc) {
-		IOF_TRACE_ERROR(ctx, "Could not send rpc, rc = %u", rc);
-		iof_pool_release(ctx->mem_pool, request);
-		return -EIO;
-	}
-	iof_pool_restock(ctx->mem_pool);
+	/* Defer clean up until the output is copied. */
+	rc = crt_req_addref(request->rpc);
+	if (rc)
+		goto err;
+	rc = crt_req_set_endpoint(request->rpc, &fs_handle->proj.grp->psr_ep);
+	if (rc)
+		goto err;
+	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",
+		      request->rpc->cr_ep.ep_rank);
+	rc = crt_req_send(request->rpc, generic_cb, request);
+	if (rc)
+		goto err;
+	if (request->cb->on_send)
+		request->cb->on_send(request);
 	return 0;
+err:
+	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
+	return -EIO;
 }
 
 static void
@@ -326,6 +388,7 @@ static int attach_group(struct iof_state *iof_state,
 	int ret;
 	struct cnss_plugin_cb *cb;
 	struct ctrl_dir *ionss_dir = NULL;
+	d_rank_list_t *psr_list = NULL;
 
 	cb = iof_state->cb;
 
@@ -354,13 +417,25 @@ static int attach_group(struct iof_state *iof_state,
 		return ret;
 	}
 
-	crt_group_size(group->grp.dest_grp, &group->grp.num_ranks);
 	/*initialize destination endpoint*/
 	group->grp.psr_ep.ep_grp = group->grp.dest_grp;
-	/*TODO: Use exported PSR from cart*/
-	group->grp.psr_ep.ep_rank = 0;
+	ret = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
+	IOF_TRACE_INFO(group, "ListPtr: %p, List: %p, Ranks: %d",
+		       psr_list, psr_list ? psr_list->rl_ranks : 0,
+		       psr_list ? psr_list->rl_nr.num : 0);
+	if (ret || !psr_list || !psr_list->rl_ranks || !psr_list->rl_nr.num) {
+		IOF_TRACE_ERROR(group, "Unable to access "
+				"PSR list, ret = %d", ret);
+		return ret;
+	}
+	/* First element in the list is the PSR */
+	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
+			psr_list->rl_ranks[0]);
+	group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
+	group->grp.num_ranks = psr_list->rl_nr.num;
 	group->grp.psr_ep.ep_tag = 0;
 	group->grp.grp_id = id;
+	d_rank_list_free(psr_list);
 
 	sprintf(buf, "%d", id);
 
@@ -457,24 +532,26 @@ int dh_reset(void *arg)
 		free(dh->name);
 	dh->name = NULL;
 
-	if (dh->open_rpc)
-		crt_req_decref(dh->open_rpc);
+	if (dh->open_req.rpc)
+		crt_req_decref(dh->open_req.rpc);
 
-	if (dh->close_rpc)
-		crt_req_decref(dh->close_rpc);
+	if (dh->close_req.rpc)
+		crt_req_decref(dh->close_req.rpc);
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, &dh->ep,
-			    FS_TO_OP(dh->fs_handle, opendir), &dh->open_rpc);
-	if (rc || !dh->open_rpc)
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(dh->fs_handle, opendir),
+			    &dh->open_req.rpc);
+	if (rc || !dh->open_req.rpc)
 		return -1;
-	IOF_TRACE_LINK(dh->open_rpc, dh, "opendir_rpc");
+	IOF_TRACE_LINK(dh->open_req.rpc, dh, "opendir_rpc");
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, &dh->ep,
-			    FS_TO_OP(dh->fs_handle, closedir), &dh->close_rpc);
-	if (rc || !dh->close_rpc) {
-		crt_req_decref(dh->open_rpc);
+	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(dh->fs_handle, closedir),
+			    &dh->close_req.rpc);
+	if (rc || !dh->close_req.rpc) {
+		crt_req_decref(dh->open_req.rpc);
 		return -1;
-	IOF_TRACE_LINK(dh->close_rpc, dh, "closedir_rpc");
+	IOF_TRACE_LINK(dh->close_req.rpc, dh, "closedir_rpc");
 	}
 	return 0;
 }
@@ -483,8 +560,8 @@ void dh_release(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
 
-	crt_req_decref(dh->open_rpc);
-	crt_req_decref(dh->close_rpc);
+	crt_req_decref(dh->open_req.rpc);
+	crt_req_decref(dh->close_req.rpc);
 }
 
 /* Create a getattr descriptor for use with mempool.
@@ -579,7 +656,7 @@ gh_init(void *arg, void *handle)
 {
 	struct getattr_req *req = arg;
 
-	IOF_REQ_FS_HANDLE(req) = handle;
+	req->fs_handle = handle;
 	return 0;
 }
 
@@ -591,15 +668,13 @@ gh_reset(void *arg)
 	struct iof_gah_string_in *in;
 	int rc;
 
-	iof_tracker_init(&req->reply.ctx.tracker, 1);
-
 	/* If this descriptor has previously been used the destroy the
 	 * existing RPC
 	 */
-	if (req->rpc) {
-		crt_req_decref(req->rpc);
-		crt_req_decref(req->rpc);
-		req->rpc = NULL;
+	if (req->request.rpc) {
+		crt_req_decref(req->request.rpc);
+		crt_req_decref(req->request.rpc);
+		req->request.rpc = NULL;
 	}
 
 	/* Create a new RPC ready for later use.  Take an initial reference
@@ -612,18 +687,16 @@ gh_reset(void *arg)
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(IOF_REQ_FS_HANDLE(req)->proj.crt_ctx,
-			    &IOF_REQ_FS_HANDLE(req)->proj.grp->psr_ep,
-			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr),
-			    &req->rpc);
-	if (rc || !req->rpc) {
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->fs_handle, getattr),
+			    &req->request.rpc);
+	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
 		return -1;
 	}
-	IOF_TRACE_LINK(req->rpc, req, "getattr_rpc");
-	crt_req_addref(req->rpc);
-	in = crt_req_get(req->rpc);
-	in->gah = IOF_REQ_FS_HANDLE(req)->gah;
+	crt_req_addref(req->request.rpc);
+	in = crt_req_get(req->request.rpc);
+	in->gah = req->fs_handle->gah;
 
 	return 0;
 }
@@ -635,24 +708,20 @@ fgh_reset(void *arg)
 	struct getattr_req *req = arg;
 	int rc;
 
-	iof_tracker_init(&req->reply.ctx.tracker, 1);
-
-	if (req->rpc) {
-		crt_req_decref(req->rpc);
-		crt_req_decref(req->rpc);
-		req->rpc = NULL;
+	if (req->request.rpc) {
+		crt_req_decref(req->request.rpc);
+		crt_req_decref(req->request.rpc);
+		req->request.rpc = NULL;
 	}
 
-	rc = crt_req_create(IOF_REQ_FS_HANDLE(req)->proj.crt_ctx,
-			    &IOF_REQ_FS_HANDLE(req)->proj.grp->psr_ep,
-			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr_gah),
-			    &req->rpc);
-	if (rc || !req->rpc) {
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->fs_handle, getattr_gah),
+			    &req->request.rpc);
+	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
 		return -1;
 	}
-	IOF_TRACE_LINK(req->rpc, req, "getfattr_rpc");
-	crt_req_addref(req->rpc);
+	crt_req_addref(req->request.rpc);
 
 	return 0;
 }
@@ -663,8 +732,8 @@ gh_release(void *arg)
 {
 	struct getattr_req *req = arg;
 
-	crt_req_decref(req->rpc);
-	crt_req_decref(req->rpc);
+	crt_req_decref(req->request.rpc);
+	crt_req_decref(req->request.rpc);
 }
 
 static int
@@ -1261,8 +1330,8 @@ static int initialize_projection(struct iof_state *iof_state,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
 
-		fs_handle->dh = iof_pool_register(&fs_handle->pool, &pt);
-		if (!fs_handle->dh)
+		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
+		if (!fs_handle->dh_pool)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->gh_pool = iof_pool_register(&fs_handle->pool, &gt);

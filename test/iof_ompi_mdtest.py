@@ -74,7 +74,7 @@ class TestMdtest(object):
         env_vars['LD_LIBRARY_PATH'] = \
             self.test_info.get_defaultENV('LD_LIBRARY_PATH')
         cmd_list.add_env_vars(env_vars)
-        parameters = "-i 3 -I 10 -d {!s}/FS_1".format(
+        parameters = "-vvv -i 3 -I 10 -d {!s}/FS_2".format(
             self.test_info.get_defaultENV('CNSS_PREFIX'))
         cmdstr = "{!s}/mdtest".format(
             self.test_info.parameters_one("{mdtest_path}"))
