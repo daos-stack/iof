@@ -2024,37 +2024,6 @@ static void *progress_thread(void *arg)
 	pthread_exit(NULL);
 }
 
-/* Find an entry in the hash table.
- *
- * As d_chash_table_traverse() does not support removal from the callback
- * function save a pointer in *arg and return 1 to terminate the traverse.
- * This way we can iterate over the entries in the hash table and delete every
- * one.
- */
-static int ioc_ht_find(d_list_t *rlink, void *arg)
-{
-	d_list_t **p = arg;
-
-	*p = rlink;
-	return 1;
-}
-
-/* Return the first entry in a hash table.  Do this by traversing the table, and
- * returning the first rlink value provided to the callback.
- * Returns rlink on success, or NULL on error or if the hash table is empty.
- */
-static d_list_t *d_chash_table_first(struct d_chash_table *ht)
-{
-	d_list_t *rlink = NULL;
-	int rc;
-
-	rc = d_chash_table_traverse(ht, ioc_ht_find, &rlink);
-	if (rc < 0)
-		return NULL;
-
-	return rlink;
-}
-
 /* Close all file handles associated with a projection, and release all GAH
  * which are currently in use.
  */
@@ -2064,7 +2033,7 @@ static void release_projection_resources(struct ios_projection *projection)
 	int rc;
 
 	do {
-		rlink = d_chash_table_first(&projection->file_ht);
+		rlink = d_chash_rec_first(&projection->file_ht);
 		if (rlink)
 			d_chash_rec_decref(&projection->file_ht, rlink);
 	} while (rlink);
