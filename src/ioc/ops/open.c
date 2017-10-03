@@ -54,7 +54,7 @@ ioc_open_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply->fh, "Bad RPC reply %d", cb_info->cci_rc);
 		if (cb_info->cci_rc == -DER_TIMEDOUT)
 			reply->err = EAGAIN;
 		else
@@ -88,23 +88,23 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	 * would otherwise be using and check that is set.
 	 */
 	if (!(fi->flags & LARGEFILE)) {
-		IOF_LOG_INFO("%p O_LARGEFILE required 0%o", fs_handle,
-			     fi->flags);
+		IOF_TRACE_INFO(fs_handle, "O_LARGEFILE required 0%o",
+			       fi->flags);
 		return -ENOTSUP;
 	}
 
 	/* Check for flags that do not make sense in this context.
 	 */
 	if (fi->flags & IOF_UNSUPPORTED_OPEN_FLAGS) {
-		IOF_LOG_INFO("%p unsupported flag requested 0%o", fs_handle,
-			     fi->flags);
+		IOF_TRACE_INFO(fs_handle, "unsupported flag requested 0%o",
+			       fi->flags);
 		return -ENOTSUP;
 	}
 
 	if (fi->flags & O_WRONLY || fi->flags & O_RDWR) {
 		if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-			IOF_LOG_INFO("Attempt to modify "
-				     "Read-Only File System");
+			IOF_TRACE_INFO("Attempt to modify "
+				       "Read-Only File System");
 			return -EROFS;
 		}
 	}
@@ -115,7 +115,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	handle->common.projection = &fs_handle->proj;
 
-	IOF_LOG_INFO("file %s flags 0%o handle %p", file, fi->flags, handle);
+	IOF_TRACE_INFO(handle, "file %s flags 0%o", file, fi->flags);
 
 
 	iof_tracker_init(&reply.tracker, 1);
@@ -129,7 +129,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	rc = crt_req_send(handle->open_rpc, ioc_open_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
 		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
@@ -143,13 +143,13 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err == 0 && reply.rc == 0)
-		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, handle,
-			     GAH_PRINT_FULL_VAL(handle->common.gah));
+		IOF_TRACE_INFO(handle, "" GAH_PRINT_FULL_STR,
+			       GAH_PRINT_FULL_VAL(handle->common.gah));
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
-	IOF_LOG_DEBUG("path %s handle %p rc %d",
-		      handle->name, rc == 0 ? handle : NULL, rc);
+	IOF_TRACE_DEBUG(handle, "path %s handle %p rc %d",
+			handle->name, rc == 0 ? handle : NULL, rc);
 
 	if (rc == 0) {
 		fi->fh = (uint64_t)handle;

@@ -64,7 +64,8 @@ write_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
+			       cb_info->cci_rc);
 		if (cb_info->cci_rc == -DER_TIMEDOUT)
 			reply->err = EAGAIN;
 		else
@@ -77,7 +78,8 @@ write_cb(const struct crt_cb_info *cb_info)
 		/* Convert the error types, out->err is a IOF error code
 		 * so translate it to a errno we can pass back to FUSE.
 		 */
-		IOF_LOG_ERROR("Error from target %d", out->err);
+		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
+				out->err);
 
 		reply->err = EIO;
 		if (out->err == IOF_GAH_INVALID)
@@ -105,15 +107,16 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
-	IOF_LOG_INFO("path %s handle %p", handle->name, handle);
+	IOF_TRACE_INFO(handle, "path %s", handle->name);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, write_direct), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
+				rc);
 		return -EIO;
 	}
+	IOF_TRACE_LINK(rpc, handle, "write_direct_rpc");
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
@@ -125,7 +128,7 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
 
@@ -156,10 +159,11 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, write_bulk), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
+		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
+				rc);
 		return -EIO;
 	}
+	IOF_TRACE_LINK(rpc, handle, "write_bulk_rpc");
 
 	in = crt_req_get(rpc);
 
@@ -174,7 +178,8 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
 			     &in->bulk);
 	if (rc) {
-		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
+		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
+				rc);
 		return -EIO;
 	}
 
@@ -187,7 +192,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
 
@@ -218,12 +223,13 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 		return -handle->fs_handle->offline_reason;
 
 	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		IOF_TRACE_INFO(handle, "Attempt to modify Read-Only File "
+			       "System");
 		return -EROFS;
 	}
 
-	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->common.gah));
+	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
+		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid

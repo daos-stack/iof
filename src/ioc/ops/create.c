@@ -59,35 +59,35 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	 * if not.
 	 */
 	if (!(fi->flags & LARGEFILE)) {
-		IOF_LOG_INFO("%p O_LARGEFILE required 0%o", fs_handle,
-			     fi->flags);
+		IOF_TRACE_INFO(fs_handle, "O_LARGEFILE required 0%o",
+			       fi->flags);
 		return -ENOTSUP;
 	}
 
 	/* Check that a regular file is requested */
 	if (!(mode & S_IFREG)) {
-		IOF_LOG_INFO("%p S_IFREG required 0%o", fs_handle,
-			     fi->flags);
+		IOF_TRACE_INFO(fs_handle, "S_IFREG required 0%o", fi->flags);
 		return -ENOTSUP;
 	}
 
 	/* Check for flags that do not make sense in this context.
 	 */
 	if (fi->flags & IOF_UNSUPPORTED_CREATE_FLAGS) {
-		IOF_LOG_INFO("%p unsupported flag requested 0%o", fs_handle,
-			     fi->flags);
+		IOF_TRACE_INFO(fs_handle, "unsupported flag requested 0%o",
+			       fi->flags);
 		return -ENOTSUP;
 	}
 
 	/* Check that only the flag for a regular file is specified */
 	if ((mode & S_IFMT) != S_IFREG) {
-		IOF_LOG_INFO("%p unsupported mode requested 0%o", fs_handle,
-			     mode);
+		IOF_TRACE_INFO(fs_handle, "unsupported mode requested 0%o",
+			       mode);
 		return -ENOTSUP;
 	}
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		IOF_TRACE_INFO(fs_handle, "Attempt to modify Read-Only File "
+			       "System");
 		return -EROFS;
 	}
 
@@ -97,8 +97,8 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	handle->common.projection = &fs_handle->proj;
 
-	IOF_LOG_INFO("file %s flags 0%o mode 0%o handle %p", file, fi->flags,
-		     mode, handle);
+	IOF_TRACE_INFO(handle, "file %s flags 0%o mode 0%o", file, fi->flags,
+		       mode);
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(handle->creat_rpc);
@@ -111,7 +111,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 
 	rc = crt_req_send(handle->creat_rpc, ioc_open_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
 		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
@@ -125,13 +125,13 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err == 0 && reply.rc == 0)
-		IOF_LOG_INFO("Handle %p " GAH_PRINT_STR, handle,
-			     GAH_PRINT_VAL(handle->common.gah));
+		IOF_TRACE_INFO(handle, " " GAH_PRINT_STR,
+			       GAH_PRINT_VAL(handle->common.gah));
 
 	rc = reply.err == 0 ? -reply.rc : -EIO;
 
-	IOF_LOG_DEBUG("path %s handle %p rc %d",
-		      handle->name, rc == 0 ? handle : NULL, rc);
+	IOF_TRACE_DEBUG(handle, "path %s handle %p rc %d",
+			handle->name, rc == 0 ? handle : NULL, rc);
 
 	if (rc == 0) {
 		fi->fh = (uint64_t)handle;

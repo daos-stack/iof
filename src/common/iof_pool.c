@@ -47,23 +47,25 @@
 static void
 debug_dump(struct iof_pool_type *type)
 {
-	IOF_LOG_INFO("Pool type %p", type);
-	IOF_LOG_DEBUG("handle %p size %d offset %d", type->reg.handle,
-		      type->reg.size, type->reg.offset);
-	IOF_LOG_DEBUG("Count: free %d pending %d total %d", type->free_count,
-		      type->pending_count, type->count);
-	IOF_LOG_DEBUG("Calls: init %d clean %d release %d", type->init_count,
-		      type->clean_count, type->release_count);
-	IOF_LOG_DEBUG("OP: init %d clean %d", type->op_init, type->op_clean);
-	IOF_LOG_DEBUG("No restock: current %d hwm %d", type->no_restock,
-		      type->no_restock_hwm);
+	IOF_TRACE_INFO(type, "Pool type %p", type);
+	IOF_TRACE_DEBUG(type, "handle %p size %d offset %d", type->reg.handle,
+			type->reg.size, type->reg.offset);
+	IOF_TRACE_DEBUG(type, "Count: free %d pending %d total %d",
+			type->free_count, type->pending_count, type->count);
+	IOF_TRACE_DEBUG(type, "Calls: init %d clean %d release %d",
+			type->init_count, type->clean_count,
+			type->release_count);
+	IOF_TRACE_DEBUG(type, "OP: init %d clean %d", type->op_init,
+			type->op_clean);
+	IOF_TRACE_DEBUG(type, "No restock: current %d hwm %d", type->no_restock,
+			type->no_restock_hwm);
 }
 
 /* Create a object pool */
 int
 iof_pool_init(struct iof_pool *pool)
 {
-	IOF_LOG_DEBUG("Created a pool at %p", pool);
+	IOF_TRACE_DEBUG(pool, "Created a pool");
 	D_INIT_LIST_HEAD(&pool->list);
 
 	pthread_mutex_init(&pool->lock, NULL);
@@ -82,11 +84,13 @@ iof_pool_destroy(struct iof_pool *pool)
 
 	iof_pool_reclaim(pool);
 	d_list_for_each_entry_safe(type, tnext, &pool->list, type_list) {
-		IOF_LOG_DEBUG("Freeing type %p", type);
 		if (type->count != 0)
-			IOF_LOG_WARNING("Freeing type with active objects");
+			IOF_TRACE_WARNING(type, "Freeing type with active "
+					  "objects");
+		IOF_TRACE_DOWN(type);
 		free(type);
 	}
+	IOF_TRACE_DOWN(pool);
 }
 
 /* Helper function for migrating objects from pending list to free list.
@@ -109,7 +113,7 @@ restock(struct iof_pool_type *type, int count)
 		void *ptr = (void *)entry - type->reg.offset;
 		int rc;
 
-		IOF_LOG_DEBUG("Cleaning %p", ptr);
+		IOF_TRACE_DEBUG(ptr, "Cleaning");
 
 		d_list_del(entry);
 		type->pending_count--;
@@ -122,7 +126,7 @@ restock(struct iof_pool_type *type, int count)
 				d_list_add(entry, &type->free_list);
 				type->free_count++;
 			} else {
-				IOF_LOG_DEBUG("entry failed clean %p", ptr);
+				IOF_TRACE_DEBUG(ptr, "entry failed clean");
 				type->count--;
 				free(ptr);
 			}
@@ -146,7 +150,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 	d_list_for_each_entry(type, &pool->list, type_list) {
 		d_list_t *entry, *enext;
 
-		IOF_LOG_DEBUG("Cleaning type %p", type);
+		IOF_TRACE_DEBUG(type, "Cleaning type");
 
 		pthread_mutex_lock(&type->lock);
 
@@ -164,13 +168,13 @@ iof_pool_reclaim(struct iof_pool *pool)
 				type->release_count++;
 			}
 
-			IOF_LOG_INFO("Destroying object at %p", ptr);
+			IOF_TRACE_DOWN(ptr);
 			d_list_del(entry);
 			free(ptr);
 			type->free_count--;
 			type->count--;
 		}
-		IOF_LOG_DEBUG("%d in use", type->count);
+		IOF_TRACE_DEBUG(type, "%d in use", type->count);
 	}
 }
 
@@ -206,7 +210,7 @@ create(struct iof_pool_type *type)
 	}
 	type->count++;
 
-	IOF_LOG_INFO("Created new object type %p at %p", type, ptr);
+	IOF_TRACE_UP(ptr, type, "handle");
 	return ptr;
 }
 
@@ -241,7 +245,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	if (!type)
 		return NULL;
 
-	IOF_LOG_DEBUG("Pool %p create a type at %p", pool, type);
+	IOF_TRACE_UP(type, pool, "iof_pool_type");
 
 	pthread_mutex_init(&type->lock, NULL);
 	D_INIT_LIST_HEAD(&type->free_list);
@@ -297,9 +301,9 @@ iof_pool_acquire(struct iof_pool_type *type)
 	pthread_mutex_unlock(&type->lock);
 
 	if (ptr)
-		IOF_LOG_DEBUG("Type %p Using %p", type, ptr);
+		IOF_TRACE_DEBUG(ptr, "Type %p Using %p", type, ptr);
 	else
-		IOF_LOG_WARNING("Failed to allocate for type %p", type);
+		IOF_TRACE_WARNING(type, "Failed to allocate for type");
 	return ptr;
 }
 
@@ -314,7 +318,7 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 {
 	d_list_t *entry = ptr + type->reg.offset;
 
-	IOF_LOG_DEBUG("Releasing %p", ptr);
+	IOF_TRACE_DEBUG(ptr, "Releasing");
 	pthread_mutex_lock(&type->lock);
 	type->pending_count++;
 	d_list_add_tail(entry, &type->pending_list);
@@ -334,7 +338,7 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 void
 iof_pool_consume(struct iof_pool_type *type, void *ptr)
 {
-	IOF_LOG_DEBUG("Marking %p as consumed", ptr);
+	IOF_TRACE_DEBUG(ptr, "Marking as consumed");
 	pthread_mutex_lock(&type->lock);
 	type->count--;
 	pthread_mutex_unlock(&type->lock);
@@ -343,8 +347,8 @@ iof_pool_consume(struct iof_pool_type *type, void *ptr)
 void
 iof_pool_restock(struct iof_pool_type *type)
 {
-	IOF_LOG_DEBUG("Restocking %p count (%d/%d/%d)", type,
-		      type->pending_count, type->free_count, type->count);
+	IOF_TRACE_DEBUG(type, "Count (%d/%d/%d)", type->pending_count,
+			type->free_count, type->count);
 
 	pthread_mutex_lock(&type->lock);
 

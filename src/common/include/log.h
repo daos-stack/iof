@@ -69,6 +69,39 @@
 #define IOF_LOG_INFO(...)	\
 	IOF_LOG_FAC(DEF_LOG_HANDLE, INFO, __VA_ARGS__)
 
+#define IOF_TRACE(ptr, fac, type, fmt, ...)		\
+	d_log(fac | DLOG_##type,			\
+		"%s:%d TRACE: %s(%p) " fmt "\n",	\
+		__FILE__,  __LINE__, __func__, ptr,	\
+		## __VA_ARGS__)
+
+#define IOF_TRACE_WARNING(ptr, ...)			\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, WARN, __VA_ARGS__)
+
+#define IOF_TRACE_ERROR(ptr, ...)			\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, ERR, __VA_ARGS__)
+
+#define IOF_TRACE_DEBUG(ptr, ...)			\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG, __VA_ARGS__)
+
+#define IOF_TRACE_INFO(ptr, ...)			\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, INFO, __VA_ARGS__)
+
+#define IOF_TRACE_UP(ptr, parent, type)			\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
+		"%s:%d TRACE: %s(%p) New %s from %p\n",	\
+		__FILE__, __LINE__, __func__, ptr, type, parent)
+
+/* Link RPC to descriptor */
+#define IOF_TRACE_LINK(ptr, parent, type)		\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
+		"%s:%d TRACE: %s(%p) Link %s to %p\n",	\
+		__FILE__, __LINE__, __func__, ptr, type, parent)
+
+#define IOF_TRACE_DOWN(ptr)				\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
+		"%s:%d TRACE: %s(%p) Closing\n",	\
+		__FILE__, __LINE__, __func__, ptr)
 
 #if defined(__cplusplus)
 extern "C" {

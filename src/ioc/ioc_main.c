@@ -79,14 +79,14 @@ ioc_status_cb(const struct crt_cb_info *cb_info)
 		/*
 		 * Error handling.  Return EIO on any error
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply, "Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
 
 	if (out->err) {
-		IOF_LOG_DEBUG("reply indicates error %d", out->err);
+		IOF_TRACE_DEBUG(reply, "reply indicates error %d", out->err);
 		reply->err = EIO;
 	}
 	reply->rc = out->rc;
@@ -109,7 +109,8 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 {
 	/* If the projection is off-line then there is nothing to do */
 	if (FS_IS_OFFLINE(fs_handle)) {
-		IOF_LOG_INFO("FS %d already offline", fs_handle->fs_id);
+		IOF_TRACE_INFO(fs_handle, "FS %d already offline",
+			       fs_handle->fs_id);
 		return;
 	}
 
@@ -117,15 +118,15 @@ void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
 	 * there is nothing to do
 	 */
 	if (ep->ep_rank != fs_handle->proj.grp->psr_ep.ep_rank) {
-		IOF_LOG_INFO("EP %d already offline for %d",
-			     ep->ep_rank, fs_handle->fs_id);
+		IOF_TRACE_INFO(fs_handle, "EP %d already offline for %d",
+			       ep->ep_rank, fs_handle->fs_id);
 		return;
 	}
 
 	/* Insert code to fail over to secondary EP here. */
 
-	IOF_LOG_WARNING("Marking %d (%s) OFFLINE", fs_handle->fs_id,
-			fs_handle->mount_point);
+	IOF_TRACE_WARNING(fs_handle, "Marking %d (%s) OFFLINE",
+			  fs_handle->fs_id, fs_handle->mount_point);
 
 	fs_handle->offline_reason = EHOSTDOWN;
 }
@@ -142,14 +143,13 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	crt_rpc_t *rpc = cb_info->cci_rpc;
 	struct iof_rpc_ctx *ctx = cb_info->cci_arg;
 
-	IOF_LOG_INFO("cb_info ptr %p", &cb_info);
 	if (IOC_HOST_IS_DOWN(cb_info)) {
-		IOF_LOG_INFO("Request timed out for PSR: %u",
-			     rpc->cr_ep.ep_rank);
+		IOF_TRACE_INFO(ctx, "Request timed out for PSR: %u",
+			       rpc->cr_ep.ep_rank);
 		if ((rpc->cr_ep.ep_rank + 1) ==
 		    ctx->fs_handle->proj.grp->num_ranks) {
 			/* No more ranks to retry, so fail. */
-			IOF_LOG_ERROR("No more PSRs left for failover.");
+			IOF_TRACE_ERROR(ctx, "No more PSRs left for failover.");
 			ctx->err = EHOSTDOWN;
 		} else {
 			/* TODO: Make this atomic. */
@@ -166,18 +166,22 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 
 				crt_req_addref(failover_rpc);
 				crt_req_addref(failover_rpc);
+				IOF_TRACE_LINK(failover_rpc, ctx,
+					       "failover_rpc");
 				*((crt_rpc_t **)ctx->rpc_ptr) = failover_rpc;
-				IOF_LOG_INFO("Resending RPC to PSR Rank %d",
-					      failover_rpc->cr_ep.ep_rank);
+				IOF_TRACE_INFO(ctx, "Resending RPC to PSR "
+					       "Rank %d",
+					       failover_rpc->cr_ep.ep_rank);
 				rc = crt_req_send(failover_rpc,
 						  generic_cb, ctx);
 				if (rc) {
-					IOF_LOG_ERROR("Could not send "
-						      "rpc, rc = %u", rc);
+					IOF_TRACE_ERROR(ctx, "Could not send "
+							"rpc, rc = %u", rc);
 				} else
 					return;
 			} else
-				IOF_LOG_ERROR("Failed to create retry RPC");
+				IOF_TRACE_ERROR(ctx, "Failed to create retry "
+						"RPC");
 			if (rc)
 				ctx->err = EIO;
 		}
@@ -203,7 +207,7 @@ int iof_fs_send(void *request, struct iof_rpc_ctx *ctx)
 
 	rc = crt_req_send(rpc, generic_cb, ctx);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(ctx, "Could not send rpc, rc = %u", rc);
 		iof_pool_release(ctx->mem_pool, request);
 		return -EIO;
 	}
@@ -225,7 +229,7 @@ query_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply, "Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = cb_info->cci_rc;
 		iof_tracker_signal(&reply->tracker);
 		return;
@@ -233,8 +237,8 @@ query_cb(const struct crt_cb_info *cb_info)
 
 	ret = crt_req_addref(cb_info->cci_rpc);
 	if (ret) {
-		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
-			      ret);
+		IOF_TRACE_ERROR(reply, "could not take reference on query RPC, "
+				"ret = %d", ret);
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
@@ -260,14 +264,16 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
 			     QUERY_PSR_OP, query_rpc);
 	if (ret || (*query_rpc == NULL)) {
-		IOF_LOG_ERROR("failed to create query rpc request, ret = %d",
-				ret);
+		IOF_TRACE_ERROR(iof_state, "failed to create query rpc request,"
+				" ret = %d", ret);
 		return ret;
 	}
+	IOF_TRACE_LINK(*query_rpc, iof_state, "query_rpc");
 
 	ret = crt_req_send(*query_rpc, query_cb, &reply);
 	if (ret) {
-		IOF_LOG_ERROR("Could not send query RPC, ret = %d", ret);
+		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, ret = %d",
+				ret);
 		return ret;
 	}
 
@@ -313,15 +319,15 @@ static int attach_group(struct iof_state *iof_state,
 	 */
 	ret = crt_group_attach(group->grp_name, &group->grp.dest_grp);
 	if (ret) {
-		IOF_LOG_INFO("crt_group_attach failed with ret = %d",
-			     ret);
+		IOF_TRACE_INFO(iof_state, "crt_group_attach failed with "
+			       "ret = %d", ret);
 		return ret;
 	}
 
 	ret = crt_group_config_save(group->grp.dest_grp, true);
 	if (ret) {
-		IOF_LOG_ERROR("crt_group_config_save failed for ionss "
-			      "with ret = %d", ret);
+		IOF_TRACE_ERROR(iof_state, "crt_group_config_save failed for "
+				"ionss with ret = %d", ret);
 		return ret;
 	}
 
@@ -338,8 +344,8 @@ static int attach_group(struct iof_state *iof_state,
 	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
 				     &ionss_dir);
 	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create control dir for ionss info "
-			      "(rc = %d)\n", ret);
+		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
+				"ionss info (rc = %d)\n", ret);
 		return IOF_ERR_CTRL_FS;
 	}
 	cb->register_ctrl_constant_uint64(ionss_dir, "psr_rank",
@@ -438,12 +444,14 @@ int dh_clean(void *arg)
 			    FS_TO_OP(dh->fs_handle, opendir), &dh->open_rpc);
 	if (rc || !dh->open_rpc)
 		return -1;
+	IOF_TRACE_LINK(dh->open_rpc, dh, "opendir_rpc");
 
 	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, &dh->ep,
 			    FS_TO_OP(dh->fs_handle, closedir), &dh->close_rpc);
 	if (rc || !dh->close_rpc) {
 		crt_req_decref(dh->open_rpc);
 		return -1;
+	IOF_TRACE_LINK(dh->close_rpc, dh, "closedir_rpc");
 	}
 	return 0;
 }
@@ -505,6 +513,7 @@ fh_clean(void *arg)
 			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
 	if (rc || !fh->open_rpc)
 		return -1;
+	IOF_TRACE_LINK(fh->open_rpc, fh, "open_rpc");
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
@@ -512,6 +521,7 @@ fh_clean(void *arg)
 		crt_req_decref(fh->open_rpc);
 		return -1;
 	}
+	IOF_TRACE_LINK(fh->creat_rpc, fh, "creat_rpc");
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
@@ -520,6 +530,7 @@ fh_clean(void *arg)
 		crt_req_decref(fh->creat_rpc);
 		return -1;
 	}
+	IOF_TRACE_LINK(fh->release_rpc, fh, "release_rpc");
 
 	crt_req_addref(fh->open_rpc);
 	crt_req_addref(fh->creat_rpc);
@@ -583,9 +594,10 @@ gh_clean(void *arg)
 			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr),
 			    &req->rpc);
 	if (rc || !req->rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
 		return -1;
 	}
+	IOF_TRACE_LINK(req->rpc, req, "getattr_rpc");
 	crt_req_addref(req->rpc);
 	in = crt_req_get(req->rpc);
 	in->gah = IOF_REQ_FS_HANDLE(req)->gah;
@@ -613,9 +625,10 @@ fgh_clean(void *arg)
 			    FS_TO_OP(IOF_REQ_FS_HANDLE(req), getattr_gah),
 			    &req->rpc);
 	if (rc || !req->rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
 		return -1;
 	}
+	IOF_TRACE_LINK(req->rpc, req, "getfattr_rpc");
 	crt_req_addref(req->rpc);
 
 	return 0;
@@ -768,7 +781,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
 	if (ret) {
-		IOF_LOG_ERROR("Context not created");
+		IOF_TRACE_ERROR(iof_state, "Context not created");
 		return 1;
 	}
 
@@ -777,7 +790,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
 	ret = iof_thread_start(iof_state);
 	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create progress thread");
+		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
 		return 1;
 	}
 
@@ -785,14 +798,16 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->num_groups = 1;
 	iof_state->groups = calloc(1, sizeof(struct iof_group_info));
 	if (iof_state->groups == NULL) {
-		IOF_LOG_ERROR("No memory available to configure IONSS");
+		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
+				"IONSS");
 		return IOF_ERR_NOMEM;
 	}
 
 	group = &iof_state->groups[0];
 	group->grp_name = strdup(IOF_DEFAULT_SET);
 	if (group->grp_name == NULL) {
-		IOF_LOG_ERROR("No memory available to configure IONSS");
+		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
+				"IONSS");
 		free(iof_state->groups);
 		return IOF_ERR_NOMEM;
 	}
@@ -803,8 +818,8 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "ionss",
 				     &iof_state->ionss_dir);
 	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create control dir for ionss info"
-			      "(rc = %d)\n", ret);
+		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
+				"ionss info (rc = %d)\n", ret);
 		return IOF_ERR_CTRL_FS;
 	}
 
@@ -814,8 +829,9 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 		ret = attach_group(iof_state, group, i);
 		if (ret != 0) {
-			IOF_LOG_ERROR("Failed to attach to service group"
-				      " %s (ret = %d)", group->grp_name, ret);
+			IOF_TRACE_ERROR(iof_state, "Failed to attach to service"
+					" group %s (ret = %d)",
+					group->grp_name, ret);
 			free(group->grp_name);
 			group->grp_name = NULL;
 			continue;
@@ -825,7 +841,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	}
 
 	if (num_attached == 0) {
-		IOF_LOG_ERROR("No IONSS found");
+		IOF_TRACE_ERROR(iof_state, "No IONSS found");
 		free(iof_state->groups);
 		return 1;
 	}
@@ -840,7 +856,8 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		closedir(prefix_dir);
 	else {
 		if (mkdir(iof_state->cnss_prefix, 0755)) {
-			IOF_LOG_ERROR("Could not create cnss_prefix");
+			IOF_TRACE_ERROR(iof_state, "Could not create "
+					"cnss_prefix");
 			return CNSS_ERR_PREFIX;
 		}
 	}
@@ -848,14 +865,15 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	/*registrations*/
 	ret = crt_rpc_register(QUERY_PSR_OP, &QUERY_RPC_FMT);
 	if (ret) {
-		IOF_LOG_ERROR("Query rpc registration failed with ret: %d",
-				ret);
+		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
+				"ret: %d", ret);
 		return ret;
 	}
 
 	ret = crt_rpc_register(DETACH_OP, NULL);
 	if (ret) {
-		IOF_LOG_ERROR("Detach registration failed with ret: %d", ret);
+		IOF_TRACE_ERROR(iof_state, "Detach registration failed with "
+				"ret: %d", ret);
 		return ret;
 	}
 
@@ -907,14 +925,16 @@ iof_thread(void *arg)
 				  &iof_state->thread_stop_tracker);
 
 		if (rc != 0 && rc != -DER_TIMEDOUT)
-			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
+			IOF_TRACE_ERROR(iof_state, "crt_progress failed rc: %d",
+					rc);
 		if (rc == -DER_TIMEDOUT)
 			sched_yield();
 
 	} while (!iof_tracker_test(&iof_state->thread_stop_tracker));
 
 	if (rc != 0)
-		IOF_LOG_ERROR("crt_progress error on shutdown rc: %d", rc);
+		IOF_TRACE_ERROR(iof_state, "crt_progress error on shutdown "
+				"rc: %d", rc);
 
 	iof_tracker_signal(&iof_state->thread_shutdown_tracker);
 	return NULL;
@@ -929,7 +949,7 @@ iof_thread_start(struct iof_state *iof_state)
 			    iof_thread, iof_state);
 
 	if (rc != 0) {
-		IOF_LOG_ERROR("Could not start progress thread");
+		IOF_TRACE_ERROR(iof_state, "Could not start progress thread");
 		return 1;
 	}
 
@@ -940,11 +960,11 @@ iof_thread_start(struct iof_state *iof_state)
 static void
 iof_thread_stop(struct iof_state *iof_state)
 {
-	IOF_LOG_INFO("Stopping CRT thread");
+	IOF_TRACE_INFO(iof_state, "Stopping CRT thread");
 	iof_tracker_signal(&iof_state->thread_stop_tracker);
 	iof_tracker_wait(&iof_state->thread_shutdown_tracker);
 	pthread_join(iof_state->thread, 0);
-	IOF_LOG_INFO("Stopped CRT thread");
+	IOF_TRACE_INFO(iof_state, "Stopped CRT thread");
 }
 
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
@@ -988,16 +1008,18 @@ static int initialize_projection(struct iof_state *iof_state,
 			   sizeof(struct iof_projection_info));
 	if (!fs_handle)
 		return IOF_ERR_NOMEM;
+	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
 
 	ret = iof_pool_init(&fs_handle->pool);
 	if (ret != 0) {
 		free(fs_handle);
 		return IOF_ERR_NOMEM;
 	}
+	IOF_TRACE_UP(&fs_handle->pool, fs_handle, "iof_pool");
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
-	IOF_LOG_INFO("Filesystem mode: Private");
+	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private");
 
 	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
 					   4, fs_handle, &hops,
@@ -1020,10 +1042,10 @@ static int initialize_projection(struct iof_state *iof_state,
 	if (ret == -1)
 		return IOF_ERR_NOMEM;
 
-	IOF_LOG_DEBUG("Projected Mount %s", base_name);
+	IOF_TRACE_DEBUG(fs_handle, "Projected Mount %s", base_name);
 
-	IOF_LOG_INFO("Mountpoint for this projection: %s",
-		     fs_handle->mount_point);
+	IOF_TRACE_INFO(fs_handle, "Mountpoint for this projection: %s",
+		       fs_handle->mount_point);
 
 	fs_handle->fs_id = fs_info->id;
 	fs_handle->proj.cli_fs_id = id;
@@ -1113,9 +1135,9 @@ static int initialize_projection(struct iof_state *iof_state,
 		REGISTER_STAT64(write_bytes);
 	}
 
-	IOF_LOG_INFO("Filesystem ID srv:%d cli:%d",
-		     fs_handle->fs_id,
-		     fs_handle->proj.cli_fs_id);
+	IOF_TRACE_INFO(fs_handle, "Filesystem ID srv:%d cli:%d",
+		       fs_handle->fs_id,
+		       fs_handle->proj.cli_fs_id);
 
 	fs_handle->proj.grp = &group->grp;
 	fs_handle->proj.grp_id = group->grp.grp_id;
@@ -1170,7 +1192,7 @@ static int initialize_projection(struct iof_state *iof_state,
 				   fs_handle->flags & IOF_CNSS_MT,
 				   fs_handle);
 	if (ret) {
-		IOF_LOG_ERROR("Unable to register FUSE fs");
+		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
 		free(fs_handle);
 		return 1;
 	}
@@ -1263,8 +1285,8 @@ static int initialize_projection(struct iof_state *iof_state,
 			return IOF_ERR_NOMEM;
 	}
 
-	IOF_LOG_DEBUG("Fuse mount installed at: %s",
-		      fs_handle->mount_point);
+	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: %s",
+			fs_handle->mount_point);
 
 	d_list_add_tail(&fs_handle->link, &iof_state->fs_list);
 
@@ -1288,14 +1310,15 @@ static int query_projections(struct iof_state *iof_state,
 	ret = ioc_get_projection_info(iof_state, group, &query,
 				      &query_rpc);
 	if (ret || (query == NULL)) {
-		IOF_LOG_ERROR("Query operation failed");
+		IOF_TRACE_ERROR(iof_state, "Query operation failed");
 		return IOF_ERR_PROJECTION;
 	}
+	IOF_TRACE_LINK(query_rpc, iof_state, "query_rpc");
 
 	/*calculate number of projections*/
 	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
-	IOF_LOG_DEBUG("Number of filesystems projected by %s: %d",
-		      group->grp_name, fs_num);
+	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",
+			group->grp_name, fs_num);
 	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
 
 	for (i = 0; i < fs_num; i++) {
@@ -1303,8 +1326,9 @@ static int query_projections(struct iof_state *iof_state,
 					    (*total)++);
 
 		if (ret != 0) {
-			IOF_LOG_ERROR("Could not initialize projection %s from"
-				      " %s", tmp[i].mnt, group->grp_name);
+			IOF_TRACE_ERROR(iof_state, "Could not initialize "
+					"projection %s from %s", tmp[i].mnt,
+					group->grp_name);
 			continue;
 		}
 
@@ -1313,7 +1337,8 @@ static int query_projections(struct iof_state *iof_state,
 
 	ret = crt_req_decref(query_rpc);
 	if (ret)
-		IOF_LOG_ERROR("Could not decrement ref count on query rpc");
+		IOF_TRACE_ERROR(iof_state, "Could not decrement ref count on "
+				"query rpc");
 	return 0;
 }
 
@@ -1332,8 +1357,8 @@ static int iof_post_start(void *arg)
 	ret = cb->create_ctrl_subdir(cb->plugin_dir, "projections",
 				     &iof_state->projections_dir);
 	if (ret != 0) {
-		IOF_LOG_ERROR("Failed to create control dir for PA mode "
-			      "(rc = %d)\n", ret);
+		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
+				"PA mode (rc = %d)\n", ret);
 		return IOF_ERR_CTRL_FS;
 	}
 
@@ -1345,8 +1370,8 @@ static int iof_post_start(void *arg)
 					&active);
 
 		if (ret) {
-			IOF_LOG_ERROR("Couldn't mount projections from %s",
-				      group->grp_name);
+			IOF_TRACE_ERROR(iof_state, "Couldn't mount projections "
+					"from %s", group->grp_name);
 			continue;
 		}
 		active_projections += active;
@@ -1357,7 +1382,7 @@ static int iof_post_start(void *arg)
 					  total_projections);
 
 	if (total_projections == 0) {
-		IOF_LOG_ERROR("No projections found");
+		IOF_TRACE_ERROR(iof_state, "No projections found");
 		return 1;
 	}
 
@@ -1386,6 +1411,7 @@ static void iof_deregister_fuse(void *arg)
 
 	iof_pool_destroy(&fs_handle->pool);
 
+	IOF_TRACE_DOWN(fs_handle);
 	d_list_del(&fs_handle->link);
 
 	if (fs_handle->fuse_ops)
@@ -1404,11 +1430,11 @@ static void iof_stop(void *arg)
 	struct iof_state *iof_state = arg;
 	struct iof_projection_info *fs_handle;
 
-	IOF_LOG_INFO("Called iof_stop");
+	IOF_TRACE_INFO(iof_state, "Called iof_stop");
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
-		IOF_LOG_INFO("Setting projection %d offline %s",
-			     fs_handle->fs_id, fs_handle->mount_point);
+		IOF_TRACE_INFO(fs_handle, "Setting projection %d offline %s",
+			       fs_handle->fs_id, fs_handle->mount_point);
 		fs_handle->offline_reason = EACCES;
 	}
 }
@@ -1439,15 +1465,16 @@ static void iof_finish(void *arg)
 		ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
 				     DETACH_OP, &rpc);
 		if (ret || !rpc) {
-			IOF_LOG_ERROR("Could not create detach req ret = %d",
-				      ret);
+			IOF_TRACE_ERROR(iof_state, "Could not create detach req"
+					" ret = %d", ret);
 			iof_tracker_signal(&tracker);
 			continue;
 		}
+		IOF_TRACE_LINK(rpc, iof_state, "detach_rpc");
 
 		ret = crt_req_send(rpc, detach_cb, &tracker);
 		if (ret) {
-			IOF_LOG_ERROR("Detach RPC not sent");
+			IOF_TRACE_ERROR(iof_state, "Detach RPC not sent");
 			iof_tracker_signal(&tracker);
 		}
 	}
@@ -1463,8 +1490,8 @@ static void iof_finish(void *arg)
 
 		ret = crt_group_detach(group->grp.dest_grp);
 		if (ret)
-			IOF_LOG_ERROR("crt_group_detach failed with ret = %d",
-				      ret);
+			IOF_TRACE_ERROR(iof_state, "crt_group_detach failed "
+					"with ret = %d", ret);
 		free(group->grp_name);
 	}
 
@@ -1473,9 +1500,10 @@ static void iof_finish(void *arg)
 
 	ret = crt_context_destroy(iof_state->crt_ctx, 0);
 	if (ret)
-		IOF_LOG_ERROR("Could not destroy context");
-	IOF_LOG_INFO("Called iof_finish with %p", iof_state);
+		IOF_TRACE_ERROR(iof_state, "Could not destroy context");
+	IOF_TRACE_INFO(iof_state, "Called iof_finish");
 
+	IOF_TRACE_DOWN(iof_state);
 	free(iof_state->groups);
 	free(iof_state->cnss_prefix);
 	free(iof_state);
@@ -1498,5 +1526,6 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 	if (!self.handle)
 		return IOF_ERR_NOMEM;
 	*fns = &self;
+	IOF_TRACE_UP(self.handle, *fns, "iof_state");
 	return IOF_SUCCESS;
 }

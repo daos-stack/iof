@@ -60,18 +60,18 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 	int rc;
 
 	STAT_ADD(fs_handle->stats, getattr);
-	IOF_LOG_INFO("path %s", path);
 	IOC_RPC_INIT(fs_handle->gh_pool, req, rpc, getattr_cb, rc);
 	if (rc)
 		return rc;
 
+	IOF_TRACE_INFO(req, "path %s", path);
 	in = crt_req_get(req->rpc);
 	in->path = (d_string_t)path;
 	req->reply.stat = stbuf;
 	iof_fs_send(req, &(req)->reply.ctx);
 
 	IOC_RPC_FINI(fs_handle->gh_pool, req, rc);
-	IOF_LOG_DEBUG("path %s rc %d", path, rc);
+	IOF_TRACE_DEBUG(req, "path %s rc %d", path, rc);
 	return rc;
 }
 

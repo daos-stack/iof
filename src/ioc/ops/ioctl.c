@@ -47,8 +47,8 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	struct iof_gah_info gah_info = {0};
 
-	IOF_LOG_INFO("ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		     GAH_PRINT_VAL(handle->common.gah));
+	IOF_TRACE_INFO(handle, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
+		       GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(handle->fs_handle->stats, ioctl);
 
@@ -69,10 +69,11 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
 		 * allocated that many bytes in data
 		 */
-		IOF_LOG_INFO("Requested " GAH_PRINT_STR " fs_id=%d,"
-			     " cli_fs_id=%d", GAH_PRINT_VAL(handle->common.gah),
-			     handle->fs_handle->fs_id,
-			     handle->fs_handle->proj.cli_fs_id);
+		IOF_TRACE_INFO(handle, "Requested " GAH_PRINT_STR " fs_id=%d,"
+			       " cli_fs_id=%d",
+			       GAH_PRINT_VAL(handle->common.gah),
+			       handle->fs_handle->fs_id,
+			       handle->fs_handle->proj.cli_fs_id);
 		gah_info.version = IOF_IOCTL_VERSION;
 		gah_info.gah = handle->common.gah;
 		gah_info.cnss_id = getpid();
@@ -81,7 +82,7 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		return 0;
 	}
 
-	IOF_LOG_INFO("Real ioctl support is not implemented");
+	IOF_TRACE_INFO(handle, "Real ioctl support is not implemented");
 
 	return -ENOTSUP;
 }

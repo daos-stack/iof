@@ -220,6 +220,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 		return CNSS_SUCCESS;
 	}
 
+	IOF_TRACE_UP(entry, info, "plugin_entry");
 	entry->dl_handle = dl_handle;
 
 	entry->self_fns.fuse_version = 3;
@@ -578,6 +579,7 @@ int main(void)
 	D_ALLOC_PTR(cnss_info);
 	if (!cnss_info)
 		return CNSS_ERR_NOMEM;
+	IOF_TRACE_UP(cnss_info, NULL, "cnss_info");
 
 	ctrl_info_init(&cnss_info->info);
 

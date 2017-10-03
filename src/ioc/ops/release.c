@@ -55,7 +55,8 @@ release_cb(const struct crt_cb_info *cb_info)
 		/*
 		 * Error handling.  Return EIO on any error
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(cb_info->cci_rpc, "Bad RPC reply %d",
+			       cb_info->cci_rc);
 		reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
@@ -84,12 +85,11 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 		return -fs_handle->offline_reason;
 	}
 
-	IOF_LOG_INFO("release %s" GAH_PRINT_STR, file,
-		GAH_PRINT_VAL(handle->common.gah));
+	IOF_TRACE_INFO(handle, "release %s" GAH_PRINT_STR, file,
+		       GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
-		IOF_LOG_INFO("Release with bad handle %p",
-			     handle);
+		IOF_TRACE_INFO(handle, "Release with bad handle");
 
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
@@ -104,12 +104,11 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 
 	rc = crt_req_send(handle->release_rpc, release_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
 		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
 	crt_req_addref(handle->release_rpc);
-
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	iof_pool_release(fs_handle->fh_pool, handle);

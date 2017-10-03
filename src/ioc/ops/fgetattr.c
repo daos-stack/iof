@@ -48,7 +48,8 @@ int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
 	int rc;
 
 	STAT_ADD(fs_handle->stats, getfattr);
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(handle->common.gah));
+	IOF_TRACE_INFO(handle, GAH_PRINT_STR,
+		       GAH_PRINT_VAL(handle->common.gah));
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
@@ -68,8 +69,8 @@ int ioc_getattr_gah(struct iof_file_handle *handle, struct stat *stbuf)
 	/* Cache the inode number */
 	if (rc == 0)
 		handle->inode_no = stbuf->st_ino;
-	IOF_LOG_DEBUG(GAH_PRINT_STR " rc %d",
-		      GAH_PRINT_VAL(handle->common.gah), rc);
+	IOF_TRACE_DEBUG(handle, GAH_PRINT_STR " rc %d",
+			GAH_PRINT_VAL(handle->common.gah), rc);
 	return rc;
 }
 

@@ -64,7 +64,8 @@ read_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
+			       cb_info->cci_rc);
 		if (cb_info->cci_rc == -DER_TIMEDOUT)
 			reply->err = EAGAIN;
 		else
@@ -74,7 +75,8 @@ read_cb(const struct crt_cb_info *cb_info)
 	}
 
 	if (out->err) {
-		IOF_LOG_ERROR("Error from target %d", out->err);
+		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
+				out->err);
 
 		if (out->err == IOF_GAH_INVALID)
 			reply->handle->common.gah_valid = 0;
@@ -92,7 +94,8 @@ read_cb(const struct crt_cb_info *cb_info)
 
 	rc = crt_req_addref(cb_info->cci_rpc);
 	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
+		IOF_TRACE_ERROR(reply->handle, "could not take reference on "
+				"query RPC, rc = %d",
 			      rc);
 		reply->err = EIO;
 	} else {
@@ -110,6 +113,7 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	struct iof_read_bulk_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc;
 
+
 	if (cb_info->cci_rc != 0) {
 		/*
 		 * Error handling.  On timeout return EAGAIN, all other errors
@@ -117,7 +121,8 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
+			       cb_info->cci_rc);
 		if (cb_info->cci_rc == -DER_TIMEDOUT)
 			reply->err = EAGAIN;
 		else
@@ -127,7 +132,8 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 	if (out->err) {
-		IOF_LOG_ERROR("Error from target %d", out->err);
+		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
+				out->err);
 
 		if (out->err == IOF_GAH_INVALID)
 			reply->handle->common.gah_valid = 0;
@@ -148,7 +154,8 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 
 	rc = crt_req_addref(cb_info->cci_rpc);
 	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
+		IOF_TRACE_ERROR(reply->handle, "could not take reference on "
+				"query RPC, rc = %d",
 			      rc);
 		reply->err = EIO;
 	} else {
@@ -174,11 +181,12 @@ ioc_read_direct(struct iof_rb *rb, size_t len, off_t position,
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, read), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
 			      rc);
 		return -EIO;
 	}
 
+	IOF_TRACE_LINK(rpc, handle, "read_direct_rpc");
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
@@ -189,7 +197,7 @@ ioc_read_direct(struct iof_rb *rb, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, read_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
 	iof_pool_restock(fs_handle->rb_pool_small);
@@ -210,7 +218,7 @@ ioc_read_direct(struct iof_rb *rb, size_t len, off_t position,
 
 	rc = crt_req_decref(reply.rpc);
 	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
+		IOF_TRACE_ERROR(handle, "decref returned %d", rc);
 
 	return len;
 }
@@ -233,11 +241,12 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, read_bulk), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
 			      rc);
 		return -EIO;
 	}
 
+	IOF_TRACE_LINK(rpc, handle, "read_bulk_rpc");
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
 	in->base = position;
@@ -252,7 +261,8 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
 			     &in->bulk);
 	if (rc) {
-		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
+		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
+				rc);
 		return -EIO;
 	}
 
@@ -263,7 +273,7 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, read_bulk_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
 		return -EIO;
 	}
 	if (len <= 4096)
@@ -286,25 +296,25 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	if (out->iov_len > 0) {
 		if (out->data.iov_len != out->iov_len) {
 			/* TODO: This is a resource leak */
-			IOF_LOG_ERROR("Missing IOV %d", out->iov_len);
+			IOF_TRACE_ERROR(handle, "Missing IOV %d", out->iov_len);
 			return -EIO;
 		}
 		len = out->data.iov_len;
 		memcpy(buff, out->data.iov_buf, len);
 	} else {
 		len = out->bulk_len;
-		IOF_LOG_INFO("Received %#zx via bulk", len);
+		IOF_TRACE_INFO(handle, "Received %#zx via bulk", len);
 	}
 
 	rc = crt_req_decref(reply.rpc);
 	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
+		IOF_TRACE_ERROR(handle, "decref returned %d", rc);
 
 	rc = crt_bulk_free(bulk);
 	if (rc)
 		return -EIO;
 
-	IOF_LOG_INFO("Read complete %#zx", len);
+	IOF_TRACE_INFO(handle, "Read complete %#zx", len);
 
 	return len;
 }
@@ -325,8 +335,8 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
-	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(handle->common.gah));
+	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
+		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	if (!handle->common.gah_valid) {
 		/* If the server has reported that the GAH is invalid
@@ -348,7 +358,7 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 
 	buf = &rb->buf;
 
-	IOF_LOG_DEBUG("Using buffer at %p", buf->buf[0].mem);
+	IOF_TRACE_DEBUG(handle, "Using buffer at %p", buf->buf[0].mem);
 
 	if (len > fs_handle->max_iov_read)
 		rc = ioc_read_bulk(rb, len, position, handle);
@@ -370,7 +380,7 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 		iof_pool_release(pt, rb);
 	}
 
-	IOF_LOG_INFO("Read complete %i", rc);
+	IOF_TRACE_INFO(handle, "Read complete %i", rc);
 
 	return rc;
 }
