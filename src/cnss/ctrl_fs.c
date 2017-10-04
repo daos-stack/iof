@@ -47,6 +47,9 @@
 #include <pthread.h>
 #include <sys/queue.h>
 #include <sys/xattr.h>
+
+#include <gurt/common.h>
+
 #ifdef __APPLE__
 # include <sys/syslimits.h>
 #else /* !__APPLE__ */
@@ -232,9 +235,7 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 	}
 
 	/* Ok, go ahead and allocate a new node, assuming no conflict */
-	newnode = (struct ctrl_node *)calloc(1,
-					     sizeof(struct ctrl_node) + dsize);
-
+	D_ALLOC(newnode, sizeof(struct ctrl_node) + dsize);
 	if (newnode == NULL) {
 		IOF_LOG_ERROR("Not enough memory to allocate ctrl node");
 		return -ENOMEM;
@@ -324,7 +325,7 @@ static int free_node(struct ctrl_node *node)
 	if (rc != 0)
 		IOF_LOG_ERROR("Could not clean ctrl node %s", node->name);
 
-	free(node);
+	D_FREE(node);
 
 	return rc;
 }
@@ -794,9 +795,10 @@ int ctrl_register_uint64_variable(struct ctrl_dir *dir,
 				  ctrl_fs_uint64_write_cb_t write_cb,
 				  void *cb_arg)
 {
-	struct value_data *data = calloc(1, sizeof(*data));
+	struct value_data *data;
 	int rc;
 
+	D_ALLOC_PTR(data);
 	if (!data)
 		return -ENOMEM;
 
@@ -810,7 +812,7 @@ int ctrl_register_uint64_variable(struct ctrl_dir *dir,
 				    ctrl_uint64_destroy,
 				    data);
 	if (rc)
-		free(data);
+		D_FREE(data);
 	return rc;
 }
 
@@ -895,7 +897,7 @@ int ctrl_opendir(const char *path, struct fuse_file_info *finfo)
 	if (node->ctrl_type != CTRL_DIR)
 		return -ENOTDIR;
 
-	handle = calloc(1, sizeof(*handle));
+	D_ALLOC_PTR(handle);
 	if (!handle)
 		return -ENOMEM;
 
@@ -937,7 +939,7 @@ int ctrl_releasedir(const char *dir, struct fuse_file_info *finfo)
 {
 	struct open_handle *handle = (struct open_handle *)finfo->fh;
 
-	free(handle);
+	D_FREE(handle);
 	return 0;
 }
 
@@ -1021,7 +1023,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 		return -EPERM;
 	}
 
-	handle = calloc(1, sizeof(*handle));
+	D_ALLOC_PTR(handle);
 	if (!handle)
 		return -ENOMEM;
 
@@ -1226,7 +1228,7 @@ static int ctrl_release(const char *fname,
 	}
 
 	IOF_LOG_INFO("releasing memory %p", handle);
-	free(handle);
+	D_FREE(handle);
 
 	return 0;
 }

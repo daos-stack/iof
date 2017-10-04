@@ -208,13 +208,13 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 	IOF_LOG_INFO("Loading plugin at entry point %p", FN_TO_PVOID(fn));
 
-	entry = calloc(1, sizeof(struct plugin_entry));
+	D_ALLOC_PTR(entry);
 	if (!entry)
 		return CNSS_ERR_NOMEM;
 
 	rc = fn(&entry->fns, &entry->fns_size);
 	if (rc != 0) {
-		free(entry);
+		D_FREE(entry);
 		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
 			     FN_TO_PVOID(fn), rc);
 		return CNSS_SUCCESS;
@@ -370,7 +370,7 @@ static int register_fuse(void *arg,
 		return 1;
 	}
 
-	info = calloc(1, sizeof(struct fs_info));
+	D_ALLOC_PTR(info);
 	if (!info) {
 		IOF_LOG_ERROR("Could not allocate fuse info");
 		return 1;
@@ -450,7 +450,7 @@ cleanup_no_mutex:
 	if (info->mnt)
 		free(info->mnt);
 	if (info)
-		free(info);
+		D_FREE(info);
 
 	return 1;
 }
@@ -503,7 +503,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	if (info->session)
 		fuse_session_destroy(info->session);
 
-	free(info);
+	D_FREE(info);
 	return rc;
 }
 
@@ -575,7 +575,7 @@ int main(void)
 		return CNSS_ERR_CART;
 	}
 
-	cnss_info = calloc(1, sizeof(struct cnss_info));
+	D_ALLOC_PTR(cnss_info);
 	if (!cnss_info)
 		return CNSS_ERR_NOMEM;
 
@@ -733,13 +733,12 @@ int main(void)
 
 		if (entry->dl_handle != NULL)
 			dlclose(entry->dl_handle);
-		free(entry);
+		D_FREE(entry);
 	}
-
 
 	free(ctrl_prefix);
 	iof_log_close();
-	free(cnss_info);
+	D_FREE(cnss_info);
 
 	return ret;
 
