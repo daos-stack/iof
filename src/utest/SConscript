@@ -96,7 +96,7 @@ def create_preload_script(target, source, env):
     script = open(target[0].abspath, "w")
     ioil = source[1].abspath
     contents = """#!/bin/sh
-export CRT_LOG_MASK=CRIT
+export D_LOG_MASK=CRIT
 export LD_PRELOAD=%s
 %s%s""" % (ioil, var_str, source[0].abspath)
     script.write("%s\n" % contents)

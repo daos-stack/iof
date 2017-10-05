@@ -318,9 +318,9 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	setenv("CRT_LOG_FILE", tmp_name, 1);
+	setenv("D_LOG_FILE", tmp_name, 1);
 	free(tmp_name);
-	setenv("CRT_LOG_MASK", "INFO,ctrl=DEBUG", 1);
+	setenv("D_LOG_MASK", "INFO,ctrl=DEBUG", 1);
 	iof_log_init("ctrl", "iof_ctrl_test", NULL);
 
 	rc = asprintf(&tmp_name, "%s/.ctrl", prefix);

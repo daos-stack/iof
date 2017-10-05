@@ -83,7 +83,7 @@ class TestIof(unittest.TestCase, common_methods.CnssChecks):
         self.test_local = False
         self.import_dir = common_methods.IMPORT_MNT
         self.export_dir = self.import_dir
-        self.log_mask = os.getenv("CRT_LOG_MASK", "INFO,CTRL=WARN")
+        self.log_mask = os.getenv("D_LOG_MASK", "INFO,CTRL=WARN")
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "eth0")
         self.cnss_prefix = os.getenv("CNSS_PREFIX")

@@ -150,14 +150,14 @@ class IofRunner():
             self.test_info.get_defaultENV('CRT_PHY_ADDR_STR', "ofi+sockets")
         os.environ['OFI_INTERFACE'] = \
             self.test_info.get_defaultENV('OFI_INTERFACE', "eth0")
-        os.environ['CRT_LOG_MASK'] = \
-            self.test_info.get_defaultENV('CRT_LOG_MASK', "INFO")
+        os.environ['D_LOG_MASK'] = \
+            self.test_info.get_defaultENV('D_LOG_MASK', "INFO")
 
     def launch_process(self):
         """Launch the CNSS and IONSS processes"""
         self.logger.info("Testnss: Launch the CNSS and IONSS processes")
         pass_env = " -x CRT_PHY_ADDR_STR -x OFI_INTERFACE" + \
-                   " -x CNSS_PREFIX -x CRT_LOG_MASK"
+                   " -x CNSS_PREFIX -x D_LOG_MASK"
         self.setup_env()
         self.proc = None
         self.create_cnss_dir()
@@ -214,7 +214,7 @@ class IofRunner():
         os.environ.pop("ION_TEMPDIR")
         os.environ.pop("CRT_PHY_ADDR_STR")
         os.environ.pop("OFI_INTERFACE")
-        os.environ.pop("CRT_LOG_MASK")
+        os.environ.pop("D_LOG_MASK")
         self.logger.info("Testionss: - return code: %s\n", procrtn)
         # Always return success for now
         return 0

@@ -2,7 +2,7 @@ description: "IOF iozone test cmds."
 
 defaultENV:
 
-    CRT_LOG_MASK: "INFO"
+    D_LOG_MASK: "INFO"
 
 module:
 

@@ -179,7 +179,7 @@ class Testlocal(unittest.TestCase,
         default_log_mask = "INFO,CTRL=WARN"
         if valgrind:
             default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
-        self.log_mask = os.getenv("CRT_LOG_MASK", default_log_mask)
+        self.log_mask = os.getenv("D_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
@@ -193,7 +193,7 @@ class Testlocal(unittest.TestCase,
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
         cmd.extend(['-n', '1',
-                    '-x', 'CRT_LOG_MASK=%s' % self.log_mask,
+                    '-x', 'D_LOG_MASK=%s' % self.log_mask,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'CNSS_PREFIX=%s' % self.cnss_prefix])
@@ -203,7 +203,7 @@ class Testlocal(unittest.TestCase,
                     '-n', '1',
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
-                    '-x', 'CRT_LOG_MASK=%s' % self.log_mask])
+                    '-x', 'D_LOG_MASK=%s' % self.log_mask])
         cmd.extend(valgrind)
         cmd.extend(ionss_args)
         cmd.extend([self.export_dir, '/usr'])
@@ -470,7 +470,7 @@ class Testlocal(unittest.TestCase,
 
         environ = os.environ
         environ['CNSS_PREFIX'] = self.cnss_prefix
-        environ['CRT_LOG_MASK'] = self.log_mask
+        environ['D_LOG_MASK'] = self.log_mask
         environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
         environ['OFI_INTERFACE'] = self.ofi_interface
         for tname in ['s_test_ioil', 'lf_s_test_ioil']:
@@ -698,7 +698,7 @@ if __name__ == '__main__':
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
     if args.redirect:
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
-    os.environ['CRT_LOG_MASK'] = args.mask
+    os.environ['D_LOG_MASK'] = args.mask
 
     tests_to_run = []
     uargs = []

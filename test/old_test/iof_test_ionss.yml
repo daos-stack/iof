@@ -3,7 +3,7 @@ description: "ionss test module"
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
     TR_REDIRECT_OUTPUT: "no"
-    CRT_LOG_MASK: "INFO"
+    D_LOG_MASK: "INFO"
 
 module:
     name: "iof_test_ionss"
