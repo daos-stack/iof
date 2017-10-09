@@ -90,7 +90,7 @@ struct operation {
 
 static void ioc_show_flags(unsigned in)
 {
-	IOF_LOG_INFO("Flags are 0x%x", in);
+	IOF_LOG_INFO("Flags are %#x", in);
 	SHOW_FLAG(in, FUSE_CAP_ASYNC_READ);
 	SHOW_FLAG(in, FUSE_CAP_POSIX_LOCKS);
 	SHOW_FLAG(in, FUSE_CAP_ATOMIC_O_TRUNC);
@@ -115,7 +115,7 @@ static void ioc_show_flags(unsigned in)
 #endif
 
 	if (in)
-		IOF_LOG_ERROR("Unknown flags 0x%x", in);
+		IOF_LOG_ERROR("Unknown flags %#x", in);
 }
 
 
@@ -143,11 +143,11 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	conn->max_read = fs_handle->max_read;
 	conn->max_write = fs_handle->max_write;
 
-	IOF_LOG_INFO("max read 0x%x", conn->max_read);
-	IOF_LOG_INFO("max write 0x%x", conn->max_write);
-	IOF_LOG_INFO("readahead 0x%x", conn->max_readahead);
+	IOF_LOG_INFO("max read %#x", conn->max_read);
+	IOF_LOG_INFO("max write %#x", conn->max_write);
+	IOF_LOG_INFO("readahead %#x", conn->max_readahead);
 
-	IOF_LOG_INFO("Capability supported 0x%x ", conn->capable);
+	IOF_LOG_INFO("Capability supported %#x ", conn->capable);
 
 	ioc_show_flags(conn->capable);
 
@@ -155,7 +155,7 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	conn->want |= FUSE_CAP_BIG_WRITES;
 #endif
 
-	IOF_LOG_INFO("Capability requested 0x%x", conn->want);
+	IOF_LOG_INFO("Capability requested %#x", conn->want);
 
 	ioc_show_flags(conn->want);
 
