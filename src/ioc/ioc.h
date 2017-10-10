@@ -458,4 +458,5 @@ void ioc_ll_getattr(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
 void ioc_ll_statfs(fuse_req_t, fuse_ino_t);
 
+void ioc_ll_readlink(fuse_req_t, fuse_ino_t);
 #endif

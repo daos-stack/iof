@@ -336,6 +336,39 @@ class Testlocal(unittest.TestCase,
         if diffs:
             self.fail("Stat attributes are different %s" % diffs)
 
+    def test_ro_link(self):
+        """Test that stat works on read-only projections"""
+
+        # Find the smallest file in the range of 1MB to 8MB.
+        target_file = None
+        u_stat = os.stat('/usr')
+        bin_files = sorted(os.listdir('/usr/bin'))
+        for bfile in bin_files:
+            fname = os.path.join('/usr/bin/', bfile)
+            s = os.lstat(fname)
+            if s.st_dev != u_stat.st_dev:
+                self.skipTest("Inconsistent device for /usr files")
+            if not stat.S_ISLNK(s.st_mode):
+                continue
+            target_file = bfile
+            break
+
+        if target_file is None:
+            self.fail("Could not find file in /usr/bin")
+
+        s_target = os.readlink(os.path.join('/usr/bin', target_file))
+
+        self.logger.info("File is %s", target_file)
+        self.logger.info("Target is %s", s_target)
+
+        test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', target_file)
+        ro_target = os.readlink(test_file)
+
+        self.logger.info("Read-only target is %s", s_target)
+
+        if ro_target != s_target:
+            self.fail("Link target is wrong, %s %s" % (s_target, ro_target))
+
     def test_direct_read(self):
         """Read a large file"""
 

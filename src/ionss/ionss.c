@@ -1537,6 +1537,36 @@ out:
 }
 
 static void
+iof_readlink_ll_handler(crt_rpc_t *rpc)
+{
+	struct iof_gah_in *in = crt_req_get(rpc);
+	struct iof_string_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *file = NULL;
+	char reply[IOF_MAX_PATH_LEN] = {0};
+	int rc;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, file);
+	if (out->err)
+		goto out;
+
+	errno = 0;
+	rc = readlinkat(file->fd, "", reply, IOF_MAX_PATH_LEN);
+
+	if (rc < 0)
+		out->rc = errno;
+	else
+		out->path = (d_string_t)reply;
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (file)
+		ios_fh_decref(file, 1);
+}
+
+static void
 iof_truncate_handler(crt_rpc_t *rpc)
 {
 	struct iof_truncate_in *in = crt_req_get(rpc);
@@ -2042,6 +2072,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(close, iof_close_handler),
 		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
 		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
+		DECL_RPC_HANDLER(readlink_ll, iof_readlink_ll_handler),
 		DECL_RPC_HANDLER(symlink, iof_symlink_handler),
 		DECL_RPC_HANDLER(fsync, iof_fsync_handler),
 		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),

@@ -152,3 +152,76 @@ int ioc_readlink(const char *link, char *target, size_t len)
 
 	return IOC_STATUS_TO_RC(&reply);
 }
+
+static void
+readlink_ll_cb(const struct crt_cb_info *cb_info)
+{
+	fuse_req_t req = cb_info->cci_arg;
+	struct iof_string_out *out = crt_reply_get(cb_info->cci_rpc);
+
+	if (cb_info->cci_rc != 0) {
+		fuse_reply_err(req, EIO);
+		return;
+	}
+
+	if (out->rc) {
+		fuse_reply_err(req, out->rc);
+		return;
+	}
+
+	if (out->err || !out->path) {
+		fuse_reply_err(req, EIO);
+		return;
+	}
+
+	fuse_reply_readlink(req, out->path);
+}
+
+void
+ioc_ll_readlink(fuse_req_t req, fuse_ino_t ino)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct iof_gah_in *in;
+	crt_rpc_t *rpc = NULL;
+	int rc;
+	int ret;
+
+	STAT_ADD(fs_handle->stats, readlink);
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
+			    FS_TO_OP(fs_handle, readlink_ll), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	in = crt_req_get(rpc);
+	in->gah = fs_handle->gah;
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, ino, &in->gah);
+	if (rc != 0) {
+		ret = ENOENT;
+		goto out_err;
+	}
+
+	rc = crt_req_send(rpc, readlink_ll_cb, req);
+	if (rc) {
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	return;
+
+out_err:
+	fuse_reply_err(req, ret);
+}

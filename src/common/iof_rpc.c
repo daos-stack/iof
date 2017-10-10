@@ -231,6 +231,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(close, gah_in, NULL),
 	RPC_TYPE(mkdir, create_in, status_out),
 	RPC_TYPE(readlink, string_in, string_out),
+	RPC_TYPE(readlink_ll, gah_in, string_out),
 	RPC_TYPE(symlink, two_string_in, status_out),
 	RPC_TYPE(fsync, gah_in, status_out),
 	RPC_TYPE(fdatasync, gah_in, status_out),

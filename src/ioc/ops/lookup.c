@@ -133,6 +133,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	if (rc != 0) {
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		fuse_reply_err(req, ENOENT);
+		return;
 	}
 
 	desc->req = req;

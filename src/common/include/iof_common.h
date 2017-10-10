@@ -344,6 +344,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, close),
 	DEF_RPC_TYPE(DEFAULT, mkdir),
 	DEF_RPC_TYPE(DEFAULT, readlink),
+	DEF_RPC_TYPE(DEFAULT, readlink_ll),
 	DEF_RPC_TYPE(DEFAULT, symlink),
 	DEF_RPC_TYPE(DEFAULT, fsync),
 	DEF_RPC_TYPE(DEFAULT, fdatasync),
