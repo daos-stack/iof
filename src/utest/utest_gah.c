@@ -130,7 +130,6 @@ static void test_ios_gah_misc(void)
 {
 	int rc = IOS_SUCCESS;
 	struct ios_gah *ios_gah;
-	char *ios_str = NULL;
 	struct ios_gah_store *ios_gah_store;
 	int ii;
 	int num_handles = 1024*20;
@@ -178,14 +177,6 @@ static void test_ios_gah_misc(void)
 	CU_ASSERT(rc == IOS_SUCCESS);
 	rc = ios_gah_is_self_root(ios_gah, 2);
 	CU_ASSERT(rc == IOS_ERR_OTHER);
-
-	/** test ios_gah_to_str() */
-	ios_str = ios_gah_to_str(NULL);
-	CU_ASSERT(ios_str == NULL);
-	ios_str = ios_gah_to_str(ios_gah);
-	CU_ASSERT(ios_str != NULL);
-	if (ios_str)
-		free(ios_str);
 
 	/** test ios_gah_get_info() */
 	CU_ASSERT(ios_gah_get_info(NULL, ios_gah, &internal) != IOS_SUCCESS);

@@ -315,8 +315,9 @@ int iof_is_mode_supported(uint8_t flags)
 struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 {
 	struct operation client_ops[OP_TYPES];
-	struct fuse_operations *fuse_ops = calloc(1, sizeof(*fuse_ops));
+	struct fuse_operations *fuse_ops;
 
+	D_ALLOC_PTR(fuse_ops);
 	if (!fuse_ops)
 		return NULL;
 
@@ -363,8 +364,9 @@ void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
 
 struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
 {
-	struct fuse_lowlevel_ops *fuse_ops = calloc(1, sizeof(*fuse_ops));
+	struct fuse_lowlevel_ops *fuse_ops;
 
+	D_ALLOC_PTR(fuse_ops);
 	if (!fuse_ops)
 		return NULL;
 

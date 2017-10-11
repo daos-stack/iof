@@ -42,6 +42,8 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#include <gurt/common.h>
+
 #include "include/ios_gah.h"
 
 #define IOS_GAH_STORE_INIT_CAPACITY (1024*8)
@@ -55,7 +57,7 @@
  * \param delta		[IN]		number of entries to add
  */
 static enum ios_return ios_gah_store_increase_capacity(
-		struct ios_gah_store *gah_store, size_t delta)
+		struct ios_gah_store *gah_store, int delta)
 {
 	int ii;
 
@@ -63,8 +65,7 @@ static enum ios_return ios_gah_store_increase_capacity(
 	struct ios_gah_ent *new_data;
 	int new_cap = gah_store->capacity + delta;
 
-	new_data = (struct ios_gah_ent *) calloc(delta,
-			sizeof(struct ios_gah_ent));
+	D_ALLOC_ARRAY(new_data, delta);
 	if (new_data == NULL)
 		return IOS_ERR_NOMEM;
 	gah_store->ptr_array = (struct ios_gah_ent **)
@@ -121,25 +122,28 @@ static uint8_t my_crc8(uint8_t *data, size_t len)
  * Initialize the gah store. Allocate storage, initialize the pointer array, and
  * setup the linked-lists.
  *
- * \param gah_store	[OUT]	pointer to the gah_store
  */
-static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
+struct ios_gah_store *ios_gah_init(void)
 {
+	struct ios_gah_store *gah_store;
 	int ii;
+
+	D_ALLOC_PTR(gah_store);
+	if (gah_store == NULL)
+		return NULL;
 
 	gah_store->size = 0;
 	gah_store->capacity = IOS_GAH_STORE_INIT_CAPACITY;
-	gah_store->data = (struct ios_gah_ent *)
-		calloc(IOS_GAH_STORE_INIT_CAPACITY,
-		       sizeof(struct ios_gah_ent));
-	if (gah_store->data == NULL)
-		return IOS_ERR_NOMEM;
-	gah_store->ptr_array = (struct ios_gah_ent **)
-		calloc(IOS_GAH_STORE_INIT_CAPACITY,
-				sizeof(struct ios_gah_ent *));
+	D_ALLOC_ARRAY(gah_store->data, IOS_GAH_STORE_INIT_CAPACITY);
+	if (gah_store->data == NULL) {
+		D_FREE(gah_store);
+		return NULL;
+	}
+	D_ALLOC_ARRAY(gah_store->ptr_array, IOS_GAH_STORE_INIT_CAPACITY);
 	if (gah_store->ptr_array == NULL) {
-		free(gah_store->data);
-		return IOS_ERR_NOMEM;
+		D_FREE(gah_store->data);
+		D_FREE(gah_store);
+		return NULL;
 	}
 
 	D_INIT_LIST_HEAD(&gah_store->free_list);
@@ -153,19 +157,6 @@ static enum ios_return ios_gah_store_init(struct ios_gah_store *gah_store)
 		d_list_add_tail(&gah_store->ptr_array[ii]->list,
 				&gah_store->free_list);
 	}
-
-	return IOS_SUCCESS;
-}
-
-struct ios_gah_store *ios_gah_init(void)
-{
-	struct ios_gah_store *gah_store;
-
-	gah_store = (struct ios_gah_store *)
-		calloc(1, sizeof(struct ios_gah_store));
-	if (gah_store == NULL)
-		return NULL;
-	ios_gah_store_init(gah_store);
 
 	return gah_store;
 }
@@ -324,23 +315,4 @@ enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank)
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	return gah->root == self_rank ? IOS_SUCCESS : IOS_ERR_OTHER;
-}
-
-char *ios_gah_to_str(struct ios_gah *gah)
-{
-	char *buf;
-
-	if (gah == NULL)
-		return NULL;
-	buf = (char *) malloc(1024);
-	if (buf == NULL)
-		return NULL;
-	snprintf(buf, 1024, "revision: %" PRIu64 " root: %" PRIu8
-		      " base: %" PRIu8 " version: %" PRIu8
-		      " fid: %" PRIu32 " crc: %" PRIu8 " CRC %s",
-		      (uint64_t) gah->revision, gah->root, gah->base,
-		      gah->version, gah->fid, gah->crc,
-		      ios_gah_check_crc(gah) ?  "mismatch" : "match");
-
-	return buf;
 }

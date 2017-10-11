@@ -182,16 +182,6 @@ enum ios_return ios_gah_check_version(struct ios_gah *gah);
  */
 enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank);
 
-/**
- * Debugging utility. Converts the global access handle to a string for print.
- *
- * \param gah		[IN]		On entry, contains a global access
- *					handle.
- * \return				A string format of the global access
- *					handle.
- */
-char *ios_gah_to_str(struct ios_gah *gah);
-
 #define GAH_PRINT_STR "Gah(%" PRIu8 ".%" PRIu32 ".%" PRIu64 ")"
 #define GAH_PRINT_VAL(P) (P).root, (P).fid, (uint64_t)(P).revision
 

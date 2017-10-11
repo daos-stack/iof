@@ -438,9 +438,8 @@ iof_opendir_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	local_handle = malloc(sizeof(*local_handle));
+	D_ALLOC_PTR(local_handle);
 	if (!local_handle) {
-		IOF_LOG_ERROR("Could not allocate handle");
 		out->err = IOF_ERR_NOMEM;
 		close(fd);
 		goto out;
@@ -565,7 +564,7 @@ iof_readdir_handler(crt_rpc_t *rpc)
 	IOF_LOG_DEBUG("max_replies %d len %zi bulk %p", max_reply_count, len,
 		      in->bulk);
 
-	replies = calloc(max_reply_count, sizeof(*replies));
+	D_ALLOC_ARRAY(replies, max_reply_count);
 	if (!replies) {
 		out->err = IOF_ERR_NOMEM;
 		goto out;
@@ -1161,7 +1160,7 @@ iof_read_handler(crt_rpc_t *rpc)
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
-	data = malloc(in->len);
+	D_ALLOC(data, in->len);
 	if (!data) {
 		out->err = IOF_ERR_NOMEM;
 		goto out;
@@ -1368,7 +1367,7 @@ iof_read_bulk_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rrd = calloc(1, sizeof(*rrd));
+	D_ALLOC_PTR(rrd);
 	if (!rrd) {
 		out->err = IOF_ERR_NOMEM;
 		goto out;
@@ -2102,6 +2101,7 @@ iof_query_handler(crt_rpc_t *query_rpc)
 
 	query->max_read = base.max_read;
 	query->max_write = base.max_write;
+	query->max_iov_read = base.max_iov_read;
 	query->readdir_size = base.max_readdir;
 
 	d_iov_set(&query->query_list, base.fs_list,
@@ -2260,10 +2260,8 @@ int filesystem_lookup(void)
 	int i, rc = 0, *path_lengths;
 
 	errno = 0;
-	path_lengths = calloc(sizeof(*path_lengths),
-			      base.projection_count);
+	D_ALLOC_ARRAY(path_lengths, base.projection_count);
 	if (path_lengths == NULL) {
-		IOF_LOG_ERROR("Could not allocate memory [path_lengths]");
 		return -ENOMEM;
 	}
 
@@ -2509,18 +2507,14 @@ int main(int argc, char **argv)
 	}
 
 	/*hardcoding the number and path for projected filesystems*/
-	base.fs_list = calloc(base.projection_count,
-			      sizeof(struct iof_fs_info));
+	D_ALLOC_ARRAY(base.fs_list, base.projection_count);
 	if (!base.fs_list) {
-		IOF_LOG_ERROR("Filesystem list not allocated");
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
 	}
 
-	base.projection_array = calloc(base.projection_count,
-				       sizeof(*base.projection_array));
+	D_ALLOC_ARRAY(base.projection_array, base.projection_count);
 	if (!base.projection_array) {
-		IOF_LOG_ERROR("Failed to allocate memory");
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
 	}
@@ -2709,7 +2703,7 @@ int main(int argc, char **argv)
 		pthread_t *progress_tids;
 		int thread;
 
-		progress_tids = calloc(thread_count, sizeof(*progress_tids));
+		D_ALLOC_ARRAY(progress_tids, thread_count);
 		if (!progress_tids) {
 			ret = 1;
 			goto cleanup;

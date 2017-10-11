@@ -179,7 +179,7 @@ static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
 	struct tpv_data *tpv_data = pthread_getspecific(pool->key);
 
 	if (tpv_data == NULL) {
-		tpv_data = malloc(sizeof(struct tpv_data));
+		D_ALLOC_PTR(tpv_data);
 		if (tpv_data == NULL)
 			return PERR_NOMEM;
 
@@ -225,7 +225,7 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 	}
 
 	/* Ok, no entries, let's allocate some and put them in our tpv */
-	block = malloc(pool->block_size);
+	D_ALLOC(block, pool->block_size);
 	if (block == NULL) {
 		*entry = NULL;
 		return PERR_NOMEM;

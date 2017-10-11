@@ -41,6 +41,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <gurt/common.h>
+
 #include "iof_pool.h"
 #include "log.h"
 
@@ -185,9 +187,10 @@ iof_pool_reclaim(struct iof_pool *pool)
 static void *
 create(struct iof_pool_type *type)
 {
-	void *ptr = calloc(1, type->reg.size);
+	void *ptr;
 	int rc;
 
+	D_ALLOC(ptr, type->reg.size);
 	if (!ptr)
 		return NULL;
 
@@ -241,7 +244,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 {
 	struct iof_pool_type *type;
 
-	type = calloc(1, sizeof(*type));
+	D_ALLOC_PTR(type);
 	if (!type)
 		return NULL;
 

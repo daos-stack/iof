@@ -677,7 +677,7 @@ lookup_clean(void *arg)
 	}
 
 	if (!req->ie) {
-		req->ie = calloc(1, sizeof(*req->ie));
+		D_ALLOC_PTR(req->ie);
 		if (!req->ie)
 			return -1;
 		atomic_fetch_add(&req->ie->ref, 1);
@@ -723,7 +723,7 @@ rb_small_init(void *arg, void *handle)
 	struct iof_rb *rb = arg;
 	struct iof_projection_info *fs_handle = handle;
 
-	rb->buf.buf[0].mem = calloc(1, fs_handle->max_iov_read);
+	D_ALLOC(rb->buf.buf[0].mem, fs_handle->max_iov_read);
 	if (!rb->buf.buf[0].mem)
 		return -1;
 
@@ -738,7 +738,8 @@ rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
-	rb->buf.buf[0].mem = calloc(1, 4096);
+	/* TODO: This should use MMAP */
+	D_ALLOC(rb->buf.buf[0].mem, 4096);
 	if (!rb->buf.buf[0].mem)
 		return -1;
 
@@ -754,7 +755,8 @@ rb_large_init(void *arg, void *handle)
 	struct iof_rb *rb = arg;
 	struct iof_projection_info *fs_handle = handle;
 
-	rb->buf.buf[0].mem = calloc(1, fs_handle->max_read);
+	/* TODO: This should use MMAP */
+	D_ALLOC(rb->buf.buf[0].mem, fs_handle->max_read);
 	if (!rb->buf.buf[0].mem)
 		return -1;
 
@@ -789,12 +791,9 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	/* Hard code only the default group now */
 	iof_state->num_groups = 1;
-	iof_state->groups = calloc(1, sizeof(struct iof_group_info));
-	if (iof_state->groups == NULL) {
-		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
-				"IONSS");
+	D_ALLOC_PTR(iof_state->groups);
+	if (iof_state->groups == NULL)
 		return IOF_ERR_NOMEM;
-	}
 
 	group = &iof_state->groups[0];
 	group->grp_name = strdup(IOF_DEFAULT_SET);
@@ -1021,8 +1020,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	if (fs_info->flags & IOF_WRITEABLE)
 		writeable = true;
 
-	fs_handle = calloc(1,
-			   sizeof(struct iof_projection_info));
+	D_ALLOC_PTR(fs_handle);
 	if (!fs_handle)
 		return IOF_ERR_NOMEM;
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
@@ -1068,7 +1066,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.cli_fs_id = id;
 	fs_handle->proj.progress_thread = 1;
 
-	fs_handle->stats = calloc(1, sizeof(*fs_handle->stats));
+	D_ALLOC_PTR(fs_handle->stats);
 	if (!fs_handle->stats)
 		return 1;
 
@@ -1537,11 +1535,15 @@ struct cnss_plugin self = {.name                  = "iof",
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 {
+	struct iof_state *state;
+
+	D_ALLOC_PTR(state);
+	if (!state)
+		return IOF_ERR_NOMEM;
+
 	*size = sizeof(struct cnss_plugin);
 
-	self.handle = calloc(1, sizeof(struct iof_state));
-	if (!self.handle)
-		return IOF_ERR_NOMEM;
+	self.handle = state;
 	*fns = &self;
 	IOF_TRACE_UP(self.handle, *fns, "iof_state");
 	return IOF_SUCCESS;
