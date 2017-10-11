@@ -851,6 +851,7 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 	if (rlink) {
 		handle = container_of(rlink, struct ionss_file_handle, clist);
 		close(fd);
+		d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
 		out->gah = handle->gah;
 		return;
 	}

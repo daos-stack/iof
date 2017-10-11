@@ -50,7 +50,8 @@ lookup_cb(const struct crt_cb_info *cb_info)
 	d_list_t		*rlink;
 	int			rc = EIO;
 
-	IOF_LOG_INFO("cb, reply %d", cb_info->cci_rc);
+	IOF_TRACE_INFO(desc, "cb, reply %d %d %d",
+		       cb_info->cci_rc, out->rc, out->err);
 	if (IOC_HOST_IS_DOWN(cb_info)) {
 		rc = EHOSTDOWN;
 		goto out;
@@ -67,8 +68,11 @@ lookup_cb(const struct crt_cb_info *cb_info)
 	if (out->err != 0)
 		goto out;
 
-	if (!out->stat.iov_buf)
+	if (!out->stat.iov_buf || out->stat.iov_len != sizeof(struct stat)) {
+		IOF_TRACE_ERROR(desc, "stat buff invalid %p %zi",
+				out->stat.iov_buf, out->stat.iov_len);
 		goto out;
+	}
 
 	memcpy(&entry.attr, out->stat.iov_buf, sizeof(struct stat));
 	entry.generation = 1;
@@ -83,12 +87,12 @@ lookup_cb(const struct crt_cb_info *cb_info)
 
 	if (rlink == &desc->ie->list) {
 		desc->ie = NULL;
-		IOF_LOG_INFO("New file rlink %p %lu " GAH_PRINT_STR,
-			     rlink, entry.ino, GAH_PRINT_VAL(out->gah));
+		IOF_TRACE_INFO(desc, "New file %lu " GAH_PRINT_STR,
+			       entry.ino, GAH_PRINT_VAL(out->gah));
 	} else {
 		/* TODO: Free the GAH */
-		IOF_LOG_INFO("Existing file rlink %p %lu " GAH_PRINT_STR,
-			     rlink, entry.ino, GAH_PRINT_VAL(out->gah));
+		IOF_TRACE_INFO(desc, "Existing file rlink %p %lu " GAH_PRINT_STR,
+			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
 	}
 
 	fuse_reply_entry(desc->req, &entry);
@@ -123,7 +127,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 		return;
 	}
 
-	IOF_LOG_INFO("Req %p ie %p", req, &desc->ie->list);
+	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
 
 	in = crt_req_get(desc->rpc);
 	in->path = (d_string_t)name;
@@ -140,7 +144,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 	rc = crt_req_set_endpoint(desc->rpc, &fs_handle->proj.grp->psr_ep);
 	if (rc) {
-		IOF_LOG_ERROR("Could not rpc endpoint, rc = %d", rc);
+		IOF_TRACE_ERROR(desc, "Could not rpc endpoint, rc = %d", rc);
 		fuse_reply_err(req, EIO);
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		return;
@@ -148,7 +152,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 	rc = crt_req_send(desc->rpc, lookup_cb, desc);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
+		IOF_TRACE_ERROR(desc, " not send rpc, rc = %d", rc);
 		fuse_reply_err(req, EIO);
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		return;
