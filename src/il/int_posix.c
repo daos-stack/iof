@@ -172,6 +172,13 @@ static int find_projections(void)
 			return 1;
 		}
 
+		rc = iof_lm_attach(grp_info->dest_grp, crt_ctx);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not initialize failover, rc = %d",
+				      rc);
+			return 1;
+		}
+
 		grp_info->psr_ep.ep_grp = grp_info->dest_grp;
 
 		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);

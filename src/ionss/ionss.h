@@ -171,7 +171,7 @@ struct ionss_read_req_desc {
 	struct ionss_file_handle	*handle;
 	struct iof_read_bulk_out	*out;
 	struct iof_read_bulk_in         *in;
-	d_size_t			req_len;
+	size_t				req_len;
 	struct ionss_active_read	*ard;
 	d_list_t			list;
 };
@@ -186,8 +186,8 @@ struct ionss_active_read {
 	struct ionss_read_req_desc      *rrd;
 	void				*buf;
 	d_list_t			list;
-	d_size_t			buf_len;
-	d_size_t			read_len;
+	size_t				buf_len;
+	size_t				read_len;
 	crt_bulk_t			local_bulk_handle;
 
 };

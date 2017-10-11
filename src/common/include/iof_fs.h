@@ -143,4 +143,6 @@ static inline void iof_fs_wait(struct iof_projection *iof_state,
 	iof_tracker_wait(tracker);
 }
 
+int iof_lm_attach(crt_group_t *group, crt_context_t crt_ctx);
+
 #endif

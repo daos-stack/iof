@@ -200,7 +200,7 @@ class Testlocal(unittest.TestCase,
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
-                    '-n', '1',
+                    '-n', '3',
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'D_LOG_MASK=%s' % self.log_mask])

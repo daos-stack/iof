@@ -531,7 +531,7 @@ iof_readdir_handler(crt_rpc_t *rpc)
 	crt_bulk_t local_bulk_hdl = {0};
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
-	d_size_t len = 0;
+	size_t len = 0;
 	int reply_idx = 0;
 	int rc;
 
@@ -1862,7 +1862,7 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 	crt_bulk_t local_bulk_hdl = {0};
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
-	d_size_t len;
+	size_t len;
 
 	int rc;
 

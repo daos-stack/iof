@@ -319,8 +319,15 @@ static int attach_group(struct iof_state *iof_state,
 	 */
 	ret = crt_group_attach(group->grp_name, &group->grp.dest_grp);
 	if (ret) {
-		IOF_TRACE_INFO(iof_state, "crt_group_attach failed with "
-			       "ret = %d", ret);
+		IOF_TRACE_ERROR(iof_state,
+				"crt_group_attach failed with ret = %d", ret);
+		return ret;
+	}
+
+	ret = iof_lm_attach(group->grp.dest_grp, NULL);
+	if (ret != 0) {
+		IOF_TRACE_ERROR(iof_state,
+				"Could not initialize failover, ret = %d", ret);
 		return ret;
 	}
 
