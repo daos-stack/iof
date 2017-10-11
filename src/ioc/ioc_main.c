@@ -1051,8 +1051,11 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
 	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private");
+	if (IOF_HAS_FAILOVER(fs_handle->flags))
+		IOF_TRACE_INFO(fs_handle, "Fail Over Enabled");
 
-	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
+	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK |
+					   D_HASH_FT_EPHEMERAL,
 					   4, fs_handle, &hops,
 					   &fs_handle->inode_ht);
 	if (ret != 0) {

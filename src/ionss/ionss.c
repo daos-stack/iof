@@ -2428,6 +2428,7 @@ int main(int argc, char **argv)
 	int err;
 	int c;
 	int cnss_threads = 0;
+	bool failover = true;
 
 	char *version = iof_get_version();
 
@@ -2449,6 +2450,7 @@ int main(int argc, char **argv)
 			{"readdir-size", required_argument, 0, 5},
 			{"max-direct-read", required_argument, 0, 6},
 			{"cnss-threads", no_argument, 0, 7},
+			{"disable-failover", no_argument, 0, 8},
 			{"thread-count", required_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -2500,6 +2502,9 @@ int main(int argc, char **argv)
 			break;
 		case 7:
 			cnss_threads = 1;
+			break;
+		case 8:
+			failover = false;
 			break;
 		case 't':
 			ret = sscanf(optarg, "%d", &thread_count);
@@ -2607,6 +2612,8 @@ int main(int argc, char **argv)
 
 		/* Set feature flags. These will be sent to the client */
 		projection->flags = IOF_FS_DEFAULT;
+		if (failover)
+			projection->flags |= IOF_FAILOVER;
 		if (faccessat(fd, ".", W_OK, 0) == 0)
 			projection->flags |= IOF_WRITEABLE;
 
