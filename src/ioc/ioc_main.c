@@ -773,6 +773,7 @@ rb_release(void *arg)
 }
 
 static int iof_thread_start(struct iof_state *iof_state);
+static void iof_thread_stop(struct iof_state *iof_state);
 
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
@@ -785,21 +786,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	int i;
 
 	iof_state->cb = cb;
-
-	ret = crt_context_create(NULL, &iof_state->crt_ctx);
-	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "Context not created");
-		return 1;
-	}
-
-	iof_tracker_init(&iof_state->thread_start_tracker, 1);
-	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
-	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
-	ret = iof_thread_start(iof_state);
-	if (ret != 0) {
-		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
-		return 1;
-	}
 
 	/* Hard code only the default group now */
 	iof_state->num_groups = 1;
@@ -830,6 +816,25 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return IOF_ERR_CTRL_FS;
 	}
 
+	ret = crt_context_create(NULL, &iof_state->crt_ctx);
+	if (ret) {
+		IOF_TRACE_ERROR(iof_state, "Context not created");
+		return 1;
+	}
+
+	iof_tracker_init(&iof_state->thread_start_tracker, 1);
+	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
+	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
+	ret = iof_thread_start(iof_state);
+	if (ret != 0) {
+		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
+		ret = crt_context_destroy(iof_state->crt_ctx, 0);
+		if (ret)
+			IOF_TRACE_ERROR(iof_state, "Could not destroy context");
+		free(iof_state->groups);
+		return 1;
+	}
+
 	/* Despite the hard coding above, now we can do attaches in a loop */
 	for (i = 0; i < iof_state->num_groups; i++) {
 		group = &iof_state->groups[i];
@@ -849,6 +854,11 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	if (num_attached == 0) {
 		IOF_TRACE_ERROR(iof_state, "No IONSS found");
+		/* Stop progress thread */
+		iof_thread_stop(iof_state);
+		ret = crt_context_destroy(iof_state->crt_ctx, 0);
+		if (ret)
+			IOF_TRACE_ERROR(iof_state, "Could not destroy context");
 		free(iof_state->groups);
 		return 1;
 	}
