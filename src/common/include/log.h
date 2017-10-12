@@ -89,7 +89,7 @@
 
 #define IOF_TRACE_UP(ptr, parent, type)			\
 	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
-		"%s:%d TRACE: %s(%p) New %s from %p\n",	\
+		"%s:%d TRACE: %s(%p) Registered new %s from %p\n",\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
 /* Link RPC to descriptor */
@@ -100,7 +100,7 @@
 
 #define IOF_TRACE_DOWN(ptr)				\
 	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
-		"%s:%d TRACE: %s(%p) Closing\n",	\
+		"%s:%d TRACE: %s(%p) Deregistered\n",	\
 		__FILE__, __LINE__, __func__, ptr)
 
 #if defined(__cplusplus)

@@ -66,6 +66,7 @@ import operator
 
 IMPORT_MNT = None
 CTRL_DIR = None
+
 try:
     from colorama import Fore, Style
     COLORAMA = 'yes'
@@ -145,6 +146,23 @@ class ColorizedOutput():
         if self.internals_log_file is not None:
             with open(self.internals_log_file, 'a') as f:
                 f.write("{0}\n".format(output))
+
+    def list_output(self, output_list):
+        """Writes entire list of strings to internals.out, only output
+        colorized warnings or errors to console"""
+        with open(self.internals_log_file, 'a') as f:
+            for item in output_list:
+                f.write("{0}\n".format(item))
+        if COLORAMA == 'yes':
+            logger = logging.getLogger("TestRunnerLogger")
+            for item in output_list:
+                prefix = item.split(' ', 1)[0]
+                if prefix == 'ERROR:':
+                    logger.info(Fore.RED + item)
+                elif prefix == 'WARN:':
+                    logger.info(Fore.YELLOW + item)
+                print(Style.RESET_ALL, end="")
+
 
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
@@ -290,6 +308,20 @@ class InternalsPathFramework(ColorizedOutput):
                 else:
                     self.error_output('IOF projection:{0} and backend '
                                       'fs:{1} differ.'.format(mount_dir, idir))
+
+    def descriptor_to_trace(self, log_dir):
+        """Find the file handle to use for descriptor tracing"""
+        descriptor = None
+        fuse_file = os.path.join('src', 'ioc', 'ops')
+        with open(log_dir, 'r') as f:
+            for line in f:
+                if fuse_file in line and 'TRACE' in line:
+                    fields = line.strip().split()
+                    descriptor = fields[7].strip().split('(')[1].strip().\
+                                 split(')')[0]
+                    return descriptor
+        self.error('Descriptor not found to trace')
+        return None
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
                  iof_ionss_setup.IonssExport):

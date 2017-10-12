@@ -66,6 +66,7 @@ from distutils.spawn import find_executable
 #pylint: enable=no-name-in-module
 import iofcommontestsuite
 import common_methods
+import rpctrace_common_methods
 
 sys.path.append('install/Linux/TESTING/scripts')
 try:
@@ -106,12 +107,14 @@ class Testlocal(unittest.TestCase,
     init_cstats = []
     final_cstats = []
     d = {}
-    ionss_logfile = []
-    ionss_logfile_marker = []
+    ionss_logfiles = []
+    ionss_logfiles_marker = []
     cnss_logfile = None
     cnss_logfile_marker = None
     log_path = None
     internals_tracing = ""
+    origin_rpctrace = None
+    targets_rpctrace = []
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -162,13 +165,16 @@ class Testlocal(unittest.TestCase,
         self.cnss_logfile = os.path.realpath(os.path.join(self.log_path,
                                                           '1/rank.0/stdout'))
         self.cnss_logfile_marker = self.timestamp_logfile(self.cnss_logfile)
+
+        self.ionss_logfiles = []
         for rank in os.listdir(os.path.join(self.log_path, '1')):
             if rank != 'rank.0':
-                self.ionss_logfile.append(os.path.realpath
-                                          (os.path.join(self.log_path, '1',
-                                                        rank, 'stdout')))
-        for ion_log in self.ionss_logfile:
-            self.ionss_logfile_marker.append(self.timestamp_logfile(ion_log))
+                self.ionss_logfiles.append(os.path.realpath
+                                           (os.path.join(self.log_path, '1',
+                                                         rank, 'stdout')))
+        self.ionss_logfiles_marker = []
+        for ionss_log in self.ionss_logfiles:
+            self.ionss_logfiles_marker.append(self.timestamp_logfile(ionss_log))
 
         #Verify FUSE Mount
         self.verify_mount(self.mount_dirs)
@@ -319,34 +325,6 @@ class Testlocal(unittest.TestCase,
         with open(log_file, 'w')  as fd:
             fd.write(msg)
 
-    def show_stats(self):
-        """Display projection statistics to stdout"""
-
-        proj_dir = os.path.join(self.cnss_prefix, '.ctrl', 'iof',
-                                'projections')
-
-        for idx in os.listdir(proj_dir):
-
-            stats_dir = os.path.join(proj_dir, idx, 'stats')
-
-            if not os.path.exists(stats_dir):
-                self.fail("Stats dir missing")
-
-            mount_point = None
-
-            with open(os.path.join(proj_dir, idx, 'mount_point'), 'r') as f:
-                mount_point = f.read().strip()
-
-            self.logger.info('Dumping statistics for filesystem %s',
-                             mount_point)
-            for stat_file in sorted(os.listdir(stats_dir)):
-                with open(os.path.join(stats_dir, stat_file), 'r') as f:
-                    data = f.read()
-                    f.close()
-                    value = data.rstrip()
-                    if value != '0':
-                        self.logger.info("%s:%s", stat_file, value)
-
     def internals_path_testing_teardown(self):
         """Call all methods for internals path testing framework.
         pyunit will call this during tearDown() of each test,
@@ -370,6 +348,35 @@ class Testlocal(unittest.TestCase,
         self.compare_projection_dir(self.mount_dirs, self.export_dirs,
                                     'single node')
 
+    def rpc_descriptor_tracing(self):
+        """RPC tracing runs at the end of each test; not currently supported
+           for local Go mode"""
+
+        #Origin RPC tracing
+        self.origin_rpctrace = rpctrace_common_methods.\
+                               RpcTrace('origin', self.internals_log_file)
+        self.origin_rpctrace.rpc_reporting(self.cnss_logfile)
+
+        #Target RPC tracing
+        self.targets_rpctrace = []
+        for index, ionss_log in enumerate(self.ionss_logfiles):
+            self.targets_rpctrace.append(rpctrace_common_methods.\
+                                         RpcTrace('target',
+                                                  self.internals_log_file))
+            self.targets_rpctrace[index].rpc_reporting(ionss_log)
+
+        #Descriptor tracing for the CNSS
+        descriptor = self.descriptor_to_trace(self.cnss_logfile)
+        if descriptor is not None:
+            reused_desc = []
+            reused_desc = self.origin_rpctrace.\
+                          descriptor_rpc_trace(self.cnss_logfile)
+            if reused_desc:
+                self.warning_output('Reused descriptors:')
+                for d in reused_desc:
+                    self.warning_output(d)
+            self.origin_rpctrace.rpc_trace_output(descriptor, self.cnss_logfile)
+
     def tearDown(self):
         """tear down the test"""
 
@@ -389,6 +396,9 @@ class Testlocal(unittest.TestCase,
             procrtn = self.common_stop_process(self.proc)
 
         self.cleanup(procrtn)
+
+        self.rpc_descriptor_tracing()
+
         self.normal_output("Ending {0}".format(self.id()))
 
     def cleanup(self, procrtn):
@@ -784,10 +794,11 @@ class Testlocal(unittest.TestCase,
 
             subtest_count += 1
             with self.subTest(possible[5:]):
-                self.mark_log('Starting test %s' % possible)
+                self.mark_log('Starting test %s:' % possible)
                 if self.internals_tracing == 'yes':
                     self.internals_path_testing_setup()
                 obj()
+
                 if self.internals_tracing == 'yes':
                     self.internals_path_testing_teardown()
                 self.mark_log('Finished test %s, cleaning up' % possible)
@@ -870,6 +881,7 @@ if __name__ == '__main__':
     if args.internals_tracing:
         os.environ['INTERNALS_TRACING'] = 'yes'
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
+        args.mask = 'DEBUG,PMIX=WARN'
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
