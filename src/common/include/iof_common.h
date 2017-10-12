@@ -190,8 +190,8 @@ struct iof_create_in {
 };
 
 struct iof_open_in {
+	struct ios_gah gah;
 	d_string_t path;
-	uint32_t fs_id;
 	uint32_t flags;
 };
 

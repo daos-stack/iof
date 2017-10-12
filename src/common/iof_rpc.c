@@ -83,8 +83,8 @@ struct crt_msg_field *create_in[] = {
 };
 
 struct crt_msg_field *open_in[] = {
+	&CMF_GAH,
 	&CMF_STRING,
-	&CMF_INT,
 	&CMF_INT,
 };
 

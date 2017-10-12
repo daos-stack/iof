@@ -940,16 +940,19 @@ iof_open_handler(crt_rpc_t *rpc)
 	struct iof_open_out	*out = crt_reply_get(rpc);
 	struct ios_projection	*projection = NULL;
 	struct ionss_mini_file	mf = {.type = open_handle};
+	struct ionss_file_handle *parent;
 
 	int fd;
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
+	projection = parent->projection;
+
 	if (in->flags & O_WRONLY || in->flags & O_RDWR) {
-		VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+		VALIDATE_WRITE(&base.fs_list[projection->id], out);
 		if (out->err || out->rc)
 			goto out;
 	}
@@ -957,13 +960,12 @@ iof_open_handler(crt_rpc_t *rpc)
 	/* in->fs_id will have been verified by the VALIDATE_ARGS_STR call
 	 * above
 	 */
-	projection = &base.projection_array[in->fs_id];
 
 	IOF_LOG_DEBUG("path %s flags 0%o",
 		      in->path, in->flags);
 
 	errno = 0;
-	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->flags);
+	fd = openat(parent->fd, iof_get_rel_path(in->path), in->flags);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -986,6 +988,9 @@ out:
 
 	if (projection)
 		iof_pool_restock(projection->fh_pool);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 static void
@@ -2184,9 +2189,31 @@ static void release_projection_resources(struct ios_projection *projection)
 
 	IOF_LOG_DEBUG("Destroying file HT");
 	do {
+		struct ionss_file_handle *fh;
+
 		rlink = d_chash_rec_first(&projection->file_ht);
-		if (rlink)
-			d_chash_rec_decref(&projection->file_ht, rlink);
+		if (!rlink)
+			break;
+
+		/* Check the ref count here to warn of failures but do not clear
+		 * the reference.
+		 *
+		 * Remote references are held through the hash table so will
+		 * be cleared by this loop, there should be one hash table
+		 * reference on the fh itself, meaning that when the last hash
+		 * table ref itself is removed the fh is closed.
+		 *
+		 * If there are any other open references on the fh then it
+		 * will not be closed, so add a warning about this here.
+		 */
+		fh = container_of(rlink, struct ionss_file_handle, clist);
+
+		if (fh->ref != 1)
+			IOF_TRACE_WARNING(fh, "Open refs (%d), will not be closed",
+					  fh->ref);
+
+		d_chash_rec_decref(&projection->file_ht, rlink);
+
 	} while (rlink);
 
 	rc = d_chash_table_destroy_inplace(&projection->file_ht, false);
