@@ -600,11 +600,15 @@ int main(void)
 
 	D_INIT_LIST_HEAD(&cnss_info->plugins);
 
-	/* Load the build-in iof "plugin" */
-	ret = add_plugin(cnss_info, iof_plugin_init, NULL);
-	if (ret != 0) {
-		ret = CNSS_ERR_PLUGIN;
-		goto shutdown_ctrl_fs;
+	if (getenv("CNSS_DISABLE_IOF") != NULL) {
+		IOF_LOG_INFO("Skipping IOF plugin");
+	} else {
+		/* Load the build-in iof "plugin" */
+		ret = add_plugin(cnss_info, iof_plugin_init, NULL);
+		if (ret != 0) {
+			ret = CNSS_ERR_PLUGIN;
+			goto shutdown_ctrl_fs;
+		}
 	}
 
 	/* Check to see if an additional plugin file has been requested and
