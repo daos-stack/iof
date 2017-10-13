@@ -114,3 +114,58 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	iof_pool_release(fs_handle->fh_pool, handle);
 	return -reply.err;
 }
+
+void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_gah_in *in;
+	int ret = EIO;
+	int rc;
+
+	STAT_ADD(fs_handle->stats, release);
+
+	/* If the projection is off-line then drop the local handle.
+	 *
+	 * This means a resource leak on the IONSS should the projection
+	 * be offline for reasons other than IONSS failure.
+	 */
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	IOF_TRACE_INFO(handle, GAH_PRINT_STR,
+		       GAH_PRINT_VAL(handle->common.gah));
+
+	IOF_TRACE_LINK(req, handle, "request");
+
+	if (!handle->common.gah_valid) {
+		IOF_TRACE_INFO(handle, "Release with bad handle");
+
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it.
+		 */
+		ret = EIO;
+		goto out_err;
+	}
+
+	in = crt_req_get(handle->release_rpc);
+	in->gah = handle->common.gah;
+
+	rc = crt_req_send(handle->release_rpc, ioc_ll_gen_cb, req);
+	if (rc) {
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
+		ret = EIO;
+		goto out_err;
+	}
+	crt_req_addref(handle->release_rpc);
+
+	iof_pool_release(fs_handle->fh_pool, handle);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+
+	iof_pool_release(fs_handle->fh_pool, handle);
+}

@@ -224,4 +224,6 @@ ioc_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 
 out_err:
 	IOF_FUSE_REPLY_ERR(req, ret);
+	if (rpc)
+		crt_req_decref(rpc);
 }

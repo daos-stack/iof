@@ -117,7 +117,6 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	IOF_TRACE_INFO(handle, "file %s flags 0%o", file, fi->flags);
 
-
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(handle->open_rpc);
 	in->path = (d_string_t)file;
@@ -139,7 +138,6 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	LOG_FLAGS(handle, fi->flags);
 
-
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	if (reply.err == 0 && reply.rc == 0)
@@ -159,4 +157,130 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	}
 
 	return rc;
+}
+
+static void
+ioc_open_ll_cb(const struct crt_cb_info *cb_info)
+{
+	struct iof_file_handle	*handle = cb_info->cci_arg;
+	struct iof_open_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct fuse_file_info	fi = {0};
+	fuse_req_t		req;
+	int			ret = EIO;
+
+	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
+			cb_info->cci_rc, out->rc, out->err);
+
+	if (cb_info->cci_rc != 0)
+		goto out_err;
+
+	if (out->rc) {
+		ret = out->rc;
+		goto out_err;
+	}
+
+	if (out->err)
+		goto out_err;
+
+	/* Create a new FI desciptor and use it to point to
+	 * our local handle
+	 */
+
+	fi.fh = (uint64_t)handle;
+	handle->common.gah = out->gah;
+	handle->common.gah_valid = 1;
+	req = handle->open_req;
+	handle->open_req = 0;
+
+	fuse_reply_open(req, &fi);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(handle->open_req, ret);
+	iof_pool_release(handle->fs_handle->fh_pool, handle);
+}
+
+void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct iof_file_handle *handle = NULL;
+	struct iof_open_in *in;
+	int ret = EIO;
+	int rc;
+
+	STAT_ADD(fs_handle->stats, open);
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
+	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
+	 * would otherwise be using and check that is set.
+	 */
+	if (!(fi->flags & LARGEFILE)) {
+		IOF_TRACE_INFO(fs_handle, "O_LARGEFILE required 0%o",
+			       fi->flags);
+		ret = ENOTSUP;
+		goto out_err;
+	}
+
+	/* Check for flags that do not make sense in this context.
+	 */
+	if (fi->flags & IOF_UNSUPPORTED_OPEN_FLAGS) {
+		IOF_TRACE_INFO(fs_handle, "unsupported flag requested 0%o",
+			       fi->flags);
+		ret = ENOTSUP;
+		goto out_err;
+	}
+
+	if (fi->flags & O_WRONLY || fi->flags & O_RDWR) {
+		if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+			IOF_TRACE_INFO("Attempt to modify "
+				       "Read-Only File System");
+			ret = EROFS;
+			goto out_err;
+		}
+	}
+
+	handle = iof_pool_acquire(fs_handle->fh_pool);
+	if (!handle) {
+		ret = ENOMEM;
+		goto out_err;
+	}
+
+	handle->common.projection = &fs_handle->proj;
+	handle->open_req = req;
+
+	in = crt_req_get(handle->open_rpc);
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, ino, &in->gah);
+	if (rc != 0) {
+		ret = ENOENT;
+		goto out_err;
+	}
+
+	in->flags = fi->flags;
+	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
+
+	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
+	if (rc) {
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	iof_pool_restock(fs_handle->fh_pool);
+	crt_req_addref(handle->open_rpc);
+
+	LOG_FLAGS(handle, fi->flags);
+
+	return;
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+
+	if (handle)
+		iof_pool_release(fs_handle->fh_pool, handle);
 }

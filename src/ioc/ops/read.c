@@ -384,3 +384,16 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 
 	return rc;
 }
+
+void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
+		 off_t position, struct fuse_file_info *fi)
+{
+	struct iof_file_handle *handle = (void *)fi->fh;
+	int ret = ENOTSUP;
+
+	IOF_TRACE_LINK(req, handle, "request");
+	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
+		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
+
+	IOF_FUSE_REPLY_ERR(req, ret);
+}

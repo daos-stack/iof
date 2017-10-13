@@ -266,6 +266,18 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops();
 		if (__rc != 0)						\
 			IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", \
 					__rc);				\
+		IOF_TRACE_DOWN(req);					\
+	} while (0)
+
+#define IOF_FUSE_REPLY_ZERO(req)					\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(req, "Returning 0");			\
+		__rc = fuse_reply_err(req, 0);				\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", \
+					__rc);				\
+		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
 /* Data which is stored against an open directory handle */
@@ -303,6 +315,9 @@ struct iof_file_handle {
 	d_list_t			list;
 	ino_t				inode_no;
 	char				*name;
+
+	/* Fuse req for open command */
+	fuse_req_t			open_req;
 };
 
 /* inode.c */
@@ -398,6 +413,8 @@ void ioc_status_cb(const struct crt_cb_info *);
 
 void getattr_cb(struct iof_rpc_ctx *ctx, void *output);
 
+void ioc_ll_gen_cb(const struct crt_cb_info *);
+
 int iof_fs_send(void *request, struct iof_rpc_ctx *ctx);
 
 int ioc_opendir(const char *, struct fuse_file_info *);
@@ -475,4 +492,12 @@ void ioc_ll_getattr(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 void ioc_ll_statfs(fuse_req_t, fuse_ino_t);
 
 void ioc_ll_readlink(fuse_req_t, fuse_ino_t);
+
+void ioc_ll_open(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_ll_read(fuse_req_t, fuse_ino_t, size_t, off_t,
+		 struct fuse_file_info *);
+
+void ioc_ll_release(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
 #endif

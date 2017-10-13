@@ -938,7 +938,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	struct ios_projection	*projection = NULL;
 	struct ionss_mini_file	mf = {.type = open_handle};
 	struct ionss_file_handle *parent;
-
+	char *path = NULL;
 	int fd;
 	int rc;
 
@@ -958,11 +958,21 @@ iof_open_handler(crt_rpc_t *rpc)
 	 * above
 	 */
 
+	if (in->path) {
+		path = (char *)iof_get_rel_path(in->path);
+	} else {
+		asprintf(&path, "/proc/self/fd/%d", parent->fd);
+		if (!path) {
+			out->rc = ENOMEM;
+			goto out;
+		}
+	}
+
 	IOF_LOG_DEBUG("path %s flags 0%o",
-		      in->path, in->flags);
+		      path, in->flags);
 
 	errno = 0;
-	fd = openat(parent->fd, iof_get_rel_path(in->path), in->flags);
+	fd = openat(parent->fd, path, in->flags);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -972,12 +982,12 @@ iof_open_handler(crt_rpc_t *rpc)
 	find_and_insert(projection, fd, &mf, out);
 
 out:
-	IOF_LOG_DEBUG("path %s flags 0%o ", in->path, in->flags);
+	IOF_LOG_DEBUG("path %s flags 0%o ", path, in->flags);
 
 	LOG_FLAGS(rpc, in->flags);
 
 	IOF_LOG_INFO("%p path %s result err %d rc %d",
-		     rpc, in->path, out->err, out->rc);
+		     rpc, path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -988,6 +998,9 @@ out:
 
 	if (parent)
 		ios_fh_decref(parent, 1);
+
+	if (!in->path)
+		D_FREE(path);
 }
 
 static void

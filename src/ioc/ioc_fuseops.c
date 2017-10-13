@@ -376,5 +376,8 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
 	fuse_ops->forget = ioc_ll_forget;
 	fuse_ops->statfs = ioc_ll_statfs;
 	fuse_ops->readlink = ioc_ll_readlink;
+	fuse_ops->open = ioc_ll_open;
+	fuse_ops->read = ioc_ll_read;
+	fuse_ops->release = ioc_ll_release;
 	return fuse_ops;
 }

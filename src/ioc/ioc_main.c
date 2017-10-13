@@ -93,6 +93,22 @@ ioc_status_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
+void
+ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
+{
+	fuse_req_t req = cb_info->cci_arg;
+	int ret = EIO;
+
+	if (cb_info->cci_rc != 0)
+		goto out_err;
+
+	IOF_FUSE_REPLY_ZERO(req);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+}
+
 /* Mark an endpoint as off-line, most likely because a process has been
  * evicted from the process set.
  *
