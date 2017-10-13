@@ -100,7 +100,7 @@ lookup_cb(const struct crt_cb_info *cb_info)
 	return;
 
 out:
-	fuse_reply_err(desc->req, rc);
+	IOF_FUSE_REPLY_ERR(desc->req, rc);
 	iof_pool_release(desc->fs_handle->lookup_pool, desc);
 }
 
@@ -112,18 +112,18 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	struct iof_gah_string_in	*in;
 	int rc;
 
-	IOF_LOG_INFO("Req %p %lu %s", req, parent, name);
+	IOF_TRACE_INFO(req, "Parent:%lu '%s'", parent, name);
 
 	STAT_ADD(fs_handle->stats, lookup);
 
 	if (FS_IS_OFFLINE(fs_handle)) {
-		fuse_reply_err(req, fs_handle->offline_reason);
+		IOF_FUSE_REPLY_ERR(req, fs_handle->offline_reason);
 		return;
 	}
 
 	desc = iof_pool_acquire(fs_handle->lookup_pool);
 	if (!desc) {
-		fuse_reply_err(req, ENOMEM);
+		IOF_FUSE_REPLY_ERR(req, ENOMEM);
 		return;
 	}
 
@@ -136,7 +136,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	rc = find_gah(fs_handle, parent, &in->gah);
 	if (rc != 0) {
 		iof_pool_release(fs_handle->lookup_pool, desc);
-		fuse_reply_err(req, ENOENT);
+		IOF_FUSE_REPLY_ERR(req, ENOENT);
 		return;
 	}
 
@@ -145,7 +145,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	rc = crt_req_set_endpoint(desc->rpc, &fs_handle->proj.grp->psr_ep);
 	if (rc) {
 		IOF_TRACE_ERROR(desc, "Could not rpc endpoint, rc = %d", rc);
-		fuse_reply_err(req, EIO);
+		IOF_FUSE_REPLY_ERR(req, EIO);
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		return;
 	}
@@ -153,7 +153,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	rc = crt_req_send(desc->rpc, lookup_cb, desc);
 	if (rc) {
 		IOF_TRACE_ERROR(desc, " not send rpc, rc = %d", rc);
-		fuse_reply_err(req, EIO);
+		IOF_FUSE_REPLY_ERR(req, EIO);
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		return;
 	}

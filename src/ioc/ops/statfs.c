@@ -153,17 +153,17 @@ statfs_ll_cb(const struct crt_cb_info *cb_info)
 	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
-		fuse_reply_err(req, EIO);
+		IOF_FUSE_REPLY_ERR(req, EIO);
 		return;
 	}
 
 	if (out->rc) {
-		fuse_reply_err(req, out->rc);
+		IOF_FUSE_REPLY_ERR(req, out->rc);
 		return;
 	}
 
 	if (out->err || !out->data.iov_buf) {
-		fuse_reply_err(req, EIO);
+		IOF_FUSE_REPLY_ERR(req, EIO);
 		return;
 	}
 
@@ -211,5 +211,5 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 	return;
 
 out_err:
-	fuse_reply_err(req, ret);
+	IOF_FUSE_REPLY_ERR(req, ret);
 }

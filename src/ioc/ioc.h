@@ -252,6 +252,22 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops();
 		iof_pool_release(pool, req); \
 	} while (0)
 
+#define IOF_FUSE_REPLY_ERR(req, status)					\
+	do {								\
+		int __err = status;					\
+		int __rc;						\
+		if (__err <= 0) {					\
+			IOF_TRACE_ERROR(req, "Invalid value passed to reply_err: %d", \
+					__err);				\
+			__err = EIO;					\
+		}							\
+		IOF_TRACE_DEBUG(req, "Returning %d '%s'", __err, strerror(__err)); \
+		__rc = fuse_reply_err(req, __err);			\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", \
+					__rc);				\
+	} while (0)
+
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {
 	struct iof_projection_info	*fs_handle;

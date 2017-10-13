@@ -96,13 +96,13 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	rc = find_gah(fs_handle, ino, &handle.common.gah);
 	if (rc != 0)
-		fuse_reply_err(req, EIO);
+		IOF_FUSE_REPLY_ERR(req, EIO);
 
 	handle.fs_handle = fs_handle;
 	handle.common.gah_valid = 1;
 	rc = ioc_getattr_gah(&handle, &st);
 	if (rc)
-		fuse_reply_err(req, -rc);
+		IOF_FUSE_REPLY_ERR(req, -rc);
 	else
 		fuse_reply_attr(req, &st, 0);
 }
