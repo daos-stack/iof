@@ -411,20 +411,21 @@ out:
 static void
 iof_opendir_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = crt_req_get(rpc);
-	struct iof_opendir_out *out = crt_reply_get(rpc);
-	struct ionss_dir_handle *local_handle;
+	struct iof_gah_string_in	*in = crt_req_get(rpc);
+	struct iof_opendir_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent;
+	struct ionss_dir_handle		*local_handle;
 	int rc;
 	int fd;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
 	IOF_LOG_DEBUG("Opening path %s", in->path);
 
 	errno = 0;
-	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
+	fd = openat(parent->fd, iof_get_rel_path(in->path),
 		    O_DIRECTORY | O_RDONLY);
 
 	if (fd == -1) {
@@ -461,6 +462,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)

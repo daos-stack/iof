@@ -212,7 +212,7 @@ struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 #define RPC_TYPE(NAME, in, out) { .fmt = DEFINE_CRT_REQ_FMT(#NAME, in, out) }
 
 struct rpc_data default_rpc_types[] = {
-	RPC_TYPE(opendir, string_in, gah_pair),
+	RPC_TYPE(opendir, gah_string_in, gah_pair),
 	RPC_TYPE(readdir, readdir_in, readdir_out),
 	RPC_TYPE(closedir, gah_in, NULL),
 	RPC_TYPE(getattr, gah_string_in, iov_pair),

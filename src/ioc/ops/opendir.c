@@ -84,7 +84,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_dir_handle *dir_handle;
-	struct iof_string_in *in;
+	struct iof_gah_string_in *in;
 	struct opendir_cb_r reply = {0};
 	int rc;
 
@@ -105,7 +105,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(dir_handle->open_rpc);
 	in->path = (d_string_t)dir;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	reply.dh = dir_handle;
 
