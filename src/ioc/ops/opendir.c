@@ -90,7 +90,7 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	IOC_RPC_INIT(dh, REQ_NAME, fs_handle->POOL_NAME, api, rc);
 	if (rc)
 		goto out;
-	IOF_LOG_INFO("dir %s handle %p", dir, dh);
+	IOF_TRACE_INFO(dh, "dir %s", dir);
 
 	in = crt_req_get(dh->REQ_NAME.rpc);
 	in->path = (d_string_t)dir;
@@ -99,16 +99,130 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	if (rc)
 		goto out;
 	IOC_RPC_WAIT(dh, REQ_NAME, fs_handle, rc);
-	dh->name = strdup(dir);
-	IOF_LOG_DEBUG("path %s rc %d", dir, rc);
+
+	IOF_TRACE_DEBUG(dh, "rc %d", rc);
 
 out:
 	if (rc == 0) {
 		fi->fh = (uint64_t)dh;
-		IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, dh,
-			     GAH_PRINT_FULL_VAL(dh->gah));
+		IOF_TRACE_DEBUG(dh, GAH_PRINT_FULL_STR,
+				GAH_PRINT_FULL_VAL(dh->gah));
 	} else {
 		iof_pool_release(fs_handle->POOL_NAME, dh);
 	}
 	return rc;
+}
+
+static void
+opendir_ll_cb(const struct crt_cb_info *cb_info)
+{
+	struct iof_opendir_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_dir_handle	*dir_handle = cb_info->cci_arg;
+	struct fuse_file_info	fi = {0};
+	fuse_req_t		req;
+	int			ret = EIO;
+
+	IOF_TRACE_DEBUG(dir_handle, "cci_rc %d rc %d err %d",
+			cb_info->cci_rc, out->rc, out->err);
+
+	if (cb_info->cci_rc != 0)
+		goto out_err;
+
+	if (out->rc) {
+		ret = out->rc;
+		goto out_err;
+	}
+
+	if (out->err)
+		goto out_err;
+
+	/* Create a new FI desciptor and use it to point to
+	 * our local handle
+	 */
+
+	fi.fh = (uint64_t)dir_handle;
+	dir_handle->gah = out->gah;
+	dir_handle->gah_valid = 1;
+	dir_handle->handle_valid = 1;
+	req = dir_handle->open_f_req;
+	dir_handle->open_f_req = 0;
+
+	fuse_reply_open(req, &fi);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(dir_handle->open_f_req, ret);
+	iof_pool_release(dir_handle->fs_handle->dh_pool, dir_handle);
+}
+
+void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct iof_dir_handle *dir_handle = NULL;
+	struct iof_gah_string_in *in;
+	int ret = EIO;
+	int rc;
+
+	IOF_TRACE_INFO(req, "ino %lu", ino);
+
+	STAT_ADD(fs_handle->stats, opendir);
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	dir_handle = iof_pool_acquire(fs_handle->dh_pool);
+	if (!dir_handle) {
+		ret = ENOMEM;
+		goto out_err;
+	}
+
+	IOF_TRACE_LINK(req, dir_handle, "request");
+
+	dir_handle->ep = fs_handle->proj.grp->psr_ep;
+	dir_handle->open_f_req = req;
+
+	in = crt_req_get(dir_handle->open_req.rpc);
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, ino, &in->gah);
+	if (rc != 0) {
+		ret = ENOENT;
+		goto out_err;
+	}
+
+	dir_handle->ep = fs_handle->proj.grp->psr_ep;
+
+	rc = crt_req_set_endpoint(dir_handle->open_req.rpc, &dir_handle->ep);
+	if (rc) {
+		IOF_TRACE_ERROR(dir_handle, "Could not set ep, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	rc = crt_req_set_endpoint(dir_handle->close_req.rpc, &dir_handle->ep);
+	if (rc) {
+		IOF_TRACE_ERROR(dir_handle, "Could not set ep, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	rc = crt_req_send(dir_handle->open_req.rpc, opendir_ll_cb, dir_handle);
+	if (rc) {
+		IOF_TRACE_ERROR(dir_handle, "Could not send rpc, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+	crt_req_addref(dir_handle->open_req.rpc);
+
+	iof_pool_restock(fs_handle->dh_pool);
+
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+
+	if (dir_handle)
+		iof_pool_release(fs_handle->dh_pool, dir_handle);
 }

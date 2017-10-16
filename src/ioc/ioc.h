@@ -295,7 +295,6 @@ struct ioc_request {
 struct iof_dir_handle {
 	struct ioc_request		open_req;
 	struct ioc_request		close_req;
-	struct ioc_request		read_req;
 	struct iof_projection_info	*fs_handle;
 	/* The handle for accessing the directory on the IONSS */
 	struct ios_gah			gah;
@@ -313,8 +312,7 @@ struct iof_dir_handle {
 	int				gah_valid;
 	crt_endpoint_t			ep;
 	d_list_t			list;
-	/* The name of the directory */
-	char				*name;
+	fuse_req_t			open_f_req;
 };
 
 /* Data which is stored against an open file handle */
@@ -495,5 +493,9 @@ void ioc_ll_read(fuse_req_t, fuse_ino_t, size_t, off_t,
 		 struct fuse_file_info *);
 
 void ioc_ll_release(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_ll_opendir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_ll_releasedir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
 #endif

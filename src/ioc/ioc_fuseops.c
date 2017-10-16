@@ -379,5 +379,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
 	fuse_ops->open = ioc_ll_open;
 	fuse_ops->read = ioc_ll_read;
 	fuse_ops->release = ioc_ll_release;
+	fuse_ops->opendir = ioc_ll_opendir;
+	fuse_ops->releasedir = ioc_ll_releasedir;
 	return fuse_ops;
 }

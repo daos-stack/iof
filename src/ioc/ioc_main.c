@@ -99,8 +99,10 @@ ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
 	fuse_req_t req = cb_info->cci_arg;
 	int ret = EIO;
 
-	if (cb_info->cci_rc != 0)
+	if (cb_info->cci_rc != 0) {
+		IOF_TRACE_INFO(req, "cci_rc is %d", cb_info->cci_rc);
 		goto out_err;
+	}
 
 	IOF_FUSE_REPLY_ZERO(req);
 	return;
@@ -512,7 +514,7 @@ int dh_init(void *arg, void *handle)
 	struct iof_dir_handle *dh = arg;
 
 	dh->fs_handle = handle;
-	dh->ep = dh->fs_handle->proj.grp->psr_ep;
+
 	return 0;
 }
 
@@ -527,10 +529,6 @@ int dh_reset(void *arg)
 	if (dh->rpc)
 		crt_req_decref(dh->rpc);
 	dh->rpc = NULL;
-
-	if (dh->name)
-		free(dh->name);
-	dh->name = NULL;
 
 	if (dh->open_req.rpc)
 		crt_req_decref(dh->open_req.rpc);
@@ -551,8 +549,8 @@ int dh_reset(void *arg)
 	if (rc || !dh->close_req.rpc) {
 		crt_req_decref(dh->open_req.rpc);
 		return -1;
-	IOF_TRACE_LINK(dh->close_req.rpc, dh, "closedir_rpc");
 	}
+	IOF_TRACE_LINK(dh->close_req.rpc, dh, "closedir_rpc");
 	return 0;
 }
 

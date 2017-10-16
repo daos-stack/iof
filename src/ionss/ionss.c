@@ -415,6 +415,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	struct iof_opendir_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 	struct ionss_dir_handle		*local_handle;
+	char *path = NULL;
 	int rc;
 	int fd;
 
@@ -422,11 +423,21 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	IOF_LOG_DEBUG("Opening path %s", in->path);
+	if (in->path) {
+		path = (char *)iof_get_rel_path(in->path);
+	} else {
+		rc = asprintf(&path, "/proc/self/fd/%d", parent->fd);
+		if (rc < 0 || !path) {
+			out->rc = ENOMEM;
+			goto out;
+		}
+	}
+
+	IOF_LOG_DEBUG("Opening path " GAH_PRINT_STR " %s",
+		      GAH_PRINT_VAL(in->gah), path);
 
 	errno = 0;
-	fd = openat(parent->fd, iof_get_rel_path(in->path),
-		    O_DIRECTORY | O_RDONLY);
+	fd = openat(parent->fd, path, O_DIRECTORY | O_RDONLY);
 
 	if (fd == -1) {
 		out->rc = errno;
@@ -462,6 +473,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+
+	if (!in->path)
+		D_FREE(path);
 
 	if (parent)
 		ios_fh_decref(parent, 1);
@@ -961,8 +975,8 @@ iof_open_handler(crt_rpc_t *rpc)
 	if (in->path) {
 		path = (char *)iof_get_rel_path(in->path);
 	} else {
-		asprintf(&path, "/proc/self/fd/%d", parent->fd);
-		if (!path) {
+		rc = asprintf(&path, "/proc/self/fd/%d", parent->fd);
+		if (rc < 0 || !path) {
 			out->rc = ENOMEM;
 			goto out;
 		}

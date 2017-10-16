@@ -412,6 +412,17 @@ class Testlocal(unittest.TestCase,
         if rtn != 0:
             self.fail('DD returned error')
 
+    def test_ro_listdir(self):
+        """Read directory contents"""
+
+        self.skipTest('Reads from r/o filesystems not working')
+
+        test_dir = os.path.join(self.cnss_prefix, 'usr', 'bin')
+        files = os.listdir(test_dir)
+
+        if not files:
+            self.fail("No files in /usr/bin")
+
     def test_large_read(self):
         """Read a large file"""
 
