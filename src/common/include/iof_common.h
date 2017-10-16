@@ -177,9 +177,9 @@ struct iof_ftruncate_in {
 };
 
 struct iof_two_string_in {
+	struct ios_gah gah;
 	d_string_t src;
 	d_string_t dst;
-	uint32_t fs_id;
 };
 
 struct iof_create_in {

@@ -74,7 +74,7 @@ ioc_rename_priv(const char *src, const char *dst)
 	in = crt_req_get(rpc);
 	in->src = (d_string_t)src;
 	in->dst = (d_string_t)dst;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {

@@ -70,9 +70,9 @@ struct crt_msg_field *lookup_out[] = {
 };
 
 struct crt_msg_field *two_string_in[] = {
+	&CMF_GAH,
 	&CMF_STRING,
 	&CMF_STRING,
-	&CMF_INT,
 };
 
 struct crt_msg_field *create_in[] = {

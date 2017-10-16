@@ -72,7 +72,7 @@ int ioc_symlink(const char *dst, const char *src)
 	in = crt_req_get(rpc);
 	in->src = (d_string_t)src;
 	in->dst = (d_string_t)dst;
-	in->fs_id = (uint64_t)fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	iof_tracker_init(&reply.tracker, 1);
 

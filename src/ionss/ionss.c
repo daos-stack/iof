@@ -67,20 +67,20 @@ static uint32_t	cnss_count;
 
 static struct ios_base base;
 
-#define VALIDATE_WRITE(fs_handle, out) \
-	do {\
-		if (!out) \
-			break; \
-		out->rc = 0; \
-		if (!(fs_handle)) { \
-			out->err = IOF_BAD_DATA; \
-			break; \
-		} \
-		if (!IOF_IS_WRITEABLE((fs_handle)->flags)) { \
-			IOF_LOG_INFO("Attempt to modify " \
-				"Read-Only Projection!"); \
-			(out)->rc = EROFS; \
-		} \
+#define VALIDATE_WRITE(fs_handle, out)					\
+	do {								\
+		if (!out)						\
+			break;						\
+		out->rc = 0;						\
+		if (!(fs_handle)) {					\
+			out->err = IOF_BAD_DATA;			\
+			break;						\
+		}							\
+		if (!IOF_IS_WRITEABLE((fs_handle)->flags)) {		\
+			IOF_TRACE_INFO(fs_handle,			\
+				"Attempt to modify Read-Only Projection!"); \
+			(out)->rc = EROFS;				\
+		}							\
 	} while (0)
 
 #define VALIDATE_ARGS_STR(rpc, in, out) \
@@ -97,24 +97,9 @@ static struct ios_base base;
 		} \
 	} while (0)
 
-#define VALIDATE_ARGS_STR2(rpc, in, out) \
-	do {\
-		if (in->fs_id >= base.projection_count) { \
-			IOF_LOG_ERROR("Invalid Projection: " \
-				      "[ID=%d]", in->fs_id); \
-			out->err = IOF_BAD_DATA; \
-			break; \
-		} \
-		if (!in->src || !in->dst) { \
-			IOF_LOG_ERROR("Missing inputs."); \
-			out->err = IOF_ERR_CART; \
-		} \
-	} while (0)
-
 #define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) do {	\
-		IOF_LOG_INFO("rpc(%p) " GAH_PRINT_STR,			\
-			rpc,						\
-			GAH_PRINT_VAL(in->gah));			\
+		IOF_TRACE_INFO(rpc, GAH_PRINT_STR,			\
+			       GAH_PRINT_VAL(in->gah));			\
 		handle = ios_##handle_type##_find(&base, &in->gah);	\
 		if (!handle) {						\
 			out->err = IOF_GAH_INVALID;			\
@@ -126,6 +111,15 @@ static struct ios_base base;
 
 #define VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle) \
 	VALIDATE_ARGS_GAH(rpc, in, out, handle, dirh)
+
+#define VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent)			\
+	do {								\
+		VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);		\
+		if (!in->src || !in->dst) {				\
+			IOF_TRACE_ERROR(rpc, "Missing inputs.");	\
+			out->err = IOF_ERR_CART;			\
+		}							\
+	} while (0)
 
 static void iof_register_default_handlers(void);
 
@@ -951,7 +945,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	projection = parent->projection;
 
 	if (in->flags & O_WRONLY || in->flags & O_RDWR) {
-		VALIDATE_WRITE(&base.fs_list[projection->id], out);
+		VALIDATE_WRITE(projection, out);
 		if (out->err || out->rc)
 			goto out;
 	}
@@ -1425,20 +1419,21 @@ out:
 static void
 iof_rename_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
+	struct iof_two_string_in	*in = crt_req_get(rpc);
+	struct iof_status_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent;
 	int rc;
 
-	VALIDATE_ARGS_STR2(rpc, in, out);
+	VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
-	rc = renameat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->src),
-		      ID_TO_FD(in->fs_id), iof_get_rel_path(in->dst));
+	rc = renameat(parent->fd, iof_get_rel_path(in->src),
+		      parent->fd, iof_get_rel_path(in->dst));
 
 	if (rc)
 		out->rc = errno;
@@ -1450,24 +1445,29 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 static void
 iof_symlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
+	struct iof_two_string_in	*in = crt_req_get(rpc);
+	struct iof_status_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent;
+
 	int rc;
 
-	VALIDATE_ARGS_STR2(rpc, in, out);
+	VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
-	rc = symlinkat(in->dst, ID_TO_FD(in->fs_id),
+	rc = symlinkat(in->dst, parent->fd,
 		       iof_get_rel_path(in->src));
 
 	if (rc)
@@ -1480,6 +1480,9 @@ out:
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 static void
