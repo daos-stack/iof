@@ -61,11 +61,16 @@ import iof_ionss_verify
 from distutils.spawn import find_executable
 #pylint: enable=import-error
 #pylint: enable=no-name-in-module
+import operator
 
 
 IMPORT_MNT = None
 CTRL_DIR = None
-
+try:
+    from colorama import Fore, Style
+    COLORAMA = 'yes'
+except ImportError:
+    COLORAMA = 'no'
 
 def import_list():
     """Return a array of imports
@@ -95,6 +100,196 @@ def get_writeable_import():
 #pylint: disable=too-many-public-methods
 #pylint: disable=no-member
 
+class ColorizedOutput():
+    """Contains all output methods for using colorized output"""
+
+    internals_log_file = None
+    logger = logging.getLogger("TestRunnerLogger")
+
+    def success_output(self, output):
+        """Green output to console, writes output to internals.out"""
+        if COLORAMA == 'yes':
+            self.logger.info(Fore.GREEN + output)
+            print(Style.RESET_ALL, end="")
+        else:
+            self.logger.info(output)
+        if self.internals_log_file is not None:
+            with open(self.internals_log_file, 'a') as f:
+                f.write("{0}\n".format(output))
+
+    def error_output(self, output):
+        """Red output to console, writes output to internals.out"""
+        if COLORAMA == 'yes':
+            self.logger.info(Fore.RED + output)
+            print(Style.RESET_ALL, end="")
+        else:
+            self.logger.info("ERROR: %s", output)
+        if self.internals_log_file is not None:
+            with open(self.internals_log_file, 'a') as f:
+                f.write("ERROR: {0}\n".format(output))
+
+    def warning_output(self, output):
+        """Yellow output to console, writes output to internals.out"""
+        if COLORAMA == 'yes':
+            self.logger.info(Fore.YELLOW + output)
+            print(Style.RESET_ALL, end="")
+        else:
+            self.logger.info("WARN: %s", output)
+        if self.internals_log_file is not None:
+            with open(self.internals_log_file, 'a') as f:
+                f.write("WARN: {0}\n".format(output))
+
+    def normal_output(self, output):
+        """Normal output to console, writes output to internals.out"""
+        self.logger.info(output)
+        if self.internals_log_file is not None:
+            with open(self.internals_log_file, 'a') as f:
+                f.write("{0}\n".format(output))
+
+class InternalsPathFramework(ColorizedOutput):
+    """Contains all methods relating to internals path testing"""
+
+    def timestamp_logfile(self, log_dir):
+        """Collect timestamp of log."""
+        timestamp = None
+        with open(log_dir, 'r') as f:
+            if os.stat(log_dir).st_size == 0:
+                self.error_output('{0} file is empty'.format(log_dir))
+            else:
+                last_line = f.readlines()[-1]
+                fields = last_line.strip().split()
+                timestamp = fields[0]
+        return timestamp
+
+    def verify_mount(self, mount_dir):
+        """Compares /proc/mounts to see if expected mount point is really
+        mounted for each IOF projection."""
+        output = None
+        condition = False
+        path = "/proc/mounts"
+        search_str = "IOF "
+        mount_count = len(mount_dir)
+        count = 0
+        with open(path, 'r') as f:
+            self.normal_output('\nVerifying FUSE Mount(s):')
+            for line in f.readlines():
+                if search_str in line:
+                    fields = line.strip().split()
+                    output = fields[1]
+                    if output in mount_dir:
+                        self.normal_output(line)
+                        count += 1
+                        if count == mount_count:
+                            condition = True
+                            break
+        if condition:
+            self.success_output('FUSE mount(s) match IOF projection(s)')
+        else:
+            self.error_output('Not all IOF projections currently '
+                              'mounted')
+
+    def verify_ionss(self, ctrl_fs_dir):
+        """Returns ionss count and psr rank for given CNSS.
+        For private access mode, ionss_count should be 1 and
+        psr_rank should be 0."""
+        self.normal_output('\nVerify IONSS:')
+        ionss_count_path = os.path.join(ctrl_fs_dir, 'iof', 'ionss_count')
+        with open(ionss_count_path, 'r') as g:
+            ionss_count = g.read()
+        psr_rank_path = os.path.join(ctrl_fs_dir, 'iof', 'ionss', '0',
+                                     'psr_rank')
+        with open(psr_rank_path, 'r') as h:
+            psr_rank = h.read()
+        self.normal_output('IONSS count = {0}PSR rank = {1}'.format(ionss_count,
+                                                                    psr_rank))
+
+    def dump_cnss_stats(self, ctrl_fs_dir):
+        """Dumps CNSS stats/FUSE callbacks for each IOF projection.
+        Returns a list containing projection mount point, a list of the names of
+        current statistics being measured, as well as a list of the actual
+        stats."""
+        ret_stats = []
+        projs_dir = os.path.join(ctrl_fs_dir, 'iof', 'projections')
+        for proj in os.listdir(projs_dir):
+            cnss_stats = []
+            stats = []
+            stats_dir = os.path.join(projs_dir, proj, 'stats')
+            if not os.path.exists(stats_dir):
+                return None
+
+            mount_point = None
+            with open(os.path.join(projs_dir, proj, 'mount_point'), 'r') as f:
+                mount_point = f.read().strip()
+
+            stats_list = os.listdir(stats_dir)
+            cnss_stats.append(mount_point)
+            cnss_stats.append(stats_list)
+            for s in stats_list:
+                with open(os.path.join(stats_dir, s), 'r') as g:
+                    stats_calls = g.read()
+                    stats.append(stats_calls)
+            cnss_stats.append(stats)
+            ret_stats.append(cnss_stats)
+        if ret_stats is None:
+            self.error_output('Error in dumping CNSS stats')
+        return ret_stats
+
+    def delta_cnss_stats(self, d, mnt):
+        """Computes the delta of initial and final CNSS stats/FUSE callbacks for
+        each IOF projection and displays non-zero results"""
+        if d['len_init_{0}'.format(mnt)] == d['len_final_{0}'.format(mnt)]:
+            d['delta_cstats_{0}'.format(mnt)] = list(map(operator.sub,
+                                                         d['final_cstats_{0}'.\
+                                                         format(mnt)],
+                                                         d['init_cstats_{0}'.\
+                                                         format(mnt)]))
+            self.normal_output('Dumping stats for filesystem {0}: '.\
+                               format(mnt))
+
+            for i in range(len(d['stats_list_{0}'.format(mnt)])):
+                if d['delta_cstats_{0}'.format(mnt)][i] != 0:
+                    self.normal_output('{0}: {1}'.format(d['stats_list_{0}'.\
+                                                         format(mnt)][i],
+                                                         d['delta_cstats_{0}'.\
+                                                         format(mnt)][i]))
+
+    def compare_projection_dir(self, mount_dirs, ionss_dirs, ionss_node):
+        """Compare contents of projection directory on CN with the original
+        directory on the ION using rsync.
+        ionss_node = 'single node' if running on one node, otherwise passes
+        ionss node"""
+        self.normal_output('\nValidate Projection and FS Data:')
+        for index, idir in enumerate(ionss_dirs):
+            if idir == '/usr':
+                break # issues with rsync on '/usr' dir
+            mount_dir = os.path.join(mount_dirs[index], '')
+            cmd = (['rsync', '-nvrc', '--links'])
+            if ionss_node == 'single node':
+                ionss_path = '{0}'.format(idir)
+            else:
+                ionss_path = '{0}:{1}'.format(ionss_node, idir)
+                cmd.extend(['-e', 'ssh -o StrictHostKeyChecking=no '
+                            '-o UserKnownHostsFile=/dev/null'])
+            cmd.extend([mount_dir, ionss_path])
+            p1 = subprocess.Popen(cmd,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+            # output from rsync command will be incremental file list
+            # consisting of differing files between the given directories
+            output, err = p1.communicate()
+            err = err.decode('utf-8')
+            if err != '':
+                self.error_output('{0}'.format(' '.join(cmd)))
+                self.error_output('{0}'.format(err))
+            else:
+                output = output.decode('ascii')
+                first_file = output.split("\n")[1]
+                if first_file == '':
+                    self.success_output('IOF projection:{0} matches I/O backend'
+                                        ' fs:{1}'.format(mount_dir, idir))
+                else:
+                    self.error_output('IOF projection:{0} and backend '
+                                      'fs:{1} differ.'.format(mount_dir, idir))
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
                  iof_ionss_setup.IonssExport):

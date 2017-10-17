@@ -80,11 +80,13 @@ except ImportError:
 #pylint: disable=too-many-public-methods
 #pylint: disable=too-many-statements
 #pylint: disable=too-many-instance-attributes
+#pylint: disable=too-many-ancestors
 
 
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
-                iofcommontestsuite.CommonTestSuite):
+                iofcommontestsuite.CommonTestSuite,
+                common_methods.InternalsPathFramework):
     """Local test"""
 
     proc = None
@@ -98,6 +100,18 @@ class Testlocal(unittest.TestCase,
     crt_phy_addr = ""
     ofi_interface = ""
     test_local = True
+    test_method = 'pyunit'
+    export_dirs = []
+    mount_dirs = []
+    init_cstats = []
+    final_cstats = []
+    d = {}
+    ionss_logfile = []
+    ionss_logfile_marker = []
+    cnss_logfile = None
+    cnss_logfile_marker = None
+    log_path = None
+    internals_tracing = ""
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -140,6 +154,40 @@ class Testlocal(unittest.TestCase,
             (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
             self.logger.info("File limits are soft:%d hard:%d", soft, hard)
 
+    def internals_path_testing_setup(self):
+        """Call all methods for internals path testing framework. pyunit will
+        call this during setUp() of each test, go method will call this
+        only once per run"""
+
+        self.cnss_logfile = os.path.realpath(os.path.join(self.log_path,
+                                                          '1/rank.0/stdout'))
+        self.cnss_logfile_marker = self.timestamp_logfile(self.cnss_logfile)
+        for rank in os.listdir(os.path.join(self.log_path, '1')):
+            if rank != 'rank.0':
+                self.ionss_logfile.append(os.path.realpath
+                                          (os.path.join(self.log_path, '1',
+                                                        rank, 'stdout')))
+        for ion_log in self.ionss_logfile:
+            self.ionss_logfile_marker.append(self.timestamp_logfile(ion_log))
+
+        #Verify FUSE Mount
+        self.verify_mount(self.mount_dirs)
+
+        #Verify IONSS
+        self.verify_ionss(common_methods.CTRL_DIR)
+
+        #Initial CNSS stats
+        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
+        for projection_stats in ret_stats:
+            mnt = projection_stats[0]
+            self.d["stats_list_{0}".format(mnt)] = projection_stats[1]
+            self.init_cstats = projection_stats[2]
+            self.d["init_cstats_{0}".format(mnt)] = \
+                   list(map(int, self.init_cstats))
+            self.d["len_init_{0}".format(mnt)] = \
+                   len(list(self.d["init_cstats_{0}".format(mnt)]))
+
+#pylint: disable=too-many-branches
     def setUp(self):
         """set up the test"""
 
@@ -148,7 +196,10 @@ class Testlocal(unittest.TestCase,
             __ch = logging.StreamHandler(sys.stdout)
             self.logger.addHandler(__ch)
 
-        self.logger.info("Starting for %s", self.id())
+        self.logger.info('\nStarting for %s', self.id())
+
+        if self.id() == '__main__.Testlocal.go':
+            self.test_method = 'go'
 
         self.setLimits()
 
@@ -177,32 +228,35 @@ class Testlocal(unittest.TestCase,
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
 
-        log_path = os.getenv("IOF_TESTLOG",
-                             os.path.join(os.path.dirname(
-                                 os.path.realpath(__file__)), 'output'))
+        log_top_dir = os.getenv("IOF_TESTLOG",
+                                os.path.join(os.path.dirname(
+                                    os.path.realpath(__file__)), 'output'))
 
         # Append the test case to the log directory to get unique names.
         # Do this in a way that matches the dump_error_messages() logic
         # in the test runner so that on failure only failing methods are
         # shown.
 
-        log_path = os.path.join(log_path, self.logdir_name())
+        self.log_path = os.path.join(log_top_dir, self.logdir_name())
 
-        valgrind = iofcommontestsuite.valgrind_suffix(log_path)
+        valgrind = iofcommontestsuite.valgrind_suffix(self.log_path)
 
         default_log_mask = "INFO,CTRL=WARN"
         if valgrind:
             default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
+        self.internals_tracing = os.getenv("INTERNALS_TRACING", "no")
+        if self.internals_tracing == "yes":
+            default_log_mask = "DEBUG,PMIX=WARN"
         self.log_mask = os.getenv("D_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
-        self.test_valgrind = iofcommontestsuite.valgrind_suffix(log_path,
+        self.test_valgrind = iofcommontestsuite.valgrind_suffix(self.log_path,
                                                                 pmix=False)
         ionss_args = ['ionss']
 
         cmd = [orterun,
-               '--output-filename', log_path]
+               '--output-filename', self.log_path]
 
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
@@ -220,7 +274,8 @@ class Testlocal(unittest.TestCase,
                     '-x', 'D_LOG_MASK=%s' % self.log_mask])
         cmd.extend(valgrind)
         cmd.extend(ionss_args)
-        cmd.extend([self.export_dir, '/usr'])
+        self.export_dirs = [self.export_dir, '/usr']
+        cmd.extend(self.export_dirs)
 
         # cmd.append('--poll-interval=1')
 
@@ -242,11 +297,25 @@ class Testlocal(unittest.TestCase,
 
         self.logger.info("Running")
 
+        self.mount_dirs = common_methods.import_list()
+
+        if self.internals_tracing == 'yes':
+            #Create a dump file for all testing and internals path output
+            self.internals_log_file = os.path.realpath(os.path.\
+                                                       join(self.log_path,
+                                                            'internals.out'))
+            with open(self.internals_log_file, 'w') as f:
+                f.write('\nStarting for {0}:\n'.format(self.id()))
+
+            if self.test_method == 'pyunit':
+                self.internals_path_testing_setup()
+#pylint: enable=too-many-branches
+
     def mark_log(self, msg):
         """Log a message to stdout and to the CNSS logs"""
 
         log_file = os.path.join(self.cnss_prefix, '.ctrl', 'write_log')
-        print(msg)
+        self.normal_output(msg)
         with open(log_file, 'w')  as fd:
             fd.write(msg)
 
@@ -278,10 +347,35 @@ class Testlocal(unittest.TestCase,
                     if value != '0':
                         self.logger.info("%s:%s", stat_file, value)
 
+    def internals_path_testing_teardown(self):
+        """Call all methods for internals path testing framework.
+        pyunit will call this during tearDown() of each test,
+        go method will call this only once per run"""
+
+        #Final CNSS stats
+        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
+        for projection_stats in ret_stats:
+            mnt = projection_stats[0]
+            self.final_cstats = projection_stats[2]
+            self.d["final_cstats_{0}".format(mnt)] = \
+                   list(map(int, self.final_cstats))
+            self.d["len_final_{0}".format(mnt)] = \
+                   len(list(self.d["final_cstats_{0}".format(mnt)]))
+
+            #CNSS Stats Delta
+            self.delta_cnss_stats(self.d, mnt)
+
+        # Compare projection and FS
+        # error with using rsync to compare '/usr' directory
+        self.compare_projection_dir(self.mount_dirs, self.export_dirs,
+                                    'single node')
+
     def tearDown(self):
         """tear down the test"""
 
-        self.show_stats()
+        if self.internals_tracing == 'yes':
+            if self.test_method == 'pyunit':
+                self.internals_path_testing_teardown()
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
@@ -295,6 +389,7 @@ class Testlocal(unittest.TestCase,
             procrtn = self.common_stop_process(self.proc)
 
         self.cleanup(procrtn)
+        self.normal_output("Ending {0}".format(self.id()))
 
     def cleanup(self, procrtn):
         """Delete any temporary files or directories created"""
@@ -318,8 +413,11 @@ class Testlocal(unittest.TestCase,
         # Now exit if there was an error after the rest of the cleanup has
         # completed.
         if procrtn == 42:
+            self.error_output("Job completed with valgrind errors")
             self.fail("Job completed with valgrind errors")
         elif procrtn != 0:
+            self.error_output("Non-zero exit code from orterun {0}".\
+                               format(procrtn))
             self.fail("Non-zero exit code from orterun %d" % procrtn)
 
     def test_ro_stat(self):
@@ -642,13 +740,14 @@ class Testlocal(unittest.TestCase,
         files = os.listdir(idir)
         for e in files:
             ep = os.path.join(idir, e)
-            print('Cleaning up %s' % ep)
+            self.normal_output('Cleaning up {0}'.format(ep))
             if os.path.isfile(ep) or os.path.islink(ep):
                 os.unlink(ep)
             elif os.path.isdir(ep):
                 shutil.rmtree(ep)
         files = os.listdir(idir)
         if files:
+            self.error_output('Test left some files {0}'.format(files))
             self.fail('Test left some files %s' % files)
 
     def go(self):
@@ -685,15 +784,19 @@ class Testlocal(unittest.TestCase,
 
             subtest_count += 1
             with self.subTest(possible[5:]):
-                self.mark_log('Starting test %s' % possible)
+                self.mark_log('\nStarting test %s:' % possible)
+                if self.internals_tracing == 'yes':
+                    self.internals_path_testing_setup()
                 obj()
+                if self.internals_tracing == 'yes':
+                    self.internals_path_testing_teardown()
                 self.mark_log('Finished test %s, cleaning up' % possible)
                 self.clean_export_dir()
 
         if have_iofmod:
             subtest_count += self.test_iofmod()
 
-        print("Ran %d subtests" % (subtest_count))
+        self.normal_output("Ran {0} subtests".format(subtest_count))
 
 def local_launch(ioil_dir):
     """Launch a local filesystem for interactive use"""
@@ -760,7 +863,13 @@ if __name__ == '__main__':
                         help='Launch a local file system for interactive use')
     parser.add_argument('--log-mask', dest='mask', metavar='MASK', type=str,
                         default='INFO,CTRL=WARN', help='Set the CaRT log mask')
+    parser.add_argument('--internals-tracing', action='store_true', help='Turn '
+                        'on internals path testing w/ RPC/Descriptor tracing')
     args = parser.parse_args()
+
+    if args.internals_tracing:
+        os.environ['INTERNALS_TRACING'] = 'yes'
+        os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'

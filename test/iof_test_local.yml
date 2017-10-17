@@ -3,8 +3,8 @@ description: "ionss local test module"
 defaultENV:
     OMPI_MCA_rmaps_base_oversubscribe: "1"
     TR_REDIRECT_OUTPUT: "yes"
-    D_LOG_MASK: "INFO"
     MULTI_INSTANCE_TESTS: "no"
+    INTERNALS_TRACING: "yes"
 
 module:
     name: "iof_test_local"
