@@ -39,6 +39,8 @@
 #define __IONSS_H__
 
 #include <dirent.h>
+#include <sys/mman.h>
+#include <stdbool.h>
 #include "iof_atomic.h"
 #include "ios_gah.h"
 #include "iof_pool.h"
@@ -189,6 +191,7 @@ struct ionss_active_read {
 	size_t				buf_len;
 	size_t				read_len;
 	crt_bulk_t			local_bulk_handle;
+	bool				failed;
 
 };
 

@@ -1238,6 +1238,7 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rrd, NULL);
 	if (rc) {
 		out->err = IOF_ERR_CART;
+		rrd->ard->failed = true;
 		goto out;
 	}
 
@@ -1281,10 +1282,12 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	struct ios_projection *projection = rrd->handle->projection;
 	int rc;
 
-	if (cb_info->bci_rc)
+	if (cb_info->bci_rc) {
 		rrd->out->err = IOF_ERR_CART;
-	else
+		rrd->ard->failed = true;
+	} else {
 		rrd->out->bulk_len = rrd->ard->read_len;
+	}
 
 	rc = crt_reply_send(rrd->rpc);
 
@@ -2314,33 +2317,18 @@ fh_init(void *arg, void *handle)
 	return 0;
 }
 
-static int
-ar_init(void *arg, void *handle)
+static int ar_create_bulk(struct ionss_active_read *ard)
 {
-	struct ionss_active_read *ard = arg;
-	struct ios_projection *projection = handle;
-	int rc;
-
-	ard->projection = projection;
-
-	ard->buf_len = projection->base->max_read;
-	rc = posix_memalign(&ard->buf, 4096, ard->buf_len);
-	if (rc || !ard->buf)
-		return -1;
-
-	return 0;
-}
-
-static int
-ar_reset(void *arg)
-{
-	struct ionss_active_read *ard = arg;
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
 	int rc;
 
-	if (ard->local_bulk_handle)
-		crt_bulk_free(ard->local_bulk_handle);
+	ard->buf = mmap(NULL, ard->buf_len, PROT_READ|PROT_WRITE,
+			MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	if (ard->buf == MAP_FAILED) {
+		ard->buf = NULL;
+		return -1;
+	}
 
 	iov.iov_len = ard->buf_len;
 	iov.iov_buf = ard->buf;
@@ -2351,23 +2339,85 @@ ar_reset(void *arg)
 	rc = crt_bulk_create(ard->projection->base->crt_ctx, &sgl, CRT_BULK_RO,
 			     &ard->local_bulk_handle);
 	if (rc) {
-		free(ard->buf);
+		rc = munmap(ard->buf, ard->buf_len);
+		if (rc == -1)
+			IOF_TRACE_DEBUG(ard, "munmap failed: %p: %s", ard->buf,
+					strerror(errno));
 		return -1;
 	}
+
+	IOF_TRACE_DEBUG(ard, "Bulk buffer allocated: %p", ard->buf);
+
 	return 0;
+}
+
+static void
+ar_destroy_bulk(struct ionss_active_read *ard)
+{
+	void *addr;
+	int rc;
+
+	rc = crt_bulk_free(ard->local_bulk_handle);
+
+	if (rc != 0) {
+		/* Something is messed up with the handle.   Leak the virtual
+		 * memory space here but disallow access to it.   Using mmap
+		 * should cause the network driver to disallow access.  If it
+		 * crashes due to an access to this memory region, then it
+		 * indicates a bug in the stack.
+		 */
+		IOF_TRACE_DEBUG(ard, "Bulk free failed, remapping: %p, rc = %d",
+				ard->buf, rc);
+		addr = mmap(ard->buf, ard->buf_len, PROT_NONE,
+			    MAP_FIXED|MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+		if (addr == MAP_FAILED)
+			IOF_TRACE_ERROR(ard, "remap failed: %p: %s", ard->buf,
+					strerror(errno));
+	} else {
+		IOF_TRACE_DEBUG(ard, "Bulk free'd: %p", ard->buf);
+		munmap(ard->buf, ard->buf_len);
+		rc = munmap(ard->buf, ard->buf_len);
+		if (rc == -1)
+			IOF_TRACE_DEBUG(ard, "munmap failed: %p: %s", ard->buf,
+					strerror(errno));
+	}
+}
+
+static int
+ar_init(void *arg, void *handle)
+{
+	struct ionss_active_read *ard = arg;
+	struct ios_projection *projection = handle;
+
+	ard->projection = projection;
+
+	ard->buf_len = projection->base->max_read;
+
+	return ar_create_bulk(ard);
+}
+
+static int
+ar_reset(void *arg)
+{
+	struct ionss_active_read *ard = arg;
+
+	/* If the previous bulk worked, leave the handle as is */
+	if (!ard->failed)
+		return 0;
+
+	ard->failed = false;
+
+	ar_destroy_bulk(ard);
+
+	return ar_create_bulk(ard);
 }
 
 static void
 ar_release(void *arg)
 {
 	struct ionss_active_read *ard = arg;
-	int rc;
 
-	rc = crt_bulk_free(ard->local_bulk_handle);
-
-	IOF_LOG_DEBUG("Bulk free %p %d", ard, rc);
-
-	free(ard->buf);
+	ar_destroy_bulk(ard);
 }
 
 int main(int argc, char **argv)
