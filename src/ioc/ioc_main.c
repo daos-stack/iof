@@ -481,7 +481,7 @@ static void ih_addref(struct d_chash_table *htable, d_list_t *rlink)
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 	oldref = atomic_fetch_add(&ie->ref, 1);
-	IOF_LOG_DEBUG("addref(%p) to %u", ie, oldref + 1);
+	IOF_TRACE_DEBUG(ie, "addref to %u", oldref + 1);
 }
 
 static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
@@ -491,7 +491,7 @@ static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 	oldref = atomic_fetch_sub(&ie->ref, 1);
-	IOF_LOG_DEBUG("decref(%p) to %u", ie, oldref - 1);
+	IOF_TRACE_DEBUG(ie, "decref to %u", oldref - 1);
 	return oldref == 1;
 }
 
@@ -784,7 +784,7 @@ lookup_reset(void *arg)
 			    NULL,
 			    FS_TO_OP(req->fs_handle, lookup), &req->rpc);
 	if (rc || !req->rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %d", rc);
+		IOF_TRACE_ERROR(arg, "Could not create request, rc = %d", rc);
 		free(req->ie);
 		return -1;
 	}
@@ -1515,18 +1515,18 @@ static void iof_deregister_fuse(void *arg)
 	d_list_t *rlink = NULL;
 	int rc;
 
-	IOF_LOG_INFO("Draining inode table");
+	IOF_TRACE_INFO(fs_handle, "Draining inode table");
 	do {
 		rlink = d_chash_rec_first(&fs_handle->inode_ht);
-		IOF_LOG_INFO("rlink is %p", rlink);
+		IOF_TRACE_INFO(fs_handle, "rlink is %p", rlink);
 		if (rlink)
 			d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	} while (rlink);
 
-	IOF_LOG_INFO("inode table empty");
+	IOF_TRACE_INFO(fs_handle, "inode table empty");
 	rc = d_chash_table_destroy_inplace(&fs_handle->inode_ht, false);
 	if (rc)
-		IOF_LOG_WARNING("Failed to close inode handles");
+		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
 
 	iof_pool_destroy(&fs_handle->pool);
 

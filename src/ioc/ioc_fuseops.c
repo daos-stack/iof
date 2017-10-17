@@ -131,10 +131,11 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 			   struct fuse_conn_info *conn)
 {
 
-	IOF_LOG_INFO("Fuse configuration for projection srv:%d cli:%d",
-		     fs_handle->fs_id, fs_handle->proj.cli_fs_id);
+	IOF_TRACE_INFO(fs_handle, "Fuse configuration for projection srv:%d cli:%d",
+		       fs_handle->fs_id, fs_handle->proj.cli_fs_id);
 
-	IOF_LOG_INFO("Proto %d %d", conn->proto_major, conn->proto_minor);
+	IOF_TRACE_INFO(fs_handle, "Proto %d %d",
+		       conn->proto_major, conn->proto_minor);
 
 	/* This value has to be set here to the same value passed to
 	 * register_fuse().  Fuse always sets this value to zero so
@@ -143,11 +144,11 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	conn->max_read = fs_handle->max_read;
 	conn->max_write = fs_handle->max_write;
 
-	IOF_LOG_INFO("max read %#x", conn->max_read);
-	IOF_LOG_INFO("max write %#x", conn->max_write);
-	IOF_LOG_INFO("readahead %#x", conn->max_readahead);
+	IOF_TRACE_INFO(fs_handle, "max read %#x", conn->max_read);
+	IOF_TRACE_INFO(fs_handle, "max write %#x", conn->max_write);
+	IOF_TRACE_INFO(fs_handle, "readahead %#x", conn->max_readahead);
 
-	IOF_LOG_INFO("Capability supported %#x ", conn->capable);
+	IOF_TRACE_INFO(fs_handle, "Capability supported %#x ", conn->capable);
 
 	ioc_show_flags(conn->capable);
 
@@ -155,12 +156,12 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	conn->want |= FUSE_CAP_BIG_WRITES;
 #endif
 
-	IOF_LOG_INFO("Capability requested %#x", conn->want);
+	IOF_TRACE_INFO(fs_handle, "Capability requested %#x", conn->want);
 
 	ioc_show_flags(conn->want);
 
-	IOF_LOG_INFO("max_background %d", conn->max_background);
-	IOF_LOG_INFO("congestion_threshold %d", conn->congestion_threshold);
+	IOF_TRACE_INFO(fs_handle, "max_background %d", conn->max_background);
+	IOF_TRACE_INFO(fs_handle, "congestion_threshold %d", conn->congestion_threshold);
 
 	return fs_handle;
 }
@@ -184,16 +185,16 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	 */
 	cfg->nullpath_ok = 1;
 
-	IOF_LOG_INFO("timeouts entry %f negative %f attr %f",
+	IOF_TRACE_INFO(fs_handle, "timeouts entry %f negative %f attr %f",
 		     cfg->entry_timeout,
 		     cfg->negative_timeout,
 		     cfg->attr_timeout);
 
-	IOF_LOG_INFO("use_ino %d", cfg->use_ino);
+	IOF_TRACE_INFO(fs_handle, "use_ino %d", cfg->use_ino);
 
-	IOF_LOG_INFO("nullpath_ok %d", cfg->nullpath_ok);
+	IOF_TRACE_INFO(fs_handle, "nullpath_ok %d", cfg->nullpath_ok);
 
-	IOF_LOG_INFO("direct_io %d", cfg->direct_io);
+	IOF_TRACE_INFO(fs_handle, "direct_io %d", cfg->direct_io);
 
 	return handle;
 }
