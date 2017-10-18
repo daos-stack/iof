@@ -51,7 +51,7 @@ struct iof_pool_reg {
 	/* Prepare an object for use by freeing any old data
 	 * and allocating new data
 	 */
-	int	(*clean)(void *);
+	int	(*reset)(void *);
 
 	/* Called once at teardown */
 	void	(*release)(void *);
@@ -89,12 +89,12 @@ struct iof_pool_type {
 
 	/* Statistics counters */
 	int			init_count;
-	int			clean_count;
+	int			reset_count;
 	int			release_count;
 
 	/* Performance metrics */
 	int			op_init; /* Number of on-path init calls */
-	int			op_clean; /* Number of on-path clean calls */
+	int			op_reset; /* Number of on-path reset calls */
 	/* Number of sequental calls to acquire() without a call to restock() */
 	int			no_restock; /* Current count */
 	int			no_restock_hwm; /* High water mark */

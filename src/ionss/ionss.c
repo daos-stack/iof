@@ -2381,7 +2381,7 @@ ar_init(void *arg, void *handle)
 }
 
 static int
-ar_clean(void *arg)
+ar_reset(void *arg)
 {
 	struct ionss_active_read *ard = arg;
 	d_sg_list_t sgl = {0};
@@ -2681,7 +2681,7 @@ int main(int argc, char **argv)
 		struct ios_projection *projection = &base.projection_array[i];
 		struct iof_pool_reg arp = {.handle = projection,
 					   .init = ar_init,
-					   .clean = ar_clean,
+					   .reset = ar_reset,
 					   .release = ar_release,
 					   .max_desc = 3,
 					   POOL_TYPE_INIT(ionss_active_read,

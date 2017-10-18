@@ -441,7 +441,7 @@ int dh_init(void *arg, void *handle)
 	return 0;
 }
 
-int dh_clean(void *arg)
+int dh_reset(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
 	int rc;
@@ -503,7 +503,7 @@ fh_init(void *arg, void *handle)
 }
 
 static int
-fh_clean(void *arg)
+fh_reset(void *arg)
 {
 	struct iof_file_handle *fh = arg;
 	int rc;
@@ -583,9 +583,9 @@ gh_init(void *arg, void *handle)
 	return 0;
 }
 
-/* Clean, and prepare for use a getattr descriptor */
+/* Reset, and prepare for use a getattr descriptor */
 static int
-gh_clean(void *arg)
+gh_reset(void *arg)
 {
 	struct getattr_req *req = arg;
 	struct iof_gah_string_in *in;
@@ -606,7 +606,7 @@ gh_clean(void *arg)
 	 * to the RPC so that it is not cleaned up after a successful send.
 	 *
 	 * After calling send the getattr code will re-take the dropped
-	 * reference which means that on all subsequent calls to clean()
+	 * reference which means that on all subsequent calls to reset()
 	 * or release() the ref count will be two.
 	 *
 	 * This means that both descriptor creation and destruction are
@@ -628,9 +628,9 @@ gh_clean(void *arg)
 	return 0;
 }
 
-/* Clean and prepare for use a getfattr descriptor */
+/* Reset and prepare for use a getfattr descriptor */
 static int
-fgh_clean(void *arg)
+fgh_reset(void *arg)
 {
 	struct getattr_req *req = arg;
 	int rc;
@@ -676,9 +676,9 @@ lookup_init(void *arg, void *handle)
 	return 0;
 }
 
-/* Clean, and prepare for use a getattr descriptor */
+/* Reset, and prepare for use a lookup descriptor */
 static int
-lookup_clean(void *arg)
+lookup_reset(void *arg)
 {
 	struct lookup_req *req = arg;
 	int rc;
@@ -703,7 +703,7 @@ lookup_clean(void *arg)
 	 * to the RPC so that it is not cleaned up after a successful send.
 	 *
 	 * After calling send the getattr code will re-take the dropped
-	 * reference which means that on all subsequent calls to clean()
+	 * reference which means that on all subsequent calls to reset()
 	 * or release() the ref count will be two.
 	 *
 	 * This means that both descriptor creation and destruction are
@@ -1235,35 +1235,35 @@ static int initialize_projection(struct iof_state *iof_state,
 		/* Register the directory handle type
 		 *
 		 * This is done late on in the registraction as the dh_int()
-		 * and dh_clean() functions require access to fs_handle.
+		 * and dh_reset() functions require access to fs_handle.
 		 */
 		struct iof_pool_reg pt = { .handle = fs_handle,
 					   .init = dh_init,
-					   .clean = dh_clean,
+					   .reset = dh_reset,
 					   .release = dh_release,
 					   POOL_TYPE_INIT(iof_dir_handle, list)};
 
 		struct iof_pool_reg fh = { .handle = fs_handle,
 					   .init = fh_init,
-					   .clean = fh_clean,
+					   .reset = fh_reset,
 					   .release = fh_release,
 					   POOL_TYPE_INIT(iof_file_handle, list)};
 
 		struct iof_pool_reg gt = { .handle = fs_handle,
 					   .init = gh_init,
-					   .clean = gh_clean,
+					   .reset = gh_reset,
 					   .release = gh_release,
 					   POOL_TYPE_INIT(getattr_req, list)};
 
 		struct iof_pool_reg fgt = { .handle = fs_handle,
 					    .init = gh_init,
-					    .clean = fgh_clean,
+					    .reset = fgh_reset,
 					    .release = gh_release,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
 		struct iof_pool_reg lookup_t = { .handle = fs_handle,
 						 .init = lookup_init,
-						 .clean = lookup_clean,
+						 .reset = lookup_reset,
 						 .release = lookup_release,
 						 POOL_TYPE_INIT(lookup_req, list)};
 

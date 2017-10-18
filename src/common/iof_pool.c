@@ -54,11 +54,11 @@ debug_dump(struct iof_pool_type *type)
 			type->reg.size, type->reg.offset);
 	IOF_TRACE_DEBUG(type, "Count: free %d pending %d total %d",
 			type->free_count, type->pending_count, type->count);
-	IOF_TRACE_DEBUG(type, "Calls: init %d clean %d release %d",
-			type->init_count, type->clean_count,
+	IOF_TRACE_DEBUG(type, "Calls: init %d reset %d release %d",
+			type->init_count, type->reset_count,
 			type->release_count);
-	IOF_TRACE_DEBUG(type, "OP: init %d clean %d", type->op_init,
-			type->op_clean);
+	IOF_TRACE_DEBUG(type, "OP: init %d reset %d", type->op_init,
+			type->op_reset);
 	IOF_TRACE_DEBUG(type, "No restock: current %d hwm %d", type->no_restock,
 			type->no_restock_hwm);
 }
@@ -106,7 +106,7 @@ static int
 restock(struct iof_pool_type *type, int count)
 {
 	d_list_t *entry, *enext;
-	int clean_calls = 0;
+	int reset_calls = 0;
 
 	if (type->free_count >= count)
 		return 0;
@@ -115,20 +115,20 @@ restock(struct iof_pool_type *type, int count)
 		void *ptr = (void *)entry - type->reg.offset;
 		int rc;
 
-		IOF_TRACE_DEBUG(ptr, "Cleaning");
+		IOF_TRACE_DEBUG(ptr, "Resetting");
 
 		d_list_del(entry);
 		type->pending_count--;
 
-		if (type->reg.clean) {
-			type->clean_count++;
-			clean_calls++;
-			rc = type->reg.clean(ptr);
+		if (type->reg.reset) {
+			type->reset_count++;
+			reset_calls++;
+			rc = type->reg.reset(ptr);
 			if (rc == 0) {
 				d_list_add(entry, &type->free_list);
 				type->free_count++;
 			} else {
-				IOF_TRACE_DEBUG(ptr, "entry failed clean");
+				IOF_TRACE_DEBUG(ptr, "entry failed reset");
 				type->count--;
 				free(ptr);
 			}
@@ -137,9 +137,9 @@ restock(struct iof_pool_type *type, int count)
 			type->free_count++;
 		}
 		if (type->free_count == count)
-			return clean_calls;
+			return reset_calls;
 	}
-	return clean_calls;
+	return reset_calls;
 }
 
 /* Reclaim any memory possible */
@@ -152,7 +152,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 	d_list_for_each_entry(type, &pool->list, type_list) {
 		d_list_t *entry, *enext;
 
-		IOF_TRACE_DEBUG(type, "Cleaning type");
+		IOF_TRACE_DEBUG(type, "Resetting type");
 
 		pthread_mutex_lock(&type->lock);
 
@@ -204,8 +204,8 @@ create(struct iof_pool_type *type)
 		}
 	}
 
-	if (type->reg.clean) {
-		rc = type->reg.clean(ptr);
+	if (type->reg.reset) {
+		rc = type->reg.reset(ptr);
 		if (rc != 0) {
 			free(ptr);
 			return NULL;
@@ -284,7 +284,7 @@ iof_pool_acquire(struct iof_pool_type *type)
 	if (type->free_count == 0) {
 		int count = restock(type, 1);
 
-		type->op_clean += count;
+		type->op_reset += count;
 	}
 
 	if (!d_list_empty(&type->free_list)) {
