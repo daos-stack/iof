@@ -734,22 +734,6 @@ lookup_release(void *arg)
 }
 
 static int
-rb_small_init(void *arg, void *handle)
-{
-	struct iof_rb *rb = arg;
-	struct iof_projection_info *fs_handle = handle;
-
-	D_ALLOC(rb->buf.buf[0].mem, fs_handle->max_iov_read);
-	if (!rb->buf.buf[0].mem)
-		return -1;
-
-	rb->buf.count = 1;
-	rb->buf.buf[0].fd = -1;
-
-	return 0;
-}
-
-static int
 rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
@@ -1267,11 +1251,6 @@ static int initialize_projection(struct iof_state *iof_state,
 						 .release = lookup_release,
 						 POOL_TYPE_INIT(lookup_req, list)};
 
-		struct iof_pool_reg rb_small = { .handle = fs_handle,
-						 .init = rb_small_init,
-						 .release = rb_release,
-						 POOL_TYPE_INIT(iof_rb, list)};
-
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
 						 .init = rb_page_init,
 						 .release = rb_release,
@@ -1301,11 +1280,6 @@ static int initialize_projection(struct iof_state *iof_state,
 
 		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
 		if (!fs_handle->fh_pool)
-			return IOF_ERR_NOMEM;
-
-		fs_handle->rb_pool_small = iof_pool_register(&fs_handle->pool,
-							     &rb_small);
-		if (!fs_handle->rb_pool_small)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->rb_pool_page = iof_pool_register(&fs_handle->pool,

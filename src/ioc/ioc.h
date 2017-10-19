@@ -138,7 +138,6 @@ struct iof_projection_info {
 	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*lookup_pool;
 	struct iof_pool_type		*fh_pool;
-	struct iof_pool_type		*rb_pool_small;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
 	uint32_t			max_read;

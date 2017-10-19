@@ -1149,54 +1149,6 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-static void
-iof_read_handler(crt_rpc_t *rpc)
-{
-	struct iof_read_in *in = crt_req_get(rpc);
-	struct iof_data_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	void *data = NULL;
-	size_t bytes_read;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
-
-	if (in->len > base.max_iov_read) {
-		IOF_LOG_WARNING("Invalid read, too large");
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	IOF_LOG_DEBUG("Reading from %d", handle->fd);
-
-	D_ALLOC(data, in->len);
-	if (!data) {
-		out->err = IOF_ERR_NOMEM;
-		goto out;
-	}
-
-	errno = 0;
-	bytes_read = pread(handle->fd, data, in->len, in->base);
-	if (bytes_read == -1)
-		out->rc = errno;
-	else
-		d_iov_set(&out->data, data, bytes_read);
-
-out:
-	rc = crt_reply_send(rpc);
-
-	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-
-	if (data)
-		free(data);
-
-	if (handle)
-		ios_fh_decref(handle, 1);
-}
-
 static int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info);
 static void iof_process_read_bulk(struct ionss_active_read *ard,
 				  struct ionss_read_req_desc *rrd);
@@ -2093,7 +2045,6 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
 		DECL_RPC_HANDLER(open, iof_open_handler),
 		DECL_RPC_HANDLER(create, iof_create_handler),
-		DECL_RPC_HANDLER(read, iof_read_handler),
 		DECL_RPC_HANDLER(close, iof_close_handler),
 		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
 		DECL_RPC_HANDLER(readlink, iof_readlink_handler),

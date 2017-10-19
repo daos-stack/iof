@@ -61,15 +61,6 @@
 		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
 		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
-struct read_cb_r {
-	struct iof_data_out *out;
-	struct iof_file_common *f_info;
-	crt_rpc_t *rpc;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
 struct read_bulk_cb_r {
 	struct iof_read_bulk_out *out;
 	struct iof_file_common *f_info;
@@ -78,61 +69,6 @@ struct read_bulk_cb_r {
 	int err;
 	int rc;
 };
-
-#define BULK_THRESHOLD 64
-
-static void
-read_cb(const struct crt_cb_info *cb_info)
-{
-	struct read_cb_r *reply = cb_info->cci_arg;
-	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		if (cb_info->cci_rc == -DER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->err) {
-		IOF_LOG_ERROR("Error from target %d", out->err);
-
-		if (out->err == IOF_GAH_INVALID)
-			reply->f_info->gah_valid = 0;
-
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->rc) {
-		reply->rc = out->rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
-
-	iof_tracker_signal(&reply->tracker);
-}
 
 static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
@@ -188,66 +124,6 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-}
-
-static int read_direct(char *buff, size_t len, off_t position,
-		     struct iof_file_common *f_info, int *errcode)
-{
-	struct iof_projection *fs_handle;
-	struct iof_service_group *grp;
-	struct iof_read_in *in;
-	struct read_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	fs_handle = f_info->projection;
-	grp = fs_handle->grp;
-
-	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    FS_TO_OP(fs_handle, read), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		*errcode = EIO;
-		return -1;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->gah = f_info->gah;
-	in->base = position;
-	in->len = len;
-
-	reply.f_info = f_info;
-
-	rc = crt_req_send(rpc, read_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		*errcode = EIO;
-		return -1;
-	}
-	iof_fs_wait(fs_handle, &reply.tracker);
-
-	if (reply.err) {
-		*errcode = reply.err;
-		return -1;
-	}
-
-	if (reply.rc != 0) {
-		*errcode = reply.rc;
-		return -1;
-	}
-
-	len = reply.out->data.iov_len;
-
-	if (len > 0)
-		memcpy(buff, reply.out->data.iov_buf, reply.out->data.iov_len);
-
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
-
-	return len;
 }
 
 static ssize_t read_bulk(char *buff, size_t len, off_t position,
@@ -351,10 +227,7 @@ ssize_t ioil_do_pread(char *buff, size_t len, off_t position,
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(f_info->gah));
 
-	if (len >= BULK_THRESHOLD)
-		return read_bulk(buff, len, position, f_info, errcode);
-	else
-		return read_direct(buff, len, position, f_info, errcode);
+	return read_bulk(buff, len, position, f_info, errcode);
 }
 
 /* TODO: This could be optimized to send multiple RPCs at once rather than
@@ -368,13 +241,8 @@ ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
 	int i;
 
 	for (i = 0; i < count; i++) {
-		if (iov[i].iov_len >= BULK_THRESHOLD)
-			bytes_read = read_bulk(iov[i].iov_base, iov[i].iov_len,
+		bytes_read = read_bulk(iov[i].iov_base, iov[i].iov_len,
 					 position, f_info, errcode);
-		else
-			bytes_read = read_direct(iov[i].iov_base,
-						 iov[i].iov_len,
-						 position, f_info, errcode);
 
 		if (bytes_read == -1)
 			return (ssize_t)-1;

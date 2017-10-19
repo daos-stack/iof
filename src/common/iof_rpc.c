@@ -123,12 +123,6 @@ struct crt_msg_field *psr_out[] = {
 	&CMF_UINT32,
 };
 
-struct crt_msg_field *read_in[] = {
-	&CMF_GAH,
-	&CMF_UINT64,
-	&CMF_UINT64,
-};
-
 struct crt_msg_field *read_bulk_in[] = {
 	&CMF_GAH,
 	&CMF_BULK,
@@ -226,7 +220,6 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
 	RPC_TYPE(unlink, string_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
-	RPC_TYPE(read, read_in, iov_pair),
 	RPC_TYPE(create, create_in, gah_pair),
 	RPC_TYPE(close, gah_in, NULL),
 	RPC_TYPE(mkdir, create_in, status_out),

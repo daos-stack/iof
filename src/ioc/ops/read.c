@@ -51,62 +51,6 @@ struct read_cb_r {
 };
 
 static void
-read_cb(const struct crt_cb_info *cb_info)
-{
-	struct read_cb_r *reply = cb_info->cci_arg;
-	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
-			       cb_info->cci_rc);
-		if (cb_info->cci_rc == -DER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->err) {
-		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
-				out->err);
-
-		if (out->err == IOF_GAH_INVALID)
-			reply->handle->common.gah_valid = 0;
-
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->rc) {
-		reply->rc = out->rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_TRACE_ERROR(reply->handle, "could not take reference on "
-				"query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
-
-	iof_tracker_signal(&reply->tracker);
-}
-
-static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_cb_r *reply = cb_info->cci_arg;
@@ -164,63 +108,6 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 	iof_tracker_signal(&reply->tracker);
-}
-
-static int
-ioc_read_direct(struct iof_rb *rb, size_t len, off_t position,
-		struct iof_file_handle *handle)
-{
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_read_in *in;
-	struct iof_data_out *out;
-	struct read_cb_r reply = {0};
-	char *buff = rb->buf.buf[0].mem;
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, read), &rpc);
-	if (rc || !rpc) {
-		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
-	IOF_TRACE_LINK(rpc, handle, "read_direct_rpc");
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->gah = handle->common.gah;
-	in->base = position;
-	in->len = len;
-
-	reply.handle = handle;
-
-	rc = crt_req_send(rpc, read_cb, &reply);
-	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
-		return -EIO;
-	}
-	iof_pool_restock(fs_handle->rb_pool_small);
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (reply.err)
-		return -reply.err;
-
-	if (reply.rc != 0)
-		return -reply.rc;
-
-	out = reply.out;
-	len = out->data.iov_len;
-
-	if (len > 0)
-		memcpy(buff, out->data.iov_buf, out->data.iov_len);
-
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_TRACE_ERROR(handle, "decref returned %d", rc);
-
-	return len;
 }
 
 static int
@@ -345,9 +232,7 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 		return -EIO;
 	}
 
-	if (len <= fs_handle->max_iov_read)
-		pt = fs_handle->rb_pool_small;
-	else if (len <= 4096)
+	if (len <= 4096)
 		pt = fs_handle->rb_pool_page;
 	else
 		pt = fs_handle->rb_pool_large;
@@ -360,11 +245,8 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 
 	IOF_TRACE_DEBUG(handle, "Using buffer at %p", buf->buf[0].mem);
 
-	if (len > fs_handle->max_iov_read)
-		rc = ioc_read_bulk(rb, len, position, handle);
-	else
-		rc = ioc_read_direct(rb, len, position, handle);
 
+	rc = ioc_read_bulk(rb, len, position, handle);
 
 	/* In theory for zero-sized reads FUSE could do without a buffer here
 	 * as there are no file contents to describe however the API requires

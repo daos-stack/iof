@@ -238,12 +238,6 @@ struct iof_open_out {
 	int err;
 };
 
-struct iof_read_in {
-	struct ios_gah gah;
-	uint64_t base;
-	uint64_t len;
-};
-
 struct iof_read_bulk_in {
 	struct ios_gah gah;
 	crt_bulk_t bulk;
@@ -340,7 +334,6 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, read_bulk),
 	DEF_RPC_TYPE(DEFAULT, unlink),
 	DEF_RPC_TYPE(DEFAULT, open),
-	DEF_RPC_TYPE(DEFAULT, read),
 	DEF_RPC_TYPE(DEFAULT, create),
 	DEF_RPC_TYPE(DEFAULT, close),
 	DEF_RPC_TYPE(DEFAULT, mkdir),
