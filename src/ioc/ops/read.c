@@ -271,11 +271,63 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		 off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (void *)fi->fh;
-	int ret = ENOTSUP;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_pool_type *pt;
+	struct iof_rb *rb;
+	int ret = EIO;
+	int rc;
 
 	IOF_TRACE_LINK(req, handle, "request");
 	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
+	if (len <= 4096)
+		pt = fs_handle->rb_pool_page;
+	else
+		pt = fs_handle->rb_pool_large;
+
+	rb = iof_pool_acquire(pt);
+	if (!rb) {
+		ret = ENOMEM;
+		goto out_err;
+	}
+
+	rc = ioc_read_bulk(rb, len, position, handle);
+	if (rc < 0) {
+		ret = -rc;
+		goto out_err;
+	}
+
+	STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
+
+	/* It's not clear without benchmarking which approach is better
+	 * here, fuse_reply_buf() is a small wrapper around writev() which
+	 * is a much shorter code-path however fuse_reply_data() attempts
+	 * to use splice which may well be faster.
+	 *
+	 * For now it's easy to pick between them, and both of them are
+	 * passing valgrind tests.
+	 */
+	if (true) {
+		rc = fuse_reply_buf(req, rb->buf.buf[0].mem, rc);
+		iof_pool_release(pt, rb);
+	} else {
+		struct fuse_bufvec *buf;
+
+		buf = &rb->buf;
+		buf->buf[0].size = rc;
+		rc = fuse_reply_data(req, buf, 0);
+		iof_pool_release(pt, rb);
+	}
+
+	if (rc != 0)
+		IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", rc);
+
+	IOF_TRACE_DOWN(req);
+	return;
+
+out_err:
 	IOF_FUSE_REPLY_ERR(req, ret);
+	if (rb)
+		iof_pool_release(pt, rb);
 }
