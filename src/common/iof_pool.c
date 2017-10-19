@@ -338,14 +338,6 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
  * object has been used however correctness is maintained even if that is not
  * the case.
  */
-void
-iof_pool_consume(struct iof_pool_type *type, void *ptr)
-{
-	IOF_TRACE_DEBUG(ptr, "Marking as consumed");
-	pthread_mutex_lock(&type->lock);
-	type->count--;
-	pthread_mutex_unlock(&type->lock);
-}
 
 void
 iof_pool_restock(struct iof_pool_type *type)

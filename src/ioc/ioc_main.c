@@ -801,17 +801,25 @@ lookup_release(void *arg)
 }
 
 static int
-rb_page_init(void *arg, void *handle)
+rb_page_reset(void *arg)
 {
 	struct iof_rb *rb = arg;
 
-	/* TODO: This should use MMAP */
-	D_ALLOC(rb->buf.buf[0].mem, 4096);
-	if (!rb->buf.buf[0].mem)
+	if (rb->buf)
+		return 0;
+
+	D_ALLOC_PTR(rb->buf);
+	if (!rb->buf)
 		return -1;
 
-	rb->buf.count = 1;
-	rb->buf.buf[0].fd = -1;
+	D_ALLOC(rb->buf->buf[0].mem, 4096);
+	if (!rb->buf->buf[0].mem) {
+		D_FREE(rb->buf);
+		return -1;
+	}
+
+	rb->buf->count = 1;
+	rb->buf->buf[0].fd = -1;
 
 	return 0;
 }
@@ -820,15 +828,33 @@ static int
 rb_large_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
-	struct iof_projection_info *fs_handle = handle;
+
+	rb->fs_handle = handle;
+
+	return 0;
+}
+
+static int
+rb_large_reset(void *arg)
+{
+	struct iof_rb *rb = arg;
+
+	if (rb->buf)
+		return 0;
 
 	/* TODO: This should use MMAP */
-	D_ALLOC(rb->buf.buf[0].mem, fs_handle->max_read);
-	if (!rb->buf.buf[0].mem)
+	D_ALLOC_PTR(rb->buf);
+	if (!rb->buf)
 		return -1;
 
-	rb->buf.count = 1;
-	rb->buf.buf[0].fd = -1;
+	D_ALLOC(rb->buf->buf[0].mem, rb->fs_handle->max_read);
+	if (!rb->buf->buf[0].mem) {
+		D_FREE(rb->buf);
+		return -1;
+	}
+
+	rb->buf->count = 1;
+	rb->buf->buf[0].fd = -1;
 
 	return 0;
 }
@@ -838,7 +864,8 @@ rb_release(void *arg)
 {
 	struct iof_rb *rb = arg;
 
-	free(rb->buf.buf[0].mem);
+	D_FREE(rb->buf->buf[0].mem);
+	D_FREE(rb->buf);
 }
 
 static int iof_thread_start(struct iof_state *iof_state);
@@ -1319,12 +1346,13 @@ static int initialize_projection(struct iof_state *iof_state,
 						 POOL_TYPE_INIT(lookup_req, list)};
 
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
-						 .init = rb_page_init,
-						 .release = rb_release,
-						 POOL_TYPE_INIT(iof_rb, list)};
+						.reset = rb_page_reset,
+						.release = rb_release,
+						POOL_TYPE_INIT(iof_rb, list)};
 
 		struct iof_pool_reg rb_large = { .handle = fs_handle,
 						 .init = rb_large_init,
+						 .reset = rb_large_reset,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
 

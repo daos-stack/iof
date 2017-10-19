@@ -118,7 +118,7 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	struct iof_read_bulk_in *in;
 	struct iof_read_bulk_out *out;
 	struct read_cb_r reply = {0};
-	char *buff = rb->buf.buf[0].mem;
+	char *buff = rb->buf->buf[0].mem;
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
 	d_sg_list_t sgl = {0};
@@ -241,7 +241,7 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 	if (!rb)
 		return -ENOMEM;
 
-	buf = &rb->buf;
+	buf = rb->buf;
 
 	IOF_TRACE_DEBUG(handle, "Using buffer at %p", buf->buf[0].mem);
 
@@ -257,7 +257,8 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 		STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
 		buf->buf[0].size = rc;
 		*bufp = buf;
-		iof_pool_consume(pt, rb);
+		rb->buf = NULL;
+		iof_pool_release(pt, rb);
 	} else {
 		iof_pool_release(pt, rb);
 	}
@@ -314,12 +315,12 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	 * passing valgrind tests.
 	 */
 	if (true) {
-		rc = fuse_reply_buf(req, rb->buf.buf[0].mem, rc);
+		rc = fuse_reply_buf(req, rb->buf->buf[0].mem, rc);
 		iof_pool_release(pt, rb);
 	} else {
 		struct fuse_bufvec *buf;
 
-		buf = &rb->buf;
+		buf = rb->buf;
 		buf->buf[0].size = rc;
 		rc = fuse_reply_data(req, buf, 0);
 		iof_pool_release(pt, rb);

@@ -112,8 +112,9 @@ struct iof_group_info {
 };
 
 struct iof_rb {
-	struct fuse_bufvec	buf;
-	d_list_t		list;
+	d_list_t			list;
+	struct iof_projection_info	*fs_handle;
+	struct fuse_bufvec		*buf;
 };
 
 struct iof_projection_info {
