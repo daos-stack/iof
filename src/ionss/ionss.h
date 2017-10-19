@@ -44,6 +44,7 @@
 #include "iof_atomic.h"
 #include "ios_gah.h"
 #include "iof_pool.h"
+#include "iof_bulk.h"
 
 #include <gurt/list.h>
 #include <gurt/hash.h>
@@ -186,11 +187,10 @@ struct ionss_read_req_desc {
 struct ionss_active_read {
 	struct ios_projection		*projection;
 	struct ionss_read_req_desc      *rrd;
-	void				*buf;
+	struct iof_local_bulk		local_bulk;
 	d_list_t			list;
 	size_t				buf_len;
 	size_t				read_len;
-	crt_bulk_t			local_bulk_handle;
 	bool				failed;
 
 };
