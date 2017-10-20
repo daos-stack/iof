@@ -2403,6 +2403,7 @@ int main(int argc, char **argv)
 	base.max_write = 1024 * 1024;
 	base.max_iov_read = 64;
 	base.max_readdir = 1024 * 64;
+	pthread_rwlock_init(&base.gah_rwlock, NULL);
 
 	while (1) {
 		static struct option long_options[] = {
@@ -2743,6 +2744,8 @@ int main(int argc, char **argv)
 	}
 
 	iof_pool_destroy(&base.pool);
+
+	pthread_rwlock_destroy(&base.gah_rwlock);
 
 	ret = crt_context_destroy(base.crt_ctx, 0);
 	if (ret)

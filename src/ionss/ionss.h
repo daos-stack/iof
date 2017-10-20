@@ -63,6 +63,7 @@ struct ios_base {
 	uint32_t		num_ranks;
 	uint			poll_interval;
 	crt_context_t		crt_ctx;
+	pthread_rwlock_t	gah_rwlock;
 	uint32_t		max_read;
 	uint32_t		max_iov_read;
 	uint32_t		max_write;

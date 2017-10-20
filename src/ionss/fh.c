@@ -55,16 +55,21 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 	base = projection->base;
 
+	pthread_rwlock_wrlock(&base->gah_rwlock);
+
 	rc = ios_gah_allocate(base->gs, &fh->gah, 0, 0, fh);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
 		free(fh);
+		pthread_rwlock_unlock(&base->gah_rwlock);
 		return IOS_ERR_NOMEM;
 	}
 
 	fh->ref = 1;
 	*fhp = fh;
+
+	pthread_rwlock_unlock(&base->gah_rwlock);
 
 	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, fh,
 		     GAH_PRINT_FULL_VAL(fh->gah));
@@ -96,11 +101,15 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	projection = fh->projection;
 	base = projection->base;
 
+	pthread_rwlock_wrlock(&base->gah_rwlock);
+
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
 		IOF_LOG_ERROR("Failed to deallocate GAH %d", rc);
 
 	iof_pool_release(projection->fh_pool, fh);
+
+	pthread_rwlock_unlock(&base->gah_rwlock);
 }
 
 /* Try to ensure that there is at least one pre-allocated file_handle
@@ -120,17 +129,21 @@ struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
 	uint oldref;
 	int rc;
 
+	pthread_rwlock_rdlock(&base->gah_rwlock);
+
 	rc = ios_gah_get_info(base->gs, gah, (void **)&fh);
 	if (rc || !fh) {
 		IOF_LOG_ERROR("Failed to load fh from " GAH_PRINT_FULL_STR,
 			      GAH_PRINT_FULL_VAL(*gah));
-		return NULL;
+		D_GOTO(out, fh = NULL);
 	}
 
 	oldref = atomic_fetch_add(&fh->ref, 1);
 
 	IOF_LOG_DEBUG("%s() Using " GAH_PRINT_STR " ref %d",
 		      fn, GAH_PRINT_VAL(fh->gah), oldref + 1);
+out:
+	pthread_rwlock_unlock(&base->gah_rwlock);
 
 	return fh;
 }
@@ -142,15 +155,19 @@ struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *base,
 	struct ionss_dir_handle *dirh = NULL;
 	int rc;
 
+	pthread_rwlock_rdlock(&base->gah_rwlock);
+
 	rc = ios_gah_get_info(base->gs, gah, (void **)&dirh);
 	if (rc || !dirh) {
 		IOF_LOG_ERROR("Failed to load dirh from " GAH_PRINT_FULL_STR,
 			      GAH_PRINT_FULL_VAL(*gah));
-		return NULL;
+		D_GOTO(out, dirh = NULL);
 	}
 
 	IOF_LOG_DEBUG("%s() Found " GAH_PRINT_STR,
 		      fn, GAH_PRINT_VAL(*gah));
+out:
+	pthread_rwlock_unlock(&base->gah_rwlock);
 
 	return dirh;
 }
