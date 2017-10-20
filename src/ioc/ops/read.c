@@ -273,13 +273,18 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	struct iof_file_handle *handle = (void *)fi->fh;
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_pool_type *pt;
-	struct iof_rb *rb;
+	struct iof_rb *rb = NULL;
 	int ret = EIO;
 	int rc;
 
-	IOF_TRACE_LINK(req, handle, "request");
+	IOF_TRACE_LINK(req, handle, "read");
 	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
 
 	if (len <= 4096)
 		pt = fs_handle->rb_pool_page;

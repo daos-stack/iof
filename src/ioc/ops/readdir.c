@@ -391,3 +391,156 @@ int ioc_readdir(const char *dir, void *buf, fuse_fill_dir_t filler,
 	IOF_LOG_INFO("Returning zero");
 	return 0;
 }
+
+void
+ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
+	       struct fuse_file_info *fi)
+{
+	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
+	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
+	off_t next_offset = offset;
+	void *buf = NULL;
+	size_t b_offset = 0;
+	int ret = EIO;
+	int rc;
+
+	STAT_ADD(dir_handle->fs_handle->stats, readdir);
+
+	IOF_TRACE_LINK(req, dir_handle, "readdir");
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	IOF_TRACE_INFO(req, GAH_PRINT_STR " offset %zi",
+		       GAH_PRINT_VAL(dir_handle->gah), offset);
+
+	if (!dir_handle->gah_valid) {
+		/* If the server has reported that the GAH is invalid
+		 * then do not send a RPC to close it
+		 */
+		ret = EIO;
+		goto out_err;
+	}
+
+	/* If the handle has been reported as invalid in the past then do not
+	 * process any more requests at this stage.
+	 */
+	if (!dir_handle->handle_valid) {
+		ret = EIO;
+		goto out_err;
+	}
+
+	D_ALLOC(buf, size);
+	if (!buf) {
+		ret = ENOMEM;
+		goto out_err;
+	}
+
+	do {
+		struct iof_readdir_reply *dir_reply;
+
+		rc = readdir_next_reply
+			(dir_handle, next_offset,
+					 &dir_reply);
+
+		IOF_LOG_DEBUG("err %d buf %p", rc, dir_reply);
+
+		if (rc != 0) {
+			ret = rc;
+			goto out_err;
+		}
+
+		/* Check for end of directory.  This is the code-path taken
+		 * where a RPC contains 0 replies, either because a directory
+		 * is empty, or where the number of entries fits exactly in
+		 * the last RPC.
+		 * In this case there is no next entry to consume.
+		 */
+		if (!dir_reply) {
+			IOF_LOG_INFO("No more directory contents");
+			goto out;
+		}
+
+		IOF_LOG_DEBUG("reply rc %d stat_rc %d",
+			      dir_reply->read_rc,
+			      dir_reply->stat_rc);
+
+		/* Check for error.  Error on the remote readdir() call exits
+		 * here
+		 */
+		if (dir_reply->read_rc != 0) {
+			ret = dir_reply->read_rc;
+			readdir_next_reply_consume(dir_handle);
+			goto out_err;
+		}
+
+		/* Process any new information received in this RPC.  The
+		 * server will have returned a directory entry name and
+		 * possibly a struct stat.
+		 *
+		 * POSIX: If the directory has been renamed since the opendir()
+		 * call and before the readdir() then the remote stat() may
+		 * have failed so check for that here.
+		 */
+
+		if (dir_reply->stat_rc != 0) {
+			IOF_TRACE_ERROR(req, "Stat rc is non-zero");
+			ret = EIO;
+			goto out_err;
+		}
+
+		ret = fuse_add_direntry(req, buf + b_offset, size - b_offset,
+					dir_reply->d_name,
+					&dir_reply->stat,
+					dir_reply->nextoff);
+
+		IOF_LOG_DEBUG("New file '%s' %d next off %zi",
+			      dir_reply->d_name, ret, dir_reply->nextoff);
+
+		/* Check for this being the last entry in a directory, this is
+		 * the typical end-of-directory case where readdir() returned
+		 * no more information on the sever
+		 */
+
+		if (ret > size - b_offset) {
+			int last;
+
+			next_offset = dir_reply->nextoff;
+			last = readdir_next_reply_consume(dir_handle);
+
+			if (last) {
+				IOF_LOG_INFO("Returning no more data");
+				goto out;
+			}
+		} else {
+			next_offset = dir_reply->nextoff;
+			readdir_next_reply_consume(dir_handle);
+			b_offset += ret;
+		}
+
+		/* Check for filler() returning full.  The filler function
+		 * returns 1 once the internal FUSE buffer is full so check
+		 * for that case and exit the loop here.
+		 */
+
+	} while (1);
+
+out:
+	IOF_TRACE_DEBUG(req, "Returning %zi bytes", b_offset);
+
+	rc = fuse_reply_buf(req, buf, b_offset);
+	if (rc != 0)
+		IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", rc);
+
+	IOF_TRACE_DOWN(req);
+
+	D_FREE(buf);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+
+	D_FREE(buf);
+}

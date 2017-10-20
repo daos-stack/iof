@@ -620,7 +620,7 @@ iof_readdir_handler(crt_rpc_t *rpc)
 		/* TODO: Check this */
 		strncpy(replies[reply_idx].d_name, dir_entry->d_name, NAME_MAX);
 
-		IOF_LOG_DEBUG("File %s nextoff %zi", dir_entry->d_name,
+		IOF_LOG_DEBUG("File '%s' nextoff %zi", dir_entry->d_name,
 			      handle->offset);
 
 		errno = 0;
