@@ -563,7 +563,7 @@ class Testlocal(unittest.TestCase,
         elapsed = time.time() - start_time
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
-            self.skipTest("Mdtest exited badly")
+            self.fail("Mdtest test_failed, rc = %d" % rtn)
         if elapsed > 5 or self.test_valgrind:
             return
         long_run = list(mdtest)
@@ -573,7 +573,7 @@ class Testlocal(unittest.TestCase,
         elapsed = time.time() - start_time
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
-            self.skipTest("Mdtest exited badly")
+            self.fail("Mdtest test_failed, rc = %d" % rtn)
 
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_iofmod(self):
