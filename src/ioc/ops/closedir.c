@@ -68,8 +68,8 @@ int ioc_closedir(const char *dir, struct fuse_file_info *fi)
 	IOC_RPC_INIT(dh, REQ_NAME, fs_handle->POOL_NAME, api, rc);
 	if (rc)
 		return rc;
-	IOF_LOG_INFO("close dir %s" GAH_PRINT_STR, dir,
-		GAH_PRINT_VAL(dh->gah));
+
+	IOF_TRACE_INFO(dh, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
 
 	/* If the GAH has been reported as invalid by the server in the past
 	 * then do not attempt to do anything with it.
@@ -114,8 +114,7 @@ void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 		goto out_err;
 	}
 
-	IOF_TRACE_INFO(handle, GAH_PRINT_STR,
-		       GAH_PRINT_VAL(handle->gah));
+	IOF_TRACE_INFO(handle, GAH_PRINT_STR, GAH_PRINT_VAL(handle->gah));
 
 	IOF_TRACE_LINK(req, handle, "request");
 

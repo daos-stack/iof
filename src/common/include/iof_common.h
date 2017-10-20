@@ -185,7 +185,7 @@ struct iof_two_string_in {
 
 struct iof_create_in {
 	d_string_t path;
-	uint32_t fs_id;
+	struct ios_gah gah;
 	uint32_t mode;
 	uint32_t flags;
 };

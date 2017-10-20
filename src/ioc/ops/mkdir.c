@@ -58,7 +58,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 		return -EROFS;
 	}
 
-	IOF_LOG_INFO("dir %s mode 0%o", file, (uint32_t)mode);
+	IOF_LOG_INFO("dir '%s' mode 0%o", file, (uint32_t)mode);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
@@ -73,7 +73,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 	in = crt_req_get(rpc);
 	in->path = (d_string_t)file;
 	in->mode = mode;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -83,7 +83,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", file, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("path '%s' rc %d", file, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }

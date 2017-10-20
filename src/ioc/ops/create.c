@@ -104,7 +104,7 @@ int ioc_create(const char *file, mode_t mode, struct fuse_file_info *fi)
 	in = crt_req_get(handle->creat_rpc);
 	in->path = (d_string_t)file;
 	in->mode = mode;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 	in->flags = fi->flags;
 
 	reply.fh = handle;

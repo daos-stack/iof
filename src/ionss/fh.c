@@ -86,13 +86,13 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 
 	oldref = atomic_fetch_sub(&fh->ref, count);
 
-	IOF_LOG_DEBUG("decref (%d) " GAH_PRINT_STR " to %d", count,
-		      GAH_PRINT_VAL(fh->gah), oldref - count);
+	IOF_TRACE_DEBUG(fh, GAH_PRINT_STR " decref %d to %d",
+			GAH_PRINT_VAL(fh->gah), count, oldref - count);
 
 	if (oldref != count)
 		return;
 
-	IOF_LOG_DEBUG("Closing %d", fh->fd);
+	IOF_TRACE_DEBUG(fh, "Closing %d", fh->fd);
 
 	rc = close(fh->fd);
 	if (rc != 0)
@@ -105,7 +105,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
-		IOF_LOG_ERROR("Failed to deallocate GAH %d", rc);
+		IOF_TRACE_ERROR(fh, "Failed to deallocate GAH %d", rc);
 
 	iof_pool_release(projection->fh_pool, fh);
 
@@ -140,8 +140,9 @@ struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
 
 	oldref = atomic_fetch_add(&fh->ref, 1);
 
-	IOF_LOG_DEBUG("%s() Using " GAH_PRINT_STR " ref %d",
-		      fn, GAH_PRINT_VAL(fh->gah), oldref + 1);
+	IOF_TRACE_DEBUG(fh, GAH_PRINT_STR " addref to %d",
+			GAH_PRINT_VAL(fh->gah), oldref + 1);
+
 out:
 	pthread_rwlock_unlock(&base->gah_rwlock);
 
@@ -164,8 +165,8 @@ struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *base,
 		D_GOTO(out, dirh = NULL);
 	}
 
-	IOF_LOG_DEBUG("%s() Found " GAH_PRINT_STR,
-		      fn, GAH_PRINT_VAL(*gah));
+	IOF_TRACE_DEBUG(dirh, GAH_PRINT_STR, GAH_PRINT_VAL(*gah));
+
 out:
 	pthread_rwlock_unlock(&base->gah_rwlock);
 

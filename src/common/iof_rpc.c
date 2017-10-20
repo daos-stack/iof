@@ -77,7 +77,7 @@ struct crt_msg_field *two_string_in[] = {
 
 struct crt_msg_field *create_in[] = {
 	&CMF_STRING,
-	&CMF_INT,
+	&CMF_GAH,
 	&CMF_INT,
 	&CMF_INT,
 };

@@ -97,13 +97,18 @@ static struct ios_base base;
 		} \
 	} while (0)
 
-#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type) do {	\
-		IOF_TRACE_INFO(rpc, GAH_PRINT_STR,			\
-			       GAH_PRINT_VAL(in->gah));			\
+#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type)		\
+	do {								\
 		handle = ios_##handle_type##_find(&base, &in->gah);	\
-		if (!handle) {						\
-			out->err = IOF_GAH_INVALID;			\
+		if (handle) {						\
+			IOF_TRACE_LINK(rpc, handle, "rpc");		\
+			IOF_TRACE_DEBUG(handle, GAH_PRINT_STR,		\
+					GAH_PRINT_VAL(in->gah));	\
+			break;						\
 		}							\
+		out->err = IOF_GAH_INVALID;				\
+		IOF_TRACE_INFO(rpc, "Failed to find handle from "	\
+			GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));		\
 	} while (0)
 
 #define VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle) \
@@ -250,7 +255,7 @@ static void fh_addref(struct d_chash_table *htable, d_list_t *rlink)
 						    clist);
 	int oldref = atomic_fetch_add(&fh->ht_ref, 1);
 
-	IOF_LOG_DEBUG("ht_ref(%p) addref to %d", fh, oldref + 1);
+	IOF_TRACE_DEBUG(fh, "addref to %d", oldref + 1);
 };
 
 static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
@@ -260,7 +265,7 @@ static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
 						clist);
 	int oldref = atomic_fetch_sub(&fh->ht_ref, 1);
 
-	IOF_LOG_DEBUG("ht_ref(%p) decref to %d", fh, oldref - 1);
+	IOF_TRACE_DEBUG(fh, "decref to %d", oldref - 1);
 
 	return (oldref == 1);
 }
@@ -271,7 +276,7 @@ static void fh_free(struct d_chash_table *htable, d_list_t *rlink)
 						    struct ionss_file_handle,
 						    clist);
 
-	IOF_LOG_DEBUG("ht_ref(%p) is %d", fh, fh->ht_ref);
+	IOF_TRACE_DEBUG(fh, "ref %d", fh->ht_ref);
 	ios_fh_decref(fh, 1);
 }
 
@@ -1022,29 +1027,30 @@ iof_create_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in	*in = crt_req_get(rpc);
 	struct iof_open_out	*out = crt_reply_get(rpc);
-	struct ios_projection	*projection = NULL;
+	struct ionss_file_handle *parent;
 	struct ionss_mini_file	mf = {.type = open_handle};
 	int fd;
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
-	/* in->fs_id will have been verified by the VALIDATE_ARGS_STR call
-	 * above
-	 */
-	projection = &base.projection_array[in->fs_id];
 
-	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o",
-		      in->path, in->flags, in->mode);
+	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o",
+			in->path, in->flags, in->mode);
 
 	errno = 0;
-	fd = openat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->flags,
+	fd = openat(parent->fd, iof_get_rel_path(in->path), in->flags,
 		    in->mode);
 	if (fd == -1) {
 		out->rc = errno;
@@ -1052,24 +1058,29 @@ iof_create_handler(crt_rpc_t *rpc)
 	}
 
 	mf.flags = in->flags;
-	find_and_insert(projection, fd, &mf, out);
+	find_and_insert(parent->projection, fd, &mf, out);
 
 out:
-	IOF_LOG_DEBUG("path %s flags 0%o mode 0%o 0%o", in->path, in->flags,
-		      in->mode & S_IFREG, in->mode & ~S_IFREG);
+	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o", in->path,
+			in->flags, in->mode & S_IFREG, in->mode & ~S_IFREG);
 
 	LOG_FLAGS(rpc, in->flags);
 	LOG_MODES(rpc, in->mode);
 
-	IOF_LOG_INFO("%p path %s result err %d rc %d",
-		     rpc, in->path, out->err, out->rc);
+	IOF_TRACE_INFO(rpc, "path %s result err %d rc %d",
+		       in->path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
 
-	if (projection)
-		iof_pool_restock(projection->fh_pool);
+	if (parent->projection)
+		iof_pool_restock(parent->projection->fh_pool);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
+
+	IOF_TRACE_DOWN(rpc);
 }
 
 /* Handle a close from a client.
@@ -1477,18 +1488,24 @@ iof_mkdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *parent;
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
 	errno = 0;
-	rc = mkdirat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->mode);
+	rc = mkdirat(parent->fd, iof_get_rel_path(in->path), in->mode);
 
 	if (rc)
 		out->rc = errno;
@@ -1496,7 +1513,12 @@ iof_mkdir_handler(crt_rpc_t *rpc)
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
+
+	IOF_TRACE_DOWN(rpc);
 }
 
 /* This function needs additional checks to handle longer links.
