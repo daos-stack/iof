@@ -858,6 +858,12 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 		return;
 	}
 
+	if (projection->dev_no != stbuf->st_dev) {
+		out->rc = EACCES;
+		close(fd);
+		return;
+	}
+
 	/* Firstly create the key on the stack and use it to search for a
 	 * descriptor, using this if found.  rec_find() will take a reference
 	 * so there is no additional step needed here.
