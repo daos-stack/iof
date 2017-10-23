@@ -494,13 +494,14 @@ static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
 
 static void ih_free(struct d_chash_table *htable, d_list_t *rlink)
 {
+	struct iof_projection_info *fs_handle = htable->ht_priv;
 	struct ioc_inode_entry *ie;
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-	/* TODO: Send forget RPC */
-	IOF_LOG_DEBUG("Delete %p", ie);
-	free(ie);
+	IOF_TRACE_DEBUG(ie);
+	ie_close(fs_handle, ie);
+	D_FREE(ie);
 }
 
 d_chash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,

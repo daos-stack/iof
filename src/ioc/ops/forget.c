@@ -41,17 +41,11 @@
 #include "ioc.h"
 #include "log.h"
 
-void
-ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
+static void
+ioc_ll_forget_one(struct iof_projection_info *fs_handle,
+		  fuse_ino_t ino, uintptr_t nlookup)
 {
-	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
 	d_list_t *rlink;
-
-	IOF_LOG_INFO("Req %p %lu %lu", req, ino, nlookup);
-
-	STAT_ADD(fs_handle->stats, forget);
-
-	fuse_reply_none(req);
 
 	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 	if (!rlink)
@@ -60,4 +54,37 @@ ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
 	do {
 		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	} while (nlookup--);
+}
+
+void
+ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+
+	STAT_ADD(fs_handle->stats, forget);
+
+	IOF_TRACE_INFO(fs_handle, "%lu %lu", ino, nlookup);
+
+	fuse_reply_none(req);
+
+	ioc_ll_forget_one(fs_handle, ino, nlookup);
+}
+
+void
+ioc_ll_forget_multi(fuse_req_t req, size_t count,
+		    struct fuse_forget_data *forgets)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	int i;
+
+	STAT_ADD(fs_handle->stats, forget);
+
+	for (i = 0; i < count; i++) {
+		IOF_TRACE_INFO(fs_handle, "%lu %lu",
+			       forgets[i].ino, forgets[i].nlookup);
+
+		ioc_ll_forget_one(fs_handle,
+				  forgets[i].ino, forgets[i].nlookup);
+	}
+	fuse_reply_none(req);
 }

@@ -70,3 +70,48 @@ find_gah(struct iof_projection_info *fs_handle,
 	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	return 0;
 }
+
+void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
+{
+	struct iof_gah_in *in;
+	crt_rpc_t *rpc = NULL;
+	int ret = EIO;
+	int rc;
+
+	/* If the projection is off-line then drop the local handle.
+	 *
+	 * This means a resource leak on the IONSS should the projection
+	 * be offline for reasons other than IONSS failure.
+	 */
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
+			    FS_TO_OP(fs_handle, close), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	in = crt_req_get(rpc);
+	in->gah = ie->gah;
+
+	rc = crt_req_send(rpc, NULL, NULL);
+	if (rc) {
+		IOF_TRACE_ERROR(ie, "Could not send rpc, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	return;
+
+out_err:
+	IOF_TRACE_INFO(ie, "Failed to close %d", ret);
+}

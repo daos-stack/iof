@@ -90,9 +90,9 @@ lookup_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_INFO(desc, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 	} else {
-		/* TODO: Free the GAH */
 		IOF_TRACE_INFO(desc, "Existing file rlink %p %lu " GAH_PRINT_STR,
 			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
+		ie_close(desc->fs_handle, desc->ie);
 	}
 
 	fuse_reply_entry(desc->req, &entry);

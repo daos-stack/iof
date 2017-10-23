@@ -331,10 +331,6 @@ struct iof_file_handle {
 	fuse_req_t			open_req;
 };
 
-/* inode.c */
-
-int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
-
 struct iof_projection_info *ioc_get_handle(void);
 
 struct status_cb_r {
@@ -365,6 +361,12 @@ struct lookup_req {
 	d_list_t			 list;
 	fuse_req_t			 req;
 };
+
+/* inode.c */
+
+int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
+
+void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 
 /* Extract a errno from status_cb_r suitable for returning to FUSE.
  * If err is non-zero then use that, otherwise use rc.  Return negative numbers
@@ -481,6 +483,8 @@ int ioc_ioctl(const char *, int, void *, struct fuse_file_info *,
 void ioc_ll_lookup(fuse_req_t, fuse_ino_t, const char *);
 
 void ioc_ll_forget(fuse_req_t, fuse_ino_t, uint64_t);
+
+void ioc_ll_forget_multi(fuse_req_t, size_t, struct fuse_forget_data *);
 
 void ioc_ll_getattr(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
