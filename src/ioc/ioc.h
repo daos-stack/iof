@@ -242,7 +242,12 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 					__err);				\
 			__err = EIO;					\
 		}							\
-		IOF_TRACE_DEBUG(req, "Returning %d '%s'", __err, strerror(__err)); \
+		if (__err == ENOTSUP)					\
+			IOF_TRACE_WARNING(req, "Returning %d '%s'",	\
+					  __err, strerror(__err));	\
+		else							\
+			IOF_TRACE_DEBUG(req, "Returning %d '%s'",	\
+					__err, strerror(__err));	\
 		__rc = fuse_reply_err(req, __err);			\
 		if (__rc != 0)						\
 			IOF_TRACE_ERROR(req, "fuse_reply_err returned %d:%s", \

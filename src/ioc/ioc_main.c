@@ -1120,10 +1120,34 @@ iof_check_complete(void *arg)
 	return iof_tracker_test(tracker);
 }
 
+/* Call crt_progress() on a context until it returns timeout
+ * or an error.
+ *
+ * Returns -DER_SUCCESS on timeout or passes through any other errors.
+ */
+static int
+iof_progress_drain(struct iof_ctx *iof_ctx)
+{
+	int ctx_rc;
+
+	do {
+		ctx_rc = crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
+
+		if (ctx_rc != -DER_TIMEDOUT && ctx_rc != -DER_SUCCESS) {
+			IOF_TRACE_WARNING(iof_ctx, "progress returned %d",
+					  ctx_rc);
+			return ctx_rc;
+		}
+
+	} while (ctx_rc != -DER_TIMEDOUT);
+	return -DER_SUCCESS;
+}
+
 static void *
 iof_thread(void *arg)
 {
 	struct iof_ctx	*iof_ctx = arg;
+	int		ctx_rc = -DER_SUCCESS;
 	int		rc;
 
 	iof_tracker_signal(&iof_ctx->thread_start_tracker);
@@ -1151,19 +1175,34 @@ iof_thread(void *arg)
 		 * any descriptors with it so there are no pending RPCs when
 		 * we call context_destroy.
 		 */
-		if (iof_ctx->pool)
-			iof_pool_reclaim(iof_ctx->pool);
+		if (iof_ctx->pool) {
+			bool active;
+
+			do {
+				active = iof_pool_reclaim(iof_ctx->pool);
+
+				if (!active)
+					break;
+
+				IOF_TRACE_WARNING(iof_ctx,
+						  "Active descriptors, waiting for one second");
+
+				ctx_rc = iof_progress_drain(iof_ctx);
+
+			} while (active && ctx_rc == -DER_SUCCESS);
+		}
 
 		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
 		if (rc == -DER_BUSY) {
 			IOF_TRACE_WARNING(iof_ctx,
 					  "RPCs in flight, waiting for one second");
-			crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
+
+			ctx_rc = iof_progress_drain(iof_ctx);
 		} else if (rc != DER_SUCCESS) {
 			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
 					rc);
 		}
-	} while (rc == -DER_BUSY);
+	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
 
 	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
 	return NULL;
@@ -1446,15 +1485,9 @@ static int initialize_projection(struct iof_state *iof_state,
 			return IOF_ERR_NOMEM;
 	}
 
-	if (writeable) {
-		fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
-		if (!fs_handle->fuse_ops)
-			return IOF_ERR_NOMEM;
-	} else {
-		fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops(writeable);
-		if (!fs_handle->fuse_ll_ops)
-			return IOF_ERR_NOMEM;
-	}
+	fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops(writeable);
+	if (!fs_handle->fuse_ll_ops)
+		return IOF_ERR_NOMEM;
 
 	ret = cb->register_fuse_fs(cb->handle,
 				   fs_handle->fuse_ops,

@@ -910,7 +910,7 @@ if __name__ == '__main__':
     parser.add_argument('--log-to-file', action='store_true',
                         help='Log to a single file', dest='logfile')
     parser.add_argument('--log-mask', dest='mask', metavar='MASK', type=str,
-                        default='INFO,CTRL=WARN', help='Set the CaRT log mask')
+                        help='Set the CaRT log mask')
     parser.add_argument('--internals-tracing', action='store_true', help='Turn '
                         'on internals path testing w/ RPC/Descriptor tracing')
     args = parser.parse_args()
@@ -918,7 +918,6 @@ if __name__ == '__main__':
     if args.internals_tracing:
         os.environ['INTERNALS_TRACING'] = 'yes'
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
-        args.mask = 'DEBUG,PMIX=WARN'
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
@@ -927,7 +926,8 @@ if __name__ == '__main__':
     if args.logfile:
         log_to_file = True
 
-    os.environ['D_LOG_MASK'] = args.mask
+    if args.mask:
+        os.environ['D_LOG_MASK'] = args.mask
 
     tests_to_run = []
     uargs = []

@@ -511,7 +511,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	pthread_mutex_unlock(&info->lock);
 
 	do {
-		IOF_TRACE_INFO(info, "Trying to join thread");
+		IOF_TRACE_INFO(info, "Trying to join fuse thread");
 
 		wait_time.tv_sec++;
 
@@ -815,10 +815,11 @@ shutdown_cart:
 
 	IOF_TRACE_DOWN(cnss_info);
 	D_FREE(ctrl_prefix);
-	iof_log_close();
 	D_FREE(cnss_info);
 
 	IOF_LOG_INFO("Exiting with status %d", ret);
+
+	iof_log_close();
 
 	return ret;
 

@@ -1620,11 +1620,14 @@ iof_rename_ll_handler(crt_rpc_t *rpc)
 	errno = 0;
 
 #if 1
-	rc = syscall(SYS_renameat2,
-		     old_parent->fd, in->old_name.name,
-		     new_parent->fd, in->new_name.name,
-		     in->flags);
-
+	if (in->flags)
+		rc = syscall(SYS_renameat2,
+			     old_parent->fd, in->old_name.name,
+			     new_parent->fd, in->new_name.name,
+			     in->flags);
+	else
+		rc = renameat(old_parent->fd, in->old_name.name,
+			      new_parent->fd, in->new_name.name);
 #else
 	rc = renameat2(old_parent->fd, in->old_name.name,
 		       new_parent->fd, in->new_name.name,
@@ -1634,8 +1637,14 @@ iof_rename_ll_handler(crt_rpc_t *rpc)
 		out->rc = errno;
 
 out:
-	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
-		      in->old_name.name, in->new_name.name, out->err, out->rc);
+	if (out->rc == ENOTSUP)
+		IOF_TRACE_WARNING(rpc, "old %s new %s flags %d err %d rc %d",
+				  in->old_name.name, in->new_name.name,
+				  in->flags, out->err, out->rc);
+	else
+		IOF_TRACE_DEBUG(rpc, "old %s new %s flags %d err %d rc %d",
+				in->old_name.name, in->new_name.name,
+				in->flags, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1773,6 +1782,8 @@ iof_mkdir_ll_handler(crt_rpc_t *rpc)
 	if (rc)
 		out->rc = errno;
 
+	IOF_TRACE_DEBUG(parent, "dir '%s' rc %d",
+			in->common.name.name, out->rc);
 out:
 	lookup_common(rpc, &in->common, out, parent);
 }
@@ -2015,13 +2026,13 @@ static void iof_unlink_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = unlinkat(parent->fd, iof_get_rel_path(in->name.name),
-		      in->flags ? AT_REMOVEDIR : 0);
+	rc = unlinkat(parent->fd, in->name.name, in->flags ? AT_REMOVEDIR : 0);
 
 	if (rc)
 		out->rc = errno;
 
-	IOF_TRACE_DEBUG(rpc, "flag %d rc %d", in->flags, out->rc);
+	IOF_TRACE_DEBUG(parent, "%s '%s' rc %d",
+			in->flags ? "dir" : "file", in->name.name, out->rc);
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -3483,9 +3494,9 @@ cleanup:
 	 */
 	memset(&base, 0, sizeof(base));
 
-	iof_log_close();
-
 	IOF_LOG_INFO("Exiting with status %d", ret);
+
+	iof_log_close();
 
 	return ret;
 }
