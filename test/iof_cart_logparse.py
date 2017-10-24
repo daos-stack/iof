@@ -130,9 +130,11 @@ class IofLogLine():
 
     def to_str(self, mark=False):
         """Convert the object to a string"""
+        pre = self._preamble.split(' ', maxsplit=3)
+        preamble = ' '.join([pre[0], pre[3]])
         if mark:
-            return '{} ** {}'.format(self._preamble, self._msg)
-        return '{}    {}'.format(self._preamble, self._msg)
+            return '{} ** {}'.format(preamble, self._msg)
+        return '{}    {}'.format(preamble, self._msg)
 
     def __getattr__(self, attr):
         if attr == 'parent':

@@ -820,9 +820,7 @@ static void *ctrl_thread_func(void *arg)
 		IOF_LOG_ERROR("Fuse loop exited with %d", rc);
 
 	fuse_unmount(ctrl_fs.fuse);
-	IOF_LOG_INFO("Fuse destroy called");
-	fuse_destroy(ctrl_fs.fuse);
-	IOF_LOG_INFO("ctrl_fs thread exit");
+	IOF_LOG_INFO("fuse_unmount() called");
 
 	return NULL;
 }
@@ -1377,6 +1375,8 @@ int ctrl_fs_shutdown(void)
 		IOF_LOG_ERROR("Error joining ctrl_fs thread %d", rc);
 		return -rc;
 	}
+
+	fuse_destroy(ctrl_fs.fuse);
 	IOF_LOG_INFO("Cleaning up ctrl_fs");
 
 	cleanup_ctrl_fs();

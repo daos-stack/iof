@@ -1558,6 +1558,11 @@ iof_progress_drain(struct iof_ctx *iof_ctx)
 {
 	int ctx_rc;
 
+	if (!iof_ctx->crt_ctx) {
+		IOF_TRACE_WARNING(iof_ctx, "Null context");
+		return -DER_SUCCESS;
+	}
+
 	do {
 		ctx_rc = crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
 
@@ -1688,17 +1693,17 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 				     &iof_state->ionss_dir);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
-				"ionss info (rc = %d)\n", ret);
+				"ionss info (rc = %d)", ret);
 		return 1;
 	}
-
-	IOF_TRACE_UP(&iof_state->iof_ctx, iof_state, "iof_ctx");
 
 	ret = crt_context_create(&iof_state->iof_ctx.crt_ctx);
 	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(iof_state, "Context not created");
 		return 1;
 	}
+
+	IOF_TRACE_UP(&iof_state->iof_ctx, iof_state, "iof_ctx");
 
 	ret = crt_context_set_timeout(iof_state->iof_ctx.crt_ctx, 7);
 	if (ret != -DER_SUCCESS) {
@@ -2654,17 +2659,20 @@ static void iof_finish(void *arg)
 		IOF_TRACE_ERROR(iof_state,
 				"thread stop returned %d", rc);
 
-	rc = iof_progress_drain(&iof_state->iof_ctx);
-	if (rc != 0)
-		IOF_TRACE_ERROR(iof_state,
-				"could not drain context %d", rc);
+	if (iof_state->iof_ctx.crt_ctx) {
 
-	rc = crt_context_destroy(iof_state->iof_ctx.crt_ctx, false);
-	if (rc != -DER_SUCCESS)
-		IOF_TRACE_ERROR(iof_state, "Could not destroy context %d",
-				rc);
+		rc = iof_progress_drain(&iof_state->iof_ctx);
+		if (rc != 0)
+			IOF_TRACE_ERROR(iof_state,
+					"could not drain context %d", rc);
 
-	IOF_TRACE_DOWN(&iof_state->iof_ctx);
+		rc = crt_context_destroy(iof_state->iof_ctx.crt_ctx, false);
+		if (rc != -DER_SUCCESS)
+			IOF_TRACE_ERROR(iof_state, "Could not destroy context %d",
+					rc);
+		IOF_TRACE_DOWN(&iof_state->iof_ctx);
+	}
+
 	IOF_TRACE_DOWN(iof_state);
 	D_FREE(iof_state->groups);
 	D_FREE(iof_state);

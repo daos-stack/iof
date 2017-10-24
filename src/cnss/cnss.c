@@ -617,6 +617,8 @@ add_plugin(struct cnss_info *info,
 		return false;
 	}
 
+	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
+
 	rc = ctrl_create_subdir(NULL, entry->fns->name,
 				&entry->self_fns.plugin_dir);
 	if (rc != 0) {
@@ -628,8 +630,6 @@ add_plugin(struct cnss_info *info,
 		D_FREE(entry);
 		return false;
 	}
-
-	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
 
 	entry->self_fns.prefix = info->prefix;
 	entry->active = true;
@@ -768,7 +768,8 @@ int main(int argc, char **argv)
 
 	D_ALLOC_PTR(cnss_info);
 	if (!cnss_info)
-		return CNSS_ERR_NOMEM;
+		D_GOTO(shutdown_log, ret = CNSS_ERR_NOMEM);
+
 	IOF_TRACE_ROOT(cnss_info, "cnss_info");
 
 	rcb = ctrl_info_init(&cnss_info->info);
@@ -778,7 +779,7 @@ int main(int argc, char **argv)
 
 	D_ASPRINTF(ctrl_prefix, "%s/.ctrl", prefix);
 	if (!ctrl_prefix)
-		return CNSS_ERR_NOMEM;
+		D_GOTO(shutdown_log, ret = CNSS_ERR_NOMEM);
 
 	ret = ctrl_fs_start(ctrl_prefix);
 	if (ret != 0) {
@@ -786,9 +787,11 @@ int main(int argc, char **argv)
 		return CNSS_ERR_CTRL_FS;
 	}
 
-	register_cnss_controls(&cnss_info->info);
-
 	D_INIT_LIST_HEAD(&cnss_info->plugins);
+
+	ret = register_cnss_controls(&cnss_info->info);
+	if (ret != 0)
+		D_GOTO(shutdown_ctrl_fs, ret = CNSS_ERR_NOMEM);
 
 	if (getenv("CNSS_DISABLE_IOF") != NULL) {
 		IOF_TRACE_INFO(cnss_info, "Skipping IOF plugin");
@@ -852,7 +855,10 @@ int main(int argc, char **argv)
 	if (ret) {
 		IOF_TRACE_ERROR(cnss_info,
 				"crt_init failed with ret = %d", ret);
-		ret = CNSS_ERR_CART;
+		if (ret == -DER_NOMEM)
+			ret = CNSS_ERR_NOMEM;
+		else
+			ret = CNSS_ERR_CART;
 		goto shutdown_ctrl_fs;
 	}
 
@@ -869,7 +875,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	/* Call start for each plugin which should perform none-local
+	/* Call start for each plugin which should perform node-local
 	 * operations only.  Plugins can choose to disable themselves
 	 * at this point.
 	 */
@@ -962,9 +968,33 @@ shutdown_cart:
 shutdown_ctrl_fs:
 	ctrl_fs_disable();
 	ctrl_fs_shutdown();
+	while ((entry = d_list_pop_entry(&cnss_info->plugins,
+					 struct plugin_entry,
+					 list))) {
+
+		if (entry->fns->destroy_plugin_data) {
+			IOF_TRACE_INFO(cnss_info,
+				       "Plugin %s(%p) calling destroy_plugin_data at %p",
+				       entry->fns->name,
+				       entry->fns->handle,
+				       FN_TO_PVOID(entry->fns->destroy_plugin_data));
+			entry->fns->destroy_plugin_data(entry->fns->handle);
+		}
+
+		if (entry->dl_handle != NULL)
+			dlclose(entry->dl_handle);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+	}
+
 	D_FREE(ctrl_prefix);
 
+shutdown_log:
+
+	IOF_TRACE_DOWN(cnss_info);
 	IOF_LOG_INFO("Exiting with status %d", ret);
+	D_FREE(cnss_info);
+	iof_log_close();
 
 	return ret;
 }

@@ -61,6 +61,7 @@ fi
 if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
+  ./test/iof_test_alloc_fail.py
   pushd ${TESTDIR}
   python3 test_runner "${JENKINS_TEST_LIST[@]}"
   popd
