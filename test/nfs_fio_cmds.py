@@ -52,8 +52,9 @@ nfs_fio_cmds.py does the following:
 11) Delete exportfs dir on exportfs node.
 """
 
-import sys
 import os
+import getpass
+import sys
 import subprocess
 import logging
 # pylint: disable=import-error
@@ -72,9 +73,9 @@ class Nfs_Fio_Cmds():
         self.log_dir_base = log_base_path
         self.logger = logging.getLogger("TestRunnerLogger")
 
-        self.user = subprocess.getoutput("/usr/bin/id -u -n")
-        self.uid = subprocess.getoutput("/usr/bin/id -u")
-        self.gid = subprocess.getoutput("/usr/bin/id -g")
+        self.user = getpass.getuser()
+        self.uid = os.getuid()
+        self.gid = os.getgid()
 
         # NFS related vairables.
 
