@@ -2197,6 +2197,26 @@ static void *progress_thread(void *arg)
 
 	} while (!shutdown);
 
+	/* progress until a timeout to flush the queue.  We still need some
+	 * support from CaRT for this (See CART-333).   The problem is corpc
+	 * aggregation happens after the user callback is executed so we may
+	 * process a shutdown broadcast and exit before actually replying to
+	 * the sender.
+	 */
+	for (;;) {
+		rc = crt_progress(b->crt_ctx, 1000, NULL, NULL);
+		if (rc == -DER_TIMEDOUT)
+			break;
+		if (rc != 0) {
+			IOF_LOG_ERROR("crt_progress failed at exit rc: %d", rc);
+			break;
+		}
+
+		/* crt_progress exits after first successful trigger, so loop
+		 * until a timeout or error occurs.
+		 */
+	}
+
 	IOF_LOG_DEBUG("progress_thread exiting");
 
 	pthread_exit(NULL);
