@@ -1295,7 +1295,7 @@ static int initialize_projection(struct iof_state *iof_state,
 		if (!fs_handle->fuse_ops)
 			return IOF_ERR_NOMEM;
 	} else {
-		fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops();
+		fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops(writeable);
 		if (!fs_handle->fuse_ll_ops)
 			return IOF_ERR_NOMEM;
 	}

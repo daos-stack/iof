@@ -218,7 +218,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(rmdir, string_in, status_out),
 	RPC_TYPE(rename, two_string_in, status_out),
 	RPC_TYPE(read_bulk, read_bulk_in, read_bulk_out),
-	RPC_TYPE(unlink, string_in, status_out),
+	RPC_TYPE(unlink, gah_string_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
 	RPC_TYPE(create, create_in, gah_pair),
 	RPC_TYPE(close, gah_in, NULL),

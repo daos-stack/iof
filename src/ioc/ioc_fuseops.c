@@ -362,7 +362,7 @@ void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
 	ioc_init_core(fs_handle, conn);
 }
 
-struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
+struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool writeable)
 {
 	struct fuse_lowlevel_ops *fuse_ops;
 
@@ -383,5 +383,10 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops()
 	fuse_ops->opendir = ioc_ll_opendir;
 	fuse_ops->releasedir = ioc_ll_releasedir;
 	fuse_ops->readdir = ioc_ll_readdir;
+
+	if (!writeable)
+		return fuse_ops;
+
+	fuse_ops->unlink = ioc_ll_unlink;
 	return fuse_ops;
 }

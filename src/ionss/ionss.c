@@ -294,6 +294,8 @@ static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
  */
 const char *iof_get_rel_path(const char *path)
 {
+	if (path[0] != '/')
+		return (char *)path;
 	path++;
 	if (path[0] == '\0')
 		return ".";
@@ -1745,28 +1747,38 @@ out:
 
 static void iof_unlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_string_in *in = crt_req_get(rpc);
+	struct iof_gah_string_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *parent;
 	int rc;
 
-	VALIDATE_ARGS_STR(rpc, in, out);
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
 	if (out->err)
 		goto out;
 
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
+	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
 	errno = 0;
-	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), 0);
+	rc = unlinkat(parent->fd, iof_get_rel_path(in->path), 0);
 
 	if (rc)
 		out->rc = errno;
 
+	IOF_TRACE_DEBUG(rpc, "rc %d", out->rc);
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
+
+	if (parent)
+		ios_fh_decref(parent, 1);
 }
 
 static void

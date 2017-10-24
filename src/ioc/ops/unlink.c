@@ -43,7 +43,7 @@
 int ioc_unlink(const char *path)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_string_in *in;
+	struct iof_gah_string_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
@@ -64,7 +64,7 @@ int ioc_unlink(const char *path)
 			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, unlink), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);
 		return -EIO;
 	}
@@ -72,7 +72,7 @@ int ioc_unlink(const char *path)
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->path = (d_string_t)path;
-	in->fs_id = fs_handle->fs_id;
+	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -85,4 +85,60 @@ int ioc_unlink(const char *path)
 	IOF_LOG_DEBUG("path %s rc %d", path, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
+}
+
+void
+ioc_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct iof_gah_string_in *in;
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	int ret = EIO;
+
+	IOF_TRACE_LINK(req, fs_handle, "unlink");
+
+	STAT_ADD(fs_handle->stats, unlink);
+
+	if (FS_IS_OFFLINE(fs_handle)) {
+		ret = fs_handle->offline_reason;
+		goto out_err;
+	}
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		ret = EROFS;
+		goto out_err;
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
+			    FS_TO_OP(fs_handle, unlink), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	in = crt_req_get(rpc);
+	in->path = (d_string_t)name;
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, parent, &in->gah);
+	if (rc != 0) {
+		ret = ENOENT;
+		goto out_err;
+	}
+
+	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
+	if (rc) {
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
+		ret = EIO;
+		goto out_err;
+	}
+
+	return;
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
 }
