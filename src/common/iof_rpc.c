@@ -259,11 +259,17 @@ const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
 	}
 };
 
+/* Bulk register a RPC type
+ *
+ * If there is a failure then register what is possible, and return
+ * the first error that occurred.
+ */
 int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 {
 	int i;
 	const struct proto *proto = &iof_protocol_registry[cls];
 	struct rpc_data *rp = proto->rpc_types;
+	int ret = 0;
 
 	for (i = 0 ; i < iof_protocol_registry->rpc_type_count ; i++) {
 		int rc;
@@ -274,10 +280,13 @@ int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 				(rp->op_id, &rp->fmt, handlers[i]);
 		else
 			rc = crt_rpc_register(rp->op_id, &rp->fmt);
-		if (rc != 0)
-			printf("Failed to register");
+		if (rc != 0) {
+			printf("Failed to register\n");
+			if (ret == 0)
+				ret = rc;
+		}
 		rp++;
 	}
 
-	return 0;
+	return ret;
 }
