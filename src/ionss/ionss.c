@@ -1236,39 +1236,38 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 
 	IOF_LOG_DEBUG("Processing read rrd %p", rrd);
 
-	rrd->ard = ard;
+	ard->rrd = rrd;
 
-	IOF_LOG_DEBUG("Processing read rrd %p ard %p", rrd, rrd->ard);
+	IOF_LOG_DEBUG("Processing read rrd %p ard %p", rrd, ard);
 
 	IOF_LOG_DEBUG("Reading from %d", handle->fd);
 
 	errno = 0;
-	rrd->ard->read_len = pread(handle->fd, rrd->ard->local_bulk.buf,
-				   in->xtvec.xt_len,
-				   in->xtvec.xt_off);
-	if (rrd->ard->read_len == -1) {
+	ard->read_len = pread(handle->fd, ard->local_bulk.buf, in->xtvec.xt_len,
+			      in->xtvec.xt_off);
+	if (ard->read_len == -1) {
 		out->rc = errno;
 		goto out;
-	} else if (rrd->ard->read_len <= base.max_iov_read) {
-		out->iov_len = rrd->ard->read_len;
-		d_iov_set(&out->data, rrd->ard->local_bulk.buf,
-			  rrd->ard->read_len);
+	} else if (ard->read_len <= base.max_iov_read) {
+		out->iov_len = ard->read_len;
+		d_iov_set(&out->data, ard->local_bulk.buf,
+			  ard->read_len);
 		goto out;
 	}
 
 	bulk_desc.bd_rpc = rrd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
 	bulk_desc.bd_remote_hdl = in->data_bulk;
-	bulk_desc.bd_local_hdl = rrd->ard->local_bulk.handle;
-	bulk_desc.bd_len = rrd->ard->read_len;
+	bulk_desc.bd_local_hdl = ard->local_bulk.handle;
+	bulk_desc.bd_len = ard->read_len;
 
 	IOF_LOG_DEBUG("Sending bulk " GAH_PRINT_STR,
 		      GAH_PRINT_VAL(in->gah));
 
-	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, rrd, NULL);
+	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, ard, NULL);
 	if (rc) {
 		out->err = IOF_ERR_CART;
-		rrd->ard->failed = true;
+		ard->failed = true;
 		goto out;
 	}
 
@@ -1291,7 +1290,7 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
-	iof_pool_release(projection->ar_pool, rrd->ard);
+	iof_pool_release(projection->ar_pool, ard);
 	free(rrd);
 
 	ios_fh_decref(handle, 1);
@@ -1307,16 +1306,17 @@ out:
 static int
 iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
-	struct ionss_read_req_desc *rrd = cb_info->bci_arg;
+	struct ionss_active_read *ard = cb_info->bci_arg;
+	struct ionss_read_req_desc *rrd = ard->rrd;
 	struct ios_projection *projection = rrd->handle->projection;
 	struct iof_readx_out *out = crt_reply_get(rrd->rpc);
 	int rc;
 
 	if (cb_info->bci_rc) {
 		out->err = IOF_ERR_CART;
-		rrd->ard->failed = true;
+		ard->failed = true;
 	} else {
-		out->bulk_len = rrd->ard->read_len;
+		out->bulk_len = ard->read_len;
 	}
 
 	rc = crt_reply_send(rrd->rpc);
@@ -1328,7 +1328,7 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
-	iof_pool_release(projection->ar_pool, rrd->ard);
+	iof_pool_release(projection->ar_pool, ard);
 	free(rrd);
 
 	iof_read_check_and_send(projection);
@@ -2396,6 +2396,8 @@ static int
 ar_reset(void *arg)
 {
 	struct ionss_active_read *ard = arg;
+
+	ard->rrd = NULL;
 
 	/* If the previous bulk worked, leave the handle as is */
 	if (!ard->failed)

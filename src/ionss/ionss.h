@@ -173,7 +173,6 @@ struct ionss_dir_handle {
 struct ionss_read_req_desc {
 	crt_rpc_t			*rpc;
 	struct ionss_file_handle	*handle;
-	struct ionss_active_read	*ard;
 	d_list_t			list;
 };
 
