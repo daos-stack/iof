@@ -136,6 +136,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 	struct read_bulk_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
+	ssize_t read_len = 0;
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
 	int rc;
@@ -202,11 +203,13 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 			*errcode = EIO;
 			return -1;
 		}
-		len = out->data.iov_len;
-		memcpy(buff, out->data.iov_buf, len);
-	} else {
-		len = out->bulk_len;
-		IOF_LOG_INFO("Received %#zx via bulk", len);
+		read_len = out->data.iov_len;
+		IOF_LOG_INFO("Received %#zx via immediate", read_len);
+		memcpy(buff + out->bulk_len, out->data.iov_buf, read_len);
+	}
+	if (out->bulk_len > 0) {
+		IOF_LOG_INFO("Received %#zx via bulk", out->bulk_len);
+		read_len += out->bulk_len;
 	}
 
 	rc = crt_req_decref(reply.rpc);
@@ -219,9 +222,9 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 		return -1;
 	}
 
-	IOF_LOG_INFO("Read complete %#zx", len);
+	IOF_LOG_INFO("Read complete %#zx", read_len);
 
-	return len;
+	return read_len;
 }
 
 ssize_t ioil_do_pread(char *buff, size_t len, off_t position,

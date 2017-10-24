@@ -1205,6 +1205,10 @@ static int initialize_projection(struct iof_state *iof_state,
 					  fs_handle->max_read);
 
 	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
+					  "max_iov_read",
+					  fs_handle->max_iov_read);
+
+	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 					  "max_write",
 					  fs_handle->max_write);
 

@@ -55,6 +55,8 @@
 
 static const char *cnss_prefix;
 static char *mount_dir;
+static uint64_t max_read_size;
+static uint64_t max_iov_read_size;
 
 
 #define WRITE_LOG_VERBOSE(fmt2, fmt1, ...) \
@@ -84,7 +86,9 @@ static int init_suite(void)
 	WRITE_LOG("setting up test");
 
 	for (;;) {
-		sprintf(buf1, "iof/projections/%d/mount_point", mnt_num++);
+		int mnt_id = mnt_num++;
+
+		sprintf(buf1, "iof/projections/%d/mount_point", mnt_id);
 		rc = iof_ctrl_read_str(buf2, IOF_CTRL_MAX_LEN, buf1);
 
 		if (rc != 0) {
@@ -101,6 +105,20 @@ static int init_suite(void)
 		}
 
 		fclose(fp);
+
+		sprintf(buf1, "iof/projections/%d/max_read", mnt_id);
+		rc = iof_ctrl_read_uint64(&max_read_size, buf1);
+		if (rc != 0) {
+			printf("max_read read error, skipping PA mount.\n");
+			continue;
+		}
+
+		sprintf(buf1, "iof/projections/%d/max_iov_read", mnt_id);
+		rc = iof_ctrl_read_uint64(&max_iov_read_size, buf1);
+		if (rc != 0) {
+			printf("max_iov_read read error, skipping PA mount.\n");
+			continue;
+		}
 
 		mount_dir = strdup(buf2);
 		if (mount_dir == NULL)
@@ -286,6 +304,69 @@ static void do_read_tests(const char *fname, size_t len)
 	printf("Closed file, rc = %d\n", rc);
 	CU_ASSERT_EQUAL(rc, 0);
 	WRITE_LOG("end read test");
+}
+
+#define CU_ASSERT_GOTO(cond, target)  \
+	do {                          \
+		CU_ASSERT(cond);      \
+		if (!(cond))          \
+			goto target;  \
+	} while (0)
+
+static void do_large_read(const char *fname, const char *expected,
+			  char *buf, size_t size)
+{
+	ssize_t bytes;
+	int fd;
+	int rc;
+
+	memset(buf, 0, size);
+	fd = open(fname, O_RDONLY);
+	CU_ASSERT_NOT_EQUAL(fd, -1);
+	if (fd == -1)
+		return;
+	bytes = read(fd, buf, size);
+	CU_ASSERT_EQUAL(bytes, size);
+	CU_ASSERT(memcmp(expected, buf, size) == 0);
+	rc = close(fd);
+	CU_ASSERT_EQUAL(rc, 0);
+}
+
+static void do_large_read_test(const char *fname, size_t len)
+{
+	char *buf = NULL;
+	char *buf2 = NULL;
+	FILE *fp = NULL;
+	size_t test1_size = max_read_size * 2;
+	size_t test2_size = test1_size + max_iov_read_size;
+	size_t test3_size = test2_size + max_iov_read_size;
+	size_t buf_size = test3_size;
+	ssize_t bytes;
+
+	buf = malloc(buf_size);
+	CU_ASSERT_GOTO(buf != NULL, done);
+
+	buf2 = malloc(buf_size);
+	CU_ASSERT_GOTO(buf2 != NULL, done);
+
+	memset(buf, 'b', buf_size);
+
+	WRITE_LOG("starting large read test");
+	fp = fopen(fname, "w");
+	CU_ASSERT_GOTO(fp != NULL, done);
+	bytes = fwrite(buf, 1, buf_size, fp);
+	CU_ASSERT_EQUAL(bytes, buf_size);
+	fclose(fp);
+	fp = NULL;
+
+	do_large_read(fname, buf, buf2, test1_size);
+	do_large_read(fname, buf, buf2, test2_size);
+	do_large_read(fname, buf, buf2, test3_size);
+
+done:
+	free(buf);
+	free(buf2);
+	WRITE_LOG("end large read test");
 }
 
 static void do_misc_tests(const char *fname, size_t len)
@@ -482,6 +563,7 @@ void sanity(void)
 	size_t len;
 	int fd;
 
+	fflush(stdout);
 	len = strlen(mount_dir);
 	snprintf(buf, BUF_SIZE - len, "%s/sanity", mount_dir);
 	buf[BUF_SIZE - 1] = 0;
@@ -494,6 +576,7 @@ void sanity(void)
 	do_write_tests(fd, buf, len);
 	do_read_tests(buf, len);
 	do_misc_tests(buf, len);
+	do_large_read_test(buf, len);
 }
 
 int main(int argc, char **argv)

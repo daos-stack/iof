@@ -189,6 +189,9 @@ struct ionss_active_read {
 	d_list_t			list;
 	size_t				buf_len;
 	size_t				read_len;
+	uint64_t			data_offset;
+	uint64_t			req_len;
+	uint64_t			segment_offset;
 	bool				failed;
 };
 

@@ -1220,6 +1220,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 
 	d_list_del(&rrd->list);
 
+	IOF_TRACE_UP(ard, rrd->handle, "ard");
 	IOF_TRACE_DEBUG(ard, "Submiting new read (%d/%d)",
 			projection->current_read_count,
 			projection->max_read_count);
@@ -1248,17 +1249,27 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	struct iof_readx_out *out = crt_reply_get(ard->rpc);
 	struct ios_projection *projection = ard->handle->projection;
 	struct crt_bulk_desc bulk_desc = {0};
+	size_t count;
+	off_t offset;
 	int rc;
 
-	IOF_TRACE_DEBUG(ard, "Processing read fd %d", handle->fd);
-
 	errno = 0;
-	ard->read_len = pread(handle->fd, ard->local_bulk.buf, in->xtvec.xt_len,
-			      in->xtvec.xt_off);
+
+	count = in->xtvec.xt_len - ard->segment_offset;
+	if (count > base.max_read) /* Only read max_read at a time */
+		count = base.max_read;
+	ard->req_len = count;
+	offset = in->xtvec.xt_off + ard->segment_offset;
+
+	IOF_TRACE_DEBUG(ard, "Reading from fd=%d %#zx-%#zx", handle->fd, offset,
+			offset + count - 1);
+
+	ard->read_len = pread(handle->fd, ard->local_bulk.buf, count, offset);
 	if (ard->read_len == -1) {
 		out->rc = errno;
 		goto out;
 	} else if (ard->read_len <= base.max_iov_read) {
+		/* Can send last bit in immediate data */
 		out->iov_len = ard->read_len;
 		d_iov_set(&out->data, ard->local_bulk.buf,
 			  ard->read_len);
@@ -1268,11 +1279,12 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	bulk_desc.bd_rpc = ard->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
 	bulk_desc.bd_remote_hdl = in->data_bulk;
+	bulk_desc.bd_remote_off = ard->data_offset;
 	bulk_desc.bd_local_hdl = ard->local_bulk.handle;
 	bulk_desc.bd_len = ard->read_len;
 
-	IOF_LOG_DEBUG("Sending bulk " GAH_PRINT_STR,
-		      GAH_PRINT_VAL(in->gah));
+	IOF_TRACE_DEBUG(ard, "Sending bulk " GAH_PRINT_STR,
+			GAH_PRINT_VAL(in->gah));
 
 	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, ard, NULL);
 	if (rc) {
@@ -1281,11 +1293,17 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 		goto out;
 	}
 
+	ard->data_offset += ard->req_len;
+	ard->segment_offset += ard->req_len;
+
+	if (ard->segment_offset < in->xtvec.xt_len &&
+	    ard->read_len == ard->req_len)
+		return; /* Not done yet */
+
 	/* Do not call crt_reply_send() in this case as it'll be done in the
 	 * bulk handler however it's safe to drop the handle as the read
 	 * has completed at this point.
 	 */
-
 	ios_fh_decref(handle, 1);
 
 	return;
@@ -1294,11 +1312,11 @@ out:
 	rc = crt_reply_send(ard->rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(ard, "response not sent, ret = %d", rc);
 
 	rc = crt_req_decref(ard->rpc);
 	if (rc)
-		IOF_LOG_ERROR("decref failed, ret = %u", rc);
+		IOF_TRACE_ERROR(ard, "decref failed, ret = %d", rc);
 
 	iof_pool_release(projection->ar_pool, ard);
 
@@ -1318,23 +1336,31 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	struct ionss_active_read *ard = cb_info->bci_arg;
 	struct ios_projection *projection = ard->handle->projection;
 	struct iof_readx_out *out = crt_reply_get(ard->rpc);
+	struct iof_readx_in *in = crt_req_get(ard->rpc);
 	int rc;
 
 	if (cb_info->bci_rc) {
 		out->err = IOF_ERR_CART;
 		ard->failed = true;
 	} else {
-		out->bulk_len = ard->read_len;
+		out->bulk_len += ard->read_len;
+	}
+
+	if (ard->segment_offset < in->xtvec.xt_len &&
+	    ard->read_len == ard->req_len) {
+		/* Get the next segment */
+		iof_process_read_bulk(ard);
+		return 0;
 	}
 
 	rc = crt_reply_send(ard->rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(ard, "response not sent, ret = %d", rc);
 
 	rc = crt_req_decref(ard->rpc);
 	if (rc)
-		IOF_LOG_ERROR("decref failed, ret = %u", rc);
+		IOF_TRACE_ERROR(ard, "decref failed, ret = %d", rc);
 
 	iof_pool_release(projection->ar_pool, ard);
 
@@ -1367,14 +1393,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	/* TODO: Fix this so that we read max_read at a time */
-	if (in->xtvec.xt_len > base.max_read) {
-		IOF_LOG_WARNING("Invalid read, too large");
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	/* TODO: Only 1 xtvec supported for now */
+	/* TODO: Only immediate xtvec supported for now */
 	if (in->xtvec_len > 0) {
 		IOF_LOG_WARNING("xtvec not yet supported for read");
 		out->err = IOF_ERR_INTERNAL;
@@ -1397,7 +1416,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 	ard = iof_pool_acquire(projection->ar_pool);
 	if (ard) {
 		projection->current_read_count++;
-		IOF_TRACE_LINK(ard, handle, "ard");
+		IOF_TRACE_UP(ard, handle, "ard");
 		IOF_TRACE_DEBUG(ard, "Injecting new read (%d/%d)",
 				projection->current_read_count,
 				projection->max_read_count);
@@ -2432,6 +2451,9 @@ static int
 ar_reset(void *arg)
 {
 	struct ionss_active_read *ard = arg;
+
+	ard->data_offset = 0;
+	ard->segment_offset = 0;
 
 	/* If the previous bulk worked, leave the handle as is */
 	if (!ard->failed)
