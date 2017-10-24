@@ -569,11 +569,12 @@ int main(void)
 	const char *prefix;
 	char *version = iof_get_version();
 	struct plugin_entry *list_iter;
+	struct plugin_entry *list_iter_next;
 	struct cnss_info *cnss_info;
-	int active_plugins = 0;
+	bool active_plugins = false;
 
 	int ret;
-	int service_process_set = 0;
+	bool service_process_set = false;
 	char *ctrl_prefix;
 
 	iof_log_init("CN", "CNSS", NULL);
@@ -663,7 +664,7 @@ int main(void)
 	 */
 	d_list_for_each_entry(list_iter, &cnss_info->plugins, list) {
 		if (list_iter->active && list_iter->fns->require_service) {
-			service_process_set = CRT_FLAG_BIT_SERVER;
+			service_process_set = true;
 			break;
 		}
 	}
@@ -672,7 +673,7 @@ int main(void)
 		     service_process_set ? "service" : "client");
 
 	/*initialize CaRT*/
-	ret = crt_init(cnss, service_process_set);
+	ret = crt_init(cnss, service_process_set ? CRT_FLAG_BIT_SERVER : 0);
 	if (ret) {
 		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
 		ret = CNSS_ERR_CART;
@@ -708,18 +709,31 @@ int main(void)
 	CALL_PLUGIN_FN_CHECK(&cnss_info->plugins, post_start);
 
 	/* Walk the plugins and check for active ones */
-	d_list_for_each_entry(list_iter, &cnss_info->plugins, list) {
+	d_list_for_each_entry_safe(list_iter, list_iter_next,
+				   &cnss_info->plugins, list) {
 		if (list_iter->active) {
-			active_plugins = 1;
-			break;
+			active_plugins = true;
+			continue;
 		}
+		if (list_iter->fns->destroy_plugin_data) {
+			IOF_LOG_INFO("Plugin %s(%p) calling destroy_plugin_data at %p",
+				list_iter->fns->name,
+				list_iter->fns->handle,
+				FN_TO_PVOID(list_iter->fns->destroy_plugin_data));
+			list_iter->fns->destroy_plugin_data(list_iter->fns->handle);
+		}
+		d_list_del(&list_iter->list);
+
+		if (list_iter->dl_handle)
+			dlclose(list_iter->dl_handle);
+		D_FREE(list_iter);
 	}
 
 	/* TODO: How to handle this case? */
 	if (!active_plugins) {
 		IOF_LOG_ERROR("No active plugins");
 		ret = 1;
-		goto shutdown_ctrl_fs;
+		goto shutdown_cart;
 	}
 
 	cnss_info->info.active = 1;
@@ -737,6 +751,8 @@ int main(void)
 
 	shutdown_fs(cnss_info);
 	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
+
+shutdown_cart:
 
 	ret = crt_finalize();
 
