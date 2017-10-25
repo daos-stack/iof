@@ -1182,9 +1182,13 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
+_Static_assert(sizeof(struct ionss_read_req_desc) <=
+	       sizeof(struct iof_readx_out),
+	       "struct iof_readx_out needs to be large enough to contain"
+	       " struct ionss_read_req_desc");
+
 static int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info);
-static void iof_process_read_bulk(struct ionss_active_read *ard,
-				  struct ionss_read_req_desc *rrd);
+static void iof_process_read_bulk(struct ionss_active_read *ard);
 
 void iof_read_check_and_send(struct ios_projection *projection)
 {
@@ -1216,12 +1220,19 @@ void iof_read_check_and_send(struct ios_projection *projection)
 
 	d_list_del(&rrd->list);
 
-	IOF_LOG_DEBUG("Submiting new read %p (%d/%d)", rrd,
-		      projection->current_read_count,
-		      projection->max_read_count);
+	IOF_TRACE_DEBUG(ard, "Submiting new read (%d/%d)",
+			projection->current_read_count,
+			projection->max_read_count);
 
 	pthread_mutex_unlock(&projection->lock);
-	iof_process_read_bulk(ard, rrd);
+
+	ard->rpc = rrd->rpc;
+	ard->handle = rrd->handle;
+
+	/* Reset the borrowed output to 0 */
+	memset(rrd, 0, sizeof(*rrd));
+
+	iof_process_read_bulk(ard);
 }
 
 /* Process a read request
@@ -1230,23 +1241,16 @@ void iof_read_check_and_send(struct ios_projection *projection)
  * the result of completes and frees the request
  */
 static void
-iof_process_read_bulk(struct ionss_active_read *ard,
-		      struct ionss_read_req_desc *rrd)
+iof_process_read_bulk(struct ionss_active_read *ard)
 {
-	struct ionss_file_handle *handle = rrd->handle;
-	struct iof_readx_in *in = crt_req_get(rrd->rpc);
-	struct iof_readx_out *out = crt_reply_get(rrd->rpc);
-	struct ios_projection *projection = rrd->handle->projection;
+	struct ionss_file_handle *handle = ard->handle;
+	struct iof_readx_in *in = crt_req_get(ard->rpc);
+	struct iof_readx_out *out = crt_reply_get(ard->rpc);
+	struct ios_projection *projection = ard->handle->projection;
 	struct crt_bulk_desc bulk_desc = {0};
 	int rc;
 
-	IOF_LOG_DEBUG("Processing read rrd %p", rrd);
-
-	ard->rrd = rrd;
-
-	IOF_LOG_DEBUG("Processing read rrd %p ard %p", rrd, ard);
-
-	IOF_LOG_DEBUG("Reading from %d", handle->fd);
+	IOF_TRACE_DEBUG(ard, "Processing read fd %d", handle->fd);
 
 	errno = 0;
 	ard->read_len = pread(handle->fd, ard->local_bulk.buf, in->xtvec.xt_len,
@@ -1261,7 +1265,7 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 		goto out;
 	}
 
-	bulk_desc.bd_rpc = rrd->rpc;
+	bulk_desc.bd_rpc = ard->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_PUT;
 	bulk_desc.bd_remote_hdl = in->data_bulk;
 	bulk_desc.bd_local_hdl = ard->local_bulk.handle;
@@ -1287,17 +1291,16 @@ iof_process_read_bulk(struct ionss_active_read *ard,
 	return;
 out:
 
-	rc = crt_reply_send(rrd->rpc);
+	rc = crt_reply_send(ard->rpc);
 
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
-	rc = crt_req_decref(rrd->rpc);
+	rc = crt_req_decref(ard->rpc);
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
 	iof_pool_release(projection->ar_pool, ard);
-	free(rrd);
 
 	ios_fh_decref(handle, 1);
 
@@ -1313,9 +1316,8 @@ static int
 iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 {
 	struct ionss_active_read *ard = cb_info->bci_arg;
-	struct ionss_read_req_desc *rrd = ard->rrd;
-	struct ios_projection *projection = rrd->handle->projection;
-	struct iof_readx_out *out = crt_reply_get(rrd->rpc);
+	struct ios_projection *projection = ard->handle->projection;
+	struct iof_readx_out *out = crt_reply_get(ard->rpc);
 	int rc;
 
 	if (cb_info->bci_rc) {
@@ -1325,17 +1327,16 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 		out->bulk_len = ard->read_len;
 	}
 
-	rc = crt_reply_send(rrd->rpc);
+	rc = crt_reply_send(ard->rpc);
 
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
-	rc = crt_req_decref(rrd->rpc);
+	rc = crt_req_decref(ard->rpc);
 	if (rc)
 		IOF_LOG_ERROR("decref failed, ret = %u", rc);
 
 	iof_pool_release(projection->ar_pool, ard);
-	free(rrd);
 
 	iof_read_check_and_send(projection);
 	return 0;
@@ -1352,8 +1353,11 @@ iof_readx_handler(crt_rpc_t *rpc)
 {
 	struct iof_readx_in *in = crt_req_get(rpc);
 	struct iof_readx_out *out = crt_reply_get(rpc);
+	/* Use the output temporarily to store minimal info about
+	 * the read.
+	 */
+	struct ionss_read_req_desc *rrd;
 	struct ionss_file_handle *handle;
-	struct ionss_read_req_desc *rrd = NULL;
 	struct ionss_active_read *ard;
 
 	struct ios_projection *projection;
@@ -1369,15 +1373,6 @@ iof_readx_handler(crt_rpc_t *rpc)
 		out->err = IOF_ERR_INTERNAL;
 		goto out;
 	}
-
-	D_ALLOC_PTR(rrd);
-	if (!rrd) {
-		out->err = IOF_ERR_NOMEM;
-		goto out;
-	}
-
-	rrd->rpc = rpc;
-	rrd->handle = handle;
 
 	rc = crt_req_addref(rpc);
 	if (rc) {
@@ -1395,12 +1390,22 @@ iof_readx_handler(crt_rpc_t *rpc)
 	ard = iof_pool_acquire(projection->ar_pool);
 	if (ard) {
 		projection->current_read_count++;
-		IOF_LOG_DEBUG("Injecting new read %p (%d/%d)", rrd,
-			      projection->current_read_count,
-			      projection->max_read_count);
+		IOF_TRACE_LINK(ard, handle, "ard");
+		IOF_TRACE_DEBUG(ard, "Injecting new read (%d/%d)",
+				projection->current_read_count,
+				projection->max_read_count);
 		pthread_mutex_unlock(&projection->lock);
-		iof_process_read_bulk(ard, rrd);
+		ard->rpc = rpc;
+		ard->handle = handle;
+		iof_process_read_bulk(ard);
 	} else {
+		/* Piggyback the output descriptor space to store the read
+		 * descriptor whilst in the read queue
+		 */
+		rrd = crt_reply_get(rpc);
+
+		rrd->rpc = rpc;
+		rrd->handle = handle;
 		d_list_add_tail(&rrd->list, &projection->read_list);
 		pthread_mutex_unlock(&projection->lock);
 	}
@@ -1414,9 +1419,6 @@ out:
 
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-
-	if (rrd)
-		free(rrd);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -2423,8 +2425,6 @@ static int
 ar_reset(void *arg)
 {
 	struct ionss_active_read *ard = arg;
-
-	ard->rrd = NULL;
 
 	/* If the previous bulk worked, leave the handle as is */
 	if (!ard->failed)

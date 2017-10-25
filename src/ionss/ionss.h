@@ -183,7 +183,8 @@ struct ionss_read_req_desc {
  */
 struct ionss_active_read {
 	struct ios_projection		*projection;
-	struct ionss_read_req_desc      *rrd;
+	crt_rpc_t			*rpc;
+	struct ionss_file_handle	*handle;
 	struct iof_local_bulk		local_bulk;
 	d_list_t			list;
 	size_t				buf_len;
