@@ -508,4 +508,7 @@ void ioc_ll_readdir(fuse_req_t, fuse_ino_t, size_t, off_t,
 
 void ioc_ll_releasedir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
+void ioc_ll_write(fuse_req_t, fuse_ino_t, const char *,	size_t, off_t,
+		  struct fuse_file_info *);
+
 #endif

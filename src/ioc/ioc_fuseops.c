@@ -388,5 +388,6 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool writeable)
 		return fuse_ops;
 
 	fuse_ops->unlink = ioc_ll_unlink;
+	fuse_ops->write = ioc_ll_write;
 	return fuse_ops;
 }

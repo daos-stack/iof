@@ -412,6 +412,18 @@ class Testlocal(unittest.TestCase,
         if rtn != 0:
             self.fail('DD returned error')
 
+    def test_file_basic_write(self):
+        """Write to a existing file"""
+
+        filename = os.path.join(self.export_dir, 'write_file')
+        with open(filename, 'w') as fd:
+            fd.close()
+
+        filename = os.path.join(self.import_dir, 'write_file')
+        with open(filename, 'w') as fd:
+            fd.write('World')
+            fd.close()
+
     def test_ro_listdir(self):
         """Read directory contents"""
 

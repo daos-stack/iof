@@ -248,3 +248,15 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 
 	return rc;
 }
+
+void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
+		  off_t position, struct fuse_file_info *fi)
+{	int rc;
+
+	rc = ioc_write(NULL, buff, len, position, fi);
+
+	if (rc < 0)
+		IOF_FUSE_REPLY_ERR(req, -rc);
+	else
+		fuse_reply_write(req, rc);
+}

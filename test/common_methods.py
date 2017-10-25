@@ -433,6 +433,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         filename = os.path.join(self.import_dir, 'write_file')
         with open(filename, 'w') as fd:
             fd.write('World')
+            fd.close()
 
         if self.test_local:
             self.verify_file_write()
