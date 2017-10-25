@@ -99,6 +99,9 @@ ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
 	fuse_req_t req = cb_info->cci_arg;
 	int ret = EIO;
 
+	if (cb_info->cci_rc == -DER_NOMEM)
+		D_GOTO(out_err, ret = ENOMEM);
+
 	if (cb_info->cci_rc != 0) {
 		IOF_TRACE_INFO(req, "cci_rc is %d", cb_info->cci_rc);
 		goto out_err;

@@ -87,17 +87,17 @@ int ioc_unlink(const char *path)
 	return IOC_STATUS_TO_RC(&reply);
 }
 
-void
-ioc_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void
+ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 {
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_gah_string_in *in;
+	struct iof_open_in *in;
 	crt_rpc_t *rpc = NULL;
 	int rc;
 
 	int ret = EIO;
 
-	IOF_TRACE_LINK(req, fs_handle, "unlink");
+	IOF_TRACE_LINK(req, fs_handle, dir ? "rmdir" : "unlink");
 
 	STAT_ADD(fs_handle->stats, unlink);
 
@@ -123,6 +123,8 @@ ioc_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 	in = crt_req_get(rpc);
 	in->path = (d_string_t)name;
+	if (dir)
+		in->flags = 1;
 
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, parent, &in->gah);
@@ -141,4 +143,16 @@ ioc_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
 	return;
 out_err:
 	IOF_FUSE_REPLY_ERR(req, ret);
+}
+
+void
+ioc_ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+	ioc_ll_remove(req, parent, name, false);
+}
+
+void
+ioc_ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+	ioc_ll_remove(req, parent, name, true);
 }

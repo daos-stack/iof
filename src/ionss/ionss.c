@@ -1753,7 +1753,7 @@ out:
 
 static void iof_unlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_gah_string_in *in = crt_req_get(rpc);
+	struct iof_open_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *parent;
 	int rc;
@@ -1772,12 +1772,13 @@ static void iof_unlink_handler(crt_rpc_t *rpc)
 	}
 
 	errno = 0;
-	rc = unlinkat(parent->fd, iof_get_rel_path(in->path), 0);
+	rc = unlinkat(parent->fd, iof_get_rel_path(in->path),
+		      in->flags ? AT_REMOVEDIR : 0);
 
 	if (rc)
 		out->rc = errno;
 
-	IOF_TRACE_DEBUG(rpc, "rc %d", out->rc);
+	IOF_TRACE_DEBUG(rpc, "flag %d rc %d", in->flags, out->rc);
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
