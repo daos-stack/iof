@@ -47,9 +47,6 @@ extern "C" {
 /* This data structure is intended for small objects */
 #define MAX_POOL_OBJ_SIZE 256
 
-#define STATIC_ASSERT(cond, msg) \
-	typedef char static_assertion_##msg[(cond) ? 1 : -1]
-
 /* Error codes */
 enum {
 	PSUCCESS = 0, /* Success */

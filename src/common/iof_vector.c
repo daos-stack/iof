@@ -112,8 +112,8 @@ struct vector {
 	unsigned int max_entries;    /* limit on size of vector */
 };
 
-STATIC_ASSERT(sizeof(struct vector) <= sizeof(vector_t),
-	      vector_t_is_too_small);
+_Static_assert(sizeof(struct vector) <= sizeof(vector_t),
+	       "vector_t must be large enough to contain struct vector");
 
 #define MIN_SIZE 1024
 #define ALLOC_SIZE_SHIFT 9 /* 512 */

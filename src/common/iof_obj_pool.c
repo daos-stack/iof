@@ -71,8 +71,8 @@ struct obj_pool {
 
 #define PAD8(size) ((size + 7) & ~7)
 
-STATIC_ASSERT(sizeof(obj_pool_t) >= sizeof(struct obj_pool),
-	      obj_pool_t_not_big_enough);
+_Static_assert(sizeof(obj_pool_t) >= sizeof(struct obj_pool),
+	       "obj_pool_t must be large enough to contain struct obj_pool");
 
 
 #define MAGIC 0x345342aa
