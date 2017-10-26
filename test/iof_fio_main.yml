@@ -3,25 +3,12 @@
 #
 # Following are the setup requirements to be able to execute this test:
 #
-# 1) Set up *all* the test nodes.
-#
-# 1.1) Insert the following entries in /etc/ssh/sshd_config:
-#
-#      PermitRootLogin        yes
-#      PasswordAuthentication yes
-#      PubkeyAuthentication   yes
-#
-# 1.2) Allow sudo (for everyone with authorization) for all cmds in /etc/sudoers:
-#
-#      ALL  ALL = (root) NOPASSWD: /usr/sbin/
-#      ALL  ALL = (root) NOPASSWD: /usr/bin/
-#
-# 2) The following files should exist in the iof repo:
+# 1) The following files should exist in the iof repo:
 #
 #    test/iof_fio_main.yml
 #    test/iof_fio_cmds.yml
 #
-# 3) The files in (1) are copied to the scripts directory after exec'ing:
+# 2) The files in (1) are copied to the scripts directory after exec'ing:
 #
 #    scons install
 #
@@ -30,9 +17,9 @@
 #    install/Linux/TESTING/scripts/iof_fio_main.yml
 #    install/Linux/TESTING/scripts/iof_fio_cmds.yml
 #
-# 4) For standalone (not CI testing) run the following cmds in the iof repo:
+# 3) For standalone (not CI testing) run the following cmds in the iof repo:
 #
-# 4.1) You need a config file in the following dir, example:
+# 3.1) You need a config file in the following dir, example:
 #
 #      install/Linux/TESTING/scripts/iof_fio_main.cfg
 #
@@ -48,7 +35,7 @@
 #            <NODE_CLIENT>
 #            with provisioned and already configured nodes.
 #
-# 4.2) To run the standalone test, exec the following cmds form the iof repo
+# 3.2) To run the standalone test, exec the following cmds form the iof repo
 #
 #      cd install/Linux/TESTING/ ;
 #
@@ -60,11 +47,11 @@
 #      python3.4 test_runner config=scripts/iof_fio_main.cfg \
 #                scripts/iof_multi_two_node.yml ;
 #
-# 5) The results can be viewed in following dir in the iof repo:
+# 4) The results can be viewed in following dir in the iof repo:
 #
 #    install/Linux/TESTING/testLogs/
 #
-# 5.1) Do the following to find failures in install/Linux/TESTING/testLogs/
+# 4.1) Do the following to find failures in install/Linux/TESTING/testLogs/
 #
 #      find testRun -name subtest_results.yml -exec grep -Hi fail {} \;
 
@@ -84,9 +71,6 @@ module:
     setKeyFromInfo:
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
-
-    appendKeyFromInfo:
-        - [LD_LIBRARY_PATH, "/lib", [OMPI_PREFIX]]
 
     hostConfig:
         type:       buildList
