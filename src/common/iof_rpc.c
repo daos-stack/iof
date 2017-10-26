@@ -69,6 +69,14 @@ struct crt_msg_field *lookup_out[] = {
 	&CMF_INT,
 };
 
+struct crt_msg_field *create_out[] = {
+	&CMF_GAH,	/* gah */
+	&CMF_GAH,	/* inode gah */
+	&CMF_IOVEC,	/* struct stat */
+	&CMF_INT,	/* rc */
+	&CMF_INT,	/* err */
+};
+
 struct crt_msg_field *two_string_in[] = {
 	&CMF_GAH,
 	&CMF_STRING,
@@ -76,10 +84,11 @@ struct crt_msg_field *two_string_in[] = {
 };
 
 struct crt_msg_field *create_in[] = {
-	&CMF_STRING,
-	&CMF_GAH,
-	&CMF_INT,
-	&CMF_INT,
+	&CMF_STRING,	/* name */
+	&CMF_GAH,	/* gah */
+	&CMF_INT,	/* mode */
+	&CMF_INT,	/* flags */
+	&CMF_INT,	/* reg_inode */
 };
 
 /* Note this is also used for unlink/rmdir */
@@ -225,7 +234,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(readx, readx_in, readx_out),
 	RPC_TYPE(unlink, open_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
-	RPC_TYPE(create, create_in, gah_pair),
+	RPC_TYPE(create, create_in, create_out),
 	RPC_TYPE(close, gah_in, NULL),
 	RPC_TYPE(mkdir, create_in, status_out),
 	RPC_TYPE(readlink, string_in, string_out),

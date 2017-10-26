@@ -255,7 +255,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	in = crt_req_get(handle->open_rpc);
 
-	/* Find the GAH of the parent */
+	/* Find the GAH of the file to open */
 	rc = find_gah(fs_handle, ino, &in->gah);
 	if (rc != 0) {
 		ret = ENOENT;

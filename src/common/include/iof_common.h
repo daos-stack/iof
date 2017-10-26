@@ -168,6 +168,14 @@ struct iof_lookup_out {
 	int err;
 };
 
+struct iof_create_out {
+	struct ios_gah gah;
+	struct ios_gah igah;
+	d_iov_t stat;
+	int rc;
+	int err;
+};
+
 struct iof_truncate_in {
 	d_string_t path;
 	uint64_t len;
@@ -190,6 +198,7 @@ struct iof_create_in {
 	struct ios_gah gah;
 	uint32_t mode;
 	uint32_t flags;
+	uint32_t reg_inode;
 };
 
 struct iof_open_in {

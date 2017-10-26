@@ -630,15 +630,25 @@ fh_reset(void *arg)
 
 	fh->common.ep = fh->fs_handle->proj.grp->psr_ep;
 
+	if (!fh->ie) {
+		D_ALLOC_PTR(fh->ie);
+		if (!fh->ie)
+			return -1;
+		atomic_fetch_add(&fh->ie->ref, 1);
+	}
+
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
-	if (rc || !fh->open_rpc)
+	if (rc || !fh->open_rpc) {
+		D_FREE(fh->ie);
 		return -1;
+	}
 	IOF_TRACE_LINK(fh->open_rpc, fh, "open_rpc");
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
 	if (rc || !fh->creat_rpc) {
+		D_FREE(fh->ie);
 		crt_req_decref(fh->open_rpc);
 		return -1;
 	}
@@ -647,6 +657,7 @@ fh_reset(void *arg)
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
 	if (rc || !fh->release_rpc) {
+		D_FREE(fh->ie);
 		crt_req_decref(fh->open_rpc);
 		crt_req_decref(fh->creat_rpc);
 		return -1;
@@ -670,6 +681,7 @@ fh_release(void *arg)
 	crt_req_decref(fh->creat_rpc);
 	crt_req_decref(fh->release_rpc);
 	crt_req_decref(fh->release_rpc);
+	D_FREE(fh->ie);
 }
 
 static int

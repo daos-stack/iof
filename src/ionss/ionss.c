@@ -154,8 +154,10 @@ shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 		shutdown_impl();
 		return;
 	}
-	IOF_LOG_ERROR("Broadcast failed, rc = %u", cb_info->cci_rc);
+	IOF_LOG_ERROR("Broadcast failed, rc = %d", cb_info->cci_rc);
+
 	/* Retry in case of failure */
+	/* TODO: This doesn't look right */
 	rc = crt_req_send(cb_info->cci_rpc, shutdown_bcast_cb, NULL);
 	if (rc)
 		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
@@ -836,6 +838,8 @@ htable_mf_insert(struct ios_projection *projection,
 		handle = existing;
 	}
 
+	IOF_TRACE_DEBUG(handle, "Using handle");
+
 	return handle;
 }
 
@@ -937,6 +941,71 @@ out:
 	out->gah = handle->gah;
 }
 
+static void find_and_insert_create(struct ios_projection *projection,
+				   int fd,
+				   int ifd,
+				   struct stat *stbuf,
+				   struct ionss_mini_file *mf,
+				   struct ionss_mini_file *imf,
+				   struct iof_create_out *out)
+{
+	struct ionss_file_handle	*handle = NULL;
+	struct ionss_file_handle	*ihandle = NULL;
+	int				rc;
+
+	rc = fstat(fd, stbuf);
+	if (rc) {
+		out->rc = errno;
+		close(fd);
+		if (ifd)
+			close(ifd);
+		return;
+	}
+
+	if (projection->dev_no != stbuf->st_dev) {
+		out->rc = EACCES;
+		close(fd);
+		if (ifd)
+			close(ifd);
+		return;
+	}
+
+	/* Firstly create the key on the stack and use it to search for a
+	 * descriptor, using this if found.  rec_find() will take a reference
+	 * so there is no additional step needed here.
+	 */
+
+	mf->inode_no = stbuf->st_ino;
+
+	if (imf) {
+		imf->inode_no = stbuf->st_ino;
+
+		ihandle = htable_mf_insert(projection, imf, ifd);
+		if (!ihandle) {
+			IOF_TRACE_DEBUG(projection, "Could not insert imf");
+			out->err = IOF_ERR_NOMEM;
+			close(fd);
+			close(ifd);
+			return;
+		}
+	}
+
+	handle = htable_mf_insert(projection, mf, fd);
+	if (!handle) {
+		IOF_TRACE_DEBUG(projection, "Could not insert mf");
+		out->err = IOF_ERR_NOMEM;
+		close(fd);
+		if (ihandle)
+			ios_fh_decref(ihandle, 1);
+		return;
+	}
+
+	d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
+	if (ihandle)
+		out->igah = ihandle->gah;
+	out->gah = handle->gah;
+}
+
 static void
 iof_lookup_handler(crt_rpc_t *rpc)
 {
@@ -955,6 +1024,8 @@ iof_lookup_handler(crt_rpc_t *rpc)
 
 	projection = parent->projection;
 
+	IOF_TRACE_UP(rpc, parent, "lookup");
+
 	if (!in->path) {
 		out->err = IOF_ERR_CART;
 		goto out;
@@ -971,17 +1042,17 @@ iof_lookup_handler(crt_rpc_t *rpc)
 
 	find_and_insert_lookup(projection, fd, &stbuf, &mf, out);
 
-	IOF_LOG_INFO("Lookup %p, %s %lu %d " GAH_PRINT_STR, rpc,
-		     in->path, mf.inode_no, fd,
-		     GAH_PRINT_VAL(out->gah));
+	IOF_TRACE_INFO(rpc, "'%s' ino:%lu " GAH_PRINT_STR,
+		       in->path, mf.inode_no, GAH_PRINT_VAL(out->gah));
 
 out:
-	IOF_LOG_INFO("Sending reply %d %d", out->rc, out->err);
+	IOF_TRACE_INFO(rpc, "Sending reply %d %d", out->rc, out->err);
 	crt_reply_send(rpc);
 	if (projection)
 		iof_pool_restock(projection->fh_pool);
 	if (parent)
 		ios_fh_decref(parent, 1);
+	IOF_TRACE_DOWN(rpc);
 }
 
 static void
@@ -1060,10 +1131,12 @@ out:
 static void
 iof_create_handler(crt_rpc_t *rpc)
 {
-	struct iof_create_in	*in = crt_req_get(rpc);
-	struct iof_open_out	*out = crt_reply_get(rpc);
-	struct ionss_file_handle *parent;
-	struct ionss_mini_file	mf = {.type = open_handle};
+	struct iof_create_in		*in = crt_req_get(rpc);
+	struct iof_create_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent;
+	struct ionss_mini_file		mf = {.type = open_handle};
+	struct stat			stbuf = {0};
+	char *path = NULL;
 	int fd;
 	int rc;
 
@@ -1093,7 +1166,34 @@ iof_create_handler(crt_rpc_t *rpc)
 	}
 
 	mf.flags = in->flags;
-	find_and_insert(parent->projection, fd, &mf, out);
+
+	if (in->reg_inode) {
+		struct ionss_mini_file		imf = {.type = inode_handle,
+						       .flags = O_PATH | O_NOATIME | O_RDONLY};
+		int ifd;
+
+		rc = asprintf(&path, "/proc/self/fd/%d", fd);
+		if (rc < 0 || !path) {
+			close(fd);
+			D_GOTO(out, out->rc = ENOMEM);
+		}
+
+		errno = 0;
+		ifd = openat(0, path, imf.flags);
+		if (ifd == -1) {
+			out->rc = errno;
+			if (!out->rc)
+				out->err = IOF_ERR_INTERNAL;
+			close(fd);
+			goto out;
+		}
+		imf.flags |= O_NOFOLLOW;
+		find_and_insert_create(parent->projection,
+				       fd, ifd, &stbuf, &mf, &imf, out);
+	} else {
+		find_and_insert_create(parent->projection,
+				       fd, 0, &stbuf, &mf, NULL, out);
+	}
 
 out:
 	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o", in->path,
@@ -1114,6 +1214,8 @@ out:
 
 	if (parent)
 		ios_fh_decref(parent, 1);
+
+	D_FREE(path);
 
 	IOF_TRACE_DOWN(rpc);
 }

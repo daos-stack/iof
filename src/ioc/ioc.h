@@ -327,7 +327,9 @@ struct iof_file_handle {
 	ino_t				inode_no;
 	char				*name;
 
-	/* Fuse req for open command */
+	struct ioc_inode_entry		*ie;
+
+	/* Fuse req for open/create command */
 	fuse_req_t			open_req;
 };
 
@@ -493,6 +495,9 @@ void ioc_ll_statfs(fuse_req_t, fuse_ino_t);
 void ioc_ll_readlink(fuse_req_t, fuse_ino_t);
 
 void ioc_ll_open(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_ll_create(fuse_req_t, fuse_ino_t, const char *, mode_t,
+		   struct fuse_file_info *);
 
 void ioc_ll_read(fuse_req_t, fuse_ino_t, size_t, off_t,
 		 struct fuse_file_info *);
