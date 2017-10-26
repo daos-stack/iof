@@ -5,7 +5,7 @@
 description: "IOZONE write, read and random (read & write) tests cmds over NFS."
 
 defaultENV:
-    D_LOG_MASK:  "INFO"
+    D_LOG_MASK:    "INFO"
     OFI_INTERFACE: "eth0"
 
 module:
