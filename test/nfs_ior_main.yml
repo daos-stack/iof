@@ -101,7 +101,7 @@ description: "IOR tests over NFS."
 
 defaultENV:
 
-    CRT_LOG_MASK: "INFO"
+    D_LOG_MASK: "INFO"
 
 module:
 

@@ -61,7 +61,7 @@ defaultENV:
 
     CRT_PHY_ADDR_STR: "ofi+sockets"
     OFI_INTERFACE:    "eth0"
-    CRT_LOG_MASK:     "INFO"
+    D_LOG_MASK:     "INFO"
 
 module:
 
