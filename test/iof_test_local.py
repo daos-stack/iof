@@ -784,7 +784,7 @@ class Testlocal(unittest.TestCase,
 
             subtest_count += 1
             with self.subTest(possible[5:]):
-                self.mark_log('\nStarting test %s:' % possible)
+                self.mark_log('Starting test %s' % possible)
                 if self.internals_tracing == 'yes':
                     self.internals_path_testing_setup()
                 obj()

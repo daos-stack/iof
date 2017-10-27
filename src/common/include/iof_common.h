@@ -324,6 +324,12 @@ struct iof_time_gah_in {
 	d_iov_t time;
 };
 
+struct iof_setattr_in {
+	struct ios_gah gah;
+	d_iov_t attr;
+	uint32_t to_set;
+};
+
 extern struct crt_req_format QUERY_RPC_FMT;
 
 struct rpc_data {
@@ -362,6 +368,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, utimens_gah),
 	DEF_RPC_TYPE(DEFAULT, statfs),
 	DEF_RPC_TYPE(DEFAULT, lookup),
+	DEF_RPC_TYPE(DEFAULT, setattr),
 	IOF_DEFAULT_RPC_TYPES,
 };
 

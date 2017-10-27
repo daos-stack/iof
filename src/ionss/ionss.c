@@ -54,6 +54,8 @@
 
 #include <fcntl.h>
 
+#include <fuse/fuse_lowlevel.h>
+
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
@@ -2301,6 +2303,131 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
+static void iof_setattr_handler(crt_rpc_t *rpc)
+{
+	struct iof_setattr_in *in = crt_req_get(rpc);
+	struct iof_data_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *handle;
+	struct stat stbuf = {0};
+	struct stat *stbuf_in;
+	int fd = -1;
+	int rc;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
+	if (out->err)
+		goto out;
+
+	VALIDATE_WRITE(handle->projection, out);
+	if (out->err || out->rc)
+		goto out;
+
+	if (!in->attr.iov_buf) {
+		IOF_LOG_ERROR("No input attr");
+		D_GOTO(out, out->err = IOF_ERR_CART);
+	}
+	stbuf_in = in->attr.iov_buf;
+
+	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
+
+	fd = open(handle->proc_fd_name, O_RDWR);
+	if (fd == -1)
+		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+
+	/* Now set any attributes as requested by FUSE.  Try each bit that this
+	 * code knows how to set, clearing the bits after they are actioned.
+	 *
+	 * Finally at the end raise an error if any bits remain set.
+	 */
+
+	/* atime/mtime handling.
+	 *
+	 * These can be requested independantly but must be set as a pair so
+	 * sample the old value, and then either use them or the FUSE provided
+	 * values.
+	 */
+	if (in->to_set & (FUSE_SET_ATTR_ATIME | FUSE_SET_ATTR_MTIME)) {
+		struct stat st_pre;
+		struct timespec tv[2] = {0};
+
+		errno = 0;
+		rc = fstat(fd, &st_pre);
+		if (rc)
+			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+
+		/* atime */
+		if (in->to_set & FUSE_SET_ATTR_ATIME)
+			tv[0].tv_sec = stbuf_in->st_atime;
+		else
+			tv[0].tv_sec = st_pre.st_atime;
+
+		tv[0].tv_nsec = 0;
+
+		/* mtime */
+		if (in->to_set & FUSE_SET_ATTR_MTIME)
+			tv[1].tv_sec = stbuf_in->st_mtime;
+		else
+			tv[1].tv_sec = st_pre.st_mtime;
+
+		tv[1].tv_nsec = 0;
+
+		errno = 0;
+		rc = futimens(fd, tv);
+		if (rc)
+			D_GOTO(out, out->rc = errno);
+
+		in->to_set &= ~(FUSE_SET_ATTR_MTIME | FUSE_SET_ATTR_ATIME);
+	}
+
+	/* Mode handling.
+	 */
+	if (in->to_set & FUSE_SET_ATTR_MODE) {
+		IOF_TRACE_DEBUG(handle, "setting mode to %#x",
+				stbuf_in->st_mode);
+		errno = 0;
+		rc = fchmod(fd,  stbuf_in->st_mode);
+		if (rc)
+			D_GOTO(out, out->rc = errno);
+
+		in->to_set &= ~(FUSE_SET_ATTR_MODE);
+	}
+
+	/* Truncate handling.
+	 */
+	if (in->to_set & FUSE_SET_ATTR_SIZE) {
+		IOF_TRACE_DEBUG(handle, "setting size to %#lx",
+				stbuf_in->st_size);
+		errno = 0;
+		rc = ftruncate(fd, stbuf_in->st_size);
+		if (rc)
+			D_GOTO(out, out->rc = errno);
+
+		in->to_set &= ~(FUSE_SET_ATTR_SIZE);
+	}
+
+	if (in->to_set) {
+		IOF_TRACE_ERROR(handle, "Unable to set %#x", in->to_set);
+		D_GOTO(out, out->rc = ENOTSUP);
+	}
+
+	errno = 0;
+	rc = fstat(handle->fd, &stbuf);
+	if (rc)
+		out->rc = errno;
+	else
+		d_iov_set(&out->data, &stbuf, sizeof(struct stat));
+
+out:
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (handle)
+		ios_fh_decref(handle, 1);
+
+	if (fd != -1)
+		close(fd);
+}
+
 static void iof_statfs_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
@@ -2370,6 +2497,7 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(utimens_gah, iof_utimens_gah_handler),
 		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
 		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
+		DECL_RPC_HANDLER(setattr, iof_setattr_handler),
 	};
 	return iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
 }

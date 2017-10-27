@@ -402,12 +402,18 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         fd = open(filename, 'w')
         fd.truncate()
 
-        if os.stat(filename).st_size != 0:
-            self.fail("File truncate to 0 failed")
+        fstat = os.stat(filename)
+        if fstat.st_size != 0:
+            self.fail("Initial size incorrect %d" % fstat.st_size)
 
-        fd.truncate(100)
-        if os.stat(filename).st_size != 100:
-            self.fail("File truncate to 100 failed")
+        for size in [0, 100, 4, 0]:
+
+            fd.truncate(size)
+            fstat = os.stat(filename)
+
+            if fstat.st_size != size:
+                self.fail("File truncate to %d failed %d" % (size,
+                                                             fstat.st_size))
 
         fd.close()
 
@@ -566,15 +572,17 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         fd = open(filename, 'w')
         fd.close()
 
-        stat_info = os.stat(filename)
+        stat_info_pre = os.stat(filename)
         self.logger.info("Stat results before setting time:")
-        self.logger.info(stat_info)
+        self.logger.info(stat_info_pre)
         time.sleep(2)
         os.utime(filename)
-        stat_info = os.stat(filename)
+        stat_info_post = os.stat(filename)
         self.logger.info("Stat results after setting time (sleep for 2s):")
-        self.logger.info(stat_info)
+        self.logger.info(stat_info_post)
 
+        if stat_info_pre.st_mtime == stat_info_post.st_mtime:
+            self.fail("File mtime did not change")
     # These methods have both multi node and iof_test_local component
 
     def test_file_copy_from(self):

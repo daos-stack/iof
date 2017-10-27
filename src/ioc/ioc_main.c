@@ -1670,7 +1670,6 @@ static void iof_finish(void *arg)
 	IOF_TRACE_INFO(iof_state, "Called iof_finish");
 
 	IOF_TRACE_DOWN(iof_state);
-	IOF_LOG_ERROR("WTH %p", iof_state);
 	D_FREE(iof_state->groups);
 	D_FREE(iof_state->cnss_prefix);
 	D_FREE(iof_state);

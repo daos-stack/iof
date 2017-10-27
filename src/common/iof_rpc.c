@@ -214,6 +214,12 @@ struct crt_msg_field *utimens_gah_in[] = {
 	&CMF_IOVEC,
 };
 
+struct crt_msg_field *setattr_in[] = {
+	&CMF_GAH,	/* gah */
+	&CMF_IOVEC,	/* struct stat */
+	&CMF_UINT32,	/* to_set */
+};
+
 /*query RPC format*/
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 							 NULL,
@@ -249,6 +255,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	RPC_TYPE(statfs, gah_in, iov_pair),
 	RPC_TYPE(lookup, gah_string_in, lookup_out),
+	RPC_TYPE(setattr, setattr_in, iov_pair),
 };
 
 const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {

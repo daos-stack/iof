@@ -81,6 +81,7 @@ struct iof_stats {
 	ATOMIC unsigned int fsync;
 	ATOMIC unsigned int lookup;
 	ATOMIC unsigned int forget;
+	ATOMIC unsigned int setattr;
 };
 
 /*For IOF Plugin*/
@@ -269,6 +270,17 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 		__rc = fuse_reply_err(req, 0);				\
 		if (__rc != 0)						\
 			IOF_TRACE_ERROR(req, "fuse_reply_err returned %d:%s", \
+					__rc, strerror(-__rc));		\
+		IOF_TRACE_DOWN(req);					\
+	} while (0)
+
+#define IOF_FUSE_REPLY_ATTR(req, attr)					\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(req, "Returning attr");			\
+		__rc = fuse_reply_attr(req, attr, 0);			\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(req, "fuse_reply_attr returned %d:%s", \
 					__rc, strerror(-__rc));		\
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
@@ -518,5 +530,8 @@ void ioc_ll_write(fuse_req_t, fuse_ino_t, const char *,	size_t, off_t,
 
 void ioc_ll_ioctl(fuse_req_t, fuse_ino_t, int, void *, struct fuse_file_info *,
 		  unsigned, const void *, size_t, size_t);
+
+void ioc_ll_setattr(fuse_req_t, fuse_ino_t, struct stat *, int,
+		    struct fuse_file_info *);
 
 #endif
