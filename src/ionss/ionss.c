@@ -1374,6 +1374,13 @@ iof_readx_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	/* TODO: Only 1 xtvec supported for now */
+	if (in->xtvec_len > 0) {
+		IOF_LOG_WARNING("xtvec not yet supported for read");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
 	rc = crt_req_addref(rpc);
 	if (rc) {
 		out->err = IOF_ERR_CART;
