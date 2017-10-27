@@ -112,9 +112,6 @@ module:
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
 
-    appendKeyFromInfo:
-        - [LD_LIBRARY_PATH, "/lib", [OMPI_PREFIX]]
-
     hostConfig:
         type:       buildList
         numServers: 1 # Num of export node(s): IOF_TEST_ION

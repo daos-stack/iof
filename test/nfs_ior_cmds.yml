@@ -5,8 +5,8 @@
 description: "IOR write, read and random (read & write) tests cmds over NFS."
 
 defaultENV:
-    D_LOG_MASK:  "INFO"
     OFI_INTERFACE: "eth0"
+    D_LOG_MASK:    "INFO"
     TEST_EXE:      "/testbin/ior/bin/ior"
 
 module:
