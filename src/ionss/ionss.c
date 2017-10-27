@@ -2160,6 +2160,7 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	query->max_read = base.max_read;
 	query->max_write = base.max_write;
 	query->max_iov_read = base.max_iov_read;
+	query->max_iov_write = base.max_iov_write;
 	query->readdir_size = base.max_readdir;
 
 	d_iov_set(&query->query_list, base.fs_list,
@@ -2494,6 +2495,7 @@ int main(int argc, char **argv)
 	base.max_read = 1024 * 1024;
 	base.max_write = 1024 * 1024;
 	base.max_iov_read = 64;
+	base.max_iov_write = 64;
 	base.max_readdir = 1024 * 64;
 	pthread_rwlock_init(&base.gah_rwlock, NULL);
 
@@ -2505,8 +2507,9 @@ int main(int argc, char **argv)
 			{"max-write", required_argument, 0, 4},
 			{"readdir-size", required_argument, 0, 5},
 			{"max-direct-read", required_argument, 0, 6},
-			{"cnss-threads", no_argument, 0, 7},
-			{"disable-failover", no_argument, 0, 8},
+			{"max-direct-write", required_argument, 0, 7},
+			{"cnss-threads", no_argument, 0, 8},
+			{"disable-failover", no_argument, 0, 9},
 			{"thread-count", required_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
 			{0, 0, 0, 0}
@@ -2557,9 +2560,16 @@ int main(int argc, char **argv)
 			}
 			break;
 		case 7:
-			cnss_threads = 1;
+			ret = parse_size(&base.max_iov_write, optarg);
+			if (ret != 0) {
+				printf("Unable to set write-direct size to "
+				       " %s\n", optarg);
+			}
 			break;
 		case 8:
+			cnss_threads = 1;
+			break;
+		case 9:
 			failover = false;
 			break;
 		case 't':

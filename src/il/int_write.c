@@ -69,8 +69,6 @@ struct write_cb_r {
 	int rc;
 };
 
-#define BULK_THRESHOLD 64
-
 static void
 write_cb(const struct crt_cb_info *cb_info)
 {
@@ -245,7 +243,7 @@ ssize_t ioil_do_pwrite(const char *buff, size_t len, off_t position,
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
 		     GAH_PRINT_VAL(f_info->gah));
 
-	if (len >= BULK_THRESHOLD)
+	if (len >= f_info->projection->max_iov_write)
 		return write_bulk(buff, len, position, f_info, errcode);
 	else
 		return write_direct(buff, len, position, f_info, errcode);
@@ -262,7 +260,7 @@ ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
 	int i;
 
 	for (i = 0; i < count; i++) {
-		if (iov[i].iov_len >= BULK_THRESHOLD)
+		if (iov[i].iov_len >= f_info->projection->max_iov_write)
 			bytes_written = write_bulk(iov[i].iov_base,
 						   iov[i].iov_len,
 						   position, f_info, errcode);

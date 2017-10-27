@@ -67,6 +67,7 @@ struct ios_base {
 	uint32_t		max_read;
 	uint32_t		max_iov_read;
 	uint32_t		max_write;
+	uint32_t		max_iov_write;
 	uint32_t		max_readdir;
 };
 

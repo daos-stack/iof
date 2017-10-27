@@ -58,6 +58,7 @@ struct iof_projection {
 	struct iof_service_group	*grp;      /* Server group info */
 	crt_context_t			*crt_ctx;  /* context to use */
 	uint32_t			grp_id;    /* CNSS defined ionss id */
+	uint32_t			max_iov_write; /* bulk threshold */
 	int				cli_fs_id; /* client projection id */
 	bool				enabled;   /* Projection enabled */
 	bool				progress_thread;   /* progress_thread */

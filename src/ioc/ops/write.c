@@ -49,8 +49,6 @@ struct write_cb_r {
 	int rc;
 };
 
-#define BULK_THRESHOLD 64
-
 static void
 write_cb(const struct crt_cb_info *cb_info)
 {
@@ -238,7 +236,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	if (len >= BULK_THRESHOLD)
+	if (len >= handle->fs_handle->proj.max_iov_write)
 		rc = ioc_write_bulk(buff, len, position, handle);
 	else
 		rc = ioc_write_direct(buff, len, position, handle);
