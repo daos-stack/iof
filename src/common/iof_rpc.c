@@ -176,9 +176,11 @@ struct crt_msg_field *write_bulk[] = {
 };
 
 struct crt_msg_field *write_out[] = {
+	&CMF_UINT64,
 	&CMF_INT,
 	&CMF_INT,
-	&CMF_INT,
+	&CMF_UINT64,
+	&CMF_UINT64,
 };
 
 struct crt_msg_field *chmod_in[] = {

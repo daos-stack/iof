@@ -286,9 +286,12 @@ struct iof_write_bulk {
 };
 
 struct iof_write_out {
+	uint64_t len;
 	int rc;
 	int err;
-	int len;
+	uint64_t pad[2]; /* TODO: Optimize this later.  For now, just add
+			  * some padding so ionss_io_req_desc fits
+			  */
 };
 
 struct iof_chmod_in {

@@ -130,6 +130,7 @@ struct ios_projection {
 	char			fs_type[IOF_MAX_FSTYPE_LEN];
 	struct iof_pool_type	*fh_pool;
 	struct iof_pool_type	*ar_pool;
+	struct iof_pool_type	*aw_pool;
 	struct ionss_file_handle	*root;
 	struct d_chash_table	file_ht;
 	uint			id;
@@ -140,6 +141,9 @@ struct ios_projection {
 	int			current_read_count;
 	int			max_read_count;
 	d_list_t		read_list;
+	int			current_write_count;
+	int			max_write_count;
+	d_list_t		write_list;
 };
 
 /* Convert from a fs_id as received over the network to a projection pointer.
@@ -166,12 +170,12 @@ struct ionss_dir_handle {
  *
  */
 
-/* Read request descriptor
+/* i/o request descriptor
  *
- * Used to describe a read request.  There is one of these per RPC that the
+ * Used to describe a i/o request.  There is one of these per RPC that the
  * IONSS receives.
  */
-struct ionss_read_req_desc {
+struct ionss_io_req_desc {
 	crt_rpc_t			*rpc;
 	struct ionss_file_handle	*handle;
 	d_list_t			list;
@@ -193,6 +197,23 @@ struct ionss_active_read {
 	uint64_t			data_offset;
 	uint64_t			req_len;
 	uint64_t			segment_offset;
+	bool				failed;
+};
+
+/* Active write descriptor
+ *
+ * Used to describe an in-progress write request.  These consume resources so
+ * are limited to a fixed number.
+ */
+struct ionss_active_write {
+	struct ios_projection		*projection;
+	crt_rpc_t			*rpc;
+	struct ionss_file_handle	*handle;
+	struct iof_local_bulk		local_bulk;
+	d_list_t			list;
+	size_t				buf_len;
+	size_t				read_len;
+	uint64_t			req_len;
 	bool				failed;
 };
 

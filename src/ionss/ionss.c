@@ -1203,17 +1203,17 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-_Static_assert(sizeof(struct ionss_read_req_desc) <=
+_Static_assert(sizeof(struct ionss_io_req_desc) <=
 	       sizeof(struct iof_readx_out),
 	       "struct iof_readx_out needs to be large enough to contain"
-	       " struct ionss_read_req_desc");
+	       " struct ionss_io_req_desc");
 
 static int iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info);
 static void iof_process_read_bulk(struct ionss_active_read *ard);
 
 void iof_read_check_and_send(struct ios_projection *projection)
 {
-	struct ionss_read_req_desc *rrd;
+	struct ionss_io_req_desc *rrd;
 	struct ionss_active_read *ard;
 
 	pthread_mutex_lock(&projection->lock);
@@ -1237,7 +1237,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 	}
 
 	rrd = d_list_entry(projection->read_list.next,
-			     struct ionss_read_req_desc, list);
+			     struct ionss_io_req_desc, list);
 
 	d_list_del(&rrd->list);
 
@@ -1403,10 +1403,9 @@ iof_readx_handler(crt_rpc_t *rpc)
 	/* Use the output temporarily to store minimal info about
 	 * the read.
 	 */
-	struct ionss_read_req_desc *rrd;
+	struct ionss_io_req_desc *rrd;
 	struct ionss_file_handle *handle;
 	struct ionss_active_read *ard;
-
 	struct ios_projection *projection;
 	int rc;
 
@@ -1870,68 +1869,158 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
-{
-	struct iof_write_bulk *in = crt_req_get(cb_info->bci_bulk_desc->bd_rpc);
-	struct iof_write_out *out = crt_reply_get(cb_info->bci_bulk_desc->bd_rpc);
-	size_t bytes_written;
-	struct ionss_file_handle *handle = NULL;
-	d_iov_t iov = {0};
-	d_sg_list_t sgl = {0};
+_Static_assert(sizeof(struct ionss_io_req_desc) <=
+	       sizeof(struct iof_write_out),
+	       "struct iof_write_out needs to be large enough to contain"
+	       " struct ionss_io_req_desc");
 
+static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info);
+static void iof_process_write(struct ionss_active_write *awd);
+
+void iof_write_check_and_send(struct ios_projection *projection)
+{
+	struct ionss_io_req_desc *wrd;
+	struct ionss_active_write *awd;
+	struct iof_write_bulk *in;
+	struct iof_write_out *out;
 	int rc;
 
-	if (cb_info->bci_rc) {
+	pthread_mutex_lock(&projection->lock);
+	if (d_list_empty(&projection->write_list)) {
+		projection->current_write_count--;
+		IOF_TRACE_DEBUG(projection, "Dropping write slot (%d/%d)",
+				projection->current_write_count,
+				projection->max_write_count);
+		pthread_mutex_unlock(&projection->lock);
+		return;
+	}
+
+	awd = iof_pool_acquire(projection->aw_pool);
+	if (!awd) {
+		projection->current_write_count--;
+		IOF_TRACE_WARNING(projection, "No AWD slot available (%d/%d)",
+				  projection->current_write_count,
+				  projection->max_write_count);
+		pthread_mutex_unlock(&projection->lock);
+		return;
+	}
+
+	wrd = d_list_entry(projection->write_list.next,
+			   struct ionss_io_req_desc, list);
+
+	d_list_del(&wrd->list);
+
+	IOF_TRACE_UP(awd, wrd->handle, "awd");
+	IOF_TRACE_DEBUG(awd, "Submiting new write (%d/%d)",
+			projection->current_write_count,
+			projection->max_write_count);
+
+	pthread_mutex_unlock(&projection->lock);
+
+	awd->rpc = wrd->rpc;
+	awd->handle = wrd->handle;
+
+	in = crt_req_get(awd->rpc);
+	out = crt_reply_get(awd->rpc);
+
+	rc = crt_bulk_get_len(in->bulk, &awd->req_len);
+
+	/* Reset the borrowed output to 0 */
+	memset(wrd, 0, sizeof(*wrd));
+
+	if (rc || awd->req_len == 0)
 		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
-	handle = ios_fh_find(&base, &in->gah);
-	if (!handle) {
-		out->err = IOF_GAH_INVALID;
-		goto out;
-	}
-	VALIDATE_WRITE(handle->projection, out);
-	if (out->err || out->rc)
-		goto out;
+	iof_process_write(awd);
+}
 
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
+/* Process a write request
+ *
+ * This function submits a bulk pull to get the data to write
+ */
+static void
+iof_process_write(struct ionss_active_write *awd)
+{
+	struct ionss_file_handle *handle = awd->handle;
+	struct iof_write_bulk *in = crt_req_get(awd->rpc);
+	struct iof_write_out *out = crt_reply_get(awd->rpc);
+	struct ios_projection *projection = awd->handle->projection;
+	struct crt_bulk_desc bulk_desc = {0};
+	int rc;
 
-	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
+	if (out->err)
+		D_GOTO(out, 0);
+
+	bulk_desc.bd_rpc = awd->rpc;
+	bulk_desc.bd_bulk_op = CRT_BULK_GET;
+	bulk_desc.bd_remote_hdl = in->bulk;
+	bulk_desc.bd_local_hdl = awd->local_bulk.handle;
+	bulk_desc.bd_len = awd->req_len;
+
+	IOF_TRACE_DEBUG(awd, "Fetching bulk " GAH_PRINT_STR,
+			GAH_PRINT_VAL(in->gah));
+
+	rc = crt_bulk_transfer(&bulk_desc, iof_write_bulk, awd, NULL);
 	if (rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
+		awd->failed = true;
+		D_GOTO(out, out->err = IOF_ERR_CART);
 	}
+
+	/* Do not call crt_reply_send() in this case as it'll be done in the
+	 * bulk handler
+	 */
+
+	return;
+out:
+
+	rc = crt_reply_send(awd->rpc);
+
+	if (rc)
+		IOF_TRACE_ERROR(awd, "response not sent, ret = %d", rc);
+
+	crt_req_decref(awd->rpc);
+
+	iof_pool_release(projection->aw_pool, awd);
+
+	ios_fh_decref(handle, 1);
+
+	iof_write_check_and_send(projection);
+}
+
+static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
+{
+	struct ionss_active_write *awd = cb_info->bci_arg;
+	struct ionss_file_handle *handle = awd->handle;
+	struct ios_projection *projection = handle->projection;
+	struct iof_write_out *out = crt_reply_get(awd->rpc);
+	struct iof_write_bulk *in = crt_req_get(awd->rpc);
+	size_t bytes_written;
+	int rc;
+
+	if (cb_info->bci_rc)
+		D_GOTO(out, out->err = IOF_ERR_CART);
 
 	errno = 0;
-	bytes_written = pwrite(handle->fd, iov.iov_buf, iov.iov_len, in->base);
+	bytes_written = pwrite(handle->fd, awd->local_bulk.buf, awd->req_len,
+			       in->base);
 	if (bytes_written == -1)
 		out->rc = errno;
 	else
 		out->len = bytes_written;
 
-	free(iov.iov_buf);
-	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
-	if (rc)
-		out->err = IOF_ERR_CART;
-
 out:
-	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
+	rc = crt_reply_send(awd->rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(awd, "response not sent, ret = %u", rc);
 
-	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
+	crt_req_decref(awd->rpc);
 
-	if (rc)
-		IOF_LOG_ERROR("Unable to drop reference, ret = %u", rc);
+	iof_pool_release(projection->aw_pool, awd);
 
-	/* There will be two references on the handle here, once from this
-	 * function, but a second one from iof_bulk_write_handler() itself
-	 */
-	if (handle)
-		ios_fh_decref(handle, 2);
+	ios_fh_decref(handle, 1);
+
+	iof_write_check_and_send(projection);
 
 	return 0;
 }
@@ -1941,75 +2030,74 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 {
 	struct iof_write_bulk *in = crt_req_get(rpc);
 	struct iof_write_out *out = crt_reply_get(rpc);
+	struct ionss_io_req_desc *wrd;
+	struct ionss_active_write *awd;
 	struct ionss_file_handle *handle;
-	struct crt_bulk_desc bulk_desc = {0};
-	crt_bulk_t local_bulk_hdl = {0};
-	d_sg_list_t sgl = {0};
-	d_iov_t iov = {0};
+	struct ios_projection *projection;
 	size_t len;
-
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
 	if (out->err)
-		goto out;
+		D_GOTO(out, 0);
 
 	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
-		goto out;
+		D_GOTO(out, 0);
 
 	rc = crt_req_addref(rpc);
-	if (rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
+	if (rc)
+		D_GOTO(out, out->err = IOF_ERR_CART);
 
 	rc = crt_bulk_get_len(in->bulk, &len);
-	if (rc || len == 0) {
-		out->err = IOF_ERR_CART;
-		goto out_decref;
+	if (rc || len == 0)
+		D_GOTO(out_decref, out->err = IOF_ERR_CART);
+
+	projection = handle->projection;
+
+	if (len > projection->base->max_write) {
+		/* TODO: Get one write working first */
+		IOF_TRACE_WARNING(projection,
+				  "write larger than max_write not supported");
+		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
 	}
 
-	rc = posix_memalign(&iov.iov_buf, 4096, len);
-	if (rc || !iov.iov_buf) {
-		out->err = IOF_ERR_NOMEM;
-		goto out_decref;
+	pthread_mutex_lock(&projection->lock);
+
+	/* Try and acquire a active write descriptor, if one is available then
+	 * start the write, else add it to the list
+	 */
+	awd = iof_pool_acquire(projection->aw_pool);
+	if (awd) {
+		projection->current_write_count++;
+		IOF_TRACE_UP(awd, handle, "awd");
+		IOF_TRACE_DEBUG(awd, "Injecting new write (%d/%d)",
+				projection->current_write_count,
+				projection->max_write_count);
+		pthread_mutex_unlock(&projection->lock);
+		awd->rpc = rpc;
+		awd->handle = handle;
+		awd->req_len = len;
+		iof_process_write(awd);
+	} else {
+		/* Piggyback the output descriptor space to store the write
+		 * descriptor whilst in the write queue
+		 */
+		wrd = crt_reply_get(rpc);
+
+		wrd->rpc = rpc;
+		wrd->handle = handle;
+		d_list_add_tail(&wrd->list, &projection->write_list);
+		pthread_mutex_unlock(&projection->lock);
 	}
-	iov.iov_len = len;
-	iov.iov_buf_len = len;
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
-
-	rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RW, &local_bulk_hdl);
-	if (rc) {
-		free(iov.iov_buf);
-		out->err = IOF_ERR_CART;
-		goto out_decref;
-	}
-
-	bulk_desc.bd_rpc = rpc;
-	bulk_desc.bd_bulk_op = CRT_BULK_GET;
-	bulk_desc.bd_remote_hdl = in->bulk;
-	bulk_desc.bd_local_hdl = local_bulk_hdl;
-	bulk_desc.bd_len = len;
-
-	rc = crt_bulk_transfer(&bulk_desc, iof_write_bulk, NULL, NULL);
-	if (rc) {
-		free(iov.iov_buf);
-		out->err = IOF_ERR_CART;
-		goto out_decref;
-	}
-
 	/* Do not call crt_reply_send() in this case as it'll be done in
 	 * the bulk handler.
 	 */
 	return;
 
 out_decref:
-	rc = crt_req_decref(rpc);
+	crt_req_decref(rpc);
 
-	if (rc)
-		IOF_LOG_ERROR("Unable to drop reference, ret = %u", rc);
 out:
 	rc = crt_reply_send(rpc);
 
@@ -2496,6 +2584,56 @@ ar_release(void *arg)
 	ar_destroy_bulk(ard);
 }
 
+static int
+aw_create_bulk(struct ionss_active_write *awd)
+{
+	if (IOF_BULK_ALLOC(awd->projection->base->crt_ctx, awd, local_bulk,
+			   awd->projection->base->max_write, false))
+		return 0;
+	return -1;
+}
+
+static void
+aw_destroy_bulk(struct ionss_active_write *awd)
+{
+	IOF_BULK_FREE(awd, local_bulk);
+}
+
+static int
+aw_init(void *arg, void *handle)
+{
+	struct ionss_active_write *awd = arg;
+	struct ios_projection *projection = handle;
+
+	awd->projection = projection;
+
+	return aw_create_bulk(awd);
+}
+
+static int
+aw_reset(void *arg)
+{
+	struct ionss_active_write *awd = arg;
+
+	/* If the previous bulk worked, leave the handle as is */
+	if (!awd->failed)
+		return 0;
+
+	awd->failed = false;
+
+	aw_destroy_bulk(awd);
+
+	return aw_create_bulk(awd);
+}
+
+static void
+aw_release(void *arg)
+{
+	struct ionss_active_write *awd = arg;
+
+	aw_destroy_bulk(awd);
+}
+
 int main(int argc, char **argv)
 {
 	char *ionss_grp = IOF_DEFAULT_SET;
@@ -2686,6 +2824,8 @@ int main(int argc, char **argv)
 
 		projection->max_read_count = 3;
 		D_INIT_LIST_HEAD(&projection->read_list);
+		projection->max_write_count = 3;
+		D_INIT_LIST_HEAD(&projection->write_list);
 
 		rc = fstat(fd, &buf);
 		if (rc) {
@@ -2773,11 +2913,21 @@ int main(int argc, char **argv)
 					   .max_desc = 3,
 					   POOL_TYPE_INIT(ionss_active_read,
 							  list)};
+		struct iof_pool_reg awp = {.handle = projection,
+					   .init = aw_init,
+					   .reset = aw_reset,
+					   .release = aw_release,
+					   .max_desc = 3,
+					   POOL_TYPE_INIT(ionss_active_write,
+							  list)};
 
 		if (!projection->active)
 			continue;
 		projection->ar_pool = iof_pool_register(&base.pool, &arp);
 		if (!projection->ar_pool)
+			projection->active = 0;
+		projection->aw_pool = iof_pool_register(&base.pool, &awp);
+		if (!projection->aw_pool)
 			projection->active = 0;
 	}
 
