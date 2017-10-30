@@ -93,18 +93,37 @@ ioc_status_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
+/* A generic callback for handling RPC replies from low-level FUSE RPCs.
+ *
+ * This can be used with RPCs where the reply type is either status_out
+ * or if the reply type is NULL.
+ */
 void
 ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
 {
-	fuse_req_t req = cb_info->cci_arg;
-	int ret = EIO;
+	struct iof_status_out	*out = crt_reply_get(cb_info->cci_rpc);
+	fuse_req_t		req = cb_info->cci_arg;
+	int			ret;
 
+	/* Local node was out of memory */
 	if (cb_info->cci_rc == -DER_NOMEM)
 		D_GOTO(out_err, ret = ENOMEM);
 
+	/* Remote node was out of memory */
+	if (cb_info->cci_rc == -DER_DOS)
+		D_GOTO(out_err, ret = ENOMEM);
+
+	/* All other errors with the RPC */
 	if (cb_info->cci_rc != 0) {
 		IOF_TRACE_INFO(req, "cci_rc is %d", cb_info->cci_rc);
-		goto out_err;
+		D_GOTO(out_err, ret = EIO);
+	}
+
+	if (out) {
+		if (out->err)
+			D_GOTO(out_err, ret = EIO);
+		if (out->rc)
+			D_GOTO(out_err, ret = out->rc);
 	}
 
 	IOF_FUSE_REPLY_ZERO(req);

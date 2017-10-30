@@ -118,8 +118,10 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	IOF_LOG_INFO("Req %p %lu %p", req, ino, fi);
 
 	rc = find_gah(fs_handle, ino, &handle.common.gah);
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_FUSE_REPLY_ERR(req, EIO);
+		return;
+	}
 
 	handle.fs_handle = fs_handle;
 	handle.common.gah_valid = 1;

@@ -258,7 +258,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 		IOF_TRACE_DEBUG(req, "Returning %d '%s'", __err, strerror(__err)); \
 		__rc = fuse_reply_err(req, __err);			\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", \
+			IOF_TRACE_ERROR(req, "fuse_reply_err returned %d", \
 					__rc);				\
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
@@ -269,7 +269,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 		IOF_TRACE_DEBUG(req, "Returning 0");			\
 		__rc = fuse_reply_err(req, 0);				\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", \
+			IOF_TRACE_ERROR(req, "fuse_reply_err returned %d", \
 					__rc);				\
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
