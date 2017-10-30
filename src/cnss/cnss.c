@@ -749,10 +749,9 @@ int main(void)
 	CALL_PLUGIN_FN(&cnss_info->plugins, stop_plugin_services);
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush_plugin_services);
 
+shutdown_cart:
 	shutdown_fs(cnss_info);
 	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
-
-shutdown_cart:
 
 	ret = crt_finalize();
 

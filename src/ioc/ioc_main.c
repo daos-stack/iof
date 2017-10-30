@@ -608,9 +608,7 @@ fh_reset(void *arg)
 	struct iof_file_handle *fh = arg;
 	int rc;
 
-	if (fh->name)
-		free(fh->name);
-	fh->name = NULL;
+	D_FREE(fh->name);
 
 	if (fh->open_rpc) {
 		crt_req_decref(fh->open_rpc);
@@ -818,7 +816,7 @@ lookup_reset(void *arg)
 			    FS_TO_OP(req->fs_handle, lookup), &req->rpc);
 	if (rc || !req->rpc) {
 		IOF_TRACE_ERROR(arg, "Could not create request, rc = %d", rc);
-		free(req->ie);
+		D_FREE(req->ie);
 		return -1;
 	}
 	crt_req_addref(req->rpc);
@@ -834,7 +832,7 @@ lookup_release(void *arg)
 
 	crt_req_decref(req->rpc);
 	crt_req_decref(req->rpc);
-	free(req->ie);
+	D_FREE(req->ie);
 }
 
 static int
@@ -916,23 +914,25 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	int ret;
 	DIR *prefix_dir;
 	int num_attached = 0;
+	int num_groups = 1;
 	int i;
 
 	iof_state->cb = cb;
 
 	/* Hard code only the default group now */
-	iof_state->num_groups = 1;
-	D_ALLOC_PTR(iof_state->groups);
+	D_ALLOC_ARRAY(iof_state->groups, num_groups);
 	if (iof_state->groups == NULL)
-		return IOF_ERR_NOMEM;
+		return 1;
+
+	/* Set this only after a successful allocation */
+	iof_state->num_groups = num_groups;
 
 	group = &iof_state->groups[0];
 	group->grp_name = strdup(IOF_DEFAULT_SET);
 	if (group->grp_name == NULL) {
 		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
 				"IONSS");
-		free(iof_state->groups);
-		return IOF_ERR_NOMEM;
+		return 1;
 	}
 
 	D_INIT_LIST_HEAD(&iof_state->fs_list);
@@ -943,7 +943,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
 				"ionss info (rc = %d)\n", ret);
-		return IOF_ERR_CTRL_FS;
+		return 1;
 	}
 
 	ret = crt_context_create(NULL, &iof_state->crt_ctx);
@@ -958,10 +958,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	ret = iof_thread_start(iof_state);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
-		ret = crt_context_destroy(iof_state->crt_ctx, 0);
-		if (ret)
-			IOF_TRACE_ERROR(iof_state, "Could not destroy context");
-		free(iof_state->groups);
 		return 1;
 	}
 
@@ -974,22 +970,14 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 			IOF_TRACE_ERROR(iof_state, "Failed to attach to service"
 					" group %s (ret = %d)",
 					group->grp_name, ret);
-			free(group->grp_name);
-			group->grp_name = NULL;
 			continue;
 		}
-
+		group->attached = true;
 		num_attached++;
 	}
 
 	if (num_attached == 0) {
 		IOF_TRACE_ERROR(iof_state, "No IONSS found");
-		/* Stop progress thread */
-		iof_thread_stop(iof_state);
-		ret = crt_context_destroy(iof_state->crt_ctx, 0);
-		if (ret)
-			IOF_TRACE_ERROR(iof_state, "Could not destroy context");
-		free(iof_state->groups);
 		return 1;
 	}
 
@@ -1005,7 +993,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		if (mkdir(iof_state->cnss_prefix, 0755)) {
 			IOF_TRACE_ERROR(iof_state, "Could not create "
 					"cnss_prefix");
-			return CNSS_ERR_PREFIX;
+			return 1;
 		}
 	}
 
@@ -1022,14 +1010,14 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
 				"ret: %d", ret);
-		return ret;
+		return 1;
 	}
 
 	ret = crt_rpc_register(DETACH_OP, CRT_RPC_FEAT_NO_TIMEOUT, NULL);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Detach registration failed with "
 				"ret: %d", ret);
-		return ret;
+		return 1;
 	}
 
 	ret = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
@@ -1174,7 +1162,7 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	ret = iof_pool_init(&fs_handle->pool);
 	if (ret != 0) {
-		free(fs_handle);
+		D_FREE(fs_handle);
 		return IOF_ERR_NOMEM;
 	}
 	IOF_TRACE_UP(&fs_handle->pool, fs_handle, "iof_pool");
@@ -1190,7 +1178,7 @@ static int initialize_projection(struct iof_state *iof_state,
 					   4, fs_handle, &hops,
 					   &fs_handle->inode_ht);
 	if (ret != 0) {
-		free(fs_handle);
+		D_FREE(fs_handle);
 		return IOF_ERR_NOMEM;
 	}
 
@@ -1367,7 +1355,7 @@ static int initialize_projection(struct iof_state *iof_state,
 				   fs_handle);
 	if (ret) {
 		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
-		free(fs_handle);
+		D_FREE(fs_handle);
 		return 1;
 	}
 
@@ -1524,12 +1512,15 @@ static int iof_post_start(void *arg)
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
 				"PA mode (rc = %d)\n", ret);
-		return IOF_ERR_CTRL_FS;
+		return 1;
 	}
 
 	for (grp_num = 0; grp_num < iof_state->num_groups; grp_num++) {
 		struct iof_group_info *group = &iof_state->groups[grp_num];
 		int active;
+
+		if (!group->attached)
+			continue;
 
 		ret = query_projections(iof_state, group, &total_projections,
 					&active);
@@ -1580,14 +1571,14 @@ static void iof_deregister_fuse(void *arg)
 	d_list_del(&fs_handle->link);
 
 	if (fs_handle->fuse_ops)
-		free(fs_handle->fuse_ops);
+		D_FREE(fs_handle->fuse_ops);
 	else
-		free(fs_handle->fuse_ll_ops);
+		D_FREE(fs_handle->fuse_ll_ops);
 
-	free(fs_handle->base_dir);
-	free(fs_handle->mount_point);
-	free(fs_handle->stats);
-	free(fs_handle);
+	D_FREE(fs_handle->base_dir);
+	D_FREE(fs_handle->mount_point);
+	D_FREE(fs_handle->stats);
+	D_FREE(fs_handle);
 }
 
 static void iof_stop(void *arg)
@@ -1616,7 +1607,7 @@ static void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
-	crt_rpc_t *rpc;
+
 	int ret;
 	int i;
 	struct iof_tracker tracker;
@@ -1624,8 +1615,15 @@ static void iof_finish(void *arg)
 	iof_tracker_init(&tracker, iof_state->num_groups);
 
 	for (i = 0; i < iof_state->num_groups; i++) {
-		rpc = NULL;
+		crt_rpc_t *rpc = NULL;
+
 		group = &iof_state->groups[i];
+
+		if (!group->attached) {
+			iof_tracker_signal(&tracker);
+			continue;
+		}
+
 		/*send a detach RPC to IONSS*/
 		ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
 				     DETACH_OP, &rpc);
@@ -1635,7 +1633,6 @@ static void iof_finish(void *arg)
 			iof_tracker_signal(&tracker);
 			continue;
 		}
-		IOF_TRACE_LINK(rpc, iof_state, "detach_rpc");
 
 		ret = crt_req_send(rpc, detach_cb, &tracker);
 		if (ret) {
@@ -1653,11 +1650,15 @@ static void iof_finish(void *arg)
 	for (i = 0; i < iof_state->num_groups; i++) {
 		group = &iof_state->groups[i];
 
+		D_FREE(group->grp_name);
+
+		if (!group->attached)
+			continue;
+
 		ret = crt_group_detach(group->grp.dest_grp);
 		if (ret)
 			IOF_TRACE_ERROR(iof_state, "crt_group_detach failed "
 					"with ret = %d", ret);
-		free(group->grp_name);
 	}
 
 	/* Stop progress thread */
@@ -1669,9 +1670,10 @@ static void iof_finish(void *arg)
 	IOF_TRACE_INFO(iof_state, "Called iof_finish");
 
 	IOF_TRACE_DOWN(iof_state);
-	free(iof_state->groups);
-	free(iof_state->cnss_prefix);
-	free(iof_state);
+	IOF_LOG_ERROR("WTH %p", iof_state);
+	D_FREE(iof_state->groups);
+	D_FREE(iof_state->cnss_prefix);
+	D_FREE(iof_state);
 }
 
 struct cnss_plugin self = {.name                  = "iof",

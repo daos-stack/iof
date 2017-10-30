@@ -107,8 +107,8 @@ struct iof_state {
 
 struct iof_group_info {
 	struct iof_service_group	grp;
-	struct ctrl_dir			*group_dir;
 	char				*grp_name;
+	bool				attached;
 };
 
 struct iof_rb {
