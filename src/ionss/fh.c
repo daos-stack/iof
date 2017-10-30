@@ -66,7 +66,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 		return IOS_ERR_NOMEM;
 	}
 
-	fh->ref = 1;
+	atomic_fetch_add(&fh->ref, 1);
 	*fhp = fh;
 
 	pthread_rwlock_unlock(&base->gah_rwlock);

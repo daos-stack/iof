@@ -774,6 +774,67 @@ iof_closedir_handler(crt_rpc_t *rpc)
 			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
 	} while (0)
 
+/* Check for an entry in the hash table, and return a handle if found, will
+ * take a reference on the handle
+ */
+static struct ionss_file_handle	*
+htable_mf_find(struct ios_projection *projection,
+	       struct ionss_mini_file *mf)
+{
+	struct ionss_file_handle *handle = NULL;
+	d_list_t *rlink;
+
+	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
+
+	if (rlink)
+		handle = container_of(rlink, struct ionss_file_handle, clist);
+
+	return handle;
+}
+
+/* Create a new handle based on mf and fd, insert into hash table whilst
+ * checking for existing entries.  Will return either handle with
+ * reference held, or NULL for ENOMEM.
+ *
+ * If entry already exists in hash table existing handle will be returned
+ * and the fd provided will be closed.
+ */
+static struct ionss_file_handle	*
+htable_mf_insert(struct ios_projection *projection,
+		 struct ionss_mini_file *mf, int fd)
+{
+	struct ionss_file_handle *handle = NULL;
+	d_list_t *rlink;
+	int rc;
+
+	rc = ios_fh_alloc(projection, &handle);
+	if (rc || !handle)
+		return NULL;
+
+	handle->fd = fd;
+	handle->projection = projection;
+	handle->mf.flags = mf->flags;
+	handle->mf.inode_no = mf->inode_no;
+	handle->mf.type = mf->type;
+	atomic_fetch_add(&handle->ht_ref, 1);
+
+	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
+					&handle->clist);
+	if (rlink != &handle->clist) {
+		struct ionss_file_handle *existing;
+
+		existing = container_of(rlink, struct ionss_file_handle, clist);
+		IOF_TRACE_DEBUG(existing, "Using existing handle for %p",
+				handle);
+		/* No need to close handle->fd here as the decref will do this
+		 */
+		ios_fh_decref(handle, 1);
+		handle = existing;
+	}
+
+	return handle;
+}
+
 /* Take a newly opened file and locate or create a handle for it.
  *
  * If the file is already opened then take a reference on the existing
@@ -786,7 +847,6 @@ static void find_and_insert(struct ios_projection *projection,
 			    struct iof_open_out *out)
 {
 	struct ionss_file_handle	*handle = NULL;
-	d_list_t			*rlink;
 	struct stat			 stbuf = {0};
 	int				rc;
 
@@ -797,47 +857,28 @@ static void find_and_insert(struct ios_projection *projection,
 		return;
 	}
 
-	/* Firstly create the key on the stack and use it to search for a
-	 * descriptor, using this if found.  rec_find() will take a reference
-	 * so there is no additional step needed here.
-	 */
-
 	mf->inode_no = stbuf.st_ino;
 
-	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
-	if (rlink) {
-		handle = container_of(rlink, struct ionss_file_handle, clist);
+	/* Firstly check for existing entry in the hash table, and use that if
+	 * it exists.
+	 */
+	handle = htable_mf_find(projection, mf);
+	if (handle) {
 		close(fd);
-		out->gah = handle->gah;
-		return;
+		D_GOTO(out, 0);
 	}
 
-	/* If the file was not already open then allocate a new descriptor,
-	 * fill it out and attempt to insert it.  If succsssful the
-	 * rec_insert() will take a reference.
+	/* If an entry wasn't found then create a new one and try to insert it,
+	 * whilst checking for existing handles
 	 */
-	rc = ios_fh_alloc(projection, &handle);
-	if (rc || !handle) {
+	handle = htable_mf_insert(projection, mf, fd);
+	if (!handle) {
 		out->err = IOF_ERR_NOMEM;
 		close(fd);
 		return;
 	}
 
-	handle->fd = fd;
-	handle->projection = projection;
-	handle->mf.flags = mf->flags;
-	handle->mf.inode_no = mf->inode_no;
-	handle->mf.type = mf->type;
-	atomic_fetch_add(&handle->ht_ref, 1);
-
-	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
-					&handle->clist);
-	if (rlink != &handle->clist) {
-		IOF_LOG_DEBUG("Competing inserts for %p", handle);
-		ios_fh_decref(handle, 1);
-		handle = container_of(rlink, struct ionss_file_handle, clist);
-	}
-
+out:
 	out->gah = handle->gah;
 }
 
@@ -848,7 +889,6 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 				   struct iof_lookup_out *out)
 {
 	struct ionss_file_handle	*handle = NULL;
-	d_list_t			*rlink;
 	int				rc;
 
 	rc = fstat(fd, stbuf);
@@ -858,54 +898,35 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 		return;
 	}
 
+	mf->inode_no = stbuf->st_ino;
+
 	if (projection->dev_no != stbuf->st_dev) {
 		out->rc = EACCES;
 		close(fd);
 		return;
 	}
 
-	/* Firstly create the key on the stack and use it to search for a
-	 * descriptor, using this if found.  rec_find() will take a reference
-	 * so there is no additional step needed here.
+	/* Firstly check for existing entry in the hash table, and use that if
+	 * it exists.
 	 */
 
-	mf->inode_no = stbuf->st_ino;
-
-	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
-	if (rlink) {
-		handle = container_of(rlink, struct ionss_file_handle, clist);
+	handle = htable_mf_find(projection, mf);
+	if (handle) {
 		close(fd);
-		d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
-		out->gah = handle->gah;
-		return;
+		D_GOTO(out, 0);
 	}
 
-	/* If the file was not already open then allocate a new descriptor,
-	 * fill it out and attempt to insert it.  If succsssful the
-	 * rec_insert() will take a reference.
+	/* If an entry wasn't found then create a new one and try to insert it,
+	 * whilst checking for existing handles
 	 */
-	rc = ios_fh_alloc(projection, &handle);
-	if (rc || !handle) {
+	handle = htable_mf_insert(projection, mf, fd);
+	if (!handle) {
 		out->err = IOF_ERR_NOMEM;
 		close(fd);
 		return;
 	}
 
-	handle->fd = fd;
-	handle->projection = projection;
-	handle->mf.flags = mf->flags;
-	handle->mf.inode_no = mf->inode_no;
-	handle->mf.type = mf->type;
-	atomic_fetch_add(&handle->ht_ref, 1);
-
-	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
-					&handle->clist);
-	if (rlink != &handle->clist) {
-		IOF_LOG_DEBUG("Competing inserts for %p", handle);
-		ios_fh_decref(handle, 1);
-		handle = container_of(rlink, struct ionss_file_handle, clist);
-	}
-
+out:
 	d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
 	out->gah = handle->gah;
 }
