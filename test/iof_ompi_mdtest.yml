@@ -10,8 +10,6 @@ module:
     setKeyFromInfo:
         - [IOF_OMPI_BIN, OMPI_PREFIX, "/bin/"]
         - [IOF_TEST_BIN, PREFIX, "/bin"]
-    appendKeyFromInfo:
-        - [LD_LIBRARY_PATH, "/lib", [OMPI_PREFIX]]
 
 directives:
     testMode: "python"

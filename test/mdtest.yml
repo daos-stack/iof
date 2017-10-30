@@ -1,7 +1,7 @@
 description: "scripts test module"
 
 defaultENV:
-    D_LOG_MASK: "INFO"
+    D_LOG_MASK: "WARN"
 
 module:
     name: "mdtest"
@@ -20,9 +20,9 @@ execStrategy:
     - name: "iof_mdtest_short"
       exe: "{mdtest_path}/mdtest"
       type: exe
-      parameters: "-vvv -i 3 -I 100 -d {CNSS_PREFIX}/FS_2/{nodename}"
+      parameters: "-i 3 -I 100 -d {CNSS_PREFIX}/FS_2/{nodename}"
     - name: "iof_mdtest_long"
       exe: "{mdtest_path}/mdtest"
       type: exe
-      parameters: "-vvv -i 15 -I 5000 -d {CNSS_PREFIX}/FS_2/{nodename}"
+      parameters: "-i 15 -I 5000 -d {CNSS_PREFIX}/FS_2/{nodename}"
       skipIf: "hasVMs"
