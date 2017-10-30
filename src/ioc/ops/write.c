@@ -53,7 +53,7 @@ static void
 write_cb(const struct crt_cb_info *cb_info)
 {
 	struct write_cb_r *reply = cb_info->cci_arg;
-	struct iof_write_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_writex_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -141,11 +141,11 @@ int ioc_write_direct(const char *buff, size_t len, off_t position,
 	return reply.len;
 }
 
-int ioc_write_bulk(const char *buff, size_t len, off_t position,
+int ioc_writex(const char *buff, size_t len, off_t position,
 		   struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_write_bulk *in;
+	struct iof_writex_in *in;
 	crt_bulk_t bulk;
 	struct write_cb_r reply = {0};
 
@@ -155,13 +155,13 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	int rc;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, write_bulk), &rpc);
+			    FS_TO_OP(fs_handle, writex), &rpc);
 	if (rc || !rpc) {
 		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
 				rc);
 		return -EIO;
 	}
-	IOF_TRACE_LINK(rpc, handle, "write_bulk_rpc");
+	IOF_TRACE_LINK(rpc, handle, "writex_rpc");
 
 	in = crt_req_get(rpc);
 
@@ -174,7 +174,7 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_nr.num = 1;
 
 	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
-			     &in->bulk);
+			     &in->data_bulk);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
 				rc);
@@ -182,9 +182,10 @@ int ioc_write_bulk(const char *buff, size_t len, off_t position,
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
-	in->base = position;
+	in->xtvec.xt_off = position;
+	in->bulk_len = in->xtvec.xt_len = len;
 
-	bulk = in->bulk;
+	bulk = in->data_bulk;
 
 	reply.handle = handle;
 
@@ -237,7 +238,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	}
 
 	if (len >= handle->fs_handle->proj.max_iov_write)
-		rc = ioc_write_bulk(buff, len, position, handle);
+		rc = ioc_writex(buff, len, position, handle);
 	else
 		rc = ioc_write_direct(buff, len, position, handle);
 

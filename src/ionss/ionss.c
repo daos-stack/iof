@@ -1840,7 +1840,7 @@ static void
 iof_write_direct_handler(crt_rpc_t *rpc)
 {
 	struct iof_write_in *in = crt_req_get(rpc);
-	struct iof_write_out *out = crt_reply_get(rpc);
+	struct iof_writex_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
 	size_t bytes_written;
 	int rc;
@@ -1869,9 +1869,31 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
+#define VALIDATE_WRITEX_IN(in, out)					\
+	do {								\
+		uint64_t xtlen = (in)->xtvec.xt_len;			\
+		size_t bulk_len;					\
+		int rc;							\
+		if (xtlen != ((in)->bulk_len + (in)->data.iov_len)) {	\
+			out->err = IOF_ERR_INTERNAL;			\
+			break;						\
+		}							\
+		if ((in)->bulk_len == 0) /*no bulk */			\
+			break;						\
+		rc = crt_bulk_get_len((in)->data_bulk, &bulk_len);	\
+		if (rc != 0) {						\
+			out->err = IOF_ERR_CART;			\
+			break;						\
+		}							\
+		if ((in)->bulk_len > bulk_len) {			\
+			out->err = IOF_ERR_INTERNAL;			\
+			break;						\
+		}							\
+	} while (0)
+
 _Static_assert(sizeof(struct ionss_io_req_desc) <=
-	       sizeof(struct iof_write_out),
-	       "struct iof_write_out needs to be large enough to contain"
+	       sizeof(struct iof_writex_out),
+	       "struct iof_writex_out needs to be large enough to contain"
 	       " struct ionss_io_req_desc");
 
 static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info);
@@ -1881,9 +1903,8 @@ void iof_write_check_and_send(struct ios_projection *projection)
 {
 	struct ionss_io_req_desc *wrd;
 	struct ionss_active_write *awd;
-	struct iof_write_bulk *in;
-	struct iof_write_out *out;
-	int rc;
+	struct iof_writex_in *in;
+	struct iof_writex_out *out;
 
 	pthread_mutex_lock(&projection->lock);
 	if (d_list_empty(&projection->write_list)) {
@@ -1923,12 +1944,10 @@ void iof_write_check_and_send(struct ios_projection *projection)
 	in = crt_req_get(awd->rpc);
 	out = crt_reply_get(awd->rpc);
 
-	rc = crt_bulk_get_len(in->bulk, &awd->req_len);
-
 	/* Reset the borrowed output to 0 */
 	memset(wrd, 0, sizeof(*wrd));
 
-	if (rc || awd->req_len == 0)
+	if (in->xtvec.xt_len == 0)
 		out->err = IOF_ERR_CART;
 
 	iof_process_write(awd);
@@ -1942,8 +1961,8 @@ static void
 iof_process_write(struct ionss_active_write *awd)
 {
 	struct ionss_file_handle *handle = awd->handle;
-	struct iof_write_bulk *in = crt_req_get(awd->rpc);
-	struct iof_write_out *out = crt_reply_get(awd->rpc);
+	struct iof_writex_in *in = crt_req_get(awd->rpc);
+	struct iof_writex_out *out = crt_reply_get(awd->rpc);
 	struct ios_projection *projection = awd->handle->projection;
 	struct crt_bulk_desc bulk_desc = {0};
 	int rc;
@@ -1953,9 +1972,9 @@ iof_process_write(struct ionss_active_write *awd)
 
 	bulk_desc.bd_rpc = awd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_GET;
-	bulk_desc.bd_remote_hdl = in->bulk;
+	bulk_desc.bd_remote_hdl = in->data_bulk;
 	bulk_desc.bd_local_hdl = awd->local_bulk.handle;
-	bulk_desc.bd_len = awd->req_len;
+	bulk_desc.bd_len = in->xtvec.xt_len;
 
 	IOF_TRACE_DEBUG(awd, "Fetching bulk " GAH_PRINT_STR,
 			GAH_PRINT_VAL(in->gah));
@@ -1992,8 +2011,8 @@ static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 	struct ionss_active_write *awd = cb_info->bci_arg;
 	struct ionss_file_handle *handle = awd->handle;
 	struct ios_projection *projection = handle->projection;
-	struct iof_write_out *out = crt_reply_get(awd->rpc);
-	struct iof_write_bulk *in = crt_req_get(awd->rpc);
+	struct iof_writex_out *out = crt_reply_get(awd->rpc);
+	struct iof_writex_in *in = crt_req_get(awd->rpc);
 	size_t bytes_written;
 	int rc;
 
@@ -2001,8 +2020,8 @@ static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 		D_GOTO(out, out->err = IOF_ERR_CART);
 
 	errno = 0;
-	bytes_written = pwrite(handle->fd, awd->local_bulk.buf, awd->req_len,
-			       in->base);
+	bytes_written = pwrite(handle->fd, awd->local_bulk.buf,
+			       in->xtvec.xt_len, in->xtvec.xt_off);
 	if (bytes_written == -1)
 		out->rc = errno;
 	else
@@ -2025,16 +2044,18 @@ out:
 	return 0;
 }
 
+
+
 static void
-iof_write_bulk_handler(crt_rpc_t *rpc)
+iof_writex_handler(crt_rpc_t *rpc)
 {
-	struct iof_write_bulk *in = crt_req_get(rpc);
-	struct iof_write_out *out = crt_reply_get(rpc);
+	struct iof_writex_in *in = crt_req_get(rpc);
+	struct iof_writex_out *out = crt_reply_get(rpc);
 	struct ionss_io_req_desc *wrd;
 	struct ionss_active_write *awd;
 	struct ionss_file_handle *handle;
 	struct ios_projection *projection;
-	size_t len;
+	uint64_t len = in->xtvec.xt_len;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
@@ -2045,15 +2066,21 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		D_GOTO(out, 0);
 
-	rc = crt_req_addref(rpc);
-	if (rc)
-		D_GOTO(out, out->err = IOF_ERR_CART);
-
-	rc = crt_bulk_get_len(in->bulk, &len);
-	if (rc || len == 0)
-		D_GOTO(out_decref, out->err = IOF_ERR_CART);
-
 	projection = handle->projection;
+
+	VALIDATE_WRITEX_IN(in, out);
+	if (out->err)
+		D_GOTO(out, 0);
+
+	if (len == 0) /* TODO: Not an error in combined protocol */
+		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+
+	if (in->data.iov_len > 0) {
+		/* TODO: Subsequent patch will fix this */
+		IOF_TRACE_WARNING(projection,
+				  "Immediate write not supported yet");
+		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+	}
 
 	if (len > projection->base->max_write) {
 		/* TODO: Get one write working first */
@@ -2061,6 +2088,10 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 				  "write larger than max_write not supported");
 		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
 	}
+
+	rc = crt_req_addref(rpc);
+	if (rc)
+		D_GOTO(out, out->err = IOF_ERR_CART);
 
 	pthread_mutex_lock(&projection->lock);
 
@@ -2077,7 +2108,6 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 		pthread_mutex_unlock(&projection->lock);
 		awd->rpc = rpc;
 		awd->handle = handle;
-		awd->req_len = len;
 		iof_process_write(awd);
 	} else {
 		/* Piggyback the output descriptor space to store the write
@@ -2094,9 +2124,6 @@ iof_write_bulk_handler(crt_rpc_t *rpc)
 	 * the bulk handler.
 	 */
 	return;
-
-out_decref:
-	crt_req_decref(rpc);
 
 out:
 	rc = crt_reply_send(rpc);
@@ -2230,7 +2257,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
 		DECL_RPC_HANDLER(getattr_gah, iof_getattr_gah_handler),
 		DECL_RPC_HANDLER(write_direct, iof_write_direct_handler),
-		DECL_RPC_HANDLER(write_bulk, iof_write_bulk_handler),
+		DECL_RPC_HANDLER(writex, iof_writex_handler),
 		DECL_RPC_HANDLER(truncate, iof_truncate_handler),
 		DECL_RPC_HANDLER(ftruncate, iof_ftruncate_handler),
 		DECL_RPC_HANDLER(chmod, iof_chmod_handler),

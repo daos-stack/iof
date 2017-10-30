@@ -192,7 +192,6 @@ struct ionss_active_read {
 	struct ionss_file_handle	*handle;
 	struct iof_local_bulk		local_bulk;
 	d_list_t			list;
-	size_t				buf_len;
 	size_t				read_len;
 	uint64_t			data_offset;
 	uint64_t			req_len;
@@ -211,9 +210,6 @@ struct ionss_active_write {
 	struct ionss_file_handle	*handle;
 	struct iof_local_bulk		local_bulk;
 	d_list_t			list;
-	size_t				buf_len;
-	size_t				read_len;
-	uint64_t			req_len;
 	bool				failed;
 };
 

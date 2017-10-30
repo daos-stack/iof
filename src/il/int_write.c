@@ -73,7 +73,7 @@ static void
 write_cb(const struct crt_cb_info *cb_info)
 {
 	struct write_cb_r *reply = cb_info->cci_arg;
-	struct iof_write_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_writex_out *out = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -167,7 +167,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
-	struct iof_write_bulk *in;
+	struct iof_writex_in *in;
 	struct write_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	crt_bulk_t bulk;
@@ -179,7 +179,7 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    FS_TO_OP(fs_handle, write_bulk), &rpc);
+			    FS_TO_OP(fs_handle, writex), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);
@@ -196,7 +196,8 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO, &in->bulk);
+	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO,
+			     &in->data_bulk);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
 		*errcode = EIO;
@@ -204,9 +205,10 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
-	in->base = position;
+	in->xtvec.xt_off = position;
+	in->bulk_len = in->xtvec.xt_len = len;
 
-	bulk = in->bulk;
+	bulk = in->data_bulk;
 
 	reply.f_info = f_info;
 

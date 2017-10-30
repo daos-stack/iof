@@ -169,13 +169,18 @@ struct crt_msg_field *write_direct[] = {
 	&CMF_UINT64,
 };
 
-struct crt_msg_field *write_bulk[] = {
+struct crt_msg_field *writex_in[] = {
 	&CMF_GAH,
-	&CMF_BULK,
+	&CMF_IOVEC,
 	&CMF_UINT64,
+	&CMF_UINT64,
+	&CMF_UINT64,
+	&CMF_UINT64,
+	&CMF_BULK,
+	&CMF_BULK,
 };
 
-struct crt_msg_field *write_out[] = {
+struct crt_msg_field *writex_out[] = {
 	&CMF_UINT64,
 	&CMF_INT,
 	&CMF_INT,
@@ -218,8 +223,8 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(closedir, gah_in, NULL),
 	RPC_TYPE(getattr, gah_string_in, iov_pair),
 	RPC_TYPE(getattr_gah, gah_in, iov_pair),
-	RPC_TYPE(write_direct, write_direct, write_out),
-	RPC_TYPE(write_bulk, write_bulk, write_out),
+	RPC_TYPE(write_direct, write_direct, writex_out),
+	RPC_TYPE(writex, writex_in, writex_out),
 	RPC_TYPE(truncate, truncate_in, status_out),
 	RPC_TYPE(ftruncate, ftruncate_in, status_out),
 	RPC_TYPE(rmdir, string_in, status_out),

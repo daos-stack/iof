@@ -279,13 +279,17 @@ struct iof_write_in {
 	uint64_t base;
 };
 
-struct iof_write_bulk {
+struct iof_writex_in {
 	struct ios_gah gah;
-	crt_bulk_t bulk;
-	uint64_t base;
+	d_iov_t data;
+	struct iof_xtvec xtvec;
+	uint64_t xtvec_len;
+	uint64_t bulk_len;
+	crt_bulk_t xtvec_bulk;
+	crt_bulk_t data_bulk;
 };
 
-struct iof_write_out {
+struct iof_writex_out {
 	uint64_t len;
 	int rc;
 	int err;
@@ -334,7 +338,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, getattr),
 	DEF_RPC_TYPE(DEFAULT, getattr_gah),
 	DEF_RPC_TYPE(DEFAULT, write_direct),
-	DEF_RPC_TYPE(DEFAULT, write_bulk),
+	DEF_RPC_TYPE(DEFAULT, writex),
 	DEF_RPC_TYPE(DEFAULT, truncate),
 	DEF_RPC_TYPE(DEFAULT, ftruncate),
 	DEF_RPC_TYPE(DEFAULT, rmdir),
