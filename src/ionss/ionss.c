@@ -1847,45 +1847,15 @@ out:
 		ios_fh_decref(parent, 1);
 }
 
-static void
-iof_write_direct_handler(crt_rpc_t *rpc)
-{
-	struct iof_write_in *in = crt_req_get(rpc);
-	struct iof_writex_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	size_t bytes_written;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(handle->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	bytes_written = pwrite(handle->fd, in->data.iov_buf, in->data.iov_len,
-			       in->base);
-	if (bytes_written == -1)
-		out->rc = errno;
-	else
-		out->len = bytes_written;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (handle)
-		ios_fh_decref(handle, 1);
-}
-
 #define VALIDATE_WRITEX_IN(in, out)					\
 	do {								\
 		uint64_t xtlen = (in)->xtvec.xt_len;			\
 		size_t bulk_len;					\
 		int rc;							\
+		if ((in)->data.iov_len > base.max_iov_write) {		\
+			out->err = IOF_ERR_INTERNAL;			\
+			break;						\
+		}							\
 		if (xtlen != ((in)->bulk_len + (in)->data.iov_len)) {	\
 			out->err = IOF_ERR_INTERNAL;			\
 			break;						\
@@ -1977,11 +1947,22 @@ iof_process_write(struct ionss_active_write *awd)
 	struct iof_writex_out *out = crt_reply_get(awd->rpc);
 	struct ios_projection *projection = awd->handle->projection;
 	struct crt_bulk_desc bulk_desc = {0};
+	size_t bytes_written;
 	int rc;
 
 	if (out->err)
 		D_GOTO(out, 0);
 
+	if (in->bulk_len == 0) {
+		errno = 0;
+		bytes_written = pwrite(handle->fd, in->data.iov_buf,
+				       in->data.iov_len, in->xtvec.xt_off);
+		if (bytes_written == -1)
+			out->rc = errno;
+		else
+			out->len = bytes_written;
+		D_GOTO(out, 0);
+	}
 	bulk_desc.bd_rpc = awd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_GET;
 	bulk_desc.bd_remote_hdl = in->data_bulk;
@@ -2056,8 +2037,6 @@ out:
 	return 0;
 }
 
-
-
 static void
 iof_writex_handler(crt_rpc_t *rpc)
 {
@@ -2084,14 +2063,21 @@ iof_writex_handler(crt_rpc_t *rpc)
 	if (out->err)
 		D_GOTO(out, 0);
 
-	if (len == 0) /* TODO: Not an error in combined protocol */
-		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
-
-	if (in->data.iov_len > 0) {
-		/* TODO: Subsequent patch will fix this */
+	/* TODO: Only immediate xtvec supported for now */
+	if (in->xtvec_len > 0) {
 		IOF_TRACE_WARNING(projection,
-				  "Immediate write not supported yet");
-		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+				  "xtvec not yet supported for write");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
+	}
+
+	/* TODO: Only handle either bulk or immediate data for now */
+	if (in->data.iov_len > 0 && in->bulk_len > 0) {
+		IOF_TRACE_WARNING(projection,
+				  "Mixing bulk and immediate data not supported"
+				  " for write");
+		out->err = IOF_ERR_INTERNAL;
+		goto out;
 	}
 
 	if (len > projection->base->max_write) {
@@ -2268,7 +2254,6 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(closedir, iof_closedir_handler),
 		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
 		DECL_RPC_HANDLER(getattr_gah, iof_getattr_gah_handler),
-		DECL_RPC_HANDLER(write_direct, iof_write_direct_handler),
 		DECL_RPC_HANDLER(writex, iof_writex_handler),
 		DECL_RPC_HANDLER(truncate, iof_truncate_handler),
 		DECL_RPC_HANDLER(ftruncate, iof_ftruncate_handler),

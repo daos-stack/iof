@@ -231,6 +231,13 @@ static int find_projections(void)
 			return 1;
 		}
 
+		snprintf(tmp, BUFSIZE, "iof/projections/%d/max_iov_write", i);
+		rc = iof_ctrl_read_uint32(&proj->max_iov_write, tmp);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not max_iov_write, rc = %d", rc);
+			return 1;
+		}
+
 		proj->grp = &ionss_grps[proj->grp_id];
 		proj->enabled = true;
 	}
@@ -273,7 +280,7 @@ static ssize_t pwrite_rpc(struct fd_entry *entry, const char *buff, size_t len,
 	int errcode;
 
 	/* Just get rpc working then work out how to really do this */
-	bytes_written = ioil_do_pwrite(buff, len, offset, &entry->common,
+	bytes_written = ioil_do_writex(buff, len, offset, &entry->common,
 				       &errcode);
 	if (bytes_written < 0)
 		saved_errno = errcode;

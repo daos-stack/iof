@@ -273,12 +273,6 @@ struct iof_gah_in {
 	struct ios_gah gah;
 };
 
-struct iof_write_in {
-	struct ios_gah gah;
-	d_iov_t data;
-	uint64_t base;
-};
-
 struct iof_writex_in {
 	struct ios_gah gah;
 	d_iov_t data;
@@ -337,7 +331,6 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, closedir),
 	DEF_RPC_TYPE(DEFAULT, getattr),
 	DEF_RPC_TYPE(DEFAULT, getattr_gah),
-	DEF_RPC_TYPE(DEFAULT, write_direct),
 	DEF_RPC_TYPE(DEFAULT, writex),
 	DEF_RPC_TYPE(DEFAULT, truncate),
 	DEF_RPC_TYPE(DEFAULT, ftruncate),

@@ -111,59 +111,8 @@ write_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
-static int write_direct(const char *buff, size_t len, off_t position,
-			struct iof_file_common *f_info, int *errcode)
-{
-	struct iof_projection *fs_handle;
-	struct iof_service_group *grp;
-	struct iof_write_in *in;
-	struct write_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	fs_handle = f_info->projection;
-	grp = fs_handle->grp;
-
-	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    FS_TO_OP(fs_handle, write_direct), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		*errcode = EIO;
-		return -1;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->gah = f_info->gah;
-	d_iov_set(&in->data, (void *)buff, len);
-	in->base = position;
-
-	reply.f_info = f_info;
-
-	rc = crt_req_send(rpc, write_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
-		*errcode = EIO;
-		return -1;
-	}
-	iof_fs_wait(fs_handle, &reply.tracker);
-
-	if (reply.err) {
-		*errcode = reply.err;
-		return -1;
-	}
-
-	if (reply.rc != 0) {
-		*errcode = reply.rc;
-		return -1;
-	}
-
-	return reply.len;
-}
-
-static ssize_t write_bulk(const char *buff, size_t len, off_t position,
-			  struct iof_file_common *f_info, int *errcode)
+ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
+		       struct iof_file_common *f_info, int *errcode)
 {
 	struct iof_projection *fs_handle;
 	struct iof_service_group *grp;
@@ -174,6 +123,9 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
 	int rc;
+
+	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position,
+		     position + len - 1, GAH_PRINT_VAL(f_info->gah));
 
 	fs_handle = f_info->projection;
 	grp = fs_handle->grp;
@@ -190,23 +142,28 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	in = crt_req_get(rpc);
 	in->gah = f_info->gah;
 
-	iov.iov_len = len;
-	iov.iov_buf_len = len;
-	iov.iov_buf = (void *)buff;
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
+	in->xtvec.xt_len = len;
+	if (len <= fs_handle->max_iov_write) {
+		d_iov_set(&in->data, (void *)buff, len);
+	} else {
+		in->bulk_len = iov.iov_len = len;
+		iov.iov_buf_len = len;
+		iov.iov_buf = (void *)buff;
+		sgl.sg_iovs = &iov;
+		sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO,
-			     &in->data_bulk);
-	if (rc) {
-		IOF_LOG_ERROR("Failed to make local bulk handle %d", rc);
-		*errcode = EIO;
-		return -1;
+		rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO,
+				     &in->data_bulk);
+		if (rc) {
+			IOF_LOG_ERROR("Failed to make local bulk handle %d",
+				      rc);
+			*errcode = EIO;
+			return -1;
+		}
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
 	in->xtvec.xt_off = position;
-	in->bulk_len = in->xtvec.xt_len = len;
 
 	bulk = in->data_bulk;
 
@@ -220,10 +177,12 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	}
 	iof_fs_wait(fs_handle, &reply.tracker);
 
-	rc = crt_bulk_free(bulk);
-	if (rc) {
-		*errcode = EIO;
-		return -1;
+	if (bulk) {
+		rc = crt_bulk_free(bulk);
+		if (rc) {
+			*errcode = EIO;
+			return -1;
+		}
 	}
 
 	if (reply.err) {
@@ -239,18 +198,6 @@ static ssize_t write_bulk(const char *buff, size_t len, off_t position,
 	return reply.len;
 }
 
-ssize_t ioil_do_pwrite(const char *buff, size_t len, off_t position,
-		       struct iof_file_common *f_info, int *errcode)
-{
-	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position, position + len - 1,
-		     GAH_PRINT_VAL(f_info->gah));
-
-	if (len >= f_info->projection->max_iov_write)
-		return write_bulk(buff, len, position, f_info, errcode);
-	else
-		return write_direct(buff, len, position, f_info, errcode);
-}
-
 /* TODO: This could be optimized to send multiple RPCs at once rather than
  * sending them serially.   Get it working first.
  */
@@ -262,14 +209,8 @@ ssize_t ioil_do_pwritev(const struct iovec *iov, int count, off_t position,
 	int i;
 
 	for (i = 0; i < count; i++) {
-		if (iov[i].iov_len >= f_info->projection->max_iov_write)
-			bytes_written = write_bulk(iov[i].iov_base,
-						   iov[i].iov_len,
-						   position, f_info, errcode);
-		else
-			bytes_written = write_direct(iov[i].iov_base,
-						     iov[i].iov_len,
-						     position, f_info, errcode);
+		bytes_written = ioil_do_writex(iov[i].iov_base, iov[i].iov_len,
+					       position, f_info, errcode);
 
 		if (bytes_written == -1)
 			return (ssize_t)-1;

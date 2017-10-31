@@ -95,52 +95,6 @@ write_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
-int ioc_write_direct(const char *buff, size_t len, off_t position,
-		     struct iof_file_handle *handle)
-{
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_write_in *in;
-	struct write_cb_r reply = {0};
-
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	IOF_TRACE_INFO(handle, "path %s", handle->name);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, write_direct), &rpc);
-	if (rc || !rpc) {
-		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
-				rc);
-		return -EIO;
-	}
-	IOF_TRACE_LINK(rpc, handle, "write_direct_rpc");
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->gah = handle->common.gah;
-	d_iov_set(&in->data, (void *)buff, len);
-	in->base = position;
-
-	reply.handle = handle;
-
-	rc = crt_req_send(rpc, write_cb, &reply);
-	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
-		return -EIO;
-	}
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (reply.err != 0)
-		return -reply.err;
-
-	if (reply.rc != 0)
-		return -reply.rc;
-
-	return reply.len;
-}
-
 int ioc_writex(const char *buff, size_t len, off_t position,
 		   struct iof_file_handle *handle)
 {
@@ -167,23 +121,28 @@ int ioc_writex(const char *buff, size_t len, off_t position,
 
 	in->gah = handle->common.gah;
 
-	iov.iov_len = len;
-	iov.iov_buf_len = len;
-	iov.iov_buf = (void *)buff;
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
+	in->xtvec.xt_len = len;
+	if (len <= handle->fs_handle->proj.max_iov_write) {
+		d_iov_set(&in->data, (void *)buff, len);
+	} else {
+		in->bulk_len = iov.iov_len = len;
+		iov.iov_buf_len = len;
+		iov.iov_buf = (void *)buff;
+		sgl.sg_iovs = &iov;
+		sgl.sg_nr.num = 1;
 
-	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
-			     &in->data_bulk);
-	if (rc) {
-		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
-				rc);
-		return -EIO;
+		rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
+				     &in->data_bulk);
+		if (rc) {
+			IOF_TRACE_ERROR(handle,
+					"Failed to make local bulk handle %d",
+					rc);
+			return -EIO;
+		}
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
 	in->xtvec.xt_off = position;
-	in->bulk_len = in->xtvec.xt_len = len;
 
 	bulk = in->data_bulk;
 
@@ -197,9 +156,11 @@ int ioc_writex(const char *buff, size_t len, off_t position,
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	rc = crt_bulk_free(bulk);
-	if (rc)
-		return -EIO;
+	if (bulk != NULL) {
+		rc = crt_bulk_free(bulk);
+		if (rc)
+			return -EIO;
+	}
 
 	if (reply.err != 0)
 		return -reply.err;
@@ -237,10 +198,7 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 		return -EIO;
 	}
 
-	if (len >= handle->fs_handle->proj.max_iov_write)
-		rc = ioc_writex(buff, len, position, handle);
-	else
-		rc = ioc_write_direct(buff, len, position, handle);
+	rc = ioc_writex(buff, len, position, handle);
 
 	if (rc > 0)
 		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
