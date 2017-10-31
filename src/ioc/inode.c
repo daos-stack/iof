@@ -60,8 +60,8 @@ find_gah(struct iof_projection_info *fs_handle,
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-	IOF_LOG_INFO("Inode %lu " GAH_PRINT_STR, ie->ino,
-		     GAH_PRINT_VAL(ie->gah));
+	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->ino,
+		       GAH_PRINT_VAL(ie->gah));
 
 	memcpy(gah, &ie->gah, sizeof(*gah));
 
@@ -82,11 +82,14 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	 *
 	 * This means a resource leak on the IONSS should the projection
 	 * be offline for reasons other than IONSS failure.
+	 *
+	 * When performing a local shutdown EACCESS is used to prevent further
+	 * fuse operations suceeding, however in this case we want to keep
+	 * communicating with the IONSS so ignore that error code here.
 	 */
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
-	}
+	if (fs_handle->offline_reason != 0 &&
+	    fs_handle->offline_reason != EACCES)
+		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
 	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));
 
@@ -94,10 +97,9 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, close), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		ret = EIO;
-		goto out_err;
+		IOF_TRACE_ERROR(ie, "Could not create request, rc = %d",
+				rc);
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	in = crt_req_get(rpc);
@@ -106,12 +108,12 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	rc = crt_req_send(rpc, NULL, NULL);
 	if (rc) {
 		IOF_TRACE_ERROR(ie, "Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	return;
 
 out_err:
-	IOF_TRACE_INFO(ie, "Failed to close %d", ret);
+	IOF_TRACE_ERROR(ie, "Failed to close " GAH_PRINT_STR " %d",
+			GAH_PRINT_VAL(ie->gah), ret);
 }
