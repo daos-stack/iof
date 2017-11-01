@@ -269,6 +269,8 @@ static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
 
 	IOF_TRACE_DEBUG(fh, "decref to %d", oldref - 1);
 
+	D_ASSERTF(oldref >= 1, "Unexpected fh hash refcount: %d\n", oldref);
+
 	return (oldref == 1);
 }
 

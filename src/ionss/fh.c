@@ -86,6 +86,8 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 
 	oldref = atomic_fetch_sub(&fh->ref, count);
 
+	D_ASSERTF(oldref != 0, "Unexpected fh refcount: %d\n", oldref);
+
 	IOF_TRACE_DEBUG(fh, GAH_PRINT_STR " decref %d to %d",
 			GAH_PRINT_VAL(fh->gah), count, oldref - count);
 
