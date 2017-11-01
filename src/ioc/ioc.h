@@ -285,6 +285,7 @@ struct ioc_request_api {
 struct ioc_request {
 	int				rc;
 	int				err;
+	crt_endpoint_t			ep;
 	crt_rpc_t			*rpc;
 	struct iof_tracker		tracker;
 	void				*ptr;
@@ -402,8 +403,6 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
  */
 #define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_TIMEDOUT) || \
 					((CB_INFO)->cci_rc == -DER_OOG))
-
-void ioc_mark_ep_offline(struct iof_projection_info *, crt_endpoint_t *);
 
 void ioc_status_cb(const struct crt_cb_info *);
 

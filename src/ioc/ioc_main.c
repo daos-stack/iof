@@ -133,44 +133,6 @@ out_err:
 	IOF_FUSE_REPLY_ERR(req, ret);
 }
 
-/* Mark an endpoint as off-line, most likely because a process has been
- * evicted from the process set.
- *
- * Although this takes a endpoint_t option it's effectively only checking
- * the rank as each projection is only served from a single group and all
- * tags in a rank will be evicted simultaneously.
- *
- * This is called after a RPC reply is received so it might be invoked
- * multiple times for the same failure, and the dest_ep might have been
- * updated after the RPC was sent but before the RPC was rejected.
- */
-void ioc_mark_ep_offline(struct iof_projection_info *fs_handle,
-			 crt_endpoint_t *ep)
-{
-	/* If the projection is off-line then there is nothing to do */
-	if (FS_IS_OFFLINE(fs_handle)) {
-		IOF_TRACE_INFO(fs_handle, "FS %d already offline",
-			       fs_handle->fs_id);
-		return;
-	}
-
-	/* If the projection has already migrated to another rank then
-	 * there is nothing to do
-	 */
-	if (ep->ep_rank != fs_handle->proj.grp->psr_ep.ep_rank) {
-		IOF_TRACE_INFO(fs_handle, "EP %d already offline for %d",
-			       ep->ep_rank, fs_handle->fs_id);
-		return;
-	}
-
-	/* Insert code to fail over to secondary EP here. */
-
-	IOF_TRACE_WARNING(fs_handle, "Marking %d (%s) OFFLINE",
-			  fs_handle->fs_id, fs_handle->mount_point);
-
-	fs_handle->offline_reason = EHOSTDOWN;
-}
-
 int ioc_simple_resend(struct ioc_request *request)
 {
 	int rc;
@@ -194,6 +156,95 @@ int ioc_simple_resend(struct ioc_request *request)
 	return iof_fs_send(request);
 }
 
+/* The eviction handler atomically updates the PSR of the group for which
+ * this eviction occurred; or disables the group if no more PSRs remain.
+ * It then locates all the projections corresponding to the group; if the
+ * group was previously disabled, it marks them offline. Else, it migrates all
+ * open handles to the new PSR. The PSR update and migration must be completed
+ * before the callbacks for individual failed RPCs are invoked, so they may be
+ * able to correctly re-target the RPCs and also use valid handles.
+ */
+static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
+{
+	int i, rc;
+	d_rank_t evicted_psr, updated_psr, new_psr;
+	d_rank_list_t *psr_list = NULL;
+	struct iof_group_info *g = NULL;
+	struct iof_state *iof_state = arg;
+	struct iof_projection_info *fs_handle;
+
+	IOF_TRACE_INFO(arg, "Eviction handler, Group: %s; Rank: %u",
+		       group->cg_grpid, rank);
+	rc = crt_lm_group_psr(group, &psr_list);
+	IOF_TRACE_INFO(arg, "ListPtr: %p, List: %p, Ranks: %d",
+		       psr_list, psr_list ? psr_list->rl_ranks : 0,
+		       psr_list ? psr_list->rl_nr.num : -1);
+	/* Sanity Check */
+	if (rc || !psr_list || !psr_list->rl_ranks) {
+		IOF_TRACE_ERROR(arg, "Invalid rank list, ret = %d", rc);
+		if (!rc)
+			rc = -EINVAL;
+	}
+	if (!rc && psr_list->rl_nr.num == 0) {
+		/* No more ranks remaining. */
+		IOF_TRACE_ERROR(arg, "No PSRs left to failover.");
+		rc = -EHOSTDOWN;
+	} else
+		new_psr = psr_list->rl_ranks[0];
+	if (psr_list != NULL)
+		d_rank_list_free(psr_list);
+
+	for (i = 0; i < iof_state->num_groups; i++) {
+		g = iof_state->groups + i;
+		if (!strncmp(group->cg_grpid,
+			    g->grp.dest_grp->cg_grpid,
+			    CRT_GROUP_ID_MAX_LEN))
+			break;
+	}
+
+	if (g == NULL) {
+		IOF_TRACE_WARNING(arg, "No group found: %s",
+				  group->cg_grpid);
+		return;
+	} else if (rc) {
+		IOF_TRACE_WARNING(g, "Group %s disabled, rc=%d",
+				  group->cg_grpid, rc);
+		g->grp.enabled = false;
+	} else {
+		evicted_psr = rank;
+		atomic_compare_exchange(&g->grp.pri_srv_rank,
+					evicted_psr, new_psr);
+		updated_psr = atomic_load_consume(&g->grp.pri_srv_rank);
+		IOF_TRACE_INFO(g, "Updated: %d, Evicted: %d, New: %d",
+			       updated_psr, evicted_psr, new_psr);
+		/* TODO: This is needed for FUSE operations which are
+		 * not yet using the failover codepath to send RPCs.
+		 * This must be removed once all the FUSE ops have been
+		 * ported. This code is not thread safe, so a FUSE call
+		 * when this is being updated will cause a race condition.
+		 */
+		g->grp.psr_ep.ep_rank = new_psr;
+	}
+
+	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		if (fs_handle->proj.grp != &g->grp)
+			continue;
+
+		if (!g->grp.enabled || !IOF_HAS_FAILOVER(fs_handle->flags)) {
+			IOF_TRACE_WARNING(fs_handle,
+					  "Marking projection %d offline: %s",
+					  fs_handle->fs_id,
+					  fs_handle->mount_point);
+			if (!g->grp.enabled)
+				fs_handle->offline_reason = -rc;
+			else
+				fs_handle->offline_reason = EHOSTDOWN;
+			continue;
+		}
+		/* TODO: Migrate Open Handles */
+	}
+}
+
 /* A generic callback function to handle completion of RPCs sent from FUSE,
  * and replay the RPC to a different end point in case the target has been
  * evicted (denoted by an "Out Of Group" return code). For all other failures
@@ -201,80 +252,26 @@ int ioc_simple_resend(struct ioc_request *request)
  */
 static void generic_cb(const struct crt_cb_info *cb_info)
 {
-	int rc;
-	d_rank_list_t *psr_list = NULL;
 	struct ioc_request *request = cb_info->cci_arg;
 	struct iof_projection_info *fs_handle =
 			request->cb->get_fsh(request);
 
-	do {
-		/* No Error */
-		if (!cb_info->cci_rc)
-			break;
-		/* Errors other than timeouts */
-		if (!IOC_HOST_IS_DOWN(cb_info)) {
-			request->err = EIO;
-			break;
-		}
+	/* No Error */
+	if (!cb_info->cci_rc)
+		D_GOTO(done, 0);
 
-		if (cb_info->cci_rc == -DER_TIMEDOUT) {
-			/*
-			 * Retry if this is a timeout. In the ideal case,
-			 * we shouldn't have to handle timeouts -- either
-			 * handle eviction or wait indefinitely.
-			 */
-			IOF_TRACE_INFO(request, "Request timed out for PSR %u",
-				     request->rpc->cr_ep.ep_rank);
-			rc = ioc_simple_resend(request);
-			if (rc)
-				break;
-			/* Return on success */
-			else
-				return;
-		}
+	/* Errors other than evictions */
+	if (!IOC_HOST_IS_DOWN(cb_info)) {
+		D_GOTO(done, request->err = EIO);
+	} else if (fs_handle->offline_reason) {
+		IOF_TRACE_ERROR(request, "Projection Offline");
+		D_GOTO(done, request->err = fs_handle->offline_reason);
+	}
 
-		IOF_TRACE_INFO(request, "PSR %u has been evicted",
-			     request->rpc->cr_ep.ep_rank);
-
-		if (!IOF_HAS_FAILOVER(fs_handle->flags)) {
-			/* Failover feature not available, so fail. */
-			IOF_TRACE_ERROR(request,
-					"Failover feature not available");
-			request->err = EHOSTDOWN;
-			break;
-		}
-
-		rc = crt_lm_group_psr(fs_handle->proj.grp->dest_grp,
-				      &psr_list);
-		IOF_TRACE_INFO(request, "ListPtr: %p, List: %p, Ranks: %d",
-			       psr_list, psr_list ? psr_list->rl_ranks : 0,
-			       psr_list ? psr_list->rl_nr.num : -1);
-		/* Sanity Check */
-		if (rc || !psr_list || !psr_list->rl_ranks) {
-			IOF_TRACE_ERROR(request, "Unable to access "
-					"fail-over rank list, ret = %d", rc);
-			request->err = EHOSTDOWN;
-			break;
-		}
-		if (psr_list->rl_nr.num == 0) {
-			/* No more ranks to retry, so fail. */
-			IOF_TRACE_ERROR(request, "No more PSRs"
-					" remaining for failover.");
-			request->err = EHOSTDOWN;
-			break;
-		}
-		/* TODO: Make this atomic. */
-		fs_handle->proj.grp->psr_ep.ep_rank = psr_list->rl_ranks[0];
-		d_rank_list_free(psr_list);
-		if (request->cb->on_evict) {
-			rc = request->cb->on_evict(request);
-			if (rc)
-				break;
-			/* Return on success */
-			else
-				return;
-		}
-	} while (0);
+	if (request->cb->on_evict &&
+	    !request->cb->on_evict(request))
+		return;
+done:
 	if (request->cb->on_result)
 		request->cb->on_result(request);
 	iof_tracker_signal(&request->tracker);
@@ -297,18 +294,23 @@ int iof_fs_send(struct ioc_request *request)
 	struct iof_projection_info *fs_handle =
 			request->cb->get_fsh(request);
 
+	request->ep.ep_tag = 0;
+	request->ep.ep_rank = atomic_load_consume(
+				&fs_handle->proj.grp->pri_srv_rank);
+	request->ep.ep_grp = fs_handle->proj.grp->dest_grp;
+
 	/* Defer clean up until the output is copied. */
 	rc = crt_req_addref(request->rpc);
 	if (rc)
-		goto err;
-	rc = crt_req_set_endpoint(request->rpc, &fs_handle->proj.grp->psr_ep);
+		D_GOTO(err, rc);
+	rc = crt_req_set_endpoint(request->rpc, &request->ep);
 	if (rc)
-		goto err;
+		D_GOTO(err, rc);
 	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",
 		      request->rpc->cr_ep.ep_rank);
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc)
-		goto err;
+		D_GOTO(err, rc);
 	if (request->cb->on_send)
 		request->cb->on_send(request);
 	return 0;
@@ -453,13 +455,13 @@ static int attach_group(struct iof_state *iof_state,
 		return ret;
 	}
 	/* First element in the list is the PSR */
-	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
-			psr_list->rl_ranks[0]);
+	atomic_store_release(&group->grp.pri_srv_rank, psr_list->rl_ranks[0]);
 	group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
-	group->grp.num_ranks = psr_list->rl_nr.num;
 	group->grp.psr_ep.ep_tag = 0;
 	group->grp.grp_id = id;
 	d_rank_list_free(psr_list);
+	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
+		       atomic_load_consume(&group->grp.pri_srv_rank));
 
 	sprintf(buf, "%d", id);
 
@@ -1008,6 +1010,13 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	}
 
 	/*registrations*/
+	ret = crt_register_eviction_cb(ioc_eviction_cb, iof_state);
+	if (ret) {
+		IOF_TRACE_ERROR(iof_state, "Eviction callback registration "
+				"failed with ret: %d", ret);
+		return ret;
+	}
+
 	ret = crt_rpc_register(QUERY_PSR_OP, &QUERY_RPC_FMT);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
