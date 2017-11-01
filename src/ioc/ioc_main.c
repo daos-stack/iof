@@ -789,7 +789,7 @@ lookup_reset(void *arg)
 		atomic_fetch_add(&req->ie->ref, 1);
 	}
 
-	/* Create a new RPC ready for later use.  Take an inital reference
+	/* Create a new RPC ready for later use.  Take an initial reference
 	 * to the RPC so that it is not cleaned up after a successful send.
 	 *
 	 * After calling send the getattr code will re-take the dropped

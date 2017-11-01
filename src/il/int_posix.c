@@ -314,7 +314,7 @@ static __attribute__((constructor)) void ioil_init(void)
 
 	iof_log_init("IL", "IOIL", NULL);
 
-	/* Get maximum number of file desciptors */
+	/* Get maximum number of file descriptors */
 	rc = getrlimit(RLIMIT_NOFILE, &rlimit);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not get process file descriptor limit"

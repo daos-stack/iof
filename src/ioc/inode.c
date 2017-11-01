@@ -84,7 +84,7 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	 * be offline for reasons other than IONSS failure.
 	 *
 	 * When performing a local shutdown EACCESS is used to prevent further
-	 * fuse operations suceeding, however in this case we want to keep
+	 * fuse operations succeeding, however in this case we want to keep
 	 * communicating with the IONSS so ignore that error code here.
 	 */
 	if (fs_handle->offline_reason != 0 &&

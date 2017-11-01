@@ -136,7 +136,7 @@ opendir_ll_cb(const struct crt_cb_info *cb_info)
 	if (out->err)
 		goto out_err;
 
-	/* Create a new FI desciptor and use it to point to
+	/* Create a new FI descriptor and use it to point to
 	 * our local handle
 	 */
 
