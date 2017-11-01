@@ -246,6 +246,7 @@ class CommonTestSuite():
         if procrtn is None:
             procrtn = -1
             try:
+                self.logger.info("Test: terminating processes :%s", proc.pid)
                 proc.terminate()
                 proc.wait(2)
             except ProcessLookupError:

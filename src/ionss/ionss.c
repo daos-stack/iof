@@ -43,7 +43,7 @@
 #include <string.h>
 #include <mntent.h>
 #include <getopt.h>
-
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -2673,6 +2673,7 @@ int main(int argc, char **argv)
 	int c;
 	int cnss_threads = 0;
 	bool failover = true;
+	struct rlimit rlim = {0};
 
 	char *version = iof_get_version();
 
@@ -2783,6 +2784,25 @@ int main(int argc, char **argv)
 	if (base.projection_count < 1) {
 		IOF_LOG_ERROR("Expected at least one directory as command line option");
 		return IOF_BAD_DATA;
+	}
+
+	/* The ionss holds open a fd for every inode it knows about so is heavy
+	 * on the open file count, so increase the rlimit for open files to
+	 * the maximum.
+	 */
+	ret = getrlimit(RLIMIT_NOFILE, &rlim);
+	if (ret)
+		D_GOTO(cleanup, ret = IOF_ERR_INTERNAL);
+
+	if (rlim.rlim_cur != rlim.rlim_max) {
+		IOF_LOG_INFO("Set rlimit from %lu to %lu",
+			     rlim.rlim_cur, rlim.rlim_max);
+
+		rlim.rlim_cur = rlim.rlim_max;
+
+		ret = setrlimit(RLIMIT_NOFILE, &rlim);
+		if (ret)
+			D_GOTO(cleanup, ret = IOF_ERR_INTERNAL);
 	}
 
 	/*hardcoding the number and path for projected filesystems*/

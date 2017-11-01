@@ -54,6 +54,7 @@ import stat
 import time
 import shutil
 import getpass
+import resource
 import subprocess
 import tempfile
 import logging
@@ -128,6 +129,17 @@ class Testlocal(unittest.TestCase,
             method = method[5:]
         return os.path.join(parts[1], method)
 
+    def setLimits(self):
+        """Set the open file resource limit to maximum"""
+
+        (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
+        self.logger.info("File limits are soft:%d hard:%d", soft, hard)
+
+        if soft != hard:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+            (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
+            self.logger.info("File limits are soft:%d hard:%d", soft, hard)
+
     def setUp(self):
         """set up the test"""
 
@@ -137,6 +149,8 @@ class Testlocal(unittest.TestCase,
             self.logger.addHandler(__ch)
 
         self.logger.info("Starting for %s", self.id())
+
+        self.setLimits()
 
         # set the standalone test flag
         self.test_local = True
