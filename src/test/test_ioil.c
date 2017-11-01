@@ -336,7 +336,7 @@ static void do_large_read_test(const char *fname, size_t len)
 {
 	char *buf = NULL;
 	char *buf2 = NULL;
-	FILE *fp = NULL;
+	int fd = -1;
 	size_t test1_size = max_read_size * 2;
 	size_t test2_size = test1_size + max_iov_read_size;
 	size_t test3_size = test2_size + max_iov_read_size;
@@ -352,12 +352,12 @@ static void do_large_read_test(const char *fname, size_t len)
 	memset(buf, 'b', buf_size);
 
 	WRITE_LOG("starting large read test");
-	fp = fopen(fname, "w");
-	CU_ASSERT_GOTO(fp != NULL, done);
-	bytes = fwrite(buf, 1, buf_size, fp);
+	fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+	CU_ASSERT_GOTO(fd != -1, done);
+	bytes = write(fd, buf, buf_size);
 	CU_ASSERT_EQUAL(bytes, buf_size);
-	fclose(fp);
-	fp = NULL;
+	close(fd);
+	fd = -1;
 
 	do_large_read(fname, buf, buf2, test1_size);
 	do_large_read(fname, buf, buf2, test2_size);

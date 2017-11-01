@@ -209,6 +209,9 @@ struct ionss_active_write {
 	crt_rpc_t			*rpc;
 	struct ionss_file_handle	*handle;
 	struct iof_local_bulk		local_bulk;
+	uint64_t			data_offset;
+	uint64_t			req_len;
+	uint64_t			segment_offset;
 	d_list_t			list;
 	bool				failed;
 };

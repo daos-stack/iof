@@ -2055,21 +2055,29 @@ iof_process_write(struct ionss_active_write *awd)
 	if (out->err)
 		D_GOTO(out, 0);
 
-	if (in->bulk_len == 0) {
+	if (in->bulk_len == 0 || awd->segment_offset == in->bulk_len) {
 		errno = 0;
 		bytes_written = pwrite(handle->fd, in->data.iov_buf,
-				       in->data.iov_len, in->xtvec.xt_off);
+				       in->data.iov_len,
+				       in->xtvec.xt_off + awd->segment_offset);
 		if (bytes_written == -1)
 			out->rc = errno;
 		else
-			out->len = bytes_written;
+			out->len += bytes_written;
 		D_GOTO(out, 0);
 	}
+
+
+	awd->req_len = in->xtvec.xt_len - awd->segment_offset;
+	if (awd->req_len > base.max_write) /* Only write max_write at a time */
+		awd->req_len = base.max_write;
+
 	bulk_desc.bd_rpc = awd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_GET;
 	bulk_desc.bd_remote_hdl = in->data_bulk;
+	bulk_desc.bd_remote_off = awd->data_offset;
 	bulk_desc.bd_local_hdl = awd->local_bulk.handle;
-	bulk_desc.bd_len = in->xtvec.xt_len;
+	bulk_desc.bd_len = awd->req_len;
 
 	IOF_TRACE_DEBUG(awd, "Fetching bulk " GAH_PRINT_STR,
 			GAH_PRINT_VAL(in->gah));
@@ -2116,11 +2124,19 @@ static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 
 	errno = 0;
 	bytes_written = pwrite(handle->fd, awd->local_bulk.buf,
-			       in->xtvec.xt_len, in->xtvec.xt_off);
-	if (bytes_written == -1)
-		out->rc = errno;
-	else
-		out->len = bytes_written;
+			       awd->req_len,
+			       in->xtvec.xt_off + awd->segment_offset);
+	if (bytes_written == -1) {
+		D_GOTO(out, out->rc = errno);
+	} else {
+		out->len += bytes_written;
+		if (out->len < in->xtvec.xt_len) {
+			awd->segment_offset += awd->req_len;
+			awd->data_offset += awd->req_len;
+			iof_process_write(awd);
+			return 0;
+		}
+	}
 
 out:
 	rc = crt_reply_send(awd->rpc);
@@ -2148,7 +2164,6 @@ iof_writex_handler(crt_rpc_t *rpc)
 	struct ionss_active_write *awd;
 	struct ionss_file_handle *handle;
 	struct ios_projection *projection;
-	uint64_t len = in->xtvec.xt_len;
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
@@ -2171,22 +2186,6 @@ iof_writex_handler(crt_rpc_t *rpc)
 				  "xtvec not yet supported for write");
 		out->err = IOF_ERR_INTERNAL;
 		goto out;
-	}
-
-	/* TODO: Only handle either bulk or immediate data for now */
-	if (in->data.iov_len > 0 && in->bulk_len > 0) {
-		IOF_TRACE_WARNING(projection,
-				  "Mixing bulk and immediate data not supported"
-				  " for write");
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
-	}
-
-	if (len > projection->base->max_write) {
-		/* TODO: Get one write working first */
-		IOF_TRACE_WARNING(projection,
-				  "write larger than max_write not supported");
-		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
 	}
 
 	rc = crt_req_addref(rpc);
@@ -2739,6 +2738,9 @@ static int
 aw_reset(void *arg)
 {
 	struct ionss_active_write *awd = arg;
+
+	awd->data_offset = 0;
+	awd->segment_offset = 0;
 
 	/* If the previous bulk worked, leave the handle as is */
 	if (!awd->failed)
