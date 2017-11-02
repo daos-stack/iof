@@ -1278,6 +1278,7 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	struct crt_bulk_desc bulk_desc = {0};
 	size_t count;
 	off_t offset;
+	bool more_to_do = false;
 	int rc;
 
 	count = in->xtvec.xt_len - ard->segment_offset;
@@ -1312,6 +1313,13 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	IOF_TRACE_DEBUG(ard, "Sending bulk " GAH_PRINT_STR,
 			GAH_PRINT_VAL(in->gah));
 
+	ard->data_offset += ard->req_len;
+	ard->segment_offset += ard->req_len;
+
+	if (ard->segment_offset < in->xtvec.xt_len &&
+	    ard->read_len == ard->req_len)
+		more_to_do = true;
+
 	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, ard, NULL);
 	if (rc) {
 		out->err = IOF_ERR_CART;
@@ -1319,12 +1327,8 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 		goto out;
 	}
 
-	ard->data_offset += ard->req_len;
-	ard->segment_offset += ard->req_len;
-
-	if (ard->segment_offset < in->xtvec.xt_len &&
-	    ard->read_len == ard->req_len)
-		return; /* Not done yet */
+	if (more_to_do)
+		return;
 
 	/* Do not call crt_reply_send() in this case as it'll be done in the
 	 * bulk handler however it's safe to drop the handle as the read
