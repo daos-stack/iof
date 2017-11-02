@@ -513,4 +513,7 @@ void ioc_ll_releasedir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 void ioc_ll_write(fuse_req_t, fuse_ino_t, const char *,	size_t, off_t,
 		  struct fuse_file_info *);
 
+void ioc_ll_ioctl(fuse_req_t, fuse_ino_t, int, void *, struct fuse_file_info *,
+		  unsigned, const void *, size_t, size_t);
+
 #endif

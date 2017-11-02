@@ -36,10 +36,35 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <gurt/common.h>
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"
 #include "iof_ioctl.h"
+
+static bool handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
+			     struct iof_gah_info *gah_info, void *trace)
+{
+	if (cmd != IOF_IOCTL_GAH)
+		return false;
+
+	STAT_ADD(handle->fs_handle->stats, il_ioctl);
+
+	/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
+	 * allocated that many bytes in data
+	 */
+	IOF_TRACE_INFO(trace, "Requested " GAH_PRINT_STR " fs_id=%d,"
+		       " cli_fs_id=%d",
+		       GAH_PRINT_VAL(handle->common.gah),
+		       handle->fs_handle->fs_id,
+		       handle->fs_handle->proj.cli_fs_id);
+	gah_info->version = IOF_IOCTL_VERSION;
+	gah_info->gah = handle->common.gah;
+	gah_info->cnss_id = getpid();
+	gah_info->cli_fs_id = handle->fs_handle->proj.cli_fs_id;
+
+	return true;
+}
 
 int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 	      unsigned int flags, void *data)
@@ -60,29 +85,55 @@ int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
 		return -EIO;
 	}
 
-	if (cmd == IOF_IOCTL_GAH) {
+	if (handle_gah_ioctl(cmd, handle, &gah_info, handle)) {
 		if (data == NULL)
 			return -EIO;
 
-		STAT_ADD(handle->fs_handle->stats, il_ioctl);
-
-		/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
-		 * allocated that many bytes in data
-		 */
-		IOF_TRACE_INFO(handle, "Requested " GAH_PRINT_STR " fs_id=%d,"
-			       " cli_fs_id=%d",
-			       GAH_PRINT_VAL(handle->common.gah),
-			       handle->fs_handle->fs_id,
-			       handle->fs_handle->proj.cli_fs_id);
-		gah_info.version = IOF_IOCTL_VERSION;
-		gah_info.gah = handle->common.gah;
-		gah_info.cnss_id = getpid();
-		gah_info.cli_fs_id = handle->fs_handle->proj.cli_fs_id;
 		memcpy(data, &gah_info, sizeof(gah_info));
+
 		return 0;
 	}
 
 	IOF_TRACE_INFO(handle, "Real ioctl support is not implemented");
 
 	return -ENOTSUP;
+}
+
+void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
+		  struct fuse_file_info *fi, unsigned flags,
+		  const void *in_buf, size_t in_bufsz, size_t out_bufsz)
+{
+	struct iof_file_handle *handle = (void *)fi->fh;
+	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_gah_info gah_info = {0};
+	int ret = EIO;
+	int rc;
+
+	IOF_TRACE_UP(req, handle, "ioctl");
+	IOF_TRACE_INFO(req, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
+		       GAH_PRINT_VAL(handle->common.gah));
+
+	STAT_ADD(handle->fs_handle->stats, ioctl);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		D_GOTO(out_err, ret = fs_handle->offline_reason);
+
+	if (!handle->common.gah_valid)
+		D_GOTO(out_err, 0);
+
+	if (!handle_gah_ioctl(cmd, handle, &gah_info, req)) {
+		IOF_TRACE_INFO(handle, "Real ioctl support is not implemented");
+		D_GOTO(out_err, ret = ENOTSUP);
+	}
+
+	rc = fuse_reply_ioctl(req, 0, &gah_info, sizeof(gah_info));
+	if (rc != 0)
+		IOF_TRACE_ERROR(req, "fuse_reply_ioctl returned %d:%s", rc,
+				strerror(-rc));
+
+	IOF_TRACE_DOWN(req);
+	return;
+
+out_err:
+	IOF_FUSE_REPLY_ERR(req, ret);
 }

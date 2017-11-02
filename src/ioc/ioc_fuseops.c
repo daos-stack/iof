@@ -384,6 +384,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool writeable)
 	fuse_ops->opendir = ioc_ll_opendir;
 	fuse_ops->releasedir = ioc_ll_releasedir;
 	fuse_ops->readdir = ioc_ll_readdir;
+	fuse_ops->ioctl = ioc_ll_ioctl;
 
 	if (!writeable)
 		return fuse_ops;
