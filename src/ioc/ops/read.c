@@ -91,7 +91,14 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 	if (out->rc) {
-		reply->rc = out->rc;
+		if (reply->rc < 0) {
+			IOF_TRACE_ERROR(reply->handle, "negative rc %d",
+					reply->rc);
+			reply->err = EIO;
+		}  else {
+			reply->rc = out->rc;
+		}
+
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
@@ -254,6 +261,8 @@ ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
 	 */
 
 	if (rc >= 0) {
+		D_ASSERTF(rc <= len, "Too many bytes returned");
+
 		STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
 		buf->buf[0].size = rc;
 		*bufp = buf;
@@ -304,6 +313,8 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		goto out_err;
 	}
 
+	D_ASSERTF(rc <= len, "Too many bytes returned");
+
 	STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
 
 	/* It's not clear without benchmarking which approach is better
@@ -316,6 +327,9 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	 */
 	if (true) {
 		rc = fuse_reply_buf(req, rb->buf->buf[0].mem, rc);
+		if (rc != 0)
+			IOF_TRACE_ERROR(req, "fuse_reply_buf returned %d:%s",
+					rc, strerror(-rc));
 		iof_pool_release(pt, rb);
 	} else {
 		struct fuse_bufvec *buf;
@@ -323,11 +337,11 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		buf = rb->buf;
 		buf->buf[0].size = rc;
 		rc = fuse_reply_data(req, buf, 0);
+		if (rc != 0)
+			IOF_TRACE_ERROR(req, "fuse_reply_data returned %d:%s",
+					rc, strerror(-rc));
 		iof_pool_release(pt, rb);
 	}
-
-	if (rc != 0)
-		IOF_TRACE_ERROR(req, "fuse_reply_error returned %d", rc);
 
 	IOF_TRACE_DOWN(req);
 	return;

@@ -1289,6 +1289,7 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	IOF_TRACE_DEBUG(ard, "Reading from fd=%d %#zx-%#zx", handle->fd, offset,
 			offset + count - 1);
 
+	errno = 0;
 	ard->read_len = pread(handle->fd, ard->local_bulk.buf, count, offset);
 	if (ard->read_len == -1) {
 		out->rc = errno;
