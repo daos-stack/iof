@@ -854,6 +854,7 @@ static void find_and_insert(struct ios_projection *projection,
 	struct stat			 stbuf = {0};
 	int				rc;
 
+	errno = 0;
 	rc = fstat(fd, &stbuf);
 	if (rc) {
 		out->rc = errno;
@@ -895,6 +896,7 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 	struct ionss_file_handle	*handle = NULL;
 	int				rc;
 
+	errno = 0;
 	rc = fstat(fd, stbuf);
 	if (rc) {
 		out->rc = errno;
@@ -1278,8 +1280,6 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	off_t offset;
 	int rc;
 
-	errno = 0;
-
 	count = in->xtvec.xt_len - ard->segment_offset;
 	if (count > base.max_read) /* Only read max_read at a time */
 		count = base.max_read;
@@ -1491,6 +1491,7 @@ iof_rename_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
+	errno = 0;
 	rc = renameat(parent->fd, iof_get_rel_path(in->src),
 		      parent->fd, iof_get_rel_path(in->dst));
 
@@ -1526,6 +1527,7 @@ iof_symlink_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
+	errno = 0;
 	rc = symlinkat(in->dst, parent->fd,
 		       iof_get_rel_path(in->src));
 
@@ -1858,6 +1860,7 @@ iof_write_direct_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
+	errno = 0;
 	bytes_written = pwrite(handle->fd, in->data.iov_buf, in->data.iov_len,
 			       in->base);
 	if (bytes_written == -1)
@@ -2479,7 +2482,6 @@ int filesystem_lookup(void)
 {
 	int i, rc = 0, *path_lengths;
 
-	errno = 0;
 	D_ALLOC_ARRAY(path_lengths, base.projection_count);
 	if (path_lengths == NULL) {
 		return -ENOMEM;
@@ -2879,6 +2881,7 @@ int main(int argc, char **argv)
 		projection->max_write_count = 3;
 		D_INIT_LIST_HEAD(&projection->write_list);
 
+		errno = 0;
 		rc = fstat(fd, &buf);
 		if (rc) {
 			IOF_LOG_ERROR("Could not stat export path %s %d",
