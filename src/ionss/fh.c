@@ -79,10 +79,12 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 void ios_fh_decref(struct ionss_file_handle *fh, int count)
 {
-	struct ios_projection *projection;
-	struct ios_base *base;
+	struct ios_projection *projection = fh->projection;
+	struct ios_base *base = base = projection->base;
 	uint oldref;
 	int rc;
+
+	pthread_rwlock_wrlock(&base->gah_rwlock);
 
 	oldref = atomic_fetch_sub(&fh->ref, count);
 
@@ -92,7 +94,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 			GAH_PRINT_VAL(fh->gah), count, oldref - count);
 
 	if (oldref != count)
-		return;
+		D_GOTO(out, 0);
 
 	IOF_TRACE_DEBUG(fh, "Closing %d", fh->fd);
 
@@ -100,17 +102,13 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	if (rc != 0)
 		IOF_LOG_ERROR("Failed to close file %d", fh->fd);
 
-	projection = fh->projection;
-	base = projection->base;
-
-	pthread_rwlock_wrlock(&base->gah_rwlock);
-
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
 		IOF_TRACE_ERROR(fh, "Failed to deallocate GAH %d", rc);
 
 	iof_pool_release(projection->fh_pool, fh);
 
+out:
 	pthread_rwlock_unlock(&base->gah_rwlock);
 }
 
