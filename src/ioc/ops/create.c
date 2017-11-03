@@ -242,6 +242,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_INFO(handle, "Existing file rlink %p %lu "
 			       GAH_PRINT_STR, rlink, entry.ino,
 			       GAH_PRINT_VAL(out->gah));
+		drop_ino_ref(handle->fs_handle, handle->ie->parent);
 		ie_close(handle->fs_handle, handle->ie);
 	}
 
@@ -251,6 +252,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 
 out_err:
 	IOF_FUSE_REPLY_ERR(handle->open_req, ret);
+	drop_ino_ref(handle->fs_handle, handle->ie->parent);
 	iof_pool_release(handle->fs_handle->fh_pool, handle);
 }
 
@@ -324,9 +326,13 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	in->flags = fi->flags;
 	in->reg_inode = 1;
 
+	strncpy(handle->ie->name, name, 256);
+	handle->ie->parent = parent;
+
 	rc = crt_req_send(handle->creat_rpc, ioc_create_ll_cb, handle);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
+		drop_ino_ref(fs_handle, parent);
 		D_GOTO(out_err, ret = EIO);
 	}
 

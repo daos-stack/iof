@@ -41,10 +41,9 @@
 #include "log.h"
 
 /* Find a GAH from a inode, return 0 if found */
-int
-find_gah(struct iof_projection_info *fs_handle,
-	 fuse_ino_t ino,
-	 struct ios_gah *gah)
+static int
+find_gah_internal(struct iof_projection_info *fs_handle,
+		  fuse_ino_t ino, struct ios_gah *gah, bool drop_ref)
 {
 	struct ioc_inode_entry *ie;
 	d_list_t *rlink;
@@ -67,6 +66,37 @@ find_gah(struct iof_projection_info *fs_handle,
 
 	/* Once the GAH has been copied drop the reference on the parent inode
 	 */
+	if (drop_ref)
+		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+	return 0;
+}
+
+int
+find_gah(struct iof_projection_info *fs_handle,
+	 fuse_ino_t ino,
+	 struct ios_gah *gah)
+{
+	return find_gah_internal(fs_handle, ino, gah, true);
+}
+
+int
+find_gah_ref(struct iof_projection_info *fs_handle,
+	     fuse_ino_t ino,
+	     struct ios_gah *gah)
+{
+	return find_gah_internal(fs_handle, ino, gah, false);
+}
+
+/* Drop a reference on the GAH in the hash table */
+int drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
+{
+	d_list_t *rlink;
+
+	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+
+	if (!rlink)
+		return -1;
+	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	return 0;
 }

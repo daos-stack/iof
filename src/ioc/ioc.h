@@ -340,8 +340,10 @@ struct getattr_req {
 
 struct ioc_inode_entry {
 	struct ios_gah	gah;
+	char		name[256];
 	d_list_t	list;
 	fuse_ino_t	ino;
+	fuse_ino_t	parent;
 	ATOMIC uint	ref;
 };
 
@@ -355,7 +357,14 @@ struct entry_req {
 
 /* inode.c */
 
+/* Convert from a inode to a GAH using the hash table */
 int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
+
+/* Convert from a inode to a GAH and keep a reference using the hash table */
+int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
+
+/* Drop a reference on the GAH in the hash table */
+int drop_ino_ref(struct iof_projection_info *, fuse_ino_t);
 
 void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 
