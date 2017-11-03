@@ -43,7 +43,7 @@
 int ios_fh_alloc(struct ios_projection *projection,
 		 struct ionss_file_handle **fhp)
 {
-	struct ios_base *base;
+	struct ios_base *base = projection->base;
 	struct ionss_file_handle *fh;
 	int rc;
 
@@ -53,26 +53,21 @@ int ios_fh_alloc(struct ios_projection *projection,
 	if (!fh)
 		return IOF_ERR_NOMEM;
 
-	base = projection->base;
-
 	pthread_rwlock_wrlock(&base->gah_rwlock);
 
 	rc = ios_gah_allocate(base->gs, &fh->gah, 0, 0, fh);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
-		free(fh);
 		pthread_rwlock_unlock(&base->gah_rwlock);
 		return IOS_ERR_NOMEM;
 	}
 
-	atomic_fetch_add(&fh->ref, 1);
 	*fhp = fh;
 
 	pthread_rwlock_unlock(&base->gah_rwlock);
 
-	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, fh,
-		     GAH_PRINT_FULL_VAL(fh->gah));
+	IOF_TRACE_INFO(fh, GAH_PRINT_FULL_STR, GAH_PRINT_FULL_VAL(fh->gah));
 
 	return IOS_SUCCESS;
 }
@@ -100,7 +95,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 
 	rc = close(fh->fd);
 	if (rc != 0)
-		IOF_LOG_ERROR("Failed to close file %d", fh->fd);
+		IOF_TRACE_ERROR(fh, "Failed to close file %d", fh->fd);
 
 	rc = ios_gah_deallocate(base->gs, &fh->gah);
 	if (rc)
@@ -121,9 +116,8 @@ void ios_fh_prealloc(struct ios_projection *projection)
 	iof_pool_restock(projection->fh_pool);
 }
 
-struct ionss_file_handle *ios_fh_find_real(struct ios_base *base,
-		  struct ios_gah *gah,
-		  const char *fn)
+struct ionss_file_handle *
+ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 {
 	struct ionss_file_handle *fh = NULL;
 	uint oldref;
@@ -149,9 +143,8 @@ out:
 	return fh;
 }
 
-struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *base,
-		  struct ios_gah *gah,
-		  const char *fn)
+struct ionss_dir_handle *
+ios_dirh_find(struct ios_base *base, struct ios_gah *gah)
 {
 	struct ionss_dir_handle *dirh = NULL;
 	int rc;

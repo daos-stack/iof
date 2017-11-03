@@ -119,6 +119,7 @@ struct ionss_file_handle {
 	struct ios_projection	*projection;
 	d_list_t		 clist;
 	struct ionss_mini_file	 mf;
+	char			 proc_fd_name[64];
 	uint			 fd;
 	ATOMIC uint		 ht_ref;
 	ATOMIC uint		 ref;
@@ -234,16 +235,10 @@ void ios_fh_decref(struct ionss_file_handle *, int);
 
 /* Lookup a file handle from a GAH and take a reference to it.
  */
-struct ionss_file_handle *ios_fh_find_real(struct ios_base *,
-					   struct ios_gah *,
-					   const char *);
+struct ionss_file_handle *
+ios_fh_find(struct ios_base *, struct ios_gah *);
 
-struct ionss_dir_handle *ios_dirh_find_real(struct ios_base *,
-					    struct ios_gah *,
-					    const char *);
-
-#define ios_fh_find(BASE, GAH) ios_fh_find_real((BASE), (GAH), __func__)
-
-#define ios_dirh_find(BASE, GAH) ios_dirh_find_real((BASE), (GAH), __func__)
+struct ionss_dir_handle *
+ios_dirh_find(struct ios_base *, struct ios_gah *);
 
 #endif

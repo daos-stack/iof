@@ -822,6 +822,7 @@ htable_mf_insert(struct ios_projection *projection,
 	handle->mf.flags = mf->flags;
 	handle->mf.inode_no = mf->inode_no;
 	handle->mf.type = mf->type;
+	snprintf(&handle->proc_fd_name[0], 64, "/proc/self/fd/%d", handle->fd);
 	atomic_fetch_add(&handle->ht_ref, 1);
 
 	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
@@ -1086,11 +1087,7 @@ iof_open_handler(crt_rpc_t *rpc)
 	if (in->path) {
 		path = (char *)iof_get_rel_path(in->path);
 	} else {
-		rc = asprintf(&path, "/proc/self/fd/%d", parent->fd);
-		if (rc < 0 || !path) {
-			out->rc = ENOMEM;
-			goto out;
-		}
+		path = &parent->proc_fd_name[0];
 	}
 
 	IOF_LOG_DEBUG("path %s flags 0%o",
@@ -1123,9 +1120,6 @@ out:
 
 	if (parent)
 		ios_fh_decref(parent, 1);
-
-	if (!in->path)
-		D_FREE(path);
 }
 
 static void
@@ -2662,6 +2656,19 @@ fh_init(void *arg, void *handle)
 }
 
 static int
+fh_reset(void *arg)
+{
+	struct ionss_file_handle *fh = arg;
+
+	fh->ht_ref = 0;
+	fh->ref = 0;
+	atomic_fetch_add(&fh->ref, 1);
+	memset(&fh->proc_fd_name, 0, 64);
+
+	return 0;
+}
+
+static int
 ar_create_bulk(struct ionss_active_read *ard)
 {
 	if (IOF_BULK_ALLOC(ard->projection->base->crt_ctx, ard, local_bulk,
@@ -2948,6 +2955,7 @@ int main(int argc, char **argv)
 		char *proj_path = argv[i + optind];
 		struct iof_pool_reg fhp = { .handle = projection,
 					    .init = fh_init,
+					    .reset = fh_reset,
 					    POOL_TYPE_INIT(ionss_file_handle,
 							   clist)};
 		int fd;
@@ -3008,10 +3016,19 @@ int main(int argc, char **argv)
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
+		snprintf(&projection->root->proc_fd_name[0], 64,
+			 "/proc/self/fd/%d",
+			 projection->root->fd);
 		atomic_fetch_add(&projection->root->ht_ref, 1);
-		d_chash_rec_insert(&projection->file_ht, &projection->root->mf,
-				   sizeof(projection->root->mf),
-				   &projection->root->clist, 0);
+
+		rc = d_chash_rec_insert(&projection->file_ht,
+					&projection->root->mf,
+					sizeof(projection->root->mf),
+					&projection->root->clist, 0);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not insert into hash table");
+			continue;
+		}
 
 		if (cnss_threads)
 			projection->flags |= IOF_CNSS_MT;
