@@ -320,6 +320,7 @@ static void do_large_read(const char *fname, const char *expected,
 	int fd;
 	int rc;
 
+	WRITE_LOG("Running large read test (%zd bytes)\n", size);
 	memset(buf, 0, size);
 	fd = open(fname, O_RDONLY);
 	CU_ASSERT_NOT_EQUAL(fd, -1);
@@ -332,16 +333,31 @@ static void do_large_read(const char *fname, const char *expected,
 	CU_ASSERT_EQUAL(rc, 0);
 }
 
-static void do_large_read_test(const char *fname, size_t len)
+static bool do_large_write(const char *fname, const char *buf, size_t len)
+{
+	ssize_t bytes;
+	int fd;
+
+	WRITE_LOG("Running large write test (%zd bytes)\n", len);
+	fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+	CU_ASSERT_GOTO(fd != -1, done_err);
+	bytes = write(fd, buf, len);
+	CU_ASSERT_EQUAL(bytes, len);
+	close(fd);
+
+	return true;
+done_err:
+	return false;
+}
+
+static void do_large_io_test(const char *fname, size_t len)
 {
 	char *buf = NULL;
 	char *buf2 = NULL;
-	int fd = -1;
 	size_t test1_size = max_read_size * 2;
 	size_t test2_size = test1_size + max_iov_read_size;
 	size_t test3_size = test2_size + max_iov_read_size;
 	size_t buf_size = test3_size;
-	ssize_t bytes;
 
 	buf = malloc(buf_size);
 	CU_ASSERT_GOTO(buf != NULL, done);
@@ -350,23 +366,20 @@ static void do_large_read_test(const char *fname, size_t len)
 	CU_ASSERT_GOTO(buf2 != NULL, done);
 
 	memset(buf, 'b', buf_size);
+	WRITE_LOG("starting large io test");
 
-	WRITE_LOG("starting large read test");
-	fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
-	CU_ASSERT_GOTO(fd != -1, done);
-	bytes = write(fd, buf, buf_size);
-	CU_ASSERT_EQUAL(bytes, buf_size);
-	close(fd);
-	fd = -1;
-
+	CU_ASSERT_GOTO(do_large_write(fname, buf, test1_size), done);
+	do_large_read(fname, buf, buf2, test1_size);
+	CU_ASSERT_GOTO(do_large_write(fname, buf, test2_size), done);
+	do_large_read(fname, buf, buf2, test2_size);
+	CU_ASSERT_GOTO(do_large_write(fname, buf, test3_size), done);
+	do_large_read(fname, buf, buf2, test3_size);
 	do_large_read(fname, buf, buf2, test1_size);
 	do_large_read(fname, buf, buf2, test2_size);
-	do_large_read(fname, buf, buf2, test3_size);
-
 done:
 	free(buf);
 	free(buf2);
-	WRITE_LOG("end large read test");
+	WRITE_LOG("end large io test");
 }
 
 static void do_misc_tests(const char *fname, size_t len)
@@ -576,7 +589,7 @@ void sanity(void)
 	do_write_tests(fd, buf, len);
 	do_read_tests(buf, len);
 	do_misc_tests(buf, len);
-	do_large_read_test(buf, len);
+	do_large_io_test(buf, len);
 }
 
 int main(int argc, char **argv)

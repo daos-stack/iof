@@ -142,7 +142,7 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	 * set it before reporting the value.
 	 */
 	conn->max_read = fs_handle->max_read;
-	conn->max_write = fs_handle->max_write;
+	conn->max_write = fs_handle->proj.max_write;
 
 	IOF_TRACE_INFO(fs_handle, "max read %#x", conn->max_read);
 	IOF_TRACE_INFO(fs_handle, "max write %#x", conn->max_write);

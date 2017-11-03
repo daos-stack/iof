@@ -238,6 +238,13 @@ static int find_projections(void)
 			return 1;
 		}
 
+		snprintf(tmp, BUFSIZE, "iof/projections/%d/max_write", i);
+		rc = iof_ctrl_read_uint32(&proj->max_write, tmp);
+		if (rc != 0) {
+			IOF_LOG_ERROR("Could not max_write, rc = %d", rc);
+			return 1;
+		}
+
 		proj->grp = &ionss_grps[proj->grp_id];
 		proj->enabled = true;
 	}

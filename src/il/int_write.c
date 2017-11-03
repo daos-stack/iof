@@ -122,6 +122,8 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	crt_bulk_t bulk;
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
+	uint64_t imm_len;
+	uint64_t imm_offset = 0;
 	int rc;
 
 	IOF_LOG_INFO("%#zx-%#zx " GAH_PRINT_STR, position,
@@ -143,11 +145,18 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	in->gah = f_info->gah;
 
 	in->xtvec.xt_len = len;
-	if (len <= fs_handle->max_iov_write) {
-		d_iov_set(&in->data, (void *)buff, len);
+	imm_len = len % fs_handle->max_write;
+	if (imm_len <= fs_handle->max_iov_write) {
+		imm_offset = len - imm_len;
+		d_iov_set(&in->data, (void *)buff + imm_offset, imm_len);
 	} else {
-		in->bulk_len = iov.iov_len = len;
-		iov.iov_buf_len = len;
+		imm_len = 0;
+		imm_offset = in->xtvec.xt_len;
+	}
+
+	if (imm_offset != 0) {
+		in->bulk_len = iov.iov_len = imm_offset;
+		iov.iov_buf_len = imm_offset;
 		iov.iov_buf = (void *)buff;
 		sgl.sg_iovs = &iov;
 		sgl.sg_nr.num = 1;

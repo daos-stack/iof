@@ -1181,7 +1181,7 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->max_read = query->max_read;
 	fs_handle->max_iov_read = query->max_iov_read;
-	fs_handle->max_write = query->max_write;
+	fs_handle->proj.max_write = query->max_write;
 	fs_handle->proj.max_iov_write = query->max_iov_write;
 	fs_handle->readdir_size = query->readdir_size;
 	fs_handle->gah = fs_info->gah;
@@ -1242,7 +1242,7 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 					  "max_write",
-					  fs_handle->max_write);
+					  fs_handle->proj.max_write);
 
 	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 					  "max_iov_write",

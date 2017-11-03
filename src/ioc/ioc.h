@@ -142,7 +142,6 @@ struct iof_projection_info {
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
 	uint32_t			max_read;
-	uint32_t			max_write;
 	uint32_t			max_iov_read;
 	uint32_t			readdir_size;
 	/* If set to True then projection is off-line */
