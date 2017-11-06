@@ -208,13 +208,13 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		goto out_err;
 	}
 
+	crt_req_addref(dir_handle->open_req.rpc);
 	rc = crt_req_send(dir_handle->open_req.rpc, opendir_ll_cb, dir_handle);
 	if (rc) {
 		IOF_TRACE_ERROR(dir_handle, "Could not send rpc, rc = %d", rc);
 		ret = EIO;
 		goto out_err;
 	}
-	crt_req_addref(dir_handle->open_req.rpc);
 
 	iof_pool_restock(fs_handle->dh_pool);
 

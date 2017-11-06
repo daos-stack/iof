@@ -47,13 +47,23 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 {
 	d_list_t *rlink;
 
+	/* One additional reference is needed because the rec_find() itself
+	 * acquires one
+	 */
+	nlookup++;
+
 	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
-	if (!rlink)
+	if (!rlink) {
+		IOF_TRACE_WARNING(fs_handle, "Unable to find ref for %lu %lu",
+				  ino, nlookup);
 		return;
+	}
+
+	IOF_TRACE_INFO(rlink, "%lu %lu", ino, nlookup);
 
 	do {
 		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
-	} while (nlookup--);
+	} while (--nlookup);
 }
 
 void
@@ -62,8 +72,6 @@ ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
 
 	STAT_ADD(fs_handle->stats, forget);
-
-	IOF_TRACE_INFO(fs_handle, "%lu %lu", ino, nlookup);
 
 	fuse_reply_none(req);
 
@@ -79,12 +87,10 @@ ioc_ll_forget_multi(fuse_req_t req, size_t count,
 
 	STAT_ADD(fs_handle->stats, forget);
 
-	for (i = 0; i < count; i++) {
-		IOF_TRACE_INFO(fs_handle, "%lu %lu",
-			       forgets[i].ino, forgets[i].nlookup);
+	fuse_reply_none(req);
 
+	for (i = 0; i < count; i++)
 		ioc_ll_forget_one(fs_handle,
 				  forgets[i].ino, forgets[i].nlookup);
-	}
-	fuse_reply_none(req);
+
 }

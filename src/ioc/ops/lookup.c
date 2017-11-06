@@ -150,6 +150,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 		return;
 	}
 
+	crt_req_addref(desc->rpc);
 	rc = crt_req_send(desc->rpc, lookup_cb, desc);
 	if (rc) {
 		IOF_TRACE_ERROR(desc, " not send rpc, rc = %d", rc);
@@ -157,6 +158,6 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 		iof_pool_release(fs_handle->lookup_pool, desc);
 		return;
 	}
-	crt_req_addref(desc->rpc);
+
 	iof_pool_restock(fs_handle->lookup_pool);
 }

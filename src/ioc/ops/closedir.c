@@ -131,13 +131,13 @@ void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 	in = crt_req_get(handle->close_req.rpc);
 	in->gah = handle->gah;
 
+	crt_req_addref(handle->close_req.rpc);
 	rc = crt_req_send(handle->close_req.rpc, ioc_ll_gen_cb, req);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
 		ret = EIO;
 		goto out_err;
 	}
-	crt_req_addref(handle->close_req.rpc);
 
 	iof_pool_release(fs_handle->dh_pool, handle);
 	return;
