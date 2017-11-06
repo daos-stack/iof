@@ -2404,14 +2404,15 @@ int ionss_register(void)
 {
 	int ret;
 
-	ret = crt_rpc_srv_register(QUERY_PSR_OP, &QUERY_RPC_FMT,
-			iof_query_handler);
+	ret = crt_rpc_srv_register(QUERY_PSR_OP, CRT_RPC_FEAT_NO_TIMEOUT,
+				   &QUERY_RPC_FMT, iof_query_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Cannot register query RPC, ret = %d", ret);
 		return ret;
 	}
 
-	ret = crt_rpc_srv_register(DETACH_OP, NULL, cnss_detach_handler);
+	ret = crt_rpc_srv_register(DETACH_OP, CRT_RPC_FEAT_NO_TIMEOUT,
+				   NULL, cnss_detach_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Cannot register CNSS detach"
 				" RPC, ret = %d", ret);
@@ -2419,13 +2420,15 @@ int ionss_register(void)
 	}
 
 	ret = crt_rpc_srv_register(SHUTDOWN_BCAST_OP,
+				   CRT_RPC_FEAT_NO_TIMEOUT,
 				   NULL, shutdown_handler);
 	if (ret) {
 		IOF_LOG_ERROR("Cannot register shutdown "
 				"broadcast RPC handler, ret = %d", ret);
 		return ret;
 	}
-	ret = crt_rpc_register(SHUTDOWN_BCAST_OP, NULL);
+	ret = crt_rpc_register(SHUTDOWN_BCAST_OP,
+			       CRT_RPC_FEAT_NO_TIMEOUT, NULL);
 	if (ret) {
 		IOF_LOG_ERROR("Cannot register shutdown "
 				"broadcast RPC, ret = %d", ret);

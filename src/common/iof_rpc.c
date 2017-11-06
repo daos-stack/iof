@@ -37,6 +37,7 @@
  */
 
 #include "iof_common.h"
+#include "log.h"
 
 /*input/output format for RPC's*/
 
@@ -275,12 +276,17 @@ int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 
 		rp->op_id = proto->id_base + i;
 		if (handlers)
-			rc = crt_rpc_srv_register
-				(rp->op_id, &rp->fmt, handlers[i]);
+			rc = crt_rpc_srv_register(rp->op_id,
+						  CRT_RPC_FEAT_NO_TIMEOUT,
+						  &rp->fmt, handlers[i]);
 		else
-			rc = crt_rpc_register(rp->op_id, &rp->fmt);
-		printf("Failed to register RPC %s, rc=%d\n",
-		       rp->fmt.crf_name, rc);
+			rc = crt_rpc_register(rp->op_id,
+					      CRT_RPC_FEAT_NO_TIMEOUT,
+					      &rp->fmt);
+
+		if (rc != 0)
+			IOF_LOG_ERROR("Failed to register RPC %s, rc=%d\n",
+				      rp->fmt.crf_name, rc);
 
 		if (rc != 0 && ret == 0)
 			ret = rc;

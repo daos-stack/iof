@@ -1017,14 +1017,15 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = crt_rpc_register(QUERY_PSR_OP, &QUERY_RPC_FMT);
+	ret = crt_rpc_register(QUERY_PSR_OP, CRT_RPC_FEAT_NO_TIMEOUT,
+			       &QUERY_RPC_FMT);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
 				"ret: %d", ret);
 		return ret;
 	}
 
-	ret = crt_rpc_register(DETACH_OP, NULL);
+	ret = crt_rpc_register(DETACH_OP, CRT_RPC_FEAT_NO_TIMEOUT, NULL);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Detach registration failed with "
 				"ret: %d", ret);
