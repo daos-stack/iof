@@ -320,7 +320,7 @@ static void do_large_read(const char *fname, const char *expected,
 	int fd;
 	int rc;
 
-	WRITE_LOG("Running large read test (%zd bytes)\n", size);
+	WRITE_LOG("Running large read test (%zd bytes)", size);
 	memset(buf, 0, size);
 	fd = open(fname, O_RDONLY);
 	CU_ASSERT_NOT_EQUAL(fd, -1);
@@ -338,7 +338,7 @@ static bool do_large_write(const char *fname, const char *buf, size_t len)
 	ssize_t bytes;
 	int fd;
 
-	WRITE_LOG("Running large write test (%zd bytes)\n", len);
+	WRITE_LOG("Running large write test (%zd bytes)", len);
 	fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
 	CU_ASSERT_GOTO(fd != -1, done_err);
 	bytes = write(fd, buf, len);
