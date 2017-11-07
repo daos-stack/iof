@@ -83,6 +83,15 @@ except ImportError:
 #pylint: disable=too-many-instance-attributes
 #pylint: disable=too-many-ancestors
 
+log_to_file = False
+
+def unlink_file(file_name):
+    """Unlink a file without failing if it doesn't exist"""
+
+    try:
+        os.unlink(file_name)
+    except FileNotFoundError:
+        pass
 
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
@@ -259,7 +268,6 @@ class Testlocal(unittest.TestCase,
 
         self.test_valgrind = iofcommontestsuite.valgrind_suffix(self.log_path,
                                                                 pmix=False)
-        ionss_args = ['ionss']
 
         cmd = [orterun,
                '--output-filename', self.log_path]
@@ -271,6 +279,11 @@ class Testlocal(unittest.TestCase,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'CNSS_PREFIX=%s' % self.cnss_prefix])
+        if log_to_file:
+            cnss_file = os.path.join(self.log_path, 'cnss.log')
+            unlink_file(cnss_file)
+            cmd.extend(['-x', 'D_LOG_FILE=%s' % cnss_file])
+
         cmd.extend(valgrind)
         cmd.extend(['cnss',
                     ':',
@@ -278,8 +291,13 @@ class Testlocal(unittest.TestCase,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'D_LOG_MASK=%s' % self.log_mask])
+        if log_to_file:
+            ionss_file = os.path.join(self.log_path, 'ionss.log')
+            unlink_file(ionss_file)
+            cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
+
         cmd.extend(valgrind)
-        cmd.extend(ionss_args)
+        cmd.append('ionss')
         self.export_dirs = [self.export_dir, '/usr']
         cmd.extend(self.export_dirs)
 
@@ -287,10 +305,10 @@ class Testlocal(unittest.TestCase,
 
         self.proc = self.common_launch_process('', ' '.join(cmd))
 
-        if not valgrind:
-            waittime = 30
-        else:
+        if valgrind:
             waittime = 120
+        else:
+            waittime = 30
         elapsed_time = 0
         while not self.is_running():
             elapsed_time += 1
@@ -420,6 +438,21 @@ class Testlocal(unittest.TestCase,
         os.rmdir(self.cnss_prefix)
         shutil.rmtree(self.export_dir)
         os.rmdir(self.e_dir)
+
+        print("Log dir is %s" % self.log_path)
+
+        for dir_path, _, file_list in os.walk(self.log_path, topdown=False):
+            for fname in file_list:
+                full_path = os.path.join(dir_path, fname)
+                fstat = os.stat(full_path)
+                if fstat.st_size == 0:
+                    os.unlink(full_path)
+                    self.logger.debug("Deleted %s", full_path)
+            try:
+                os.rmdir(dir_path)
+                self.logger.debug("Removed %s", dir_path)
+            except OSError:
+                pass
 
         # Now exit if there was an error after the rest of the cleanup has
         # completed.
@@ -873,6 +906,8 @@ if __name__ == '__main__':
                         help='Redirect daemon output to a file')
     parser.add_argument('--launch', action='store_true',
                         help='Launch a local file system for interactive use')
+    parser.add_argument('--log-to-file', action='store_true',
+                        help='Log to a single file', dest='logfile')
     parser.add_argument('--log-mask', dest='mask', metavar='MASK', type=str,
                         default='INFO,CTRL=WARN', help='Set the CaRT log mask')
     parser.add_argument('--internals-tracing', action='store_true', help='Turn '
@@ -888,6 +923,9 @@ if __name__ == '__main__':
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
     if args.redirect:
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
+    if args.logfile:
+        log_to_file = True
+
     os.environ['D_LOG_MASK'] = args.mask
 
     tests_to_run = []
