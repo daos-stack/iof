@@ -41,37 +41,29 @@
 #include "ioc.h"
 #include "log.h"
 
-static void
-lookup_cb(const struct crt_cb_info *cb_info)
+#define REQ_NAME request
+#define POOL_NAME lookup_pool
+#define TYPE_NAME lookup_req
+#define RESTOCK_ON_SEND
+#include "ioc_ops.h"
+
+static void lookup_cb(struct ioc_request *request)
 {
-	struct lookup_req	*desc = cb_info->cci_arg;
-	struct iof_lookup_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct TYPE_NAME	*desc = CONTAINER(request);
+	struct iof_lookup_out	*out = IOC_GET_RESULT(request);
 	struct fuse_entry_param	 entry = {0};
-	d_list_t		*rlink;
-	int			rc = EIO;
+	d_list_t		 *rlink;
+	int			 rc;
 
-	IOF_TRACE_INFO(desc, "cb, reply %d %d %d",
-		       cb_info->cci_rc, out->rc, out->err);
-	if (IOC_HOST_IS_DOWN(cb_info)) {
-		rc = EHOSTDOWN;
-		goto out;
-	}
-
-	if (cb_info->cci_rc != 0)
-		goto out;
-
-	if (out->rc != 0) {
-		rc = out->rc;
-		goto out;
-	}
-
-	if (out->err != 0)
-		goto out;
+	IOC_RESOLVE_STATUS(request, out);
+	rc = IOC_STATUS_TO_RC_LL(request);
+	if (rc)
+		D_GOTO(out, rc);
 
 	if (!out->stat.iov_buf || out->stat.iov_len != sizeof(struct stat)) {
 		IOF_TRACE_ERROR(desc, "stat buff invalid %p %zi",
 				out->stat.iov_buf, out->stat.iov_len);
-		goto out;
+		D_GOTO(out, rc = EIO);
 	}
 
 	memcpy(&entry.attr, out->stat.iov_buf, sizeof(struct stat));
@@ -94,70 +86,47 @@ lookup_cb(const struct crt_cb_info *cb_info)
 			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
 		ie_close(desc->fs_handle, desc->ie);
 	}
-
-	fuse_reply_entry(desc->req, &entry);
-	iof_pool_release(desc->fs_handle->lookup_pool, desc);
-	return;
-
 out:
-	IOF_FUSE_REPLY_ERR(desc->req, rc);
-	iof_pool_release(desc->fs_handle->lookup_pool, desc);
+	if (rc)
+		IOF_FUSE_REPLY_ERR(request->req, rc);
+	else
+		fuse_reply_entry(request->req, &entry);
+	IOC_REQ_RELEASE(desc);
 }
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= lookup_cb,
+	.on_evict	= ioc_simple_resend
+};
+
+#define STAT_KEY lookup
 
 void
 ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
-	struct lookup_req		*desc;
+	struct TYPE_NAME		*desc = NULL;
 	struct iof_gah_string_in	*in;
 	int rc;
 
 	IOF_TRACE_INFO(req, "Parent:%lu '%s'", parent, name);
-
-	STAT_ADD(fs_handle->stats, lookup);
-
-	if (FS_IS_OFFLINE(fs_handle)) {
-		IOF_FUSE_REPLY_ERR(req, fs_handle->offline_reason);
-		return;
-	}
-
-	desc = iof_pool_acquire(fs_handle->lookup_pool);
-	if (!desc) {
-		IOF_FUSE_REPLY_ERR(req, ENOMEM);
-		return;
-	}
-
+	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
+	if (rc)
+		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
-
-	in = crt_req_get(desc->rpc);
 	in->path = (d_string_t)name;
 
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, parent, &in->gah);
-	if (rc != 0) {
-		iof_pool_release(fs_handle->lookup_pool, desc);
-		IOF_FUSE_REPLY_ERR(req, ENOENT);
-		return;
-	}
-
-	desc->req = req;
-
-	rc = crt_req_set_endpoint(desc->rpc, &fs_handle->proj.grp->psr_ep);
-	if (rc) {
-		IOF_TRACE_ERROR(desc, "Could not rpc endpoint, rc = %d", rc);
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		iof_pool_release(fs_handle->lookup_pool, desc);
-		return;
-	}
-
-	crt_req_addref(desc->rpc);
-	rc = crt_req_send(desc->rpc, lookup_cb, desc);
-	if (rc) {
-		IOF_TRACE_ERROR(desc, " not send rpc, rc = %d", rc);
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		iof_pool_release(fs_handle->lookup_pool, desc);
-		return;
-	}
-
-	iof_pool_restock(fs_handle->lookup_pool);
+	if (rc != 0)
+		D_GOTO(err, rc = ENOENT);
+	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	if (rc != 0)
+		D_GOTO(err, rc);
+	return;
+err:
+	IOC_REQ_RELEASE(desc);
+	IOF_FUSE_REPLY_ERR(req, rc);
 }

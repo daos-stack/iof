@@ -221,31 +221,6 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 #define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
 					O_EXCL)
 
-#define IOC_RPC_INIT(src, req, pool, api, rc) \
-	do {\
-		struct iof_projection_info *fsh = pool->reg.handle; \
-		rc = 0; \
-		if (FS_IS_OFFLINE(fsh)) { \
-			rc = -(fsh)->offline_reason; \
-			break; \
-		} \
-		/* Acquire new object only if NULL */ \
-		if (!src) \
-			src = iof_pool_acquire(pool); \
-		if (!src) { \
-			rc = -ENOMEM; \
-			break; \
-		} \
-		(src)->req.cb = &api; \
-		iof_tracker_init(&(src)->req.tracker, 1); \
-	} while (0)
-
-#define IOC_RPC_WAIT(src, req, fsh, rc) \
-	do {\
-		iof_fs_wait(&(fsh)->proj, &(src)->req.tracker); \
-		rc = IOC_STATUS_TO_RC(&(src)->req); \
-	} while (0)
-
 #define IOF_FUSE_REPLY_ERR(req, status)					\
 	do {								\
 		int __err = status;					\
@@ -299,6 +274,7 @@ struct ioc_request {
 	int				err;
 	crt_endpoint_t			ep;
 	crt_rpc_t			*rpc;
+	fuse_req_t			req;
 	struct iof_tracker		tracker;
 	void				*ptr;
 	const struct ioc_request_api	*cb;
@@ -325,7 +301,6 @@ struct iof_dir_handle {
 	int				gah_valid;
 	crt_endpoint_t			ep;
 	d_list_t			list;
-	fuse_req_t			open_f_req;
 };
 
 /* Data which is stored against an open file handle */
@@ -370,10 +345,9 @@ struct ioc_inode_entry {
 
 struct lookup_req {
 	struct iof_projection_info	*fs_handle;
-	struct crt_rpc			*rpc;
+	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;
 	d_list_t			 list;
-	fuse_req_t			 req;
 };
 
 /* inode.c */
@@ -392,6 +366,9 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 #define IOC_STATUS_TO_RC(STATUS) \
 	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
 
+#define IOC_STATUS_TO_RC_LL(STATUS) \
+	((STATUS)->err == 0 ? (STATUS)->rc : (STATUS)->err)
+
 #define IOC_GET_RESULT(REQ) crt_reply_get((REQ)->rpc)
 
 /* Correctly resolve the return codes and errors from the RPC response.
@@ -402,13 +379,15 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
  * TODO: Unify the RPC output types so they can be processed without using
  * this macro, since the 'err' and 'rc' fields are common in all of them.
  */
-#define IOC_RESOLVE_STATUS(STATUS, OUT) \
-	do { \
-		if (!(STATUS)->err) { \
-			(STATUS)->rc = (OUT)->rc; \
-			if ((OUT)->err) \
-				(STATUS)->err = EIO; \
-		} \
+#define IOC_RESOLVE_STATUS(STATUS, OUT)					\
+	do {								\
+		if ((OUT) != NULL) {					\
+			if (!(STATUS)->err) {				\
+				(STATUS)->rc = (OUT)->rc;		\
+				if ((OUT)->err)				\
+					(STATUS)->err = EIO;		\
+			}						\
+		}							\
 	} while (0)
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
  * for permanent failure of the remote ep.

@@ -44,24 +44,14 @@
 #define REQ_NAME open_req
 #define POOL_NAME dh_pool
 #define TYPE_NAME iof_dir_handle
-#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
-
-static struct iof_projection_info
-*get_fs_handle(struct ioc_request *req)
-{
-	return CONTAINER(req)->fs_handle;
-}
-
-static void post_send(struct ioc_request *req)
-{
-	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
-}
+#define RESTOCK_ON_SEND
+#include "ioc_ops.h"
 
 static void
 opendir_cb(struct ioc_request *request)
 {
 	struct iof_opendir_out *out = IOC_GET_RESULT(request);
-	struct iof_dir_handle *dh = CONTAINER(request);
+	struct TYPE_NAME *dh = CONTAINER(request);
 
 	IOC_RESOLVE_STATUS(request, out);
 	if (IOC_STATUS_TO_RC(request) == 0) {
@@ -79,150 +69,83 @@ static const struct ioc_request_api api = {
 	.on_evict	= ioc_simple_resend
 };
 
+#define STAT_KEY opendir
+
 int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_dir_handle *dh = NULL;
+	struct TYPE_NAME *dh = NULL;
 	struct iof_gah_string_in *in;
 	int rc;
 
-	STAT_ADD(fs_handle->stats, opendir);
-	IOC_RPC_INIT(dh, REQ_NAME, fs_handle->POOL_NAME, api, rc);
+	IOC_REQ_INIT(dh, fs_handle, api, in, rc);
 	if (rc)
-		goto out;
+		D_GOTO(out, rc);
 	IOF_TRACE_INFO(dh, "dir %s", dir);
-
-	in = crt_req_get(dh->REQ_NAME.rpc);
 	in->path = (d_string_t)dir;
 	in->gah = fs_handle->gah;
-	rc = iof_fs_send(&dh->REQ_NAME);
-	if (rc)
-		goto out;
-	IOC_RPC_WAIT(dh, REQ_NAME, fs_handle, rc);
-
-	IOF_TRACE_DEBUG(dh, "rc %d", rc);
-
+	IOC_REQ_SEND(dh, fs_handle, rc);
 out:
+	IOF_TRACE_DEBUG(dh, "dir %s rc %d", dir, rc);
 	if (rc == 0) {
 		fi->fh = (uint64_t)dh;
 		IOF_TRACE_DEBUG(dh, GAH_PRINT_FULL_STR,
 				GAH_PRINT_FULL_VAL(dh->gah));
 	} else {
-		iof_pool_release(fs_handle->POOL_NAME, dh);
+		IOC_REQ_RELEASE(dh);
 	}
 	return rc;
 }
 
 static void
-opendir_ll_cb(const struct crt_cb_info *cb_info)
+opendir_ll_cb(struct ioc_request *request)
 {
-	struct iof_opendir_out	*out = crt_reply_get(cb_info->cci_rpc);
-	struct iof_dir_handle	*dir_handle = cb_info->cci_arg;
-	struct fuse_file_info	fi = {0};
-	fuse_req_t		req;
-	int			ret = EIO;
+	struct TYPE_NAME *dh		= CONTAINER(request);
+	fuse_req_t f_req		= request->req;
+	struct fuse_file_info fi	= {0};
+	int rc;
 
-	IOF_TRACE_DEBUG(dir_handle, "cci_rc %d rc %d err %d",
-			cb_info->cci_rc, out->rc, out->err);
-
-	if (cb_info->cci_rc != 0)
-		goto out_err;
-
-	if (out->rc) {
-		ret = out->rc;
-		goto out_err;
+	request->req = NULL;
+	opendir_cb(request);
+	rc = IOC_STATUS_TO_RC_LL(request);
+	if (rc == 0) {
+		fi.fh = (uint64_t) dh;
+		fuse_reply_open(f_req, &fi);
+	} else {
+		IOC_REQ_RELEASE(dh);
+		IOF_FUSE_REPLY_ERR(f_req, rc);
 	}
-
-	if (out->err)
-		goto out_err;
-
-	/* Create a new FI descriptor and use it to point to
-	 * our local handle
-	 */
-
-	fi.fh = (uint64_t)dir_handle;
-	dir_handle->gah = out->gah;
-	dir_handle->gah_valid = 1;
-	dir_handle->handle_valid = 1;
-	req = dir_handle->open_f_req;
-	dir_handle->open_f_req = 0;
-
-	fuse_reply_open(req, &fi);
-	return;
-
-out_err:
-	IOF_FUSE_REPLY_ERR(dir_handle->open_f_req, ret);
-	iof_pool_release(dir_handle->fs_handle->dh_pool, dir_handle);
 }
+
+static const struct ioc_request_api api_ll = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= opendir_ll_cb,
+	.on_evict	= ioc_simple_resend
+};
 
 void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
-	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_dir_handle *dir_handle = NULL;
-	struct iof_gah_string_in *in;
-	int ret = EIO;
+	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct TYPE_NAME		*dh = NULL;
+	struct iof_gah_string_in	*in;
 	int rc;
 
 	IOF_TRACE_INFO(req, "ino %lu", ino);
-
-	STAT_ADD(fs_handle->stats, opendir);
-
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
-	}
-
-	dir_handle = iof_pool_acquire(fs_handle->dh_pool);
-	if (!dir_handle) {
-		ret = ENOMEM;
-		goto out_err;
-	}
-
-	IOF_TRACE_LINK(req, dir_handle, "request");
-
-	dir_handle->ep = fs_handle->proj.grp->psr_ep;
-	dir_handle->open_f_req = req;
-
-	in = crt_req_get(dir_handle->open_req.rpc);
+	IOC_REQ_INIT_LL(dh, fs_handle, api_ll, in, req, rc);
+	if (rc)
+		D_GOTO(err, rc);
+	IOF_TRACE_LINK(req, dh, "request");
 
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0) {
-		ret = ENOENT;
-		goto out_err;
-	}
-
-	dir_handle->ep = fs_handle->proj.grp->psr_ep;
-
-	rc = crt_req_set_endpoint(dir_handle->open_req.rpc, &dir_handle->ep);
-	if (rc) {
-		IOF_TRACE_ERROR(dir_handle, "Could not set ep, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
-	}
-
-	rc = crt_req_set_endpoint(dir_handle->close_req.rpc, &dir_handle->ep);
-	if (rc) {
-		IOF_TRACE_ERROR(dir_handle, "Could not set ep, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
-	}
-
-	crt_req_addref(dir_handle->open_req.rpc);
-	rc = crt_req_send(dir_handle->open_req.rpc, opendir_ll_cb, dir_handle);
-	if (rc) {
-		IOF_TRACE_ERROR(dir_handle, "Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
-	}
-
-	iof_pool_restock(fs_handle->dh_pool);
-
+	if (rc != 0)
+		D_GOTO(err, rc = ENOENT);
+	IOC_REQ_SEND_LL(dh, fs_handle, rc);
+	if (rc != 0)
+		D_GOTO(err, rc);
 	return;
-
-out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
-
-	if (dir_handle)
-		iof_pool_release(fs_handle->dh_pool, dir_handle);
+err:
+	IOC_REQ_RELEASE(dh);
+	IOF_FUSE_REPLY_ERR(req, rc);
 }

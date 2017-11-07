@@ -255,6 +255,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	struct ioc_request *request = cb_info->cci_arg;
 	struct iof_projection_info *fs_handle =
 			request->cb->get_fsh(request);
+	fuse_req_t f_req = request->req;
 
 	/* No Error */
 	if (!cb_info->cci_rc)
@@ -274,7 +275,8 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 done:
 	if (request->cb->on_result)
 		request->cb->on_result(request);
-	iof_tracker_signal(&request->tracker);
+	if (f_req == NULL)
+		iof_tracker_signal(&request->tracker);
 }
 
 /*
@@ -788,10 +790,10 @@ lookup_reset(void *arg)
 	/* If this descriptor has previously been used the destroy the
 	 * existing RPC
 	 */
-	if (req->rpc) {
-		crt_req_decref(req->rpc);
-		crt_req_decref(req->rpc);
-		req->rpc = NULL;
+	if (req->request.rpc) {
+		crt_req_decref(req->request.rpc);
+		crt_req_decref(req->request.rpc);
+		req->request.rpc = NULL;
 	}
 
 	if (!req->ie) {
@@ -804,34 +806,34 @@ lookup_reset(void *arg)
 	/* Create a new RPC ready for later use.  Take an initial reference
 	 * to the RPC so that it is not cleaned up after a successful send.
 	 *
-	 * After calling send the getattr code will re-take the dropped
+	 * After calling send the lookup code will re-take the dropped
 	 * reference which means that on all subsequent calls to reset()
 	 * or release() the ref count will be two.
 	 *
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx,
-			    NULL,
-			    FS_TO_OP(req->fs_handle, lookup), &req->rpc);
-	if (rc || !req->rpc) {
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->fs_handle, lookup),
+			    &req->request.rpc);
+	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(arg, "Could not create request, rc = %d", rc);
 		D_FREE(req->ie);
 		return -1;
 	}
-	crt_req_addref(req->rpc);
+	crt_req_addref(req->request.rpc);
 
 	return 0;
 }
 
-/* Destroy a descriptor which could be either getattr or getfattr */
+/* Destroy a lookup descriptor */
 static void
 lookup_release(void *arg)
 {
 	struct lookup_req *req = arg;
 
-	crt_req_decref(req->rpc);
-	crt_req_decref(req->rpc);
+	crt_req_decref(req->request.rpc);
+	crt_req_decref(req->request.rpc);
 	D_FREE(req->ie);
 }
 

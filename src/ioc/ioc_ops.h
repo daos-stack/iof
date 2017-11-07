@@ -35,54 +35,69 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+#ifndef __IOC_OPS_H__
+#define __IOC_OPS_H__
 
-#include "iof_common.h"
-#include "ioc.h"
-#include "log.h"
+#define IOC_REQ_INIT(src, fsh, api, in, rc)				\
+	do {								\
+		rc = 0;							\
+		STAT_ADD(fsh->stats, STAT_KEY);				\
+		if (FS_IS_OFFLINE(fsh)) {				\
+			rc = -(fsh)->offline_reason;			\
+			break;						\
+		}							\
+		/* Acquire new object only if NULL */			\
+		if (!src)						\
+			src = iof_pool_acquire(fsh->POOL_NAME);		\
+		if (!src) {						\
+			rc = -ENOMEM;					\
+			break;						\
+		}							\
+		(src)->REQ_NAME.cb = &api;				\
+		in = crt_req_get((src)->REQ_NAME.rpc);			\
+		iof_tracker_init(&(src)->REQ_NAME.tracker, 1);		\
+	} while (0)
 
-#define REQ_NAME request
-#define POOL_NAME gh_pool
-#define TYPE_NAME getattr_req
-#define RESTOCK_ON_SEND
-#include "ioc_ops.h"
+#define IOC_REQ_SEND(src, fsh, rc)					\
+	do {								\
+		rc = iof_fs_send(&(src)->REQ_NAME);			\
+		if (rc)							\
+			break;						\
+		iof_fs_wait(&(fsh)->proj, &(src)->REQ_NAME.tracker);	\
+		rc = IOC_STATUS_TO_RC(&(src)->REQ_NAME);		\
+	} while (0)
 
-void ioc_getattr_cb(struct ioc_request *request)
+#define IOC_REQ_INIT_LL(src, fsh, api, in, fuse_req, rc)		\
+	do {								\
+		IOC_REQ_INIT(src, fsh, api, in, rc);			\
+		rc = -rc;						\
+		if (rc)							\
+			break;						\
+		(src)->REQ_NAME.req = fuse_req;				\
+	} while (0)
+
+#define IOC_REQ_SEND_LL(src, fsh, rc) \
+	(void)(rc = -iof_fs_send(&(src)->REQ_NAME))
+
+#define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
+
+#define IOC_REQ_RELEASE(req)						  \
+	do {								  \
+		if (req != NULL)					  \
+			iof_pool_release(req->fs_handle->POOL_NAME, req); \
+	} while (0)
+
+static struct iof_projection_info
+*get_fs_handle(struct ioc_request *req)
 {
-	struct iof_getattr_out *out = IOC_GET_RESULT(request);
-
-	IOC_RESOLVE_STATUS(request, out);
-	if (IOC_STATUS_TO_RC(request) == 0 && request->ptr != NULL)
-		memcpy(request->ptr, out->stat.iov_buf, sizeof(struct stat));
+	return CONTAINER(req)->fs_handle;
 }
 
-static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
-	.on_send	= post_send,
-	.on_result	= ioc_getattr_cb,
-	.on_evict	= ioc_simple_resend
-};
-
-#define STAT_KEY getattr
-
-int ioc_getattr_name(const char *path, struct stat *stbuf)
+#ifdef RESTOCK_ON_SEND
+static void post_send(struct ioc_request *req)
 {
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct TYPE_NAME *desc = NULL;
-	struct iof_gah_string_in *in;
-
-	int rc;
-
-	IOF_LOG_INFO("path %s", path);
-	IOC_REQ_INIT(desc, fs_handle, api, in, rc);
-	if (rc)
-		D_GOTO(out, rc);
-
-	desc->request.ptr = stbuf;
-	in->path = (d_string_t)path;
-	IOC_REQ_SEND(desc, fs_handle, rc);
-out:
-	IOC_REQ_RELEASE(desc);
-	IOF_TRACE_DEBUG(desc, "path %s rc %d", path, rc);
-	return rc;
+	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
 }
+#endif
 
+#endif
