@@ -266,10 +266,9 @@ const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
  */
 int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 {
-	int i;
+	int i, ret = 0;
 	const struct proto *proto = &iof_protocol_registry[cls];
 	struct rpc_data *rp = proto->rpc_types;
-	int ret = 0;
 
 	for (i = 0 ; i < iof_protocol_registry->rpc_type_count ; i++) {
 		int rc;
@@ -280,11 +279,11 @@ int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 				(rp->op_id, &rp->fmt, handlers[i]);
 		else
 			rc = crt_rpc_register(rp->op_id, &rp->fmt);
-		if (rc != 0) {
-			printf("Failed to register\n");
-			if (ret == 0)
-				ret = rc;
-		}
+		printf("Failed to register RPC %s, rc=%d\n",
+		       rp->fmt.crf_name, rc);
+
+		if (rc != 0 && ret == 0)
+			ret = rc;
 		rp++;
 	}
 

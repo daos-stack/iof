@@ -128,13 +128,6 @@ static struct ios_base base;
 		}							\
 	} while (0)
 
-static void iof_register_default_handlers(void);
-
-static void (*register_handlers
-		  [IOF_PROTO_CLASSES])(void) = {
-	iof_register_default_handlers
-};
-
 void shutdown_impl(void)
 {
 	IOF_LOG_DEBUG("Shutting Down");
@@ -2345,7 +2338,7 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-static void iof_register_default_handlers(void)
+static int iof_register_handlers(void)
 {
 #define DECL_RPC_HANDLER(NAME, FN) [DEF_RPC_TYPE(DEFAULT, NAME)] = FN
 
@@ -2378,7 +2371,7 @@ static void iof_register_default_handlers(void)
 		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
 		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
 	};
-	iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
+	return iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
 }
 
 /*
@@ -2409,7 +2402,7 @@ iof_query_handler(crt_rpc_t *query_rpc)
 
 int ionss_register(void)
 {
-	int i, reg_count, ret;
+	int ret;
 
 	ret = crt_rpc_srv_register(QUERY_PSR_OP, &QUERY_RPC_FMT,
 			iof_query_handler);
@@ -2438,10 +2431,11 @@ int ionss_register(void)
 				"broadcast RPC, ret = %d", ret);
 		return ret;
 	}
-	reg_count = sizeof(register_handlers)
-		  / sizeof(*register_handlers);
-	for (i = 0; i < reg_count; i++)
-		register_handlers[i]();
+
+	ret = iof_register_handlers();
+	if (ret)
+		IOF_LOG_ERROR("RPC server handler registration failed,"
+			      " ret = %d", ret);
 	return ret;
 }
 

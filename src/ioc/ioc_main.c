@@ -1031,7 +1031,12 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
+	ret = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
+	if (ret) {
+		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
+				"with ret: %d", ret);
+		return ret;
+	}
 	iof_state->cb_size = cb_size;
 
 	return ret;
