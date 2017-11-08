@@ -3115,7 +3115,10 @@ int main(int argc, char **argv)
 			IOF_NAME_LEN_MAX);
 	}
 
-	ionss_register();
+	ret = ionss_register();
+	if (ret)
+		D_GOTO(cleanup, ret);
+
 
 	shutdown = 0;
 
