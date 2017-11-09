@@ -222,6 +222,7 @@ def scons():
 
     # Build the IONSS application
     ienv = tenv.Clone()
+    prereqs.require(ienv, 'fuse', headers_only=True)
     ionss_obj = []
     for src in IONSS_SRC:
         ionss_obj += ienv.Object(os.path.join('ionss', src))

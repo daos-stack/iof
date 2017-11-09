@@ -55,7 +55,7 @@
 
 #include <fcntl.h>
 
-#include <fuse/fuse_lowlevel.h>
+#include <fuse3/fuse_lowlevel.h>
 
 #include "version.h"
 #include "log.h"
