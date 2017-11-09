@@ -201,6 +201,14 @@ struct iof_create_in {
 	uint32_t reg_inode;
 };
 
+struct iof_rename_in {
+	struct ios_gah old_gah;
+	struct ios_gah new_gah;
+	d_string_t old_path;
+	d_string_t new_path;
+	uint32_t flags;
+};
+
 struct iof_open_in {
 	struct ios_gah gah;
 	d_string_t path;
@@ -351,6 +359,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, ftruncate),
 	DEF_RPC_TYPE(DEFAULT, rmdir),
 	DEF_RPC_TYPE(DEFAULT, rename),
+	DEF_RPC_TYPE(DEFAULT, rename_ll),
 	DEF_RPC_TYPE(DEFAULT, readx),
 	DEF_RPC_TYPE(DEFAULT, unlink),
 	DEF_RPC_TYPE(DEFAULT, open),

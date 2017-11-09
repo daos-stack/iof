@@ -96,3 +96,66 @@ int ioc_rename(const char *src, const char *dst, unsigned int flags)
 	}
 	return ioc_rename_priv(src, dst);
 }
+
+void
+ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+	      fuse_ino_t newparent, const char *newname, unsigned int flags)
+{
+	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct iof_rename_in	*in;
+	crt_rpc_t		*rpc = NULL;
+	int ret = EIO;
+	int rc;
+
+	IOF_TRACE_UP(req, fs_handle, "rename");
+
+	STAT_ADD(fs_handle->stats, rename);
+
+	IOF_TRACE_DEBUG(req, "renaming %s to %s", name, newname);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		D_GOTO(err, ret = fs_handle->offline_reason);
+
+	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
+		IOF_LOG_INFO("Attempt to modify Read-Only File System");
+		D_GOTO(err, ret = EROFS);
+	}
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx,
+			    &fs_handle->proj.grp->psr_ep,
+			    FS_TO_OP(fs_handle, rename_ll), &rpc);
+	if (rc || !rpc) {
+		IOF_LOG_ERROR("Could not create request, rc = %u",
+			      rc);
+		D_GOTO(err, ret = ENOMEM);
+	}
+
+	in = crt_req_get(rpc);
+
+	in->old_path = (d_string_t)name;
+	in->new_path = (d_string_t)newname;
+	in->flags = flags;
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, parent, &in->old_gah);
+	if (rc != 0)
+		D_GOTO(err, ret = ENOENT);
+
+	rc = find_gah(fs_handle, newparent, &in->new_gah);
+	if (rc != 0)
+		D_GOTO(err, ret = ENOENT);
+
+	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
+	if (rc) {
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
+		D_GOTO(err, ret = EIO);
+	}
+
+	return;
+
+err:
+	IOF_FUSE_REPLY_ERR(req, ret);
+
+	if (rpc)
+		crt_req_decref(rpc);
+}

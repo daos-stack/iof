@@ -523,6 +523,9 @@ void ioc_ll_opendir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 void ioc_ll_readdir(fuse_req_t, fuse_ino_t, size_t, off_t,
 		    struct fuse_file_info *);
 
+void ioc_ll_rename(fuse_req_t, fuse_ino_t, const char *, fuse_ino_t,
+		   const char *, unsigned int);
+
 void ioc_ll_releasedir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
 void ioc_ll_write(fuse_req_t, fuse_ino_t, const char *,	size_t, off_t,

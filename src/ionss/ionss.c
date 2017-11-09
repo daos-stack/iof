@@ -47,6 +47,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
+#include <sys/syscall.h>
 
 #ifdef __APPLE__
 #include <sys/syslimits.h>
@@ -1606,6 +1607,61 @@ out:
 }
 
 static void
+iof_rename_ll_handler(crt_rpc_t *rpc)
+{
+	struct iof_rename_in		*in = crt_req_get(rpc);
+	struct iof_status_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*old_parent = NULL;
+	struct ionss_file_handle	*new_parent = NULL;
+	int rc;
+
+	old_parent = ios_fh_find(&base, &in->old_gah);
+	if (!old_parent)
+		D_GOTO(out, out->err = IOF_GAH_INVALID);
+
+	new_parent = ios_fh_find(&base, &in->new_gah);
+	if (!new_parent)
+		D_GOTO(out, out->err = IOF_GAH_INVALID);
+
+	VALIDATE_WRITE(old_parent->projection, out);
+	if (out->err || out->rc)
+		D_GOTO(out, 0);
+
+	if (!in->old_path || !in->new_path)
+		D_GOTO(out, out->err = IOF_GAH_INVALID);
+
+	errno = 0;
+
+#if 1
+	rc = syscall(SYS_renameat2,
+		     old_parent->fd, in->old_path,
+		     new_parent->fd, in->new_path,
+		     in->flags);
+
+#else
+	rc = renameat2(old_parent->fd, in->old_path,
+		       new_parent->fd, in->new_path,
+		       in->flags);
+#endif
+	if (rc)
+		out->rc = errno;
+
+out:
+	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
+		      in->old_path, in->new_path, out->err, out->rc);
+
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+
+	if (old_parent)
+		ios_fh_decref(old_parent, 1);
+
+	if (new_parent)
+		ios_fh_decref(new_parent, 1);
+}
+
+static void
 iof_symlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in	*in = crt_req_get(rpc);
@@ -2482,6 +2538,7 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(chmod_gah, iof_chmod_gah_handler),
 		DECL_RPC_HANDLER(rmdir, iof_rmdir_handler),
 		DECL_RPC_HANDLER(rename, iof_rename_handler),
+		DECL_RPC_HANDLER(rename_ll, iof_rename_ll_handler),
 		DECL_RPC_HANDLER(readx, iof_readx_handler),
 		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
 		DECL_RPC_HANDLER(open, iof_open_handler),

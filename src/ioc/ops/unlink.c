@@ -97,7 +97,7 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 
 	int ret = EIO;
 
-	IOF_TRACE_LINK(req, fs_handle, dir ? "rmdir" : "unlink");
+	IOF_TRACE_UP(req, fs_handle, dir ? "rmdir" : "unlink");
 
 	STAT_ADD(fs_handle->stats, unlink);
 
@@ -143,6 +143,9 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 	return;
 out_err:
 	IOF_FUSE_REPLY_ERR(req, ret);
+
+	if (rpc)
+		crt_req_decref(rpc);
 }
 
 void

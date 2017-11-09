@@ -92,6 +92,14 @@ struct crt_msg_field *create_in[] = {
 	&CMF_INT,	/* reg_inode */
 };
 
+struct crt_msg_field *rename_in[] = {
+	&CMF_GAH,	/* old parent */
+	&CMF_GAH,	/* new parent */
+	&CMF_STRING,	/* old name */
+	&CMF_STRING,	/* new name */
+	&CMF_INT,	/* flags */
+};
+
 /* Note this is also used for unlink/rmdir */
 struct crt_msg_field *open_in[] = {
 	&CMF_GAH,
@@ -238,6 +246,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(ftruncate, ftruncate_in, status_out),
 	RPC_TYPE(rmdir, string_in, status_out),
 	RPC_TYPE(rename, two_string_in, status_out),
+	RPC_TYPE(rename_ll, rename_in, status_out),
 	RPC_TYPE(readx, readx_in, readx_out),
 	RPC_TYPE(unlink, open_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
