@@ -125,7 +125,7 @@ static struct ios_base base;
 #define VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent)			\
 	do {								\
 		VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);		\
-		if (!in->src || !in->dst) {				\
+		if (!in->newpath || !in->oldpath) {			\
 			IOF_TRACE_ERROR(rpc, "Missing inputs.");	\
 			out->err = IOF_ERR_CART;			\
 		}							\
@@ -1598,15 +1598,15 @@ iof_rename_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = renameat(parent->fd, iof_get_rel_path(in->src),
-		      parent->fd, iof_get_rel_path(in->dst));
+	rc = renameat(parent->fd, iof_get_rel_path(in->oldpath),
+		      parent->fd, iof_get_rel_path(in->newpath));
 
 	if (rc)
 		out->rc = errno;
 
 out:
-	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
-		      in->src, in->dst, out->err, out->rc);
+	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
+		      in->oldpath, in->newpath, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1657,7 +1657,7 @@ iof_rename_ll_handler(crt_rpc_t *rpc)
 		out->rc = errno;
 
 out:
-	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
+	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
 		      in->old_path, in->new_path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
@@ -1689,15 +1689,15 @@ iof_symlink_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = symlinkat(in->dst, parent->fd,
-		       iof_get_rel_path(in->src));
+	rc = symlinkat(in->oldpath, parent->fd,
+		       iof_get_rel_path(in->newpath));
 
 	if (rc)
 		out->rc = errno;
 
 out:
-	IOF_LOG_DEBUG("src %s dst %s result err %d rc %d",
-		      in->src, in->dst, out->err, out->rc);
+	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
+		      in->newpath, in->oldpath, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1705,6 +1705,36 @@ out:
 
 	if (parent)
 		ios_fh_decref(parent, 1);
+}
+
+static void
+iof_symlink_ll_handler(crt_rpc_t *rpc)
+{
+	struct iof_two_string_in	*in = crt_req_get(rpc);
+	struct iof_lookup_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent;
+
+	int rc;
+
+	VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent);
+	if (out->err)
+		goto out;
+	IOF_TRACE_UP(rpc, parent, "symlink");
+
+	VALIDATE_WRITE(parent->projection, out);
+	if (out->err || out->rc)
+		goto out;
+
+	errno = 0;
+	rc = symlinkat(in->oldpath, parent->fd, in->newpath);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	lookup_common(rpc, (struct iof_gah_string_in *)in, out, parent);
+	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
+		      in->newpath, in->oldpath, out->err, out->rc);
 }
 
 static void
@@ -2592,6 +2622,7 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
 		DECL_RPC_HANDLER(readlink_ll, iof_readlink_ll_handler),
 		DECL_RPC_HANDLER(symlink, iof_symlink_handler),
+		DECL_RPC_HANDLER(symlink_ll, iof_symlink_ll_handler),
 		DECL_RPC_HANDLER(fsync, iof_fsync_handler),
 		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),
 		DECL_RPC_HANDLER(utimens, iof_utimens_handler),

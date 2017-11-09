@@ -189,8 +189,8 @@ struct iof_ftruncate_in {
 
 struct iof_two_string_in {
 	struct ios_gah gah;
-	d_string_t src;
-	d_string_t dst;
+	d_string_t newpath;
+	d_string_t oldpath;
 };
 
 struct iof_create_in {
@@ -201,14 +201,20 @@ struct iof_create_in {
 	uint32_t reg_inode;
 };
 
-/* We reuse lookup callback so first part of iof_create_in should match
- * iof_gah_string_in.  Add some static asserts to this effect
+/* We reuse lookup callback so first part of mkdir and symlink so
+ * first part of inputs must match.   We could use embedded structs
+ * but this is less change.
  */
+_Static_assert(offsetof(struct iof_two_string_in, gah) == 0,
+	       "gah must be first in iof_two_string_in");
 _Static_assert(offsetof(struct iof_create_in, gah) == 0,
 	       "gah must be first in iof_create_in");
 _Static_assert(offsetof(struct iof_gah_string_in, gah) == 0,
 	       "gah must be first in iof_gah_string_in");
 _Static_assert(offsetof(struct iof_create_in, path) ==
+	       offsetof(struct iof_gah_string_in, path),
+	       "path offset mismatch in iof_create_in and iof_gah_string_in");
+_Static_assert(offsetof(struct iof_two_string_in, newpath) ==
 	       offsetof(struct iof_gah_string_in, path),
 	       "path offset mismatch in iof_create_in and iof_gah_string_in");
 _Static_assert(offsetof(struct iof_create_in, path) ==
@@ -383,6 +389,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, readlink),
 	DEF_RPC_TYPE(DEFAULT, readlink_ll),
 	DEF_RPC_TYPE(DEFAULT, symlink),
+	DEF_RPC_TYPE(DEFAULT, symlink_ll),
 	DEF_RPC_TYPE(DEFAULT, fsync),
 	DEF_RPC_TYPE(DEFAULT, fdatasync),
 	DEF_RPC_TYPE(DEFAULT, chmod),

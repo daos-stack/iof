@@ -771,16 +771,19 @@ gh_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
-static int
-lookup_init(void *arg, void *handle)
-{
-	struct lookup_req *req = arg;
+#define entry_init(type)					\
+	static int type##_init(void *arg, void *handle)		\
+	{							\
+		struct lookup_req *req = arg;			\
+								\
+		req->fs_handle = handle;			\
+		req->opcode = FS_TO_OP(dh->fs_handle, type);	\
+		return 0;					\
+	}
+entry_init(lookup);
+entry_init(mkdir_ll);
+entry_init(symlink_ll);
 
-	req->fs_handle = handle;
-	return 0;
-}
-
-/* Reset, and prepare for use a lookup descriptor */
 static int
 lookup_reset(void *arg)
 {
@@ -813,11 +816,10 @@ lookup_reset(void *arg)
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->fs_handle, lookup),
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL, req->opcode,
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(arg, "Could not create request, rc = %d", rc);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
 		D_FREE(req->ie);
 		return -1;
 	}
@@ -825,53 +827,6 @@ lookup_reset(void *arg)
 
 	return 0;
 }
-
-static int
-mkdir_reset(void *arg)
-{
-	struct lookup_req *req = arg;
-	int rc;
-
-	/* If this descriptor has previously been used the destroy the
-	 * existing RPC
-	 */
-	if (req->request.rpc) {
-		crt_req_decref(req->request.rpc);
-		crt_req_decref(req->request.rpc);
-		req->request.rpc = NULL;
-	}
-
-	if (!req->ie) {
-		D_ALLOC_PTR(req->ie);
-		if (!req->ie)
-			return -1;
-		atomic_fetch_add(&req->ie->ref, 1);
-	}
-
-	/* Create a new RPC ready for later use.  Take an initial reference
-	 * to the RPC so that it is not cleaned up after a successful send.
-	 *
-	 * After calling send the getattr code will re-take the dropped
-	 * reference which means that on all subsequent calls to reset()
-	 * or release() the ref count will be two.
-	 *
-	 * This means that both descriptor creation and destruction are
-	 * done off the critical path.
-	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx,
-			    NULL,
-			    FS_TO_OP(req->fs_handle, mkdir_ll),
-			    &req->request.rpc);
-	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(arg, "Could not create request, rc = %d", rc);
-		D_FREE(req->ie);
-		return -1;
-	}
-	crt_req_addref(req->request.rpc);
-
-	return 0;
-}
-
 
 /* Destroy a descriptor which could be either getattr or getfattr */
 static void
@@ -1439,15 +1394,8 @@ static int initialize_projection(struct iof_state *iof_state,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
 		struct iof_pool_reg lookup_t = { .handle = fs_handle,
-						 .init = lookup_init,
 						 .reset = lookup_reset,
 						 .release = lookup_release,
-						 POOL_TYPE_INIT(lookup_req, list)};
-
-		struct iof_pool_reg mkdir_t = { .handle = fs_handle,
-						.init = lookup_init,
-						.reset = mkdir_reset,
-						.release = lookup_release,
 						 POOL_TYPE_INIT(lookup_req, list)};
 
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
@@ -1473,14 +1421,22 @@ static int initialize_projection(struct iof_state *iof_state,
 		if (!fs_handle->fgh_pool)
 			return IOF_ERR_NOMEM;
 
+		lookup_t.init = lookup_init;
 		fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool,
 							   &lookup_t);
 		if (!fs_handle->lookup_pool)
 			return IOF_ERR_NOMEM;
 
+		lookup_t.init = mkdir_ll_init;
 		fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool,
-							  &mkdir_t);
+							  &lookup_t);
 		if (!fs_handle->mkdir_pool)
+			return IOF_ERR_NOMEM;
+
+		lookup_t.init = symlink_ll_init;
+		fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool,
+							    &lookup_t);
+		if (!fs_handle->symlink_pool)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);

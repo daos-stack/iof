@@ -41,7 +41,7 @@
 #include "log.h"
 
 static int
-ioc_rename_priv(const char *src, const char *dst)
+ioc_rename_priv(const char *oldpath, const char *newpath)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_two_string_in *in;
@@ -59,7 +59,7 @@ ioc_rename_priv(const char *src, const char *dst)
 		return -EROFS;
 	}
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
+	IOF_LOG_INFO("oldpath %s newpath %s", oldpath, newpath);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
@@ -72,8 +72,8 @@ ioc_rename_priv(const char *src, const char *dst)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->src = (d_string_t)src;
-	in->dst = (d_string_t)dst;
+	in->oldpath = (d_string_t)oldpath;
+	in->newpath = (d_string_t)newpath;
 	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
@@ -83,18 +83,18 @@ ioc_rename_priv(const char *src, const char *dst)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("path %s rc %d", oldpath, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
 }
 
-int ioc_rename(const char *src, const char *dst, unsigned int flags)
+int ioc_rename(const char *oldpath, const char *newpath, unsigned int flags)
 {
 	if (flags) {
 		IOF_LOG_INFO("Unsupported rename flags %x", flags);
 		return -ENOTSUP;
 	}
-	return ioc_rename_priv(src, dst);
+	return ioc_rename_priv(oldpath, newpath);
 }
 
 void

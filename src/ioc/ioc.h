@@ -140,6 +140,7 @@ struct iof_projection_info {
 	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*lookup_pool;
 	struct iof_pool_type		*mkdir_pool;
+	struct iof_pool_type		*symlink_pool;
 	struct iof_pool_type		*fh_pool;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
@@ -349,6 +350,7 @@ struct lookup_req {
 	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;
 	d_list_t			 list;
+	crt_opcode_t			opcode;
 };
 
 /* inode.c */
@@ -518,6 +520,8 @@ void ioc_ll_ioctl(fuse_req_t, fuse_ino_t, int, void *, struct fuse_file_info *,
 
 void ioc_ll_setattr(fuse_req_t, fuse_ino_t, struct stat *, int,
 		    struct fuse_file_info *);
+
+void ioc_ll_symlink(fuse_req_t, const char *, fuse_ino_t, const char *);
 
 void iof_entry_cb(struct ioc_request *request);
 

@@ -40,7 +40,7 @@
 #include "ioc.h"
 #include "log.h"
 
-int ioc_symlink(const char *dst, const char *src)
+int ioc_symlink(const char *oldpath, const char *newpath)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
 	struct iof_two_string_in *in;
@@ -58,7 +58,7 @@ int ioc_symlink(const char *dst, const char *src)
 		return -EROFS;
 	}
 
-	IOF_LOG_INFO("src %s dst %s", src, dst);
+	IOF_LOG_INFO("newpath %s oldpath %s", newpath, oldpath);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
@@ -70,8 +70,8 @@ int ioc_symlink(const char *dst, const char *src)
 	}
 
 	in = crt_req_get(rpc);
-	in->src = (d_string_t)src;
-	in->dst = (d_string_t)dst;
+	in->newpath = (d_string_t)newpath;
+	in->oldpath = (d_string_t)oldpath;
 	in->gah = fs_handle->gah;
 
 	iof_tracker_init(&reply.tracker, 1);
@@ -83,7 +83,52 @@ int ioc_symlink(const char *dst, const char *src)
 	}
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	IOF_LOG_DEBUG("path %s rc %d", src, IOC_STATUS_TO_RC(&reply));
+	IOF_LOG_DEBUG("path %s rc %d", newpath, IOC_STATUS_TO_RC(&reply));
 
 	return IOC_STATUS_TO_RC(&reply);
+}
+
+#define REQ_NAME request
+#define POOL_NAME symlink_pool
+#define TYPE_NAME lookup_req
+#define RESTOCK_ON_SEND
+#include "ioc_ops.h"
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= iof_entry_cb,
+	.on_evict	= ioc_simple_resend
+};
+
+#define STAT_KEY symlink
+
+void
+ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
+	       const char *name)
+{
+	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct TYPE_NAME		*desc = NULL;
+	struct iof_two_string_in	*in;
+	int rc;
+
+	IOF_TRACE_INFO(req, "Parent:%lu '%s'", parent, name);
+	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
+	if (rc)
+		D_GOTO(err, rc);
+	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
+	in->newpath = (d_string_t)name;
+	in->oldpath = (d_string_t)link;
+
+	/* Find the GAH of the parent */
+	rc = find_gah(fs_handle, parent, &in->gah);
+	if (rc != 0)
+		D_GOTO(err, rc = ENOENT);
+	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	if (rc != 0)
+		D_GOTO(err, rc);
+	return;
+err:
+	IOC_REQ_RELEASE(desc);
+	IOF_FUSE_REPLY_ERR(req, rc);
 }

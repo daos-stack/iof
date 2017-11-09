@@ -391,6 +391,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool writeable)
 	if (!writeable)
 		return fuse_ops;
 
+	fuse_ops->symlink = ioc_ll_symlink;
 	fuse_ops->mkdir = ioc_ll_mkdir;
 	fuse_ops->unlink = ioc_ll_unlink;
 	fuse_ops->write = ioc_ll_write;
