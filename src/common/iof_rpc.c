@@ -85,8 +85,8 @@ struct crt_msg_field *two_string_in[] = {
 };
 
 struct crt_msg_field *create_in[] = {
-	&CMF_STRING,	/* name */
 	&CMF_GAH,	/* gah */
+	&CMF_STRING,	/* path */
 	&CMF_INT,	/* mode */
 	&CMF_INT,	/* flags */
 	&CMF_INT,	/* reg_inode */
@@ -253,6 +253,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(create, create_in, create_out),
 	RPC_TYPE(close, gah_in, NULL),
 	RPC_TYPE(mkdir, create_in, status_out),
+	RPC_TYPE(mkdir_ll, create_in, lookup_out),
 	RPC_TYPE(readlink, string_in, string_out),
 	RPC_TYPE(readlink_ll, gah_in, string_out),
 	RPC_TYPE(symlink, two_string_in, status_out),

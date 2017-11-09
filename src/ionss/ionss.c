@@ -1004,29 +1004,19 @@ static void find_and_insert_create(struct ios_projection *projection,
 }
 
 static void
-iof_lookup_handler(crt_rpc_t *rpc)
+lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
+	      struct iof_lookup_out *out, struct ionss_file_handle *parent)
 {
-	struct iof_gah_string_in	*in = crt_req_get(rpc);
-	struct iof_lookup_out		*out = crt_reply_get(rpc);
 	struct ios_projection		*projection = NULL;
-	struct ionss_file_handle	*parent = NULL;
 	struct stat			stbuf = {0};
 	struct ionss_mini_file		mf = {.type = inode_handle,
 					      .flags = O_PATH | O_NOATIME | O_NOFOLLOW | O_RDONLY};
 	int				fd;
 
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
-	if (out->err)
+	if (out->err || out->rc)
 		goto out;
 
 	projection = parent->projection;
-
-	IOF_TRACE_UP(rpc, parent, "lookup");
-
-	if (!in->path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
 	errno = 0;
 	fd = openat(parent->fd, in->path, mf.flags);
@@ -1050,6 +1040,26 @@ out:
 	if (parent)
 		ios_fh_decref(parent, 1);
 	IOF_TRACE_DOWN(rpc);
+}
+
+static void
+iof_lookup_handler(crt_rpc_t *rpc)
+{
+	struct iof_gah_string_in	*in = crt_req_get(rpc);
+	struct iof_lookup_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent = NULL;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	if (out->err)
+		goto out;
+
+	IOF_TRACE_UP(rpc, parent, "lookup");
+
+	if (!in->path)
+		out->err = IOF_ERR_CART;
+
+out:
+	lookup_common(rpc, in, out, parent);
 }
 
 static void
@@ -1733,6 +1743,39 @@ out:
 		ios_fh_decref(parent, 1);
 
 	IOF_TRACE_DOWN(rpc);
+}
+
+static void
+iof_mkdir_ll_handler(crt_rpc_t *rpc)
+{
+	struct iof_create_in *in = crt_req_get(rpc);
+	struct iof_lookup_out *out = crt_reply_get(rpc);
+	struct ionss_file_handle *parent;
+	int rc;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	if (out->err)
+		goto out;
+
+	IOF_TRACE_UP(rpc, parent, "mkdir");
+
+	if (!in->path) {
+		out->err = IOF_ERR_CART;
+		goto out;
+	}
+
+	VALIDATE_WRITE(parent->projection, out);
+	if (out->err || out->rc)
+		goto out;
+
+	errno = 0;
+	rc = mkdirat(parent->fd, in->path, in->mode);
+
+	if (rc)
+		out->rc = errno;
+
+out:
+	lookup_common(rpc, (struct iof_gah_string_in *)in, out, parent);
 }
 
 /* This function needs additional checks to handle longer links.
@@ -2545,6 +2588,7 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(create, iof_create_handler),
 		DECL_RPC_HANDLER(close, iof_close_handler),
 		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
+		DECL_RPC_HANDLER(mkdir_ll, iof_mkdir_ll_handler),
 		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
 		DECL_RPC_HANDLER(readlink_ll, iof_readlink_ll_handler),
 		DECL_RPC_HANDLER(symlink, iof_symlink_handler),

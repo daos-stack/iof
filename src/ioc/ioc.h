@@ -139,6 +139,7 @@ struct iof_projection_info {
 	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*lookup_pool;
+	struct iof_pool_type		*mkdir_pool;
 	struct iof_pool_type		*fh_pool;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
@@ -483,6 +484,8 @@ void ioc_ll_statfs(fuse_req_t, fuse_ino_t);
 
 void ioc_ll_readlink(fuse_req_t, fuse_ino_t);
 
+void ioc_ll_mkdir(fuse_req_t, fuse_ino_t, const char *, mode_t);
+
 void ioc_ll_open(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
 
 void ioc_ll_create(fuse_req_t, fuse_ino_t, const char *, mode_t,
@@ -515,5 +518,7 @@ void ioc_ll_ioctl(fuse_req_t, fuse_ino_t, int, void *, struct fuse_file_info *,
 
 void ioc_ll_setattr(fuse_req_t, fuse_ino_t, struct stat *, int,
 		    struct fuse_file_info *);
+
+void iof_entry_cb(struct ioc_request *request);
 
 #endif

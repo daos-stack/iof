@@ -81,11 +81,14 @@
 
 #define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
 
-#define IOC_REQ_RELEASE(req)						  \
+#define IOC_REQ_RELEASE_POOL(req, pool)					  \
 	do {								  \
 		if (req != NULL)					  \
-			iof_pool_release(req->fs_handle->POOL_NAME, req); \
+			iof_pool_release(pool, req); \
 	} while (0)
+
+#define IOC_REQ_RELEASE(req)						  \
+	IOC_REQ_RELEASE_POOL(req, req->fs_handle->POOL_NAME)
 
 static struct iof_projection_info
 *get_fs_handle(struct ioc_request *req)

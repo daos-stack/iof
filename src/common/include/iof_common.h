@@ -194,12 +194,25 @@ struct iof_two_string_in {
 };
 
 struct iof_create_in {
-	d_string_t path;
 	struct ios_gah gah;
+	d_string_t path;
 	uint32_t mode;
 	uint32_t flags;
 	uint32_t reg_inode;
 };
+
+/* We reuse lookup callback so first part of iof_create_in should match
+ * iof_gah_string_in.  Add some static asserts to this effect
+ */
+_Static_assert(offsetof(struct iof_create_in, gah) == 0,
+	       "gah must be first in iof_create_in");
+_Static_assert(offsetof(struct iof_gah_string_in, gah) == 0,
+	       "gah must be first in iof_gah_string_in");
+_Static_assert(offsetof(struct iof_create_in, path) ==
+	       offsetof(struct iof_gah_string_in, path),
+	       "path offset mismatch in iof_create_in and iof_gah_string_in");
+_Static_assert(offsetof(struct iof_create_in, path) ==
+	       sizeof(struct ios_gah), "path at wrong offset in iof_create_in");
 
 struct iof_rename_in {
 	struct ios_gah old_gah;
@@ -366,6 +379,7 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, create),
 	DEF_RPC_TYPE(DEFAULT, close),
 	DEF_RPC_TYPE(DEFAULT, mkdir),
+	DEF_RPC_TYPE(DEFAULT, mkdir_ll),
 	DEF_RPC_TYPE(DEFAULT, readlink),
 	DEF_RPC_TYPE(DEFAULT, readlink_ll),
 	DEF_RPC_TYPE(DEFAULT, symlink),

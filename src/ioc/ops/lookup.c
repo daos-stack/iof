@@ -47,14 +47,19 @@
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
-static void lookup_cb(struct ioc_request *request)
+void iof_entry_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*desc = CONTAINER(request);
+	struct iof_pool_type	*pool;
 	struct iof_lookup_out	*out = IOC_GET_RESULT(request);
 	struct fuse_entry_param	 entry = {0};
 	d_list_t		 *rlink;
 	int			 rc;
 
+	if (request->rpc->cr_opc == FS_TO_OP(desc->fs_handle, lookup))
+		pool = desc->fs_handle->lookup_pool;
+	else
+		pool = desc->fs_handle->mkdir_pool;
 	IOC_RESOLVE_STATUS(request, out);
 	rc = IOC_STATUS_TO_RC_LL(request);
 	if (rc)
@@ -91,13 +96,13 @@ out:
 		IOF_FUSE_REPLY_ERR(request->req, rc);
 	else
 		fuse_reply_entry(request->req, &entry);
-	IOC_REQ_RELEASE(desc);
+	IOC_REQ_RELEASE_POOL(desc, pool);
 }
 
 static const struct ioc_request_api api = {
 	.get_fsh	= get_fs_handle,
 	.on_send	= post_send,
-	.on_result	= lookup_cb,
+	.on_result	= iof_entry_cb,
 	.on_evict	= ioc_simple_resend
 };
 
