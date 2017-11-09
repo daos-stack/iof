@@ -77,12 +77,18 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	       struct fuse_file_info *fi)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct iof_file_handle		*handle;
 	struct iof_setattr_in		*in;
 	crt_rpc_t			*rpc = NULL;
 	int ret;
 	int rc;
 
-	IOF_TRACE_UP(req, fs_handle, "setattr");
+	if (fi) {
+		handle = (void *)fi->fh;
+		IOF_TRACE_UP(req, handle, "setattr");
+	} else {
+		IOF_TRACE_UP(req, fs_handle, "setattr");
+	}
 
 	STAT_ADD(fs_handle->stats, setattr);
 
@@ -100,10 +106,14 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 
 	in = crt_req_get(rpc);
 
-	/* Find the GAH of the inode */
-	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0)
-		D_GOTO(out_err, ret = ENOENT);
+	if (handle) {
+		in->gah = handle->common.gah;
+	} else {
+		/* Find the GAH of the inode */
+		rc = find_gah(fs_handle, ino, &in->gah);
+		if (rc != 0)
+			D_GOTO(out_err, ret = ENOENT);
+	}
 
 	in->to_set = to_set;
 

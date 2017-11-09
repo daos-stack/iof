@@ -2463,11 +2463,15 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	}
 	stbuf_in = in->attr.iov_buf;
 
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
+	IOF_TRACE_INFO(handle, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
-	fd = open(handle->proc_fd_name, O_RDWR);
-	if (fd == -1)
-		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+	if (handle->mf.type != inode_handle) {
+		fd = handle->fd;
+	} else {
+		fd = open(handle->proc_fd_name, O_RDWR);
+		if (fd == -1)
+			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+	}
 
 	/* Now set any attributes as requested by FUSE.  Try each bit that this
 	 * code knows how to set, clearing the bits after they are actioned.
@@ -2598,12 +2602,12 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(handle, "response not sent, ret = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
 
-	if (fd != -1)
+	if ((handle->mf.type == inode_handle) && (fd != -1))
 		close(fd);
 }
 
