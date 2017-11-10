@@ -214,6 +214,7 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 
 	rc = fn(&entry->fns, &entry->fns_size);
 	if (rc != 0) {
+		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
 			     FN_TO_PVOID(fn), rc);
@@ -766,9 +767,11 @@ shutdown_cart:
 
 		if (entry->dl_handle != NULL)
 			dlclose(entry->dl_handle);
+		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 	}
 
+	IOF_TRACE_DOWN(cnss_info);
 	free(ctrl_prefix);
 	iof_log_close();
 	D_FREE(cnss_info);
