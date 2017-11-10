@@ -989,7 +989,9 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 					  IOF_IOCTL_VERSION);
 
 	prefix = getenv("CNSS_PREFIX");
-	iof_state->cnss_prefix = realpath(prefix, NULL);
+	D_REALPATH(iof_state->cnss_prefix, prefix);
+	if (!iof_state->cnss_prefix)
+		return 1;
 	prefix_dir = opendir(iof_state->cnss_prefix);
 	if (prefix_dir)
 		closedir(prefix_dir);
@@ -1314,7 +1316,7 @@ static int initialize_projection(struct iof_state *iof_state,
 		args.argc++;
 
 	args.allocated = 1;
-	args.argv = calloc(args.argc, sizeof(char *));
+	D_ALLOC_ARRAY(args.argv, args.argc);
 	if (!args.argv)
 		return IOF_ERR_NOMEM;
 

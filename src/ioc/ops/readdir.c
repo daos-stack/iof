@@ -117,7 +117,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
-	iov.iov_buf = malloc(len);
+	D_ALLOC(iov.iov_buf, len);
 
 	if (iov.iov_buf) {
 		d_sg_list_t sgl = {0};
@@ -134,8 +134,6 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 			goto out;
 		}
 		bulk = in->bulk;
-	} else {
-		IOF_LOG_INFO("Failed to allocate memory for bulk");
 	}
 
 	iof_tracker_init(&reply.tracker, 1);
