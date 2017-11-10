@@ -70,9 +70,9 @@ int ioc_symlink(const char *oldpath, const char *newpath)
 	}
 
 	in = crt_req_get(rpc);
-	in->newpath = (d_string_t)newpath;
+	in->common.path = (d_string_t)newpath;
 	in->oldpath = (d_string_t)oldpath;
-	in->gah = fs_handle->gah;
+	in->common.gah = fs_handle->gah;
 
 	iof_tracker_init(&reply.tracker, 1);
 
@@ -90,7 +90,7 @@ int ioc_symlink(const char *oldpath, const char *newpath)
 
 #define REQ_NAME request
 #define POOL_NAME symlink_pool
-#define TYPE_NAME lookup_req
+#define TYPE_NAME entry_req
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
@@ -117,11 +117,11 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
-	in->newpath = (d_string_t)name;
+	in->common.path = (d_string_t)name;
 	in->oldpath = (d_string_t)link;
 
 	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, parent, &in->gah);
+	rc = find_gah(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);

@@ -71,9 +71,9 @@ int ioc_mkdir(const char *file, mode_t mode)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (d_string_t)file;
+	in->common.path = (d_string_t)file;
 	in->mode = mode;
-	in->gah = fs_handle->gah;
+	in->common.gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {
@@ -90,7 +90,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 
 #define REQ_NAME request
 #define POOL_NAME mkdir_pool
-#define TYPE_NAME lookup_req
+#define TYPE_NAME entry_req
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
@@ -116,11 +116,11 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
-	in->path = (d_string_t)name;
+	in->common.path = (d_string_t)name;
 	in->mode = mode;
 
 	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, parent, &in->gah);
+	rc = find_gah(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);

@@ -102,30 +102,37 @@ static struct ios_base base;
 		} \
 	} while (0)
 
-#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type)		\
+#define VALIDATE_ARGS_GAH_H(rpc, in, out, handle, handle_type)	\
 	do {								\
-		handle = ios_##handle_type##_find(&base, &in->gah);	\
+		handle = ios_##handle_type##_find(&base, &(in).gah);	\
 		if (handle) {						\
 			IOF_TRACE_LINK(rpc, handle, "rpc");		\
 			IOF_TRACE_DEBUG(handle, GAH_PRINT_STR,		\
-					GAH_PRINT_VAL(in->gah));	\
+					GAH_PRINT_VAL((in).gah));	\
 			break;						\
 		}							\
 		out->err = IOF_GAH_INVALID;				\
 		IOF_TRACE_INFO(rpc, "Failed to find handle from "	\
-			GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));		\
+			GAH_PRINT_STR, GAH_PRINT_VAL((in).gah));	\
 	} while (0)
 
+#define VALIDATE_ARGS_GAH(rpc, in, out, handle, handle_type)		\
+	VALIDATE_ARGS_GAH_H(rpc, *(in), out, handle, handle_type)	\
+
+#define VALIDATE_ARGS_GAH_FILE_H(rpc, in, out, handle)	\
+	VALIDATE_ARGS_GAH_H(rpc, in, out, handle, fh)
+
 #define VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle) \
-	VALIDATE_ARGS_GAH(rpc, in, out, handle, fh)
+	VALIDATE_ARGS_GAH_FILE_H(rpc, *(in), out, handle)
 
 #define VALIDATE_ARGS_GAH_DIR(rpc, in, out, handle) \
 	VALIDATE_ARGS_GAH(rpc, in, out, handle, dirh)
 
 #define VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent)			\
 	do {								\
-		VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);		\
-		if (!in->newpath || !in->oldpath) {			\
+		VALIDATE_ARGS_GAH_FILE_H(rpc, (in)->common, out,	\
+					 parent);			\
+		if (!(in)->common.path || !(in)->oldpath) {		\
 			IOF_TRACE_ERROR(rpc, "Missing inputs.");	\
 			out->err = IOF_ERR_CART;			\
 		}							\
@@ -892,7 +899,7 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 				   int fd,
 				   struct stat *stbuf,
 				   struct ionss_mini_file *mf,
-				   struct iof_lookup_out *out)
+				   struct iof_entry_out *out)
 {
 	struct ionss_file_handle	*handle = NULL;
 	int				rc;
@@ -1005,7 +1012,7 @@ static void find_and_insert_create(struct ios_projection *projection,
 
 static void
 lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
-	      struct iof_lookup_out *out, struct ionss_file_handle *parent)
+	      struct iof_entry_out *out, struct ionss_file_handle *parent)
 {
 	struct ios_projection		*projection = NULL;
 	struct stat			stbuf = {0};
@@ -1046,7 +1053,7 @@ static void
 iof_lookup_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_string_in	*in = crt_req_get(rpc);
-	struct iof_lookup_out		*out = crt_reply_get(rpc);
+	struct iof_entry_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent = NULL;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
@@ -1140,11 +1147,11 @@ iof_create_handler(crt_rpc_t *rpc)
 	int fd;
 	int rc;
 
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	VALIDATE_ARGS_GAH_FILE_H(rpc, in->common, out, parent);
 	if (out->err)
 		goto out;
 
-	if (!in->path) {
+	if (!in->common.path) {
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1155,10 +1162,10 @@ iof_create_handler(crt_rpc_t *rpc)
 
 
 	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o",
-			in->path, in->flags, in->mode);
+			in->common.path, in->flags, in->mode);
 
 	errno = 0;
-	fd = openat(parent->fd, iof_get_rel_path(in->path), in->flags,
+	fd = openat(parent->fd, iof_get_rel_path(in->common.path), in->flags,
 		    in->mode);
 	if (fd == -1) {
 		out->rc = errno;
@@ -1196,14 +1203,14 @@ iof_create_handler(crt_rpc_t *rpc)
 	}
 
 out:
-	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o", in->path,
+	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o", in->common.path,
 			in->flags, in->mode & S_IFREG, in->mode & ~S_IFREG);
 
 	LOG_FLAGS(rpc, in->flags);
 	LOG_MODES(rpc, in->mode);
 
 	IOF_TRACE_INFO(rpc, "path %s result err %d rc %d",
-		       in->path, out->err, out->rc);
+		       in->common.path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1599,14 +1606,14 @@ iof_rename_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = renameat(parent->fd, iof_get_rel_path(in->oldpath),
-		      parent->fd, iof_get_rel_path(in->newpath));
+		      parent->fd, iof_get_rel_path(in->common.path));
 
 	if (rc)
 		out->rc = errno;
 
 out:
 	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
-		      in->oldpath, in->newpath, out->err, out->rc);
+		      in->oldpath, in->common.path, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1690,14 +1697,14 @@ iof_symlink_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = symlinkat(in->oldpath, parent->fd,
-		       iof_get_rel_path(in->newpath));
+		       iof_get_rel_path(in->common.path));
 
 	if (rc)
 		out->rc = errno;
 
 out:
 	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->newpath, in->oldpath, out->err, out->rc);
+		      in->common.path, in->oldpath, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1711,7 +1718,7 @@ static void
 iof_symlink_ll_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in	*in = crt_req_get(rpc);
-	struct iof_lookup_out		*out = crt_reply_get(rpc);
+	struct iof_entry_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 
 	int rc;
@@ -1726,7 +1733,7 @@ iof_symlink_ll_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = symlinkat(in->oldpath, parent->fd, in->newpath);
+	rc = symlinkat(in->oldpath, parent->fd, in->common.path);
 
 	if (rc)
 		out->rc = errno;
@@ -1734,7 +1741,7 @@ iof_symlink_ll_handler(crt_rpc_t *rpc)
 out:
 	lookup_common(rpc, (struct iof_gah_string_in *)in, out, parent);
 	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->newpath, in->oldpath, out->err, out->rc);
+		      in->common.path, in->oldpath, out->err, out->rc);
 }
 
 static void
@@ -1745,11 +1752,11 @@ iof_mkdir_handler(crt_rpc_t *rpc)
 	struct ionss_file_handle *parent;
 	int rc;
 
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	VALIDATE_ARGS_GAH_FILE_H(rpc, in->common, out, parent);
 	if (out->err)
 		goto out;
 
-	if (!in->path) {
+	if (!in->common.path) {
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1759,7 +1766,7 @@ iof_mkdir_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = mkdirat(parent->fd, iof_get_rel_path(in->path), in->mode);
+	rc = mkdirat(parent->fd, iof_get_rel_path(in->common.path), in->mode);
 
 	if (rc)
 		out->rc = errno;
@@ -1779,17 +1786,17 @@ static void
 iof_mkdir_ll_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in = crt_req_get(rpc);
-	struct iof_lookup_out *out = crt_reply_get(rpc);
+	struct iof_entry_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *parent;
 	int rc;
 
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	VALIDATE_ARGS_GAH_FILE_H(rpc, in->common, out, parent);
 	if (out->err)
 		goto out;
 
 	IOF_TRACE_UP(rpc, parent, "mkdir");
 
-	if (!in->path) {
+	if (!in->common.path) {
 		out->err = IOF_ERR_CART;
 		goto out;
 	}
@@ -1799,7 +1806,7 @@ iof_mkdir_ll_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = mkdirat(parent->fd, in->path, in->mode);
+	rc = mkdirat(parent->fd, in->common.path, in->mode);
 
 	if (rc)
 		out->rc = errno;

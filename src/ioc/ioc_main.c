@@ -772,9 +772,9 @@ gh_release(void *arg)
 }
 
 #define entry_init(type)					\
-	static int type##_init(void *arg, void *handle)		\
+	static int type##_entry_init(void *arg, void *handle)	\
 	{							\
-		struct lookup_req *req = arg;			\
+		struct entry_req *req = arg;			\
 								\
 		req->fs_handle = handle;			\
 		req->opcode = FS_TO_OP(dh->fs_handle, type);	\
@@ -785,9 +785,9 @@ entry_init(mkdir_ll);
 entry_init(symlink_ll);
 
 static int
-lookup_reset(void *arg)
+entry_reset(void *arg)
 {
-	struct lookup_req *req = arg;
+	struct entry_req *req = arg;
 	int rc;
 
 	/* If this descriptor has previously been used the destroy the
@@ -830,9 +830,9 @@ lookup_reset(void *arg)
 
 /* Destroy a descriptor which could be either getattr or getfattr */
 static void
-lookup_release(void *arg)
+entry_release(void *arg)
 {
-	struct lookup_req *req = arg;
+	struct entry_req *req = arg;
 
 	crt_req_decref(req->request.rpc);
 	crt_req_decref(req->request.rpc);
@@ -1393,10 +1393,10 @@ static int initialize_projection(struct iof_state *iof_state,
 					    .release = gh_release,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
-		struct iof_pool_reg lookup_t = { .handle = fs_handle,
-						 .reset = lookup_reset,
-						 .release = lookup_release,
-						 POOL_TYPE_INIT(lookup_req, list)};
+		struct iof_pool_reg entry_t = { .handle = fs_handle,
+						.reset = entry_reset,
+						.release = entry_release,
+						POOL_TYPE_INIT(entry_req, list)};
 
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
 						.reset = rb_page_reset,
@@ -1421,21 +1421,21 @@ static int initialize_projection(struct iof_state *iof_state,
 		if (!fs_handle->fgh_pool)
 			return IOF_ERR_NOMEM;
 
-		lookup_t.init = lookup_init;
+		entry_t.init = lookup_entry_init;
 		fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool,
-							   &lookup_t);
+							   &entry_t);
 		if (!fs_handle->lookup_pool)
 			return IOF_ERR_NOMEM;
 
-		lookup_t.init = mkdir_ll_init;
+		entry_t.init = mkdir_ll_entry_init;
 		fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool,
-							  &lookup_t);
+							  &entry_t);
 		if (!fs_handle->mkdir_pool)
 			return IOF_ERR_NOMEM;
 
-		lookup_t.init = symlink_ll_init;
+		entry_t.init = symlink_ll_entry_init;
 		fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool,
-							    &lookup_t);
+							    &entry_t);
 		if (!fs_handle->symlink_pool)
 			return IOF_ERR_NOMEM;
 

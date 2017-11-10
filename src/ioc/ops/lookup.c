@@ -43,7 +43,7 @@
 
 #define REQ_NAME request
 #define POOL_NAME lookup_pool
-#define TYPE_NAME lookup_req
+#define TYPE_NAME entry_req
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
@@ -51,7 +51,7 @@ void iof_entry_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*desc = CONTAINER(request);
 	struct iof_pool_type	*pool;
-	struct iof_lookup_out	*out = IOC_GET_RESULT(request);
+	struct iof_entry_out	*out = IOC_GET_RESULT(request);
 	struct fuse_entry_param	 entry = {0};
 	d_list_t		 *rlink;
 	int			 rc;

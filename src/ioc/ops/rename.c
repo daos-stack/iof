@@ -73,8 +73,8 @@ ioc_rename_priv(const char *oldpath, const char *newpath)
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->oldpath = (d_string_t)oldpath;
-	in->newpath = (d_string_t)newpath;
-	in->gah = fs_handle->gah;
+	in->common.path = (d_string_t)newpath;
+	in->common.gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
 	if (rc) {

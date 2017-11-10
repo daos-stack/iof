@@ -161,7 +161,7 @@ struct iof_string_out {
 	int err;
 };
 
-struct iof_lookup_out {
+struct iof_entry_out {
 	struct ios_gah gah;
 	d_iov_t stat;
 	int rc;
@@ -188,37 +188,25 @@ struct iof_ftruncate_in {
 };
 
 struct iof_two_string_in {
-	struct ios_gah gah;
-	d_string_t newpath;
+	struct iof_gah_string_in common;
 	d_string_t oldpath;
 };
 
 struct iof_create_in {
-	struct ios_gah gah;
-	d_string_t path;
+	struct iof_gah_string_in common;
 	uint32_t mode;
 	uint32_t flags;
 	uint32_t reg_inode;
 };
 
-/* We reuse lookup callback so first part of mkdir and symlink so
- * first part of inputs must match.   We could use embedded structs
- * but this is less change.
+/* We reuse iof_gah_string_in in a few input structs and we need to
+ * ensure compiler isn't adding padding.   This should always be
+ * the case now unless we change the struct.  This assert is here
+ * to force the modifier to ensure the same condition is met.
  */
-_Static_assert(offsetof(struct iof_two_string_in, gah) == 0,
-	       "gah must be first in iof_two_string_in");
-_Static_assert(offsetof(struct iof_create_in, gah) == 0,
-	       "gah must be first in iof_create_in");
-_Static_assert(offsetof(struct iof_gah_string_in, gah) == 0,
-	       "gah must be first in iof_gah_string_in");
-_Static_assert(offsetof(struct iof_create_in, path) ==
-	       offsetof(struct iof_gah_string_in, path),
-	       "path offset mismatch in iof_create_in and iof_gah_string_in");
-_Static_assert(offsetof(struct iof_two_string_in, newpath) ==
-	       offsetof(struct iof_gah_string_in, path),
-	       "path offset mismatch in iof_create_in and iof_gah_string_in");
-_Static_assert(offsetof(struct iof_create_in, path) ==
-	       sizeof(struct ios_gah), "path at wrong offset in iof_create_in");
+_Static_assert(sizeof(struct iof_gah_string_in) ==
+	       (sizeof(struct ios_gah) + sizeof(d_string_t)),
+	       "iof_gah_string_in size unexpected");
 
 struct iof_rename_in {
 	struct ios_gah old_gah;

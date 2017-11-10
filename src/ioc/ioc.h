@@ -345,7 +345,7 @@ struct ioc_inode_entry {
 	ATOMIC uint	ref;
 };
 
-struct lookup_req {
+struct entry_req {
 	struct iof_projection_info	*fs_handle;
 	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;

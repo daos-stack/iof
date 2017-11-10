@@ -63,7 +63,7 @@ struct crt_msg_field *string_out[] = {
 	&CMF_INT,
 };
 
-struct crt_msg_field *lookup_out[] = {
+struct crt_msg_field *entry_out[] = {
 	&CMF_GAH,
 	&CMF_IOVEC,
 	&CMF_INT,
@@ -253,11 +253,11 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(create, create_in, create_out),
 	RPC_TYPE(close, gah_in, NULL),
 	RPC_TYPE(mkdir, create_in, status_out),
-	RPC_TYPE(mkdir_ll, create_in, lookup_out),
+	RPC_TYPE(mkdir_ll, create_in, entry_out),
 	RPC_TYPE(readlink, string_in, string_out),
 	RPC_TYPE(readlink_ll, gah_in, string_out),
 	RPC_TYPE(symlink, two_string_in, status_out),
-	RPC_TYPE(symlink_ll, two_string_in, lookup_out),
+	RPC_TYPE(symlink_ll, two_string_in, entry_out),
 	RPC_TYPE(fsync, gah_in, status_out),
 	RPC_TYPE(fdatasync, gah_in, status_out),
 	RPC_TYPE(chmod, chmod_in, status_out),
@@ -265,7 +265,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(utimens, utimens_in, status_out),
 	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	RPC_TYPE(statfs, gah_in, iov_pair),
-	RPC_TYPE(lookup, gah_string_in, lookup_out),
+	RPC_TYPE(lookup, gah_string_in, entry_out),
 	RPC_TYPE(setattr, setattr_in, iov_pair),
 };
 
