@@ -46,13 +46,16 @@ from collections import Counter
 from tabulate import tabulate
 import common_methods
 
-
+# pylint: disable=too-many-branches
 # pylint: disable=too-many-instance-attributes
 class RpcTrace(common_methods.ColorizedOutput):
-    """RPC tracing methods"""
+    """RPC tracing methods
+    RPC = CaRT Priv
+    Descriptor = handle/iof_pol_type/iof_pool/iof_projection_info/iof_state/
+    cnss_plugin/plugin_entry/cnss_info"""
 
     rpc_dict = {}
-    """dictionary maps rpc(cart_priv) to 'alloc/submit/sent/dealloc' state"""
+    """dictionary maps rpc to 'alloc/submit/sent/dealloc' state"""
     op_state_list = []
     """list entries (opcode, rpc state)"""
     rpc_op_list = []
@@ -61,6 +64,9 @@ class RpcTrace(common_methods.ColorizedOutput):
     """dictionary maps descriptor to descriptor type and parent"""
     desc_dict = {}
     """dictionary maps descriptor to RPC(s)"""
+    desc_state = {}
+    """dictionary maps descriptor to 'registered/deregistered/linked' states
+    w/ regard to IOF_TRACE macros"""
 
     ALLOC_STATE = 'RPC ALLOCATED'
     DEALLOC_STATE = 'RPC DEALLOCATED'
@@ -157,7 +163,6 @@ class RpcTrace(common_methods.ColorizedOutput):
         headers.extend(self.STATES)
         return ('{0}'.format(tabulate(table, headers=headers)), errors)
 
-    # pylint: disable=too-many-branches
     def rpc_tabulate_populate_lists(self):
         """Create and populate lists for all RPC states for table ouput of
         Opcode vs State Transition Counts"""
@@ -226,7 +231,6 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return (op_table, alloc_table, dealloc_table, sent_table, submit_table,
                 errors)
-    # pylint: enable=too-many-branches
 
     def rpc_reporting(self, logfile_path):
         """RPC reporting for RPC state machine"""
@@ -305,6 +309,9 @@ class RpcTrace(common_methods.ColorizedOutput):
         reused_desc = []
         self.normal_output('\nIOF Descriptor/RPC Tracing ({0}):\n'
                            'Logfile: {1}'.format(self.SOURCE, log_path))
+
+        self.descriptor_error_state_tracing(log_path)
+
         with open(log_path, 'r') as f:
             for line in f:
                 if "TRACE" in line and "Registered new" in line:
@@ -423,16 +430,88 @@ class RpcTrace(common_methods.ColorizedOutput):
                 output.append('WARN: {0:<24}{1:<30}{2}[{3}]'.\
                               format(k, v[0], v[1], None))
 
-        output.append('\n\n{0:<45}{1:<30}'.format('Descriptor', 'RPCs'))
-        output.append('{0:<45}{1:<30}'.format('----------', '----'))
+        output.append('\n\n{:<60}{:<30}'.format('Descriptor', 'RPCs'))
+        output.append('{:<60}{:<30}'.format('----------', '----'))
         for k, v in sorted(self.desc_dict.items()):
             if k in self.trace_dict:
+                #reformat rpc list for better output display in table
+                temp_v = []
+                v_output = ''
+                add_format = 'no'
+                for i in v:
+                    if add_format == 'no':
+                        temp_v.append('{:>25}:{:<15}'.format(i[0], i[1]))
+                        add_format = 'yes'
+                    else:
+                        temp_v.append('{:>65}:{:<15}'.format(i[0], i[1]))
+                if v:
+                    v_output = '\n'.join(temp_v)
                 type_field = '[{0}]'.format(self.trace_dict['{0}'.format(k)][0])
-                output.append('{0:<15}{1:<30}{2}'.\
-                              format(k, type_field, v))
+                output.append('{:<20}{:<20}{}'.\
+                              format(k, type_field, v_output))
 
         #Hierarchy for given descriptor
         self.rpc_trace_output_hierarchy(descriptor, output)
 
         #Log dump for descriptor hierarchy
         self.rpc_trace_output_logdump(descriptor, log_path, output)
+
+    def descriptor_error_state_tracing(self, log_path):
+        """Check for any descriptors that are not registered/deregistered"""
+        self.normal_output('\nDescriptor State Transitions:')
+        self.desc_state = {}
+        with open(log_path, 'r') as f:
+            output = []
+            self.normal_output('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
+                               format('Descriptor', 'State', 'Funct',
+                                      '----------', '-----', '-----'))
+            for line in f:
+                if 'TRACE' in line:
+                    state = None
+                    fields = line.strip().split()
+                    desc = fields[7].strip().split('(')[1][:-1]
+                    function_name = fields[7].strip().split('(')[0]
+
+                    if 'Registered' in line:
+                        state = 'Registered'
+                        if desc not in self.desc_state or \
+                           self.desc_state['{0}'.format(desc)] == \
+                                           'Deregistered':
+                            self.desc_state['{0}'.format(desc)] = state
+                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
+                                          format(desc, state, function_name))
+                        else:
+                            output.append('ERROR: {0:<20}{1:<20}({2}) ' \
+                                          '(previous state: {3})'.\
+                                          format(desc, state, function_name,
+                                                 self.desc_state['{0}'.\
+                                                                 format(desc)]))
+                    elif 'Link' in line:
+                        state = 'Linked'
+                        if desc in self.desc_state and \
+                           self.desc_state['{0}'.format(desc)] == 'Registered':
+                            output.append('WARN: {0:<20}{1:<20}({2}) '
+                                          '(Registered and Linked)'.\
+                                          format(desc, state, function_name))
+                        else:
+                            self.desc_state['{0}'.format(desc)] = state
+                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
+                                          format(desc, state, function_name))
+                    elif 'Deregistered' in line:
+                        state = 'Deregistered'
+                        if desc in self.desc_state and \
+                           self.desc_state['{0}'.format(desc)] == \
+                                            'Deregistered' or \
+                           desc not in self.desc_state:
+                            output.append('ERROR: {0:<20}{1:<20}({2})'.\
+                                          format(desc, state, function_name))
+                        else:
+                            self.desc_state['{0}'.format(desc)] = state
+                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
+                                          format(desc, state, function_name))
+            self.list_output(output)
+
+        #check if all descriptors are deregistered
+        for d in self.desc_state:
+            if self.desc_state['{0}'.format(d)] == 'Registered':
+                self.error_output('{0} is not deregistered'.format(d))
