@@ -1566,17 +1566,29 @@ static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 	d_list_t *rlink = NULL;
+	uint64_t refs = 0;
+	int links = 0;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Draining inode table");
 	do {
+		struct ioc_inode_entry *ie;
+
 		rlink = d_chash_rec_first(&fs_handle->inode_ht);
-		IOF_TRACE_INFO(fs_handle, "rlink is %p", rlink);
-		if (rlink)
-			d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+		IOF_TRACE_DEBUG(fs_handle, "rlink is %p", rlink);
+		if (!rlink)
+			break;
+
+		ie = container_of(rlink, struct ioc_inode_entry, list);
+
+		refs += ie->ref;
+		d_chash_rec_ndecref(&fs_handle->inode_ht, ie->ref, rlink);
+		links++;
 	} while (rlink);
 
-	IOF_TRACE_INFO(fs_handle, "inode table empty");
+	IOF_TRACE_INFO(fs_handle, "dropped %lu refs on %u handles",
+		       refs, links);
+
 	rc = d_chash_table_destroy_inplace(&fs_handle->inode_ht, false);
 	if (rc)
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");

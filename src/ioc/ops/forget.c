@@ -61,9 +61,7 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 
 	IOF_TRACE_INFO(rlink, "%lu %lu", ino, nlookup);
 
-	do {
-		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
-	} while (--nlookup);
+	d_chash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
 }
 
 void
