@@ -2540,6 +2540,46 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		in->to_set &= ~(FUSE_SET_ATTR_SIZE);
 	}
 
+	if (in->to_set & (FUSE_SET_ATTR_ATIME_NOW | FUSE_SET_ATTR_MTIME_NOW)) {
+		struct stat st_pre;
+		struct timespec tv[2] = {0};
+		struct timespec now;
+		int rc;
+
+		rc = clock_gettime(CLOCK_REALTIME, &now);
+		if (rc)
+			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+
+		errno = 0;
+		rc = fstat(fd, &st_pre);
+		if (rc)
+			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+
+		/* atime */
+		if (in->to_set & FUSE_SET_ATTR_ATIME_NOW)
+			tv[0].tv_sec = now.tv_sec;
+		else
+			tv[0].tv_sec = st_pre.st_atime;
+
+		tv[0].tv_nsec = 0;
+
+		/* mtime */
+		if (in->to_set & FUSE_SET_ATTR_MTIME_NOW)
+			tv[1].tv_sec = now.tv_sec;
+		else
+			tv[1].tv_sec = st_pre.st_mtime;
+
+		tv[1].tv_nsec = 0;
+
+		errno = 0;
+		rc = futimens(fd, tv);
+		if (rc)
+			D_GOTO(out, out->rc = errno);
+
+		in->to_set &= ~(FUSE_SET_ATTR_MTIME_NOW |
+				FUSE_SET_ATTR_ATIME_NOW);
+	}
+
 	if (in->to_set) {
 		IOF_TRACE_ERROR(handle, "Unable to set %#x", in->to_set);
 		D_GOTO(out, out->rc = ENOTSUP);
@@ -2553,6 +2593,9 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		d_iov_set(&out->data, &stbuf, sizeof(struct stat));
 
 out:
+	IOF_TRACE_DEBUG(handle, "set %#x err %d rc %d",
+			in->to_set, out->err, out->rc);
+
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
