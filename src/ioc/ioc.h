@@ -395,7 +395,7 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
  * for permanent failure of the remote ep.
  */
-#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_TIMEDOUT) || \
+#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
 					((CB_INFO)->cci_rc == -DER_OOG))
 
 void ioc_status_cb(const struct crt_cb_info *);
