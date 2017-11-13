@@ -185,7 +185,9 @@ cnss_detach_handler(crt_rpc_t *rpc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
 	/* Do nothing if there are more CNSS attached */
-	if (--cnss_count)
+	cnss_count--;
+
+	if (cnss_count > 0)
 		return;
 
 	IOF_LOG_DEBUG("Last CNSS detached from Rank %d",
@@ -2779,7 +2781,6 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	cnss_count = 0;
 	base.primary_group = crt_group_lookup(base.group_name);
 	if (base.primary_group == NULL) {
 		IOF_LOG_ERROR("Failed to look up primary group");
