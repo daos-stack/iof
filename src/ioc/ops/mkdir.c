@@ -53,6 +53,9 @@ int ioc_mkdir(const char *file, mode_t mode)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
+	if (strnlen(file, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -71,7 +74,7 @@ int ioc_mkdir(const char *file, mode_t mode)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->common.path = (d_string_t)file;
+	strncpy(in->common.name.name, file, NAME_MAX);
 	in->mode = mode;
 	in->common.gah = fs_handle->gah;
 
@@ -116,11 +119,14 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
-	in->common.path = (d_string_t)name;
+
+	strncpy(desc->ie->name, name, NAME_MAX);
+	desc->ie->parent = parent;
+	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;
 
 	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, parent, &in->common.gah);
+	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);

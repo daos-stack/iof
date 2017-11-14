@@ -54,6 +54,9 @@ ioc_rename_priv(const char *oldpath, const char *newpath)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
+	if (strnlen(newpath, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -73,7 +76,7 @@ ioc_rename_priv(const char *oldpath, const char *newpath)
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
 	in->oldpath = (d_string_t)oldpath;
-	in->common.path = (d_string_t)newpath;
+	strncpy(in->common.name.name, newpath, NAME_MAX);
 	in->common.gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);

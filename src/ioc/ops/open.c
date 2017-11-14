@@ -83,6 +83,9 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
+	if (strnlen(file, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
 	 * would otherwise be using and check that is set.
@@ -119,7 +122,7 @@ int ioc_open(const char *file, struct fuse_file_info *fi)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(handle->open_rpc);
-	in->path = (d_string_t)file;
+	strncpy(in->name.name, file, NAME_MAX);
 
 	in->gah = fs_handle->gah;
 	in->flags = fi->flags;

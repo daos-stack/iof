@@ -53,6 +53,9 @@ int ioc_symlink(const char *oldpath, const char *newpath)
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
 
+	if (strnlen(newpath, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
 		return -EROFS;
@@ -70,7 +73,7 @@ int ioc_symlink(const char *oldpath, const char *newpath)
 	}
 
 	in = crt_req_get(rpc);
-	in->common.path = (d_string_t)newpath;
+	strncpy(in->common.name.name, newpath, NAME_MAX);
 	in->oldpath = (d_string_t)oldpath;
 	in->common.gah = fs_handle->gah;
 
@@ -117,11 +120,14 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
-	in->common.path = (d_string_t)name;
+	strncpy(in->common.name.name, name, NAME_MAX);
 	in->oldpath = (d_string_t)link;
 
+	strncpy(desc->ie->name, name, NAME_MAX);
+	desc->ie->parent = parent;
+
 	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, parent, &in->common.gah);
+	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);

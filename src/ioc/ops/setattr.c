@@ -77,7 +77,7 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	       struct fuse_file_info *fi)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
-	struct iof_file_handle		*handle;
+	struct iof_file_handle		*handle = NULL;
 	struct iof_setattr_in		*in;
 	crt_rpc_t			*rpc = NULL;
 	int ret;

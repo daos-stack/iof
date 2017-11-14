@@ -132,6 +132,13 @@ struct iof_fs_info {
 	uint8_t flags;
 };
 
+/* The name of a filesystem entry
+ *
+ */
+struct ios_name {
+	char name[NAME_MAX + 1];
+};
+
 /* The response to the initial query RPC.
  * Note that readdir_size comes after the IOV in order to avoid
  * the compiler automatically padding the struct.
@@ -147,7 +154,7 @@ struct iof_psr_query {
 
 struct iof_gah_string_in {
 	struct ios_gah gah;
-	d_string_t path;
+	struct ios_name name;
 };
 
 struct iof_string_in {
@@ -205,8 +212,10 @@ struct iof_create_in {
  * to force the modifier to ensure the same condition is met.
  */
 _Static_assert(sizeof(struct iof_gah_string_in) ==
-	       (sizeof(struct ios_gah) + sizeof(d_string_t)),
+	       (sizeof(struct ios_gah) + sizeof(struct ios_name)),
 	       "iof_gah_string_in size unexpected");
+
+_Static_assert(NAME_MAX == 255, "NAME_MAX wrong size");
 
 struct iof_rename_in {
 	struct ios_gah old_gah;
@@ -217,8 +226,8 @@ struct iof_rename_in {
 };
 
 struct iof_open_in {
+	struct ios_name name;
 	struct ios_gah gah;
-	d_string_t path;
 	uint32_t flags;
 };
 
@@ -243,7 +252,7 @@ struct iof_readdir_in {
 
 /* Each READDIR rpc contains an array of these */
 struct iof_readdir_reply {
-	char d_name[256];
+	char d_name[NAME_MAX + 1];
 	struct stat stat;
 	off_t nextoff;
 	int read_rc;

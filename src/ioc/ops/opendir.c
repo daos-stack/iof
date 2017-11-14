@@ -78,11 +78,14 @@ int ioc_opendir(const char *dir, struct fuse_file_info *fi)
 	struct iof_gah_string_in *in;
 	int rc;
 
+	if (strnlen(dir, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	IOC_REQ_INIT(dh, fs_handle, api, in, rc);
 	if (rc)
 		D_GOTO(out, rc);
 	IOF_TRACE_INFO(dh, "dir %s", dir);
-	in->path = (d_string_t)dir;
+	strncpy(in->name.name, dir, NAME_MAX);
 	in->gah = fs_handle->gah;
 	IOC_REQ_SEND(dh, fs_handle, rc);
 out:

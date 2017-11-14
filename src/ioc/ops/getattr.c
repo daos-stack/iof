@@ -72,13 +72,16 @@ int ioc_getattr_name(const char *path, struct stat *stbuf)
 
 	int rc;
 
+	if (strnlen(path, NAME_MAX) == NAME_MAX)
+		return -EIO;
+
 	IOF_LOG_INFO("path %s", path);
 	IOC_REQ_INIT(desc, fs_handle, api, in, rc);
 	if (rc)
 		D_GOTO(out, rc);
 
 	desc->request.ptr = stbuf;
-	in->path = (d_string_t)path;
+	strncpy(in->name.name, path, NAME_MAX);
 	IOC_REQ_SEND(desc, fs_handle, rc);
 out:
 	IOC_REQ_RELEASE(desc);

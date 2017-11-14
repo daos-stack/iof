@@ -133,8 +133,8 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
 
-	in->path = (d_string_t)name;
-	strncpy(desc->ie->name, name, 256);
+	strncpy(in->name.name, name, NAME_MAX);
+	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;
 
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);

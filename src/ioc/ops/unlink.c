@@ -43,7 +43,7 @@
 int ioc_unlink(const char *path)
 {
 	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_gah_string_in *in;
+	struct iof_open_in *in;
 	struct status_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
 	int rc;
@@ -52,6 +52,9 @@ int ioc_unlink(const char *path)
 
 	if (FS_IS_OFFLINE(fs_handle))
 		return -fs_handle->offline_reason;
+
+	if (strnlen(path, NAME_MAX) == NAME_MAX)
+		return -EIO;
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
@@ -71,7 +74,7 @@ int ioc_unlink(const char *path)
 
 	iof_tracker_init(&reply.tracker, 1);
 	in = crt_req_get(rpc);
-	in->path = (d_string_t)path;
+	strncpy(in->name.name, path, NAME_MAX);
 	in->gah = fs_handle->gah;
 
 	rc = crt_req_send(rpc, ioc_status_cb, &reply);
@@ -122,7 +125,7 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 	}
 
 	in = crt_req_get(rpc);
-	in->path = (d_string_t)name;
+	strncpy(in->name.name, name, NAME_MAX);
 	if (dir)
 		in->flags = 1;
 

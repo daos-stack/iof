@@ -47,9 +47,22 @@
  */
 #define CMF_GAH CMF_UUID
 
+int
+iof_proc_name(crt_proc_t proc, void *arg)
+{
+	struct ios_name *data = arg;
+
+	return crt_proc_memcpy(proc, data, sizeof(*data));
+}
+
+struct crt_msg_field CMF_IOF_NAME = {
+	.cmf_size = sizeof(struct ios_name),
+	.cmf_proc = iof_proc_name,
+};
+
 struct crt_msg_field *gah_string_in[] = {
-	&CMF_GAH,
-	&CMF_STRING,
+	&CMF_GAH,	/* gah */
+	&CMF_IOF_NAME,	/* name */
 };
 
 struct crt_msg_field *string_in[] = {
@@ -80,13 +93,13 @@ struct crt_msg_field *create_out[] = {
 
 struct crt_msg_field *two_string_in[] = {
 	&CMF_GAH,
-	&CMF_STRING,
+	&CMF_IOF_NAME,
 	&CMF_STRING,
 };
 
 struct crt_msg_field *create_in[] = {
 	&CMF_GAH,	/* gah */
-	&CMF_STRING,	/* path */
+	&CMF_IOF_NAME,	/* name */
 	&CMF_INT,	/* mode */
 	&CMF_INT,	/* flags */
 	&CMF_INT,	/* reg_inode */
@@ -102,9 +115,9 @@ struct crt_msg_field *rename_in[] = {
 
 /* Note this is also used for unlink/rmdir */
 struct crt_msg_field *open_in[] = {
-	&CMF_GAH,
-	&CMF_STRING,
-	&CMF_INT,
+	&CMF_IOF_NAME,	/* name */
+	&CMF_GAH,	/* gah */
+	&CMF_INT,	/* flags */
 };
 
 struct crt_msg_field *iov_pair[] = {

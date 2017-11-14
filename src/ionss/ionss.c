@@ -132,7 +132,7 @@ static struct ios_base base;
 	do {								\
 		VALIDATE_ARGS_GAH_FILE_H(rpc, (in)->common, out,	\
 					 parent);			\
-		if (!(in)->common.path || !(in)->oldpath) {		\
+		if (!(in)->oldpath) {					\
 			IOF_TRACE_ERROR(rpc, "Missing inputs.");	\
 			out->err = IOF_ERR_CART;			\
 		}							\
@@ -350,14 +350,9 @@ iof_getattr_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (!in->path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
 	errno = 0;
 	rc = fstatat(parent->fd,
-		     iof_get_rel_path(in->path), &stbuf,
+		     iof_get_rel_path(in->name.name), &stbuf,
 		     AT_SYMLINK_NOFOLLOW);
 	if (rc)
 		out->rc = errno;
@@ -370,7 +365,7 @@ iof_getattr_handler(crt_rpc_t *rpc)
 out:
 
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
-		      in->path, out->err, out->rc);
+		      in->name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -439,14 +434,10 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (in->path) {
-		path = (char *)iof_get_rel_path(in->path);
+	if (in->name.name[0] != '\0') {
+		path = (char *)iof_get_rel_path(in->name.name);
 	} else {
-		rc = asprintf(&path, "/proc/self/fd/%d", parent->fd);
-		if (rc < 0 || !path) {
-			out->rc = ENOMEM;
-			goto out;
-		}
+		path = parent->proc_fd_name;
 	}
 
 	IOF_LOG_DEBUG("Opening path " GAH_PRINT_STR " %s",
@@ -484,14 +475,11 @@ iof_opendir_handler(crt_rpc_t *rpc)
 
 out:
 	IOF_LOG_DEBUG("path %s result err %d rc %d",
-		      in->path, out->err, out->rc);
+		      in->name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-
-	if (!in->path)
-		D_FREE(path);
 
 	if (parent)
 		ios_fh_decref(parent, 1);
@@ -825,7 +813,7 @@ htable_mf_insert(struct ios_projection *projection,
 	handle->mf.flags = mf->flags;
 	handle->mf.inode_no = mf->inode_no;
 	handle->mf.type = mf->type;
-	snprintf(&handle->proc_fd_name[0], 64, "/proc/self/fd/%d", handle->fd);
+	snprintf(handle->proc_fd_name, 64, "/proc/self/fd/%d", handle->fd);
 	atomic_fetch_add(&handle->ht_ref, 1);
 
 	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
@@ -1026,7 +1014,7 @@ lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
 	projection = parent->projection;
 
 	errno = 0;
-	fd = openat(parent->fd, in->path, mf.flags);
+	fd = openat(parent->fd, in->name.name, mf.flags);
 	if (fd == -1) {
 		out->rc = errno;
 		if (!out->rc)
@@ -1037,7 +1025,7 @@ lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
 	find_and_insert_lookup(projection, fd, &stbuf, &mf, out);
 
 	IOF_TRACE_INFO(rpc, "'%s' ino:%lu " GAH_PRINT_STR,
-		       in->path, mf.inode_no, GAH_PRINT_VAL(out->gah));
+		       in->name.name, mf.inode_no, GAH_PRINT_VAL(out->gah));
 
 out:
 	IOF_TRACE_INFO(rpc, "Sending reply %d %d", out->rc, out->err);
@@ -1061,9 +1049,6 @@ iof_lookup_handler(crt_rpc_t *rpc)
 		goto out;
 
 	IOF_TRACE_UP(rpc, parent, "lookup");
-
-	if (!in->path)
-		out->err = IOF_ERR_CART;
 
 out:
 	lookup_common(rpc, in, out, parent);
@@ -1097,11 +1082,10 @@ iof_open_handler(crt_rpc_t *rpc)
 	 * above
 	 */
 
-	if (in->path) {
-		path = (char *)iof_get_rel_path(in->path);
-	} else {
-		path = &parent->proc_fd_name[0];
-	}
+	if (in->name.name[0] != '\0')
+		path = (char *)iof_get_rel_path(in->name.name);
+	else
+		path = parent->proc_fd_name;
 
 	IOF_LOG_DEBUG("path %s flags 0%o",
 		      path, in->flags);
@@ -1151,22 +1135,17 @@ iof_create_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (!in->common.path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
 	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
 
 	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o",
-			in->common.path, in->flags, in->mode);
+			in->common.name.name, in->flags, in->mode);
 
 	errno = 0;
-	fd = openat(parent->fd, iof_get_rel_path(in->common.path), in->flags,
-		    in->mode);
+	fd = openat(parent->fd, iof_get_rel_path(in->common.name.name),
+		    in->flags, in->mode);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -1175,8 +1154,8 @@ iof_create_handler(crt_rpc_t *rpc)
 	mf.flags = in->flags;
 
 	if (in->reg_inode) {
-		struct ionss_mini_file		imf = {.type = inode_handle,
-						       .flags = O_PATH | O_NOATIME | O_RDONLY};
+		struct ionss_mini_file	imf = {.type = inode_handle,
+					       .flags = O_PATH | O_NOATIME | O_RDONLY};
 		int ifd;
 
 		rc = asprintf(&path, "/proc/self/fd/%d", fd);
@@ -1203,14 +1182,15 @@ iof_create_handler(crt_rpc_t *rpc)
 	}
 
 out:
-	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o", in->common.path,
+	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o",
+			in->common.name.name,
 			in->flags, in->mode & S_IFREG, in->mode & ~S_IFREG);
 
 	LOG_FLAGS(rpc, in->flags);
 	LOG_MODES(rpc, in->mode);
 
 	IOF_TRACE_INFO(rpc, "path %s result err %d rc %d",
-		       in->common.path, out->err, out->rc);
+		       in->common.name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1606,14 +1586,14 @@ iof_rename_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = renameat(parent->fd, iof_get_rel_path(in->oldpath),
-		      parent->fd, iof_get_rel_path(in->common.path));
+		      parent->fd, iof_get_rel_path(in->common.name.name));
 
 	if (rc)
 		out->rc = errno;
 
 out:
 	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
-		      in->oldpath, in->common.path, out->err, out->rc);
+		      in->oldpath, in->common.name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1697,14 +1677,14 @@ iof_symlink_handler(crt_rpc_t *rpc)
 
 	errno = 0;
 	rc = symlinkat(in->oldpath, parent->fd,
-		       iof_get_rel_path(in->common.path));
+		       iof_get_rel_path(in->common.name.name));
 
 	if (rc)
 		out->rc = errno;
 
 out:
 	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->common.path, in->oldpath, out->err, out->rc);
+		      in->common.name.name, in->oldpath, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1733,15 +1713,15 @@ iof_symlink_ll_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = symlinkat(in->oldpath, parent->fd, in->common.path);
+	rc = symlinkat(in->oldpath, parent->fd, in->common.name.name);
 
 	if (rc)
 		out->rc = errno;
 
 out:
-	lookup_common(rpc, (struct iof_gah_string_in *)in, out, parent);
+	lookup_common(rpc, &in->common, out, parent);
 	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->common.path, in->oldpath, out->err, out->rc);
+		      in->common.name.name, in->oldpath, out->err, out->rc);
 }
 
 static void
@@ -1756,17 +1736,14 @@ iof_mkdir_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (!in->common.path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
 
 	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
 	errno = 0;
-	rc = mkdirat(parent->fd, iof_get_rel_path(in->common.path), in->mode);
+	rc = mkdirat(parent->fd, iof_get_rel_path(in->common.name.name),
+		     in->mode);
 
 	if (rc)
 		out->rc = errno;
@@ -1796,23 +1773,18 @@ iof_mkdir_ll_handler(crt_rpc_t *rpc)
 
 	IOF_TRACE_UP(rpc, parent, "mkdir");
 
-	if (!in->common.path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
 	VALIDATE_WRITE(parent->projection, out);
 	if (out->err || out->rc)
 		goto out;
 
 	errno = 0;
-	rc = mkdirat(parent->fd, in->common.path, in->mode);
+	rc = mkdirat(parent->fd, in->common.name.name, in->mode);
 
 	if (rc)
 		out->rc = errno;
 
 out:
-	lookup_common(rpc, (struct iof_gah_string_in *)in, out, parent);
+	lookup_common(rpc, &in->common, out, parent);
 }
 
 /* This function needs additional checks to handle longer links.
@@ -2052,13 +2024,8 @@ static void iof_unlink_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
-	if (!in->path) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
 	errno = 0;
-	rc = unlinkat(parent->fd, iof_get_rel_path(in->path),
+	rc = unlinkat(parent->fd, iof_get_rel_path(in->name.name),
 		      in->flags ? AT_REMOVEDIR : 0);
 
 	if (rc)
@@ -3327,7 +3294,7 @@ int main(int argc, char **argv)
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
-		snprintf(&projection->root->proc_fd_name[0], 64,
+		snprintf(projection->root->proc_fd_name, 64,
 			 "/proc/self/fd/%d",
 			 projection->root->fd);
 		atomic_fetch_add(&projection->root->ht_ref, 1);
