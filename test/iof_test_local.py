@@ -397,7 +397,8 @@ class Testlocal(unittest.TestCase,
 
         self.cleanup(procrtn)
 
-        self.rpc_descriptor_tracing()
+        if self.internals_tracing == 'yes':
+            self.rpc_descriptor_tracing()
 
         self.normal_output("Ending {0}".format(self.id()))
 
