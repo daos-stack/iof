@@ -220,8 +220,8 @@ _Static_assert(NAME_MAX == 255, "NAME_MAX wrong size");
 struct iof_rename_in {
 	struct ios_gah old_gah;
 	struct ios_gah new_gah;
-	d_string_t old_path;
-	d_string_t new_path;
+	struct ios_name old_name;
+	struct ios_name new_name;
 	uint32_t flags;
 };
 

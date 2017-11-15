@@ -121,8 +121,8 @@ struct crt_msg_field *create_in[] = {
 struct crt_msg_field *rename_in[] = {
 	&CMF_GAH,	/* old parent */
 	&CMF_GAH,	/* new parent */
-	&CMF_STRING,	/* old name */
-	&CMF_STRING,	/* new name */
+	&CMF_IOF_NAME,	/* old name */
+	&CMF_IOF_NAME,	/* new name */
 	&CMF_INT,	/* flags */
 };
 

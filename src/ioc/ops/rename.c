@@ -135,8 +135,8 @@ ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 	in = crt_req_get(rpc);
 
-	in->old_path = (d_string_t)name;
-	in->new_path = (d_string_t)newname;
+	strncpy(in->old_name.name, name, NAME_MAX);
+	strncpy(in->new_name.name, newname, NAME_MAX);
 	in->flags = flags;
 
 	/* Find the GAH of the parent */

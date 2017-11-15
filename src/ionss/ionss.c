@@ -1618,20 +1618,17 @@ iof_rename_ll_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		D_GOTO(out, 0);
 
-	if (!in->old_path || !in->new_path)
-		D_GOTO(out, out->err = IOF_GAH_INVALID);
-
 	errno = 0;
 
 #if 1
 	rc = syscall(SYS_renameat2,
-		     old_parent->fd, in->old_path,
-		     new_parent->fd, in->new_path,
+		     old_parent->fd, in->old_name.name,
+		     new_parent->fd, in->new_name.name,
 		     in->flags);
 
 #else
-	rc = renameat2(old_parent->fd, in->old_path,
-		       new_parent->fd, in->new_path,
+	rc = renameat2(old_parent->fd, in->old_name.name,
+		       new_parent->fd, in->new_name.name,
 		       in->flags);
 #endif
 	if (rc)
@@ -1639,7 +1636,7 @@ iof_rename_ll_handler(crt_rpc_t *rpc)
 
 out:
 	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
-		      in->old_path, in->new_path, out->err, out->rc);
+		      in->old_name.name, in->new_name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
