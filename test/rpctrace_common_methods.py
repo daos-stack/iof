@@ -648,6 +648,7 @@ class RpcTrace(common_methods.ColorizedOutput):
     def rpc_trace_output(self, descriptor, log_path):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
            log messages related to descriptor"""
+        missing_links = []
         output = []
         self.normal_output('\n{0:<30}{1:<30}{2:<30}'.format('Descriptor',
                                                             'Type', 'Parent'))
@@ -658,9 +659,14 @@ class RpcTrace(common_methods.ColorizedOutput):
                 output.append('{0:<30}{1:<30}{2} [{3}]'.\
                               format(k, v[0], v[1],
                                      self.trace_dict[v[1]][0]))
-            else:
-                output.append('WARN: {0:<24}{1:<30}{2} [None]'.\
+            elif v[1] == 'root':
+                output.append('{0:<24}{1:<30}{2} [None]'.\
                               format(k, v[0], v[1]))
+            else: #fail if missing parent/link
+                output.append('ERROR: {0:<24}{1:<30}{2} [None]'.\
+                              format(k, v[0], v[1]))
+                missing_links.append(v[1])
+
         self.list_output(output)
         output = []
 
@@ -690,6 +696,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         #Log dump for descriptor hierarchy
         self.rpc_trace_output_logdump(descriptor, log_path)
+
+        return missing_links
 
     def descriptor_error_state_tracing(self, log_path):
         """Check for any descriptors that are not registered/deregistered"""

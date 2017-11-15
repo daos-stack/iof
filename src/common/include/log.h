@@ -103,6 +103,11 @@
 		"%s:%d TRACE: %s(%p) Deregistered\n",	\
 		__FILE__, __LINE__, __func__, ptr)
 
+#define IOF_TRACE_ROOT(ptr, type)				\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,			\
+		"%s:%d TRACE: %s(%p) Registered new %s as root\n",\
+		__FILE__, __LINE__, __func__, ptr, type)
+
 #if defined(__cplusplus)
 extern "C" {
 #endif

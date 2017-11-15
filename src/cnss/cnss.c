@@ -722,7 +722,7 @@ int main(int argc, char **argv)
 	D_ALLOC_PTR(cnss_info);
 	if (!cnss_info)
 		return CNSS_ERR_NOMEM;
-	IOF_TRACE_UP(cnss_info, NULL, "cnss_info");
+	IOF_TRACE_ROOT(cnss_info, "cnss_info");
 
 	ctrl_info_init(&cnss_info->info);
 	cnss_info->prefix = prefix;

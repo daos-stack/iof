@@ -407,6 +407,7 @@ class Testlocal(unittest.TestCase,
                 self.targets_rpctrace[index].rpc_reporting(ionss_log)
 
         #Descriptor tracing for the CNSS
+        missing_links = []
         reused_desc = []
         reused_desc = self.origin_rpctrace.\
                       descriptor_rpc_trace(self.cnss_logfile)
@@ -417,7 +418,10 @@ class Testlocal(unittest.TestCase,
 
         descriptor = self.origin_rpctrace.descriptor_to_trace(self.cnss_logfile)
         if descriptor is not None:
-            self.origin_rpctrace.rpc_trace_output(descriptor, self.cnss_logfile)
+            missing_links = self.origin_rpctrace.\
+                            rpc_trace_output(descriptor, self.cnss_logfile)
+        if missing_links:
+            self.fail('Missing links for TRACE macros: %s' % missing_links)
 
         self.internals_log_file.close()
         self.internals_log_file = None
