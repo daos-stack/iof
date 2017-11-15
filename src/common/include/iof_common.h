@@ -170,7 +170,7 @@ struct iof_string_out {
 
 struct iof_entry_out {
 	struct ios_gah gah;
-	d_iov_t stat;
+	struct stat stat;
 	int rc;
 	int err;
 };
@@ -178,7 +178,7 @@ struct iof_entry_out {
 struct iof_create_out {
 	struct ios_gah gah;
 	struct ios_gah igah;
-	d_iov_t stat;
+	struct stat stat;
 	int rc;
 	int err;
 };
@@ -350,7 +350,7 @@ struct iof_time_gah_in {
 
 struct iof_setattr_in {
 	struct ios_gah gah;
-	d_iov_t attr;
+	struct stat stat;
 	uint32_t to_set;
 };
 

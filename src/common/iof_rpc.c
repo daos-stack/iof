@@ -55,9 +55,22 @@ iof_proc_name(crt_proc_t proc, void *arg)
 	return crt_proc_memcpy(proc, data, sizeof(*data));
 }
 
+int
+iof_proc_stat(crt_proc_t proc, void *arg)
+{
+	struct stat *data = arg;
+
+	return crt_proc_memcpy(proc, data, sizeof(*data));
+}
+
 struct crt_msg_field CMF_IOF_NAME = {
 	.cmf_size = sizeof(struct ios_name),
 	.cmf_proc = iof_proc_name,
+};
+
+struct crt_msg_field CMF_IOF_STAT = {
+	.cmf_size = sizeof(struct stat),
+	.cmf_proc = iof_proc_stat,
 };
 
 struct crt_msg_field *gah_string_in[] = {
@@ -77,16 +90,16 @@ struct crt_msg_field *string_out[] = {
 };
 
 struct crt_msg_field *entry_out[] = {
-	&CMF_GAH,
-	&CMF_IOVEC,
-	&CMF_INT,
-	&CMF_INT,
+	&CMF_GAH,	/* gah */
+	&CMF_IOF_STAT,	/* struct stat */
+	&CMF_INT,	/* rc */
+	&CMF_INT,	/* err */
 };
 
 struct crt_msg_field *create_out[] = {
 	&CMF_GAH,	/* gah */
 	&CMF_GAH,	/* inode gah */
-	&CMF_IOVEC,	/* struct stat */
+	&CMF_IOF_STAT,	/* struct stat */
 	&CMF_INT,	/* rc */
 	&CMF_INT,	/* err */
 };
@@ -237,7 +250,7 @@ struct crt_msg_field *utimens_gah_in[] = {
 
 struct crt_msg_field *setattr_in[] = {
 	&CMF_GAH,	/* gah */
-	&CMF_IOVEC,	/* struct stat */
+	&CMF_IOF_STAT,	/* struct stat */
 	&CMF_UINT32,	/* to_set */
 };
 

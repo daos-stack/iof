@@ -208,7 +208,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	req = handle->open_req;
 	handle->open_req = 0;
 
-	memcpy(&entry.attr, out->stat.iov_buf, sizeof(struct stat));
+	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
 	entry.generation = 1;
 	entry.ino = entry.attr.st_ino;
 

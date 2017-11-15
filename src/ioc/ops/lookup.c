@@ -68,13 +68,7 @@ void iof_entry_cb(struct ioc_request *request)
 	if (rc)
 		D_GOTO(out, rc);
 
-	if (!out->stat.iov_buf || out->stat.iov_len != sizeof(struct stat)) {
-		IOF_TRACE_ERROR(desc, "stat buff invalid %p %zi",
-				out->stat.iov_buf, out->stat.iov_len);
-		D_GOTO(out, rc = EIO);
-	}
-
-	memcpy(&entry.attr, out->stat.iov_buf, sizeof(struct stat));
+	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
 	entry.generation = 1;
 	entry.ino = entry.attr.st_ino;
 

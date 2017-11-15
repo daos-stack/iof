@@ -885,7 +885,6 @@ out:
 
 static void find_and_insert_lookup(struct ios_projection *projection,
 				   int fd,
-				   struct stat *stbuf,
 				   struct ionss_mini_file *mf,
 				   struct iof_entry_out *out)
 {
@@ -893,16 +892,16 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 	int				rc;
 
 	errno = 0;
-	rc = fstat(fd, stbuf);
+	rc = fstat(fd, &out->stat);
 	if (rc) {
 		out->rc = errno;
 		close(fd);
 		return;
 	}
 
-	mf->inode_no = stbuf->st_ino;
+	mf->inode_no = out->stat.st_ino;
 
-	if (projection->dev_no != stbuf->st_dev) {
+	if (projection->dev_no != out->stat.st_dev) {
 		out->rc = EACCES;
 		close(fd);
 		return;
@@ -929,14 +928,12 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 	}
 
 out:
-	d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
 	out->gah = handle->gah;
 }
 
 static void find_and_insert_create(struct ios_projection *projection,
 				   int fd,
 				   int ifd,
-				   struct stat *stbuf,
 				   struct ionss_mini_file *mf,
 				   struct ionss_mini_file *imf,
 				   struct iof_create_out *out)
@@ -945,7 +942,7 @@ static void find_and_insert_create(struct ios_projection *projection,
 	struct ionss_file_handle	*ihandle = NULL;
 	int				rc;
 
-	rc = fstat(fd, stbuf);
+	rc = fstat(fd, &out->stat);
 	if (rc) {
 		out->rc = errno;
 		close(fd);
@@ -954,7 +951,7 @@ static void find_and_insert_create(struct ios_projection *projection,
 		return;
 	}
 
-	if (projection->dev_no != stbuf->st_dev) {
+	if (projection->dev_no != out->stat.st_dev) {
 		out->rc = EACCES;
 		close(fd);
 		if (ifd)
@@ -967,10 +964,10 @@ static void find_and_insert_create(struct ios_projection *projection,
 	 * so there is no additional step needed here.
 	 */
 
-	mf->inode_no = stbuf->st_ino;
+	mf->inode_no = out->stat.st_ino;
 
 	if (imf) {
-		imf->inode_no = stbuf->st_ino;
+		imf->inode_no = out->stat.st_ino;
 
 		ihandle = htable_mf_insert(projection, imf, ifd);
 		if (!ihandle) {
@@ -992,7 +989,6 @@ static void find_and_insert_create(struct ios_projection *projection,
 		return;
 	}
 
-	d_iov_set(&out->stat, stbuf, sizeof(*stbuf));
 	if (ihandle)
 		out->igah = ihandle->gah;
 	out->gah = handle->gah;
@@ -1003,7 +999,6 @@ lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
 	      struct iof_entry_out *out, struct ionss_file_handle *parent)
 {
 	struct ios_projection		*projection = NULL;
-	struct stat			stbuf = {0};
 	struct ionss_mini_file		mf = {.type = inode_handle,
 					      .flags = O_PATH | O_NOATIME | O_NOFOLLOW | O_RDONLY};
 	int				fd;
@@ -1022,7 +1017,7 @@ lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
 		goto out;
 	}
 
-	find_and_insert_lookup(projection, fd, &stbuf, &mf, out);
+	find_and_insert_lookup(projection, fd, &mf, out);
 
 	IOF_TRACE_INFO(rpc, "'%s' ino:%lu " GAH_PRINT_STR,
 		       in->name.name, mf.inode_no, GAH_PRINT_VAL(out->gah));
@@ -1126,7 +1121,6 @@ iof_create_handler(crt_rpc_t *rpc)
 	struct iof_create_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 	struct ionss_mini_file		mf = {.type = open_handle};
-	struct stat			stbuf = {0};
 	char *path = NULL;
 	int fd;
 	int rc;
@@ -1175,10 +1169,10 @@ iof_create_handler(crt_rpc_t *rpc)
 		}
 		imf.flags |= O_NOFOLLOW;
 		find_and_insert_create(parent->projection,
-				       fd, ifd, &stbuf, &mf, &imf, out);
+				       fd, ifd, &mf, &imf, out);
 	} else {
 		find_and_insert_create(parent->projection,
-				       fd, 0, &stbuf, &mf, NULL, out);
+				       fd, 0, &mf, NULL, out);
 	}
 
 out:
@@ -2412,7 +2406,6 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	struct iof_data_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
 	struct stat stbuf = {0};
-	struct stat *stbuf_in;
 	int fd = -1;
 	int rc;
 
@@ -2423,12 +2416,6 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	VALIDATE_WRITE(handle->projection, out);
 	if (out->err || out->rc)
 		goto out;
-
-	if (!in->attr.iov_buf) {
-		IOF_LOG_ERROR("No input attr");
-		D_GOTO(out, out->err = IOF_ERR_CART);
-	}
-	stbuf_in = in->attr.iov_buf;
 
 	IOF_TRACE_INFO(handle, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
@@ -2463,7 +2450,7 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 
 		/* atime */
 		if (in->to_set & FUSE_SET_ATTR_ATIME)
-			tv[0].tv_sec = stbuf_in->st_atime;
+			tv[0].tv_sec = in->stat.st_atime;
 		else
 			tv[0].tv_sec = st_pre.st_atime;
 
@@ -2471,7 +2458,7 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 
 		/* mtime */
 		if (in->to_set & FUSE_SET_ATTR_MTIME)
-			tv[1].tv_sec = stbuf_in->st_mtime;
+			tv[1].tv_sec = in->stat.st_mtime;
 		else
 			tv[1].tv_sec = st_pre.st_mtime;
 
@@ -2489,9 +2476,9 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	 */
 	if (in->to_set & FUSE_SET_ATTR_MODE) {
 		IOF_TRACE_DEBUG(handle, "setting mode to %#x",
-				stbuf_in->st_mode);
+				in->stat.st_mode);
 		errno = 0;
-		rc = fchmod(fd,  stbuf_in->st_mode);
+		rc = fchmod(fd,  in->stat.st_mode);
 		if (rc)
 			D_GOTO(out, out->rc = errno);
 
@@ -2502,9 +2489,9 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	 */
 	if (in->to_set & FUSE_SET_ATTR_SIZE) {
 		IOF_TRACE_DEBUG(handle, "setting size to %#lx",
-				stbuf_in->st_size);
+				in->stat.st_size);
 		errno = 0;
-		rc = ftruncate(fd, stbuf_in->st_size);
+		rc = ftruncate(fd, in->stat.st_size);
 		if (rc)
 			D_GOTO(out, out->rc = errno);
 

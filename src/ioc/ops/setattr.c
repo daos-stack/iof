@@ -117,7 +117,7 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 
 	in->to_set = to_set;
 
-	d_iov_set(&in->attr, attr, sizeof(*attr));
+	memcpy(&in->stat, attr, sizeof(*attr));
 
 	rc = crt_req_send(rpc, attr_ll_cb, req);
 	if (rc) {
