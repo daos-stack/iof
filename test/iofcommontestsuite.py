@@ -91,6 +91,7 @@ def valgrind_suffix(log_path, pmix=True):
     if use_valgrind == 'memcheck':
         return ['valgrind',
                 '--fair-sched=try',
+                '--free-fill=0x87',
                 '--xml=yes',
                 '--xml-file=%s' %
                 os.path.join(log_path,
