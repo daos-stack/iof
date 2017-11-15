@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#pylint: disable=too-many-lines
 # Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
@@ -161,16 +162,21 @@ class Testlocal(unittest.TestCase,
         call this during setUp() of each test, go method will call this
         only once per run"""
 
-        self.cnss_logfile = os.path.realpath(os.path.join(self.log_path,
-                                                          '1/rank.0/stdout'))
+        if log_to_file:
+            self.cnss_logfile = os.path.join(self.log_path, 'cnss.log')
+        else:
+            self.cnss_logfile = os.path.join(self.log_path, '1/rank.0/stdout')
+
         self.cnss_logfile_marker = self.timestamp_logfile(self.cnss_logfile)
 
         self.ionss_logfiles = []
-        for rank in os.listdir(os.path.join(self.log_path, '1')):
-            if rank != 'rank.0':
-                self.ionss_logfiles.append(os.path.realpath
-                                           (os.path.join(self.log_path, '1',
-                                                         rank, 'stdout')))
+        if log_to_file:
+            self.ionss_logfiles.append(os.path.join(self.log_path, 'ionss.log'))
+        else:
+            for rank in os.listdir(os.path.join(self.log_path, '1')):
+                if rank != 'rank.0':
+                    self.ionss_logfiles.append(os.path.join(self.log_path, '1',
+                                                            rank, 'stdout'))
         self.ionss_logfiles_marker = []
         for ionss_log in self.ionss_logfiles:
             self.ionss_logfiles_marker.append(self.timestamp_logfile(ionss_log))
@@ -366,21 +372,37 @@ class Testlocal(unittest.TestCase,
                                     'single node')
 
     def rpc_descriptor_tracing(self):
-        """RPC tracing runs at the end of each test; not currently supported
-           for local Go mode"""
+        """RPC tracing runs at the end of each test"""
 
-        #Origin RPC tracing
+        #Origin RPC tracing for one CNSS instance
         self.origin_rpctrace = rpctrace_common_methods.\
                                RpcTrace('origin', self.internals_log_file)
         self.origin_rpctrace.rpc_reporting(self.cnss_logfile)
 
-        #Target RPC tracing
+        #Target RPC tracing for multiple IONSS instances
         self.targets_rpctrace = []
         for index, ionss_log in enumerate(self.ionss_logfiles):
-            self.targets_rpctrace.append(rpctrace_common_methods.\
-                                         RpcTrace('target',
-                                                  self.internals_log_file))
-            self.targets_rpctrace[index].rpc_reporting(ionss_log)
+            if log_to_file:
+                if index > 0:
+                    #there should only be "ionss.log" present in logfiles
+                    self.error_output('Invalid ionss logfiles present with' \
+                                      '--log-to-file option')
+                    break
+                #all ionss instances will be logged to ionss.log, therefore will
+                #need to handle multiple processes by separating by PID
+                for rank in range(self.ionss_count):
+                    self.targets_rpctrace.\
+                    append(rpctrace_common_methods.\
+                           RpcTrace('target', self.internals_log_file))
+                    #rank will correlate to PID to trace in log
+                    #(ie rank 0 will trace for the first PID found in the logs)
+                    self.targets_rpctrace[rank].rpc_reporting(ionss_log, rank)
+            else:
+                #all process ranks will be logged to separate files
+                self.targets_rpctrace.append(rpctrace_common_methods.\
+                                             RpcTrace('target',
+                                                      self.internals_log_file))
+                self.targets_rpctrace[index].rpc_reporting(ionss_log)
 
         #Descriptor tracing for the CNSS
         reused_desc = []

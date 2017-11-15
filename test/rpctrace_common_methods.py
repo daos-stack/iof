@@ -233,8 +233,15 @@ class RpcTrace(common_methods.ColorizedOutput):
         return (op_table, alloc_table, dealloc_table, sent_table, submit_table,
                 errors)
 
-    def rpc_reporting(self, logfile_path):
+    def rpc_reporting(self, logfile_path, index_multiprocess=None):
         """RPC reporting for RPC state machine"""
+
+        #index_multiprocess is None if there is only one process being traced,
+        #otherwise first index should start at 0
+        if index_multiprocess is not None:
+            self.rpc_reporting_multiprocess(logfile_path, index_multiprocess)
+            return
+
         self.rpc_dict = {}
         self.op_state_list = []
         self.rpc_op_dict = {}
@@ -274,7 +281,110 @@ class RpcTrace(common_methods.ColorizedOutput):
                     rpc_state = self.DEALLOC_STATE
                     opcode = fields[10][:-2]
                 #opcode not printed in submitted/sent log messages;
-                #use rpc_op_list{} to store RPC and opcode
+                #use rpc_op_dict{} to store RPC and opcode
+                elif str_match == self.SEARCH_STRS[1]:
+                    rpc_state = self.SUBMIT_STATE
+                    opcode = self.rpc_op_dict.get(rpc, None)
+                elif str_match == self.SEARCH_STRS[2]:
+                    rpc_state = self.SENT_STATE
+                    opcode = self.rpc_op_dict.get(rpc, None)
+
+                if rpc and opcode and rpc_state:
+                    self.op_state_list.append((opcode, rpc_state))
+                    (state, extra) = self.rpc_error_state_tracing(rpc,
+                                                                  rpc_state,
+                                                                  opcode)
+                    function_name = fields[6]
+                    prefix = '{0}: {1}'.format(state, rpc)
+                    if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
+                        if extra:
+                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3} {4}' \
+                                               .format(prefix,
+                                                       rpc_state[4:],
+                                                       opcode,
+                                                       function_name,
+                                                       extra))
+                        else:
+                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3}' \
+                                               .format(prefix,
+                                                       rpc_state[4:],
+                                                       opcode,
+                                                       function_name))
+
+        if output_rpcs:
+            output_rpcs.insert(0, 'RPC State Transitions:')
+            output_rpcs.insert(1, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
+                               format('RPC', 'STATE', 'Op', 'Function'))
+            output_rpcs.insert(2, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
+                               format('---', '-----', '--', '--------'))
+            output_rpcs.append('')
+
+        output_rpcs.append('Opcode State Transition Tally:')
+        (ret_str, errors) = self.rpc_tabulate()
+        output_rpcs.append(ret_str)
+        output_rpcs.extend(errors)
+
+        self.list_output(output_rpcs)
+        f.close()
+
+    def rpc_reporting_multiprocess(self, logfile_path, index_multiprocess):
+        """RPC reporting for RPC state machine, for mutiprocesses"""
+        self.rpc_dict = {}
+        self.op_state_list = []
+        self.rpc_op_dict = {}
+
+        #search for all process ids in logfile with multiple instances logged
+        with open(logfile_path, 'r') as f:
+            pids = []
+            for line in f:
+                fields = line.strip().split()
+                pid = fields[2].strip().split('[')[1].strip().\
+                              split(']')[0]
+                if pid not in pids:
+                    pids.append(pid)
+
+        #index_multiprocess will determine which PID to trace
+        #(ie index 0 will be assigned the first PID found in logs)
+        pid_to_trace = pids[index_multiprocess]
+
+        if self.SOURCE is None:
+            self.error_output('Source not designated for rpc reporting in logs')
+            sys.exit(2)
+        self.normal_output('\nCaRT RPC Reporting ({0}):\nLogfile: {1}, '
+                           'PID: {2}\n'.format(self.SOURCE, logfile_path,
+                                               pid_to_trace))
+
+        f = open(logfile_path, 'r')
+        output_rpcs = []
+        errors = []
+
+        for line in f:
+            if (any(s in line for s in self.SEARCH_STRS[0]) or \
+               any(s in line for s in self.SEARCH_STRS[1:])) and \
+               pid_to_trace in line:
+                rpc_state = None
+                rpc = None
+                opcode = None
+                fields = line.strip().split()
+                #remove ending punctuation from log msg
+                translator = str.maketrans('', '', string.punctuation)
+                str_match = fields[-1].translate(translator)
+                if str_match == '0': #'decref to 0'
+                    str_match = ' '.join(fields[-3:]).translate(translator)
+                elif str_match == 'received': #'allocated per RPC request
+                    # received'
+                    str_match = ' '.join(fields[-5:]).translate(translator)
+
+                rpc = fields[8]
+
+                if any(s in str_match for s in self.SEARCH_STRS[0]):
+                    rpc_state = self.ALLOC_STATE
+                    opcode = fields[10][:-2]
+                elif str_match == self.SEARCH_STRS[-1]:
+                    rpc_state = self.DEALLOC_STATE
+                    opcode = fields[10][:-2]
+                #opcode not printed in submitted/sent log messages;
+                #use rpc_op_dict{} to store RPC and opcode
                 elif str_match == self.SEARCH_STRS[1]:
                     rpc_state = self.SUBMIT_STATE
                     opcode = self.rpc_op_dict.get(rpc, None)
