@@ -356,33 +356,34 @@ class RpcTrace(common_methods.ColorizedOutput):
                                           format(obj))
         return reused_desc
 
-    def rpc_trace_output_hierarchy(self, descriptor, output):
+    def rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
         trace = descriptor
         reuse_iter = 0
         while trace in self.trace_dict:
-            output.append('\nDescriptor Hierarchy ({0}):'.format(trace))
+            self.normal_output('\nDescriptor Hierarchy ({0}):'.format(trace))
             while trace in self.trace_dict:
-                output.append('{0}: {1}'.format(self.trace_dict['{0}'.\
-                                                format(trace)][0], trace))
+                self.normal_output('{0}: {1}'.format(self.trace_dict['{0}'.\
+                                                     format(trace)][0], trace))
                 if trace in self.rpc_dict:
                     #print out all linked rpcs in the hierarchy as well
                     for i in self.desc_dict['{0}'.format(trace)]:
-                        output.append('\t{0} {1}'.format(i[0], i[1]))
+                        self.normal_output('\t{0} {1}'.format(i[0], i[1]))
                 trace = self.trace_dict['{0}'.format(trace)][1]
             #handle reused descriptor hierarchies
             reuse_iter += 1
             trace = '{0}_{1}'.format(descriptor, reuse_iter)
 
-    def rpc_trace_output_logdump(self, descriptor, log_path, output):
+    def rpc_trace_output_logdump(self, descriptor, log_path, log_dump):
         """Prints all log messages relating to the given descriptor or any
            pointer in the descriptor's hierarchy"""
         trace = descriptor
         reuse_iter = 0
+        output = []
         while trace in self.trace_dict:
             with open(log_path, 'r') as f:
-                output.append('\nLog dump for descriptor hierarchy ({0}):'.\
-                              format(trace))
+                output.append('\nLog dump for descriptor hierarchy ({0}):'\
+                                   .format(trace))
                 for line in f:
                     if "TRACE" in line:
                         fields = line.strip().split()
@@ -393,27 +394,32 @@ class RpcTrace(common_methods.ColorizedOutput):
                         while parent_trace in self.trace_dict and \
                               parent_trace in self.desc_dict:
                             if rpc == parent_trace:
-                                output.append('{0}'.\
-                                              format(' '.join(line.\
-                                                              splitlines())))
+                                output.append('HILITE: {0}'.\
+                                                      format(' '.\
+                                                             join(line.\
+                                                                  splitlines()\
+                                                                  )))
                                 break
                             for i in self.desc_dict['{0}'.format(parent_trace)]:
                                 if rpc == i[0]:
-                                    output.append('{0}'.\
-                                                  format(' '.\
-                                                         join(line.\
-                                                              splitlines())))
+                                    output.append('HILITE: {0}'.\
+                                                     format(' '.\
+                                                            join(line.\
+                                                                 splitlines())))
                                     break
                             parent_trace = self.\
                                            trace_dict['{0}'.\
                                                       format(parent_trace)][1]
+                    else:
+                        output.append('{0}'.format(' '.join(line.\
+                                                                 splitlines())))
             #handle reused descriptor logs
             reuse_iter += 1
             trace = '{0}_{1}'.format(descriptor, reuse_iter)
 
-        self.list_output(output)
+        self.list_output(output, log_dump)
 
-    def rpc_trace_output(self, descriptor, log_path):
+    def rpc_trace_output(self, descriptor, log_path, log_dump):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
            log messages related to descriptor"""
         output = []
@@ -429,9 +435,11 @@ class RpcTrace(common_methods.ColorizedOutput):
             else:
                 output.append('WARN: {0:<24}{1:<30}{2}[{3}]'.\
                               format(k, v[0], v[1], None))
+        self.list_output(output)
+        output = []
 
-        output.append('\n\n{:<60}{:<30}'.format('Descriptor', 'RPCs'))
-        output.append('{:<60}{:<30}'.format('----------', '----'))
+        self.normal_output('\n\n{:<60}{:<30}'.format('Descriptor', 'RPCs'))
+        self.normal_output('{:<60}{:<30}'.format('----------', '----'))
         for k, v in sorted(self.desc_dict.items()):
             if k in self.trace_dict:
                 #reformat rpc list for better output display in table
@@ -449,12 +457,13 @@ class RpcTrace(common_methods.ColorizedOutput):
                 type_field = '[{0}]'.format(self.trace_dict['{0}'.format(k)][0])
                 output.append('{:<20}{:<20}{}'.\
                               format(k, type_field, v_output))
+        self.list_output(output)
 
         #Hierarchy for given descriptor
-        self.rpc_trace_output_hierarchy(descriptor, output)
+        self.rpc_trace_output_hierarchy(descriptor)
 
         #Log dump for descriptor hierarchy
-        self.rpc_trace_output_logdump(descriptor, log_path, output)
+        self.rpc_trace_output_logdump(descriptor, log_path, log_dump)
 
     def descriptor_error_state_tracing(self, log_path):
         """Check for any descriptors that are not registered/deregistered"""

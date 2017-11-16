@@ -68,7 +68,7 @@ IMPORT_MNT = None
 CTRL_DIR = None
 
 try:
-    from colorama import Fore, Style
+    from colorama import Fore, Style, Back
     COLORAMA = 'yes'
 except ImportError:
     COLORAMA = 'no'
@@ -147,22 +147,40 @@ class ColorizedOutput():
             with open(self.internals_log_file, 'a') as f:
                 f.write("{0}\n".format(output))
 
-    def list_output(self, output_list):
+#pylint: disable=too-many-branches
+    def list_output(self, output_list, dump_to_console=False):
         """Writes entire list of strings to internals.out, only output
-        colorized warnings or errors to console"""
+        colorized warnings or errors to console by default,
+        otherwise if dump_to_console is set output entire list to console"""
         with open(self.internals_log_file, 'a') as f:
             for item in output_list:
-                f.write("{0}\n".format(item))
-        if COLORAMA == 'yes':
-            logger = logging.getLogger("TestRunnerLogger")
-            for item in output_list:
                 prefix = item.split(' ', 1)[0]
+                if prefix == 'HILITE:':
+                    f.write("***** {0} *****\n".format(item.split(' ', 1)[1]))
+                else:
+                    f.write("{0}\n".format(item))
+        for item in output_list:
+            prefix = item.split(' ', 1)[0]
+            if COLORAMA == 'yes':
                 if prefix == 'ERROR:':
-                    logger.info(Fore.RED + item)
+                    self.logger.info(Fore.RED + item.split(' ', 1)[1])
                 elif prefix == 'WARN:':
-                    logger.info(Fore.YELLOW + item)
+                    self.logger.info(Fore.YELLOW + item.split(' ', 1)[1])
+                elif prefix == 'HILITE:':
+                    if dump_to_console:
+                        self.logger.info(Back.YELLOW)
+                        self.logger.info(Fore.BLACK + item.split(' ', 1)[1])
+                else:
+                    if dump_to_console:
+                        self.logger.info(item)
                 print(Style.RESET_ALL, end="")
-
+            else:
+                if dump_to_console:
+                    if prefix == 'HILITE:':
+                        self.logger.info("***** %s *****", item)
+                    else:
+                        self.logger.info(item)
+#pylint: enable=too-many-branches
 
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
@@ -310,18 +328,30 @@ class InternalsPathFramework(ColorizedOutput):
                                       'fs:{1} differ.'.format(mount_dir, idir))
 
     def descriptor_to_trace(self, log_dir):
-        """Find the file handle to use for descriptor tracing"""
+        """Find the file handle to use for descriptor tracing:
+        if an error or warning is found in trace logs, use that descriptor,
+        otherwise use first fuse op instance in logs"""
         descriptor = None
+        log_dump = False
         fuse_file = os.path.join('src', 'ioc', 'ops')
+        with open(log_dir, 'r') as f:
+            for line in f:
+                if 'TRACE' in line:
+                    if 'ERR' in line or 'WARN' in line:
+                        fields = line.strip().split()
+                        descriptor = fields[7].strip().split('(')[1].strip().\
+                                     split(')')[0]
+                        log_dump = True
+                        return descriptor, log_dump
         with open(log_dir, 'r') as f:
             for line in f:
                 if fuse_file in line and 'TRACE' in line:
                     fields = line.strip().split()
                     descriptor = fields[7].strip().split('(')[1].strip().\
                                  split(')')[0]
-                    return descriptor
+                    return descriptor, log_dump
         self.error('Descriptor not found to trace')
-        return None
+        return None, None
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
                  iof_ionss_setup.IonssExport):
