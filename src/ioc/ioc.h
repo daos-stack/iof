@@ -89,6 +89,7 @@ struct iof_ctx {
 	/* cart context */
 	crt_context_t			crt_ctx;
 	pthread_t			thread;
+	struct iof_pool			*pool;
 	struct iof_tracker		thread_start_tracker;
 	struct iof_tracker		thread_stop_tracker;
 	struct iof_tracker		thread_shutdown_tracker;
@@ -98,8 +99,6 @@ struct iof_ctx {
 struct iof_state {
 	struct cnss_plugin_cb		*cb;
 	size_t				cb_size;
-	/* cart context */
-	crt_context_t			crt_ctx;
 	struct iof_ctx			iof_ctx;
 	d_list_t			fs_list;
 	/* CNSS Prefix */
@@ -125,6 +124,7 @@ struct iof_rb {
 
 struct iof_projection_info {
 	struct iof_projection		proj;
+	struct iof_ctx			ctx;
 	struct iof_state		*iof_state;
 	struct ios_gah			gah;
 	d_list_t			link;

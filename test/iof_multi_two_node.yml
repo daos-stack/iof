@@ -38,6 +38,7 @@ execStrategy:
       setConfigKeys:
     - name: "mdtest"
       nodeType: "IOF_TEST_CN"
+      waittime: 2700
       setConfigKeys:
     - name: "nfs_iozone_cmds"
       nodeType: "IOF_TEST_ION"

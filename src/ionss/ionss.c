@@ -3485,5 +3485,7 @@ cleanup:
 
 	iof_log_close();
 
+	IOF_LOG_INFO("Exiting with status %d", ret);
+
 	return ret;
 }

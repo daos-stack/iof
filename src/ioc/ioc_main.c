@@ -367,7 +367,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 
 	reply.query = query;
 
-	ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
+	ret = crt_req_create(iof_state->iof_ctx.crt_ctx, &group->grp.psr_ep,
 			     QUERY_PSR_OP, query_rpc);
 	if (ret || (*query_rpc == NULL)) {
 		IOF_TRACE_ERROR(iof_state, "failed to create query rpc request,"
@@ -384,7 +384,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	}
 
 	/*make on-demand progress*/
-	iof_wait(iof_state->crt_ctx, &reply.tracker);
+	iof_wait(iof_state->iof_ctx.crt_ctx, &reply.tracker);
 
 	if (reply.err)
 		return reply.err;
@@ -964,8 +964,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return 1;
 	}
 
-	iof_state->crt_ctx = iof_state->iof_ctx.crt_ctx;
-
 	ret = iof_thread_start(&iof_state->iof_ctx);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
@@ -1101,13 +1099,21 @@ iof_thread(void *arg)
 				"rc: %d", rc);
 
 	do {
+		/* If this context has a pool associated with it then reap
+		 * any descriptors with it so there are no pending RPCs when
+		 * we call context_destroy.
+		 */
+		if (iof_ctx->pool)
+			iof_pool_reclaim(iof_ctx->pool);
+
 		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
 		if (rc == -DER_BUSY) {
 			IOF_TRACE_WARNING(iof_ctx,
 					  "RPCs in flight, waiting for one second");
 			crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
-		} else {
-			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context");
+		} else if (rc != DER_SUCCESS) {
+			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
+					rc);
 		}
 	} while (rc == -DER_BUSY);
 
@@ -1332,7 +1338,21 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->proj.grp = &group->grp;
 	fs_handle->proj.grp_id = group->grp.grp_id;
-	fs_handle->proj.crt_ctx = iof_state->crt_ctx;
+
+	ret = crt_context_create(NULL, &fs_handle->ctx.crt_ctx);
+
+	if (ret) {
+		IOF_TRACE_ERROR(fs_handle, "Could not create context");
+		return 1;
+	}
+
+	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
+	fs_handle->ctx.pool = &fs_handle->pool;
+	ret = iof_thread_start(&fs_handle->ctx);
+	if (ret) {
+		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
+		return 1;
+	}
 
 	args.argc = 4;
 	if (!writeable)
@@ -1618,6 +1638,10 @@ static void iof_deregister_fuse(void *arg)
 	if (rc)
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
 
+	/* Stop the progress thread for this projection and delete the context
+	 */
+	iof_thread_stop(&fs_handle->ctx);
+
 	iof_pool_destroy(&fs_handle->pool);
 
 	IOF_TRACE_DOWN(fs_handle);
@@ -1678,7 +1702,8 @@ static void iof_finish(void *arg)
 		}
 
 		/*send a detach RPC to IONSS*/
-		ret = crt_req_create(iof_state->crt_ctx, &group->grp.psr_ep,
+		ret = crt_req_create(iof_state->iof_ctx.crt_ctx,
+				     &group->grp.psr_ep,
 				     DETACH_OP, &rpc);
 		if (ret || !rpc) {
 			IOF_TRACE_ERROR(iof_state, "Could not create detach req"
@@ -1698,7 +1723,7 @@ static void iof_finish(void *arg)
 	 * progress
 	 */
 	if (!iof_tracker_test(&tracker))
-		iof_wait(iof_state->crt_ctx, &tracker);
+		iof_wait(iof_state->iof_ctx.crt_ctx, &tracker);
 
 	for (i = 0; i < iof_state->num_groups; i++) {
 		group = &iof_state->groups[i];

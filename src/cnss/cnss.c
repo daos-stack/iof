@@ -821,12 +821,16 @@ shutdown_cart:
 	iof_log_close();
 	D_FREE(cnss_info);
 
+	IOF_LOG_INFO("Exiting with status %d", ret);
+
 	return ret;
 
 shutdown_ctrl_fs:
 	ctrl_fs_disable();
 	ctrl_fs_shutdown();
 	D_FREE(ctrl_prefix);
+
+	IOF_LOG_INFO("Exiting with status %d", ret);
 
 	return ret;
 }
