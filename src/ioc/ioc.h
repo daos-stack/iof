@@ -84,12 +84,23 @@ struct iof_stats {
 	ATOMIC unsigned int setattr;
 };
 
+/* A common structure for holding a cart context and thread details */
+struct iof_ctx {
+	/* cart context */
+	crt_context_t			crt_ctx;
+	pthread_t			thread;
+	struct iof_tracker		thread_start_tracker;
+	struct iof_tracker		thread_stop_tracker;
+	struct iof_tracker		thread_shutdown_tracker;
+};
+
 /*For IOF Plugin*/
 struct iof_state {
 	struct cnss_plugin_cb		*cb;
 	size_t				cb_size;
 	/* cart context */
 	crt_context_t			crt_ctx;
+	struct iof_ctx			iof_ctx;
 	d_list_t			fs_list;
 	/* CNSS Prefix */
 	char				*cnss_prefix;
@@ -98,12 +109,6 @@ struct iof_state {
 	struct iof_group_info		*groups;
 	uint32_t			num_groups;
 
-	int progress_thread;
-
-	pthread_t			thread;
-	struct iof_tracker		thread_start_tracker;
-	struct iof_tracker		thread_stop_tracker;
-	struct iof_tracker		thread_shutdown_tracker;
 };
 
 struct iof_group_info {

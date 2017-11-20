@@ -908,8 +908,8 @@ rb_release(void *arg)
 	D_FREE(rb->buf);
 }
 
-static int iof_thread_start(struct iof_state *iof_state);
-static void iof_thread_stop(struct iof_state *iof_state);
+static int iof_thread_start(struct iof_ctx *);
+static void iof_thread_stop(struct iof_ctx *);
 
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
@@ -951,16 +951,17 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return 1;
 	}
 
-	ret = crt_context_create(NULL, &iof_state->crt_ctx);
+	IOF_TRACE_UP(&iof_state->iof_ctx, iof_state, "iof_ctx");
+
+	ret = crt_context_create(NULL, &iof_state->iof_ctx.crt_ctx);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Context not created");
 		return 1;
 	}
 
-	iof_tracker_init(&iof_state->thread_start_tracker, 1);
-	iof_tracker_init(&iof_state->thread_stop_tracker, 1);
-	iof_tracker_init(&iof_state->thread_shutdown_tracker, 1);
-	ret = iof_thread_start(iof_state);
+	iof_state->crt_ctx = iof_state->iof_ctx.crt_ctx;
+
+	ret = iof_thread_start(&iof_state->iof_ctx);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
 		return 1;
@@ -1071,13 +1072,13 @@ iof_check_complete(void *arg)
 static void *
 iof_thread(void *arg)
 {
-	struct iof_state *iof_state = arg;
-	int			rc;
+	struct iof_ctx	*iof_ctx = arg;
+	int		rc;
 
-	iof_tracker_signal(&iof_state->thread_start_tracker);
+	iof_tracker_signal(&iof_ctx->thread_start_tracker);
 	do {
-		rc = crt_progress(iof_state->crt_ctx, 1, iof_check_complete,
-				  &iof_state->thread_stop_tracker);
+		rc = crt_progress(iof_ctx->crt_ctx, 1, iof_check_complete,
+				  &iof_ctx->thread_stop_tracker);
 
 		if (rc == -DER_TIMEDOUT) {
 			rc = 0;
@@ -1085,44 +1086,60 @@ iof_thread(void *arg)
 		}
 
 		if (rc != 0)
-			IOF_TRACE_ERROR(iof_state, "crt_progress failed rc: %d",
+			IOF_TRACE_ERROR(iof_ctx, "crt_progress failed rc: %d",
 					rc);
 
-	} while (!iof_tracker_test(&iof_state->thread_stop_tracker));
+	} while (!iof_tracker_test(&iof_ctx->thread_stop_tracker));
 
 	if (rc != 0)
-		IOF_TRACE_ERROR(iof_state, "crt_progress error on shutdown "
+		IOF_TRACE_ERROR(iof_ctx, "crt_progress error on shutdown "
 				"rc: %d", rc);
 
-	iof_tracker_signal(&iof_state->thread_shutdown_tracker);
+	do {
+		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
+		if (rc == -DER_BUSY) {
+			IOF_TRACE_WARNING(iof_ctx,
+					  "RPCs in flight, waiting for one second");
+			crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
+		} else {
+			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context");
+		}
+	} while (rc == -DER_BUSY);
+
+	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
 	return NULL;
 }
 
 static int
-iof_thread_start(struct iof_state *iof_state)
+iof_thread_start(struct iof_ctx *iof_ctx)
 {
 	int rc;
 
-	rc = pthread_create(&iof_state->thread, NULL,
-			    iof_thread, iof_state);
+	iof_tracker_init(&iof_ctx->thread_start_tracker, 1);
+	iof_tracker_init(&iof_ctx->thread_stop_tracker, 1);
+	iof_tracker_init(&iof_ctx->thread_shutdown_tracker, 1);
+
+	rc = pthread_create(&iof_ctx->thread, NULL,
+			    iof_thread, iof_ctx);
 
 	if (rc != 0) {
-		IOF_TRACE_ERROR(iof_state, "Could not start progress thread");
+		IOF_TRACE_ERROR(iof_ctx, "Could not start progress thread");
 		return 1;
 	}
 
-	iof_tracker_wait(&iof_state->thread_start_tracker);
+	iof_tracker_wait(&iof_ctx->thread_start_tracker);
 	return 0;
 }
 
+/* Stop the progress thread, and destroy the context */
 static void
-iof_thread_stop(struct iof_state *iof_state)
+iof_thread_stop(struct iof_ctx *iof_ctx)
 {
-	IOF_TRACE_INFO(iof_state, "Stopping CRT thread");
-	iof_tracker_signal(&iof_state->thread_stop_tracker);
-	iof_tracker_wait(&iof_state->thread_shutdown_tracker);
-	pthread_join(iof_state->thread, 0);
-	IOF_TRACE_INFO(iof_state, "Stopped CRT thread");
+	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
+	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
+	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
+	pthread_join(iof_ctx->thread, 0);
+	IOF_TRACE_INFO(iof_ctx, "Stopped CRT thread");
 }
 
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
@@ -1693,13 +1710,9 @@ static void iof_finish(void *arg)
 	}
 
 	/* Stop progress thread */
-	iof_thread_stop(iof_state);
+	iof_thread_stop(&iof_state->iof_ctx);
 
-	ret = crt_context_destroy(iof_state->crt_ctx, 0);
-	if (ret)
-		IOF_TRACE_ERROR(iof_state, "Could not destroy context");
-	IOF_TRACE_INFO(iof_state, "Called iof_finish");
-
+	IOF_TRACE_DOWN(&iof_state->iof_ctx);
 	IOF_TRACE_DOWN(iof_state);
 	D_FREE(iof_state->groups);
 	D_FREE(iof_state->cnss_prefix);

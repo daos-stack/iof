@@ -48,6 +48,7 @@
 #include <sys/xattr.h>
 #include <cart/api.h>
 #include <gurt/common.h>
+#include <signal.h>
 
 #include "cnss_plugin.h"
 #include "version.h"
@@ -291,14 +292,30 @@ static void iof_fuse_umount(struct fs_info *info)
 		fuse_unmount(info->fuse);
 }
 
+/* Add a NO-OP signal handler.  This doesn't do anything other than
+ * interrupt the fuse leader thread if it's not already awake to
+ * reap the other fuse threads.  Initially this was tried with a
+ * no-op function however that didn't appear to work so perhaps the
+ * compiler was optimising it away.
+ */
+static int signal_word;
+
+static void iof_signal_poke(int signal)
+{
+	signal_word++;
+}
+
 static void *ll_loop_fn(void *args)
 {
 	int ret;
 	struct fs_info *info = args;
+	const struct sigaction act = {.sa_handler = iof_signal_poke};
 
 	pthread_mutex_lock(&info->lock);
 	info->running = 1;
 	pthread_mutex_unlock(&info->lock);
+
+	sigaction(SIGUSR1, &act, NULL);
 
 	/*Blocking*/
 	if (info->mt)
@@ -309,11 +326,12 @@ static void *ll_loop_fn(void *args)
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
+	IOF_TRACE_DEBUG(info, "fuse loop completed %d", ret);
+
 	pthread_mutex_lock(&info->lock);
-	info->fuse = NULL;
 	info->running = 0;
 	pthread_mutex_unlock(&info->lock);
-	return NULL;
+	return (void *)(uintptr_t)ret;
 }
 
 static void *loop_fn(void *args)
@@ -460,10 +478,15 @@ cleanup_no_mutex:
 static int
 deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 {
-	uintptr_t *rcp = NULL;
+	struct timespec wait_time;
+	void *rcp = NULL;
 	int rc;
 
+	clock_gettime(CLOCK_REALTIME, &wait_time);
+
 	pthread_mutex_lock(&info->lock);
+
+	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
 
 	if (info->running) {
 
@@ -485,13 +508,37 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 			fuse_session_exit(session);
 			fuse_session_unmount(session);
 		}
-		pthread_mutex_unlock(&info->lock);
-	} else {
-		pthread_mutex_unlock(&info->lock);
 	}
 
-	IOF_LOG_DEBUG("Unmounting FS: %s", info->mnt);
-	pthread_join(info->thread, (void **)&rcp);
+	pthread_mutex_unlock(&info->lock);
+
+	do {
+		IOF_TRACE_INFO(info, "Trying to join thread");
+
+		wait_time.tv_sec++;
+
+		rc = pthread_timedjoin_np(info->thread, &rcp, &wait_time);
+
+		IOF_TRACE_INFO(info, "Join returned %d:'%s'", rc, strerror(rc));
+
+		if (rc == ETIMEDOUT) {
+			if ((info->session) &&
+			    !fuse_session_exited(info->session))
+				IOF_TRACE_WARNING(info,
+						  "Session still running");
+
+			IOF_TRACE_INFO(info,
+				       "Thread still running, waking it up");
+
+			pthread_kill(info->thread, SIGUSR1);
+		}
+
+	} while (rc == ETIMEDOUT);
+
+	if (rc)
+		IOF_TRACE_ERROR(info, "Final join returned %d:'%s'",
+				rc, strerror(rc));
+
 	d_list_del(&info->entries);
 
 	rc = (uintptr_t)rcp;
