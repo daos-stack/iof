@@ -13,30 +13,11 @@
    fuse3-1
    Memcheck:Leak
    match-leak-kinds: reachable
-   fun:malloc
-   fun:strdup
-   fun:fuse_register_module
-   ...
-   fun:ctrl_fs_start
-   fun:main
-}
-{
-   fuse3-2
-   Memcheck:Leak
-   match-leak-kinds: reachable
    fun:calloc
    fun:fuse_register_module
    ...
    fun:ctrl_fs_start
    fun:main
-}
-{
-   IOF-542: shutdown file leak.
-   Memcheck:Leak
-   match-leak-kinds: definite
-   fun:calloc
-   fun:ctrl_open
-   fun:fuse_fs_open
 }
 {
    Known benign, single leak
