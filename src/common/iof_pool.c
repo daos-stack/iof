@@ -89,9 +89,11 @@ iof_pool_destroy(struct iof_pool *pool)
 		if (type->count != 0)
 			IOF_TRACE_WARNING(type, "Freeing type with active "
 					  "objects");
+		pthread_mutex_destroy(&type->lock);
 		IOF_TRACE_DOWN(type);
 		free(type);
 	}
+	pthread_mutex_destroy(&pool->lock);
 	IOF_TRACE_DOWN(pool);
 }
 
@@ -148,7 +150,6 @@ restock(struct iof_pool_type *type, int count)
 		if (type->reg.max_free_desc != 0 &&
 		    type->free_count >= type->reg.max_free_desc)
 			return reset_calls;
-
 	}
 	return reset_calls;
 }
@@ -188,7 +189,9 @@ iof_pool_reclaim(struct iof_pool *pool)
 			type->count--;
 		}
 		IOF_TRACE_DEBUG(type, "%d in use", type->count);
+		pthread_mutex_unlock(&type->lock);
 	}
+	pthread_mutex_unlock(&pool->lock);
 }
 
 /* Create a single new object
