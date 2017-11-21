@@ -175,6 +175,21 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 
 	IOF_TRACE_INFO(arg, "Eviction handler, Group: %s; Rank: %u",
 		       group->cg_grpid, rank);
+
+	for (i = 0; i < iof_state->num_groups; i++) {
+		g = iof_state->groups + i;
+		if (!strncmp(group->cg_grpid,
+			    g->grp.dest_grp->cg_grpid,
+			    CRT_GROUP_ID_MAX_LEN))
+			break;
+		g = NULL;
+	}
+
+	if (g == NULL) {
+		IOF_TRACE_INFO(arg, "Not an ionss group: %s", group->cg_grpid);
+		return;
+	}
+
 	rc = crt_lm_group_psr(group, &psr_list);
 	IOF_TRACE_INFO(arg, "ListPtr: %p, List: %p, Ranks: %d",
 		       psr_list, psr_list ? psr_list->rl_ranks : 0,
@@ -191,22 +206,11 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		rc = -EHOSTDOWN;
 	} else
 		new_psr = psr_list->rl_ranks[0];
+
 	if (psr_list != NULL)
 		d_rank_list_free(psr_list);
 
-	for (i = 0; i < iof_state->num_groups; i++) {
-		g = iof_state->groups + i;
-		if (!strncmp(group->cg_grpid,
-			    g->grp.dest_grp->cg_grpid,
-			    CRT_GROUP_ID_MAX_LEN))
-			break;
-	}
-
-	if (g == NULL) {
-		IOF_TRACE_WARNING(arg, "No group found: %s",
-				  group->cg_grpid);
-		return;
-	} else if (rc) {
+	if (rc) {
 		IOF_TRACE_WARNING(g, "Group %s disabled, rc=%d",
 				  group->cg_grpid, rc);
 		g->grp.enabled = false;
