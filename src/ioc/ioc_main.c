@@ -800,6 +800,11 @@ entry_reset(void *arg)
 		req->request.rpc = NULL;
 	}
 
+	/* Free any destination string on this descriptor.  This is only used
+	 * for symlink to store the link target whilst the RPC is being sent
+	 */
+	D_FREE(req->dest);
+
 	if (!req->ie) {
 		D_ALLOC_PTR(req->ie);
 		if (!req->ie)

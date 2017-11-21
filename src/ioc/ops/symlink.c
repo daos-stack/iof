@@ -121,7 +121,10 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 		D_GOTO(err, rc);
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
 	strncpy(in->common.name.name, name, NAME_MAX);
-	in->oldpath = (d_string_t)link;
+	desc->dest = strdup(link);
+	if (!desc->dest)
+		D_GOTO(err, rc = ENOMEM);
+	in->oldpath = desc->dest;
 
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;

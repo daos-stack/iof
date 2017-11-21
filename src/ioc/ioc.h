@@ -356,8 +356,9 @@ struct entry_req {
 	struct iof_projection_info	*fs_handle;
 	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;
-	d_list_t			 list;
+	d_list_t			list;
 	crt_opcode_t			opcode;
+	char				*dest;
 };
 
 /* inode.c */
