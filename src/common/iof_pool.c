@@ -91,7 +91,7 @@ iof_pool_destroy(struct iof_pool *pool)
 					  "objects");
 		pthread_mutex_destroy(&type->lock);
 		IOF_TRACE_DOWN(type);
-		free(type);
+		D_FREE(type);
 	}
 	pthread_mutex_destroy(&pool->lock);
 	IOF_TRACE_DOWN(pool);
@@ -141,7 +141,7 @@ restock(struct iof_pool_type *type, int count)
 		} else {
 			IOF_TRACE_DEBUG(ptr, "entry failed reset");
 			type->count--;
-			free(ptr);
+			D_FREE(ptr);
 		}
 
 		if (type->free_count == count)
@@ -184,7 +184,7 @@ iof_pool_reclaim(struct iof_pool *pool)
 
 			IOF_TRACE_DOWN(ptr);
 			d_list_del(entry);
-			free(ptr);
+			D_FREE(ptr);
 			type->free_count--;
 			type->count--;
 		}
@@ -213,7 +213,7 @@ create(struct iof_pool_type *type)
 		rc = type->reg.init(ptr, type->reg.handle);
 
 		if (rc != 0) {
-			free(ptr);
+			D_FREE(ptr);
 			return NULL;
 		}
 	}
@@ -221,7 +221,7 @@ create(struct iof_pool_type *type)
 	if (type->reg.reset) {
 		rc = type->reg.reset(ptr);
 		if (rc != 0) {
-			free(ptr);
+			D_FREE(ptr);
 			return NULL;
 		}
 	}

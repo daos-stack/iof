@@ -129,7 +129,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		if (rc) {
 			IOF_LOG_ERROR("Failed to make local bulk handle %d",
 				      rc);
-			free(iov.iov_buf);
+			D_FREE(iov.iov_buf);
 			ret = EIO;
 			goto out;
 		}
@@ -194,7 +194,7 @@ out:
 
 out_with_rpc:
 	if (iov.iov_buf && iov.iov_buf != dir_handle->replies)
-		free(iov.iov_buf);
+		D_FREE(iov.iov_buf);
 
 	if (bulk) {
 		rc = crt_bulk_free(bulk);
@@ -221,8 +221,7 @@ static int readdir_next_reply_consume(struct iof_dir_handle *dir_handle)
 			crt_req_decref(dir_handle->rpc);
 			dir_handle->rpc = NULL;
 		} else if (dir_handle->replies_base) {
-			free(dir_handle->replies_base);
-			dir_handle->replies_base = NULL;
+			D_FREE(dir_handle->replies_base);
 		}
 	}
 	if (dir_handle->reply_count == 0 && dir_handle->last_replies)

@@ -72,7 +72,7 @@ static enum ios_return ios_gah_store_increase_capacity(
 		realloc(gah_store->ptr_array,
 			new_cap*sizeof(struct ios_gah_ent));
 	if (gah_store->ptr_array == NULL) {
-		free(new_data);
+		D_FREE(new_data);
 		return IOS_ERR_NOMEM;
 	}
 	/** setup the pointer array */
@@ -179,14 +179,14 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 	}
 
 	/** free the chunck allocated on init */
-	free(ios_gah_store->ptr_array[0]);
+	D_FREE(ios_gah_store->ptr_array[0]);
 	/** walk down the pointer array, free all memory chuncks */
 	for (ii = IOS_GAH_STORE_INIT_CAPACITY; ii < ios_gah_store->capacity;
 	    ii += IOS_GAH_STORE_DELTA) {
-		free(ios_gah_store->ptr_array[ii]);
+		D_FREE(ios_gah_store->ptr_array[ii]);
 	}
-	free(ios_gah_store->ptr_array);
-	free(ios_gah_store);
+	D_FREE(ios_gah_store->ptr_array);
+	D_FREE(ios_gah_store);
 
 	return IOS_SUCCESS;
 }

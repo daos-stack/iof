@@ -467,10 +467,8 @@ static int register_fuse(void *arg,
 cleanup:
 	pthread_mutex_destroy(&info->lock);
 cleanup_no_mutex:
-	if (info->mnt)
-		free(info->mnt);
-	if (info)
-		D_FREE(info);
+	D_FREE(info->mnt);
+	D_FREE(info);
 
 	return 1;
 }
@@ -545,7 +543,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	pthread_mutex_destroy(&info->lock);
 
-	free(info->mnt);
+	D_FREE(info->mnt);
 	if (plugin->active && plugin->fns->deregister_fuse)
 		plugin->fns->deregister_fuse(info->private_data);
 
@@ -819,7 +817,7 @@ shutdown_cart:
 	}
 
 	IOF_TRACE_DOWN(cnss_info);
-	free(ctrl_prefix);
+	D_FREE(ctrl_prefix);
 	iof_log_close();
 	D_FREE(cnss_info);
 
@@ -828,7 +826,7 @@ shutdown_cart:
 shutdown_ctrl_fs:
 	ctrl_fs_disable();
 	ctrl_fs_shutdown();
-	free(ctrl_prefix);
+	D_FREE(ctrl_prefix);
 
 	return ret;
 }

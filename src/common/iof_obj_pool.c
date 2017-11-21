@@ -91,7 +91,7 @@ static void save_free_entries(void *tpv_data)
 	d_list_splice(&tpv->allocated_blocks, &pool->allocated_blocks);
 	d_list_del(&tpv->link);
 	pthread_setspecific(pool->key, NULL);
-	free(tpv);
+	D_FREE(tpv);
 	pthread_mutex_unlock(&pool->lock);
 
 }
@@ -158,15 +158,15 @@ int obj_pool_destroy(obj_pool_t *pool)
 
 	d_list_for_each_entry_safe(block, tmpblock,
 				   &real_pool->allocated_blocks, link) {
-		free(block);
+		D_FREE(block);
 	}
 	d_list_for_each_entry_safe(tpv, tmptpv,
 				   &real_pool->tpv_list, link) {
 		d_list_for_each_entry_safe(block, tmpblock,
 					   &tpv->allocated_blocks, link) {
-			free(block);
+			D_FREE(block);
 		}
-		free(tpv);
+		D_FREE(tpv);
 	}
 
 	pthread_mutex_destroy(&real_pool->lock);

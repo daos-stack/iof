@@ -42,6 +42,8 @@
 #include <errno.h>
 #include <mntent.h>
 
+#include <gurt/common.h>
+
 #include "iof_mntent.h"
 
 /*
@@ -74,7 +76,6 @@ int iof_mntent_foreach(iof_mntent_func_t func, void *priv)
 cleanup:
 	if (fp_mounts)
 		endmntent(fp_mounts);
-	if (filename)
-		free(filename);
+	D_FREE(filename);
 	return rc;
 }

@@ -216,7 +216,7 @@ int vector_destroy(vector_t *vector)
 
 	pthread_rwlock_destroy(&realv->lock);
 	obj_pool_destroy(&realv->pool);
-	free(realv->data);
+	D_FREE(realv->data);
 
 	return 0;
 }

@@ -245,7 +245,7 @@ static int allocate_node(struct ctrl_node **node, const char *name,
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not initialize ctrl node %s", name);
-		free(newnode);
+		D_FREE(newnode);
 		return rc;
 	}
 
@@ -785,7 +785,7 @@ static int ctrl_uint64_write(const char *str, void *arg)
 
 static int ctrl_uint64_destroy(void *arg)
 {
-	free(arg);
+	D_FREE(arg);
 	return 0;
 }
 
@@ -840,7 +840,7 @@ static void *ctrl_thread_func(void *arg)
 static void cleanup_ctrl_fs(void)
 {
 	IOF_LOG_INFO("Cleaning up ctrl fs");
-	free(ctrl_fs.prefix);
+	D_FREE(ctrl_fs.prefix);
 }
 
 static int find_path_node(const char *path, struct ctrl_node **node)

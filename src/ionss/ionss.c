@@ -465,7 +465,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
 	if (rc != IOS_SUCCESS) {
 		closedir(local_handle->h_dir);
-		free(local_handle);
+		D_FREE(local_handle);
 		out->err = IOF_ERR_INTERNAL;
 		goto out;
 	}
@@ -507,7 +507,7 @@ int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	}
 
 	IOF_LOG_DEBUG("Freeing buffer %p", iov.iov_buf);
-	free(iov.iov_buf);
+	D_FREE(iov.iov_buf);
 
 	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
 	if (rc)
@@ -688,8 +688,7 @@ out:
 	if (rc)
 		IOF_LOG_ERROR(" response not sent, rc = %u", rc);
 
-	if (replies)
-		free(replies);
+	D_FREE(replies);
 }
 
 static void
@@ -712,7 +711,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		if (rc != 0)
 			IOF_LOG_DEBUG("Failed to close directory %p",
 				      handle->h_dir);
-		free(handle);
+		D_FREE(handle);
 	}
 
 	ios_gah_deallocate(base.gs, &in->gah);
@@ -2858,8 +2857,7 @@ int filesystem_lookup(void)
 	}
 
 cleanup:
-	if (path_lengths)
-		free(path_lengths);
+	D_FREE(path_lengths);
 	return rc;
 }
 
@@ -3421,7 +3419,7 @@ int main(int argc, char **argv)
 				IOF_LOG_ERROR("Could not join progress thread %d",
 					      thread);
 		}
-		free(progress_tids);
+		D_FREE(progress_tids);
 	}
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
@@ -3449,7 +3447,7 @@ int main(int argc, char **argv)
 
 		pthread_mutex_destroy(&projection->lock);
 
-		free(projection->full_path);
+		D_FREE(projection->full_path);
 	}
 
 	iof_pool_destroy(&base.pool);
@@ -3460,7 +3458,7 @@ int main(int argc, char **argv)
 	if (ret)
 		IOF_LOG_ERROR("Could not destroy context");
 
-	free(base.projection_array);
+	D_FREE(base.projection_array);
 
 cleanup:
 	/* TODO:
@@ -3474,8 +3472,7 @@ cleanup:
 	if (ret)
 		IOF_LOG_ERROR("Could not finalize cart");
 
-	if (base.fs_list)
-		free(base.fs_list);
+	D_FREE(base.fs_list);
 
 	ret = ios_gah_destroy(base.gs);
 	if (ret)
