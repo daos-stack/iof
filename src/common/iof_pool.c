@@ -295,8 +295,9 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 void *
 iof_pool_acquire(struct iof_pool_type *type)
 {
-	void *ptr = NULL;
-	d_list_t *entry;
+	void		*ptr = NULL;
+	d_list_t	*entry;
+	bool		at_limit = false;
 
 	pthread_mutex_lock(&type->lock);
 
@@ -319,6 +320,8 @@ iof_pool_acquire(struct iof_pool_type *type)
 		if (!type->reg.max_desc || type->count < type->reg.max_desc) {
 			type->op_init++;
 			ptr = create(type);
+		} else {
+			at_limit = true;
 		}
 	}
 
@@ -326,6 +329,8 @@ iof_pool_acquire(struct iof_pool_type *type)
 
 	if (ptr)
 		IOF_TRACE_DEBUG(ptr, "Type %p Using %p", type, ptr);
+	else if (at_limit)
+		IOF_TRACE_INFO(type, "Descriptor limit hit");
 	else
 		IOF_TRACE_WARNING(type, "Failed to allocate for type");
 	return ptr;
