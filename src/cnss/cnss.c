@@ -647,12 +647,9 @@ int main(void)
 
 	ctrl_info_init(&cnss_info->info);
 
-	ret = asprintf(&ctrl_prefix, "%s/.ctrl", prefix);
-
-	if (ret == -1) {
-		IOF_LOG_ERROR("Could not allocate memory for ctrl prefix");
+	D_ASPRINTF(ctrl_prefix, "%s/.ctrl", prefix);
+	if (!ctrl_prefix)
 		return CNSS_ERR_NOMEM;
-	}
 
 	ret = ctrl_fs_start(ctrl_prefix);
 	if (ret != 0) {

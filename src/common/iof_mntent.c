@@ -52,30 +52,30 @@
  */
 int iof_mntent_foreach(iof_mntent_func_t func, void *priv)
 {
-	int rc = 0;
-	FILE *fp_mounts = NULL;
-	struct mntent entry;
-	char *filename, text[IOF_MAX_MNTENT_LEN];
+	int		rc = 0;
+	FILE		*fp_mounts;
+	struct mntent	entry;
+	char		*filename;
+	char		text[IOF_MAX_MNTENT_LEN];
+
+
+	D_ASPRINTF(filename, "/proc/%d/mounts", getpid());
+	if (!filename)
+		D_GOTO(cleanup, rc = -ENOMEM);
 
 	errno = 0;
-	if (asprintf(&filename, "/proc/%d/mounts", getpid()) == -1) {
-		filename = NULL;
-		rc = -ENOMEM;
-		goto cleanup;
-	}
-
 	fp_mounts = setmntent(filename, "r");
-	if (fp_mounts == NULL) {
-		rc = -errno;
-		goto cleanup;
-	}
+	if (!fp_mounts)
+		D_GOTO(cleanup, rc = -errno);
 
 	while (!rc && getmntent_r(fp_mounts, &entry,
 				  text, IOF_MAX_MNTENT_LEN))
 		rc = func(&entry, priv);
+
+	endmntent(fp_mounts);
+
 cleanup:
-	if (fp_mounts)
-		endmntent(fp_mounts);
+
 	D_FREE(filename);
 	return rc;
 }

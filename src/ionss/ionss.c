@@ -1151,8 +1151,8 @@ iof_create_handler(crt_rpc_t *rpc)
 					       .flags = O_PATH | O_NOATIME | O_RDONLY};
 		int ifd;
 
-		rc = asprintf(&path, "/proc/self/fd/%d", fd);
-		if (rc < 0 || !path) {
+		D_ASPRINTF(path, "/proc/self/fd/%d", fd);
+		if (!path) {
 			close(fd);
 			D_GOTO(out, out->rc = ENOMEM);
 		}

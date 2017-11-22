@@ -1288,9 +1288,9 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	base_name = basename(fs_info->mnt);
 
-	ret = asprintf(&fs_handle->mount_point, "%s/%s",
-		       iof_state->cnss_prefix, base_name);
-	if (ret == -1)
+	D_ASPRINTF(fs_handle->mount_point, "%s/%s", iof_state->cnss_prefix,
+		   base_name);
+	if (!fs_handle->mount_point)
 		return IOF_ERR_NOMEM;
 
 	IOF_TRACE_DEBUG(fs_handle, "Projected Mount %s", base_name);
@@ -1306,9 +1306,8 @@ static int initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle->stats)
 		return 1;
 
-	ret = asprintf(&fs_handle->base_dir, "%d",
-		       fs_handle->proj.cli_fs_id);
-	if (ret == -1)
+	D_ASPRINTF(fs_handle->base_dir, "%d", fs_handle->proj.cli_fs_id);
+	if (!fs_handle->base_dir)
 		return IOF_ERR_NOMEM;
 
 	cb->create_ctrl_subdir(iof_state->projections_dir,
@@ -1425,25 +1424,25 @@ static int initialize_projection(struct iof_state *iof_state,
 	if (!args.argv)
 		return IOF_ERR_NOMEM;
 
-	ret = asprintf(&args.argv[0], "%s", "");
-	if (ret == -1)
+	D_STRNDUP(args.argv[0], "", 1);
+	if (!args.argv[0])
 		return IOF_ERR_NOMEM;
 
-	ret = asprintf(&args.argv[1], "-ofsname=IOF");
-	if (ret == -1)
+	D_STRNDUP(args.argv[1], "-ofsname=IOF", 32);
+	if (!args.argv[1])
 		return IOF_ERR_NOMEM;
 
-	ret = asprintf(&args.argv[2], "-osubtype=pam");
-	if (ret == -1)
+	D_STRNDUP(args.argv[2], "-osubtype=pam", 32);
+	if (!args.argv[2])
 		return IOF_ERR_NOMEM;
 
-	ret = asprintf(&args.argv[3], "-omax_read=%u", fs_handle->max_read);
-	if (ret == -1)
+	D_ASPRINTF(args.argv[3], "-omax_read=%u", fs_handle->max_read);
+	if (!args.argv[3])
 		return IOF_ERR_NOMEM;
 
 	if (!writeable) {
-		ret = asprintf(&args.argv[4], "-oro");
-		if (ret == -1)
+		D_STRNDUP(args.argv[4], "-oro", 32);
+		if (!args.argv[4])
 			return IOF_ERR_NOMEM;
 	}
 
