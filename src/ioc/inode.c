@@ -108,17 +108,7 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	int ret = EIO;
 	int rc;
 
-	/* If the projection is off-line then drop the local handle.
-	 *
-	 * This means a resource leak on the IONSS should the projection
-	 * be offline for reasons other than IONSS failure.
-	 *
-	 * When performing a local shutdown EACCESS is used to prevent further
-	 * fuse operations succeeding, however in this case we want to keep
-	 * communicating with the IONSS so ignore that error code here.
-	 */
-	if (fs_handle->offline_reason != 0 &&
-	    fs_handle->offline_reason != EACCES)
+	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
 	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));

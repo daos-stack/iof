@@ -1662,20 +1662,6 @@ static void iof_deregister_fuse(void *arg)
 	D_FREE(fs_handle);
 }
 
-static void iof_stop(void *arg)
-{
-	struct iof_state *iof_state = arg;
-	struct iof_projection_info *fs_handle;
-
-	IOF_TRACE_INFO(iof_state, "Called iof_stop");
-
-	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
-		IOF_TRACE_INFO(fs_handle, "Setting projection %d offline %s",
-			       fs_handle->fs_id, fs_handle->mount_point);
-		fs_handle->offline_reason = EACCES;
-	}
-}
-
 static void
 detach_cb(const struct crt_cb_info *cb_info)
 {
@@ -1759,7 +1745,6 @@ struct cnss_plugin self = {.name                  = "iof",
 			   .start                 = iof_reg,
 			   .post_start            = iof_post_start,
 			   .deregister_fuse       = iof_deregister_fuse,
-			   .stop_plugin_services  = iof_stop,
 			   .destroy_plugin_data   = iof_finish};
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
