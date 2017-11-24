@@ -143,6 +143,7 @@ struct iof_projection_info {
 	struct iof_pool_type		*dh_pool;
 	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
+	struct iof_pool_type		*close_pool;
 	struct iof_pool_type		*lookup_pool;
 	struct iof_pool_type		*mkdir_pool;
 	struct iof_pool_type		*symlink_pool;
@@ -336,6 +337,12 @@ struct status_cb_r {
 };
 
 struct getattr_req {
+	struct ioc_request		request;
+	struct iof_projection_info	*fs_handle;
+	d_list_t			list;
+};
+
+struct close_req {
 	struct ioc_request		request;
 	struct iof_projection_info	*fs_handle;
 	d_list_t			list;

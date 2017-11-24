@@ -40,6 +40,13 @@
 #include "ioc.h"
 #include "log.h"
 
+#define POOL_NAME close_pool
+#define TYPE_NAME close_req
+#define REQ_NAME request
+#define STAT_KEY release
+#define RESTOCK_ON_SEND
+#include "ioc_ops.h"
+
 /* Find a GAH from a inode, return 0 if found */
 static int
 find_gah_internal(struct iof_projection_info *fs_handle,
@@ -101,39 +108,43 @@ int drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
 	return 0;
 }
 
+static void ie_close_cb(struct ioc_request *request)
+{
+	struct TYPE_NAME	*desc = CONTAINER(request);
+
+	IOC_REQ_RELEASE_POOL(desc, desc->fs_handle->close_pool);
+}
+
+static const struct ioc_request_api api = {
+	.get_fsh	= get_fs_handle,
+	.on_send	= post_send,
+	.on_result	= ie_close_cb,
+};
+
 void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 {
-	struct iof_gah_in *in;
-	crt_rpc_t *rpc = NULL;
-	int ret = EIO;
-	int rc;
+	struct TYPE_NAME	*desc = NULL;
+	struct iof_gah_in	*in;
+	int			rc;
 
 	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(out_err, ret = fs_handle->offline_reason);
+		D_GOTO(err, rc = fs_handle->offline_reason);
 
 	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, close), &rpc);
-	if (rc || !rpc) {
-		IOF_TRACE_ERROR(ie, "Could not create request, rc = %d",
-				rc);
-		D_GOTO(out_err, ret = EIO);
-	}
+	IOC_REQ_INIT(desc, fs_handle, api, in, rc);
+	if (rc)
+		D_GOTO(err, rc);
 
-	in = crt_req_get(rpc);
 	in->gah = ie->gah;
 
-	rc = crt_req_send(rpc, NULL, NULL);
-	if (rc) {
-		IOF_TRACE_ERROR(ie, "Could not send rpc, rc = %d", rc);
-		D_GOTO(out_err, ret = EIO);
-	}
+	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	if (rc != 0)
+		D_GOTO(err, rc);
 
 	return;
 
-out_err:
+err:
 	IOF_TRACE_ERROR(ie, "Failed to close " GAH_PRINT_STR " %d",
-			GAH_PRINT_VAL(ie->gah), ret);
+			GAH_PRINT_VAL(ie->gah), rc);
 }

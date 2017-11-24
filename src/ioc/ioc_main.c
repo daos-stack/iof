@@ -776,6 +776,50 @@ gh_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
+static int
+close_init(void *arg, void *handle)
+{
+	struct close_req *req = arg;
+
+	req->fs_handle = handle;
+	return 0;
+}
+
+/* Reset and prepare for use a getfattr descriptor */
+static int
+close_reset(void *arg)
+{
+	struct close_req *req = arg;
+	int rc;
+
+	if (req->request.rpc) {
+		crt_req_decref(req->request.rpc);
+		crt_req_decref(req->request.rpc);
+		req->request.rpc = NULL;
+	}
+
+	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->fs_handle, close),
+			    &req->request.rpc);
+	if (rc || !req->request.rpc) {
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
+		return -1;
+	}
+	crt_req_addref(req->request.rpc);
+
+	return 0;
+}
+
+/* Destroy a descriptor which could be either getattr or getfattr */
+static void
+close_release(void *arg)
+{
+	struct close_req *req = arg;
+
+	crt_req_decref(req->request.rpc);
+	crt_req_decref(req->request.rpc);
+}
+
 #define entry_init(type)					\
 	static int type##_entry_init(void *arg, void *handle)	\
 	{							\
@@ -1442,6 +1486,12 @@ static int initialize_projection(struct iof_state *iof_state,
 					    .release = gh_release,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
+		struct iof_pool_reg ct = { .handle = fs_handle,
+					    .init = close_init,
+					    .reset = close_reset,
+					    .release = close_release,
+					    POOL_TYPE_INIT(close_req, list)};
+
 		struct iof_pool_reg entry_t = { .handle = fs_handle,
 						.reset = entry_reset,
 						.release = entry_release,
@@ -1468,6 +1518,11 @@ static int initialize_projection(struct iof_state *iof_state,
 
 		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
 		if (!fs_handle->fgh_pool)
+			return IOF_ERR_NOMEM;
+
+		fs_handle->close_pool = iof_pool_register(&fs_handle->pool,
+							  &ct);
+		if (!fs_handle->close_pool)
 			return IOF_ERR_NOMEM;
 
 		entry_t.init = lookup_entry_init;
