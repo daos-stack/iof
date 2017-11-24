@@ -130,7 +130,10 @@ void iof_pool_release(struct iof_pool_type *, void *);
  */
 void iof_pool_restock(struct iof_pool_type *);
 
-/* Reclaim any memory possible across all types */
-void iof_pool_reclaim(struct iof_pool *);
+/* Reclaim any memory possible across all types
+ *
+ * Returns true of there are any descriptors in use.
+ */
+bool iof_pool_reclaim(struct iof_pool *);
 
 #endif /*  __IOF_POOL_H__ */

@@ -154,11 +154,16 @@ restock(struct iof_pool_type *type, int count)
 	return reset_calls;
 }
 
-/* Reclaim any memory possible */
-void
+/* Reclaim any memory possible across all types
+ *
+ * Returns true of there are any descriptors in use.
+ */
+
+bool
 iof_pool_reclaim(struct iof_pool *pool)
 {
 	struct iof_pool_type *type;
+	int active_descriptors = false;
 
 	pthread_mutex_lock(&pool->lock);
 	d_list_for_each_entry(type, &pool->list, type_list) {
@@ -189,9 +194,12 @@ iof_pool_reclaim(struct iof_pool *pool)
 			type->count--;
 		}
 		IOF_TRACE_DEBUG(type, "%d in use", type->count);
+		if (type->count)
+			active_descriptors = true;
 		pthread_mutex_unlock(&type->lock);
 	}
 	pthread_mutex_unlock(&pool->lock);
+	return active_descriptors;
 }
 
 /* Create a single new object
