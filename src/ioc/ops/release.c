@@ -102,13 +102,13 @@ int ioc_release(const char *file, struct fuse_file_info *fi)
 	in = crt_req_get(handle->release_rpc);
 	in->gah = handle->common.gah;
 
+	crt_req_addref(handle->release_rpc);
 	rc = crt_req_send(handle->release_rpc, release_cb, &reply);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
 		iof_pool_release(fs_handle->fh_pool, handle);
 		return -EIO;
 	}
-	crt_req_addref(handle->release_rpc);
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
 	iof_pool_release(fs_handle->fh_pool, handle);
@@ -153,13 +153,13 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	in = crt_req_get(handle->release_rpc);
 	in->gah = handle->common.gah;
 
+	crt_req_addref(handle->release_rpc);
 	rc = crt_req_send(handle->release_rpc, ioc_ll_gen_cb, req);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
 		ret = EIO;
 		goto out_err;
 	}
-	crt_req_addref(handle->release_rpc);
 
 	iof_pool_release(fs_handle->fh_pool, handle);
 	return;

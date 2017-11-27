@@ -332,6 +332,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	strncpy(handle->ie->name, name, NAME_MAX);
 	handle->ie->parent = parent;
 
+	crt_req_addref(handle->creat_rpc);
 	rc = crt_req_send(handle->creat_rpc, ioc_create_ll_cb, handle);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
@@ -340,7 +341,6 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
-	crt_req_addref(handle->creat_rpc);
 
 	LOG_FLAGS(handle, fi->flags);
 	LOG_MODES(handle, mode);

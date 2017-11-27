@@ -268,6 +268,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	in->flags = fi->flags;
 	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
 
+	crt_req_addref(handle->open_rpc);
 	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
 	if (rc) {
 		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
@@ -276,7 +277,6 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
-	crt_req_addref(handle->open_rpc);
 
 	LOG_FLAGS(handle, fi->flags);
 
