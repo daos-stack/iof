@@ -112,6 +112,9 @@ opendir_ll_cb(struct ioc_request *request)
 	opendir_cb(request);
 	rc = IOC_STATUS_TO_RC_LL(request);
 	if (rc == 0) {
+		pthread_mutex_lock(&dh->fs_handle->od_lock);
+		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
+		pthread_mutex_unlock(&dh->fs_handle->od_lock);
 		fi.fh = (uint64_t) dh;
 		fuse_reply_open(f_req, &fi);
 	} else {

@@ -1265,6 +1265,20 @@ static int initialize_projection(struct iof_state *iof_state,
 		return IOF_ERR_NOMEM;
 	}
 
+	/* Keep a list of open directory handles
+	 *
+	 * Directory handles are added to this list as the open call succeeds,
+	 * and removed from the list when a release request is received,
+	 * therefore this is a list of directory handles held locally by the
+	 * kernel, not a list of handles the CNSS holds on the IONSS.
+	 *
+	 * Used during shutdown so that we can iterate over the list after
+	 * terminating the FUSE thread to send closedir RPCs for any handles
+	 * the server didn't close.
+	 */
+	D_INIT_LIST_HEAD(&fs_handle->opendir_list);
+	pthread_mutex_init(&fs_handle->od_lock, NULL);
+
 	fs_handle->max_read = query->max_read;
 	fs_handle->max_iov_read = query->max_iov_read;
 	fs_handle->proj.max_write = query->max_write;
@@ -1670,8 +1684,9 @@ static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 	d_list_t *rlink = NULL;
+	struct iof_dir_handle *dh, *dh2;
 	uint64_t refs = 0;
-	int links = 0;
+	int handles = 0;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Draining inode table");
@@ -1687,15 +1702,29 @@ static void iof_deregister_fuse(void *arg)
 
 		refs += ie->ref;
 		d_chash_rec_ndecref(&fs_handle->inode_ht, ie->ref, rlink);
-		links++;
+		handles++;
 	} while (rlink);
 
 	IOF_TRACE_INFO(fs_handle, "dropped %lu refs on %u handles",
-		       refs, links);
+		       refs, handles);
 
 	rc = d_chash_table_destroy_inplace(&fs_handle->inode_ht, false);
 	if (rc)
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
+
+	/* This code does not need to hold the od_lock as the fuse progression
+	 * thread is no longer running so no more calls to opendir() or
+	 * releasedir() can race with this code.
+	 */
+	handles = 0;
+	d_list_for_each_entry_safe(dh, dh2, &fs_handle->opendir_list, list) {
+		IOF_TRACE_INFO(fs_handle, "Closing directory " GAH_PRINT_STR
+			       " %p", GAH_PRINT_VAL(dh->gah), dh);
+		ioc_int_releasedir(dh);
+		handles++;
+	}
+
+	IOF_TRACE_INFO(fs_handle, "Closed %d directory handles", handles);
 
 	/* Stop the progress thread for this projection and delete the context
 	 */
@@ -1710,6 +1739,8 @@ static void iof_deregister_fuse(void *arg)
 		D_FREE(fs_handle->fuse_ops);
 	else
 		D_FREE(fs_handle->fuse_ll_ops);
+
+	pthread_mutex_destroy(&fs_handle->od_lock);
 
 	D_FREE(fs_handle->base_dir);
 	D_FREE(fs_handle->mount_point);

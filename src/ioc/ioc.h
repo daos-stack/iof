@@ -153,9 +153,13 @@ struct iof_projection_info {
 	uint32_t			max_read;
 	uint32_t			max_iov_read;
 	uint32_t			readdir_size;
-	/* If set to True then projection is off-line */
+	/* set to error code if projection is off-line */
 	int				offline_reason;
 	struct d_chash_table		inode_ht;
+
+	/* List of directory handles owned by FUSE */
+	pthread_mutex_t			od_lock;
+	d_list_t			opendir_list;
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
@@ -533,6 +537,8 @@ void ioc_ll_rename(fuse_req_t, fuse_ino_t, const char *, fuse_ino_t,
 		   const char *, unsigned int);
 
 void ioc_ll_releasedir(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_int_releasedir(struct iof_dir_handle *);
 
 void ioc_ll_write(fuse_req_t, fuse_ino_t, const char *,	size_t, off_t,
 		  struct fuse_file_info *);

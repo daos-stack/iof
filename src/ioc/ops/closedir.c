@@ -90,6 +90,8 @@ static void closedir_ll_cb(struct ioc_request *request)
 	IOC_RESOLVE_STATUS(request, out);
 	rc = IOC_STATUS_TO_RC_LL(request);
 	IOC_REQ_RELEASE(dh);
+	if (!f_req)
+		return;
 	if (rc == 0)
 		IOF_FUSE_REPLY_ZERO(f_req);
 	else
@@ -105,15 +107,18 @@ static const struct ioc_request_api api_ll = {
 #undef STAT_KEY
 #define STAT_KEY release
 
-void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
-		       struct fuse_file_info *fi)
+void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 {
-	struct TYPE_NAME *dh = (struct TYPE_NAME *)fi->fh;
 	struct iof_projection_info *fs_handle = dh->fs_handle;
 	struct iof_gah_in *in;
 	int rc;
 
 	IOF_TRACE_INFO(dh, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
+
+	pthread_mutex_lock(&fs_handle->od_lock);
+	d_list_del(&dh->list);
+	pthread_mutex_unlock(&fs_handle->od_lock);
+
 	IOC_REQ_INIT_LL(dh, fs_handle, api_ll, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
@@ -134,5 +139,19 @@ void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 	return;
 err:
 	IOC_REQ_RELEASE(dh);
-	IOF_FUSE_REPLY_ERR(req, rc);
+	if (req)
+		IOF_FUSE_REPLY_ERR(req, rc);
+}
+
+void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
+		       struct fuse_file_info *fi)
+{
+	struct TYPE_NAME *dh = (struct TYPE_NAME *)fi->fh;
+
+	ioc_releasedir_priv(req, dh);
+}
+
+void ioc_int_releasedir(struct iof_dir_handle *dh)
+{
+	ioc_releasedir_priv(NULL, dh);
 }
