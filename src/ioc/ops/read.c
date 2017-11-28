@@ -41,106 +41,97 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct read_cb_r {
-	void *out;
-	struct iof_file_handle *handle;
-	crt_rpc_t *rpc;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
 static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
-	struct read_cb_r *reply = cb_info->cci_arg;
+	struct iof_rb *rb = cb_info->cci_arg;
+	struct iof_readx_in *in = crt_req_get(cb_info->cci_rpc);
 	struct iof_readx_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
-
+	int rc = 0;
+	size_t bytes_read = 0;
+	void *buff = NULL;
 
 	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
+		IOF_TRACE_INFO(rb, "Bad RPC reply %d",
 			       cb_info->cci_rc);
-		if (cb_info->cci_rc == -DER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
+		D_GOTO(out, rc = EIO);
 	}
 
 	if (out->err) {
-		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
+		IOF_TRACE_ERROR(rb, "Error from target %d",
 				out->err);
-
-		if (out->err == IOF_GAH_INVALID)
-			reply->handle->common.gah_valid = 0;
-
-		if (out->err == IOF_ERR_NOMEM)
-			reply->err = ENOMEM;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
+		D_GOTO(out, rc = EIO);
 	}
 
-	if (out->rc) {
-		if (reply->rc < 0) {
-			IOF_TRACE_ERROR(reply->handle, "negative rc %d",
-					reply->rc);
-			reply->err = EIO;
-		}  else {
-			reply->rc = out->rc;
-		}
+	if (out->rc)
+		D_GOTO(out, rc = out->rc);
 
-		iof_tracker_signal(&reply->tracker);
-		return;
+	if (out->iov_len > 0) {
+		if (out->data.iov_len != out->iov_len)
+			D_GOTO(out, rc = EIO);
+		buff = out->data.iov_buf;
+		bytes_read = out->data.iov_len;
+	} else if (out->bulk_len > 0) {
+		bytes_read = out->bulk_len;
+		buff = rb->buf->buf[0].mem;
 	}
 
-	rc = crt_req_addref(cb_info->cci_rpc);
+out:
 	if (rc) {
-		IOF_TRACE_ERROR(reply->handle, "could not take reference on "
-				"query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
+		IOF_FUSE_REPLY_ERR(rb->req, rc);
 	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
 
-	iof_tracker_signal(&reply->tracker);
+		STAT_ADD_COUNT(rb->fs_handle->stats, read_bytes, rc);
+
+		/* It's not clear without benchmarking which approach is better
+		 * here, fuse_reply_buf() is a small wrapper around writev()
+		 * which is a much shorter code-path however fuse_reply_data()
+		 * attempts to use splice which may well be faster.
+		 *
+		 * For now it's easy to pick between them, and both of them are
+		 * passing valgrind tests.
+		 */
+		if (true) {
+			rc = fuse_reply_buf(rb->req, buff, bytes_read);
+			if (rc != 0)
+				IOF_TRACE_ERROR(rb->req,
+						"fuse_reply_buf returned %d:%s",
+						rc, strerror(-rc));
+
+		} else {
+			struct fuse_bufvec *buf;
+
+			buf = rb->buf;
+			buf->buf[0].size = bytes_read;
+			rc = fuse_reply_data(rb->req, buf, 0);
+			if (rc != 0)
+				IOF_TRACE_ERROR(rb->req,
+						"fuse_reply_data returned %d:%s",
+						rc, strerror(-rc));
+		}
+	}
+	iof_pool_release(rb->pt, rb);
+	crt_bulk_free(in->data_bulk);
 }
 
-static int
+static void
 ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
-	      struct iof_file_handle *handle)
+	struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_readx_in *in;
-	struct iof_readx_out *out;
-	struct read_cb_r reply = {0};
-	char *buff = rb->buf->buf[0].mem;
+	struct iof_readx_in *in = NULL;
+	fuse_req_t req = rb->req;
 	crt_rpc_t *rpc = NULL;
-	crt_bulk_t bulk;
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};
 	int rc;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
 			    FS_TO_OP(fs_handle, readx), &rpc);
-	if (rc || !rpc) {
-		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
+	if (rc || !rpc)
+		D_GOTO(out_err, rc = EIO);
 
-	IOF_TRACE_LINK(rpc, handle, "read_bulk_rpc");
+	IOF_TRACE_UP(rpc, handle, "read_bulk_rpc");
 	in = crt_req_get(rpc);
 	in->gah = handle->common.gah;
 	in->xtvec.xt_off = position;
@@ -148,133 +139,28 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;
-	iov.iov_buf = (void *)buff;
+	iov.iov_buf = (void *)rb->buf->buf[0].mem;
 	sgl.sg_iovs = &iov;
 	sgl.sg_nr.num = 1;
 
 	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
 			     &in->data_bulk);
-	if (rc) {
-		IOF_TRACE_ERROR(handle, "Failed to make local bulk handle %d",
-				rc);
-		return -EIO;
-	}
-
-	bulk = in->data_bulk;
-
-	iof_tracker_init(&reply.tracker, 1);
-	reply.handle = handle;
-
-	rc = crt_req_send(rpc, read_bulk_cb, &reply);
-	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
-		return -EIO;
-	}
-	if (len <= 4096)
-		iof_pool_restock(fs_handle->rb_pool_page);
-	else
-		iof_pool_restock(fs_handle->rb_pool_large);
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (reply.err) {
-		crt_bulk_free(bulk);
-		return -reply.err;
-	}
-
-	if (reply.rc != 0) {
-		crt_bulk_free(bulk);
-		return -reply.rc;
-	}
-
-	out = reply.out;
-	if (out->iov_len > 0) {
-		if (out->data.iov_len != out->iov_len) {
-			/* TODO: This is a resource leak */
-			IOF_TRACE_ERROR(handle, "Missing IOV %d", out->iov_len);
-			return -EIO;
-		}
-		len = out->data.iov_len;
-		memcpy(buff, out->data.iov_buf, len);
-	} else {
-		len = out->bulk_len;
-		IOF_TRACE_INFO(handle, "Received %#zx via bulk", len);
-	}
-
-	rc = crt_req_decref(reply.rpc);
 	if (rc)
-		IOF_TRACE_ERROR(handle, "decref returned %d", rc);
+		D_GOTO(out_err, rc = EIO);
 
-	rc = crt_bulk_free(bulk);
+	rc = crt_req_send(rpc, read_bulk_cb, rb);
 	if (rc)
-		return -EIO;
+		D_GOTO(out_err, rc = EIO);
 
-	IOF_TRACE_INFO(handle, "Read complete %#zx", len);
+	return;
 
-	return len;
-}
-
-int
-ioc_read_buf(const char *file, struct fuse_bufvec **bufp, size_t len,
-	     off_t position, struct fuse_file_info *fi)
-{
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct fuse_bufvec *buf;
-	struct iof_rb *rb;
-	struct iof_pool_type *pt;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, read);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
-		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
-
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
-		 */
-		return -EIO;
-	}
-
-	if (len <= 4096)
-		pt = fs_handle->rb_pool_page;
-	else
-		pt = fs_handle->rb_pool_large;
-
-	rb = iof_pool_acquire(pt);
-	if (!rb)
-		return -ENOMEM;
-
-	buf = rb->buf;
-
-	IOF_TRACE_DEBUG(handle, "Using buffer at %p", buf->buf[0].mem);
-
-
-	rc = ioc_read_bulk(rb, len, position, handle);
-
-	/* In theory for zero-sized reads FUSE could do without a buffer here
-	 * as there are no file contents to describe however the API requires
-	 * one.
-	 */
-
-	if (rc >= 0) {
-		D_ASSERTF(rc <= len, "Too many bytes returned");
-
-		STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
-		buf->buf[0].size = rc;
-		*bufp = buf;
-		rb->buf = NULL;
-		iof_pool_release(pt, rb);
-	} else {
-		iof_pool_release(pt, rb);
-	}
-
-	IOF_TRACE_INFO(handle, "Read complete %i", rc);
-
-	return rc;
+out_err:
+	IOF_FUSE_REPLY_ERR(req, rc);
+	iof_pool_release(rb->pt, rb);
+	if (in->data_bulk)
+		crt_bulk_free(in->data_bulk);
+	if (rpc)
+		crt_req_decref(rpc);
 }
 
 void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
@@ -284,7 +170,6 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_pool_type *pt;
 	struct iof_rb *rb = NULL;
-	int ret = EIO;
 	int rc;
 
 	IOF_TRACE_LINK(req, handle, "read");
@@ -292,8 +177,7 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
+		D_GOTO(out_err, rc = fs_handle->offline_reason);
 	}
 
 	if (len <= 4096)
@@ -302,52 +186,16 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		pt = fs_handle->rb_pool_large;
 
 	rb = iof_pool_acquire(pt);
-	if (!rb) {
-		ret = ENOMEM;
-		goto out_err;
-	}
+	if (!rb)
+		D_GOTO(out_err, rc = ENOMEM);
 
-	rc = ioc_read_bulk(rb, len, position, handle);
-	if (rc < 0) {
-		ret = -rc;
-		goto out_err;
-	}
+	rb->req = req;
+	rb->pt = pt;
 
-	D_ASSERTF(rc <= len, "Too many bytes returned");
+	ioc_read_bulk(rb, len, position, handle);
 
-	STAT_ADD_COUNT(fs_handle->stats, read_bytes, rc);
-
-	/* It's not clear without benchmarking which approach is better
-	 * here, fuse_reply_buf() is a small wrapper around writev() which
-	 * is a much shorter code-path however fuse_reply_data() attempts
-	 * to use splice which may well be faster.
-	 *
-	 * For now it's easy to pick between them, and both of them are
-	 * passing valgrind tests.
-	 */
-	if (true) {
-		rc = fuse_reply_buf(req, rb->buf->buf[0].mem, rc);
-		if (rc != 0)
-			IOF_TRACE_ERROR(req, "fuse_reply_buf returned %d:%s",
-					rc, strerror(-rc));
-		iof_pool_release(pt, rb);
-	} else {
-		struct fuse_bufvec *buf;
-
-		buf = rb->buf;
-		buf->buf[0].size = rc;
-		rc = fuse_reply_data(req, buf, 0);
-		if (rc != 0)
-			IOF_TRACE_ERROR(req, "fuse_reply_data returned %d:%s",
-					rc, strerror(-rc));
-		iof_pool_release(pt, rb);
-	}
-
-	IOF_TRACE_DOWN(req);
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
-	if (rb)
-		iof_pool_release(pt, rb);
+	IOF_FUSE_REPLY_ERR(req, rc);
 }

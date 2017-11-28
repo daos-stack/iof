@@ -113,6 +113,8 @@ struct iof_rb {
 	d_list_t			list;
 	struct iof_projection_info	*fs_handle;
 	struct fuse_bufvec		*buf;
+	fuse_req_t			req;
+	struct iof_pool_type		*pt;
 };
 
 struct iof_projection_info {

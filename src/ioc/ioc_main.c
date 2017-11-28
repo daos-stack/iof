@@ -879,7 +879,7 @@ rb_page_reset(void *arg)
 }
 
 static int
-rb_large_init(void *arg, void *handle)
+rb_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
@@ -1490,12 +1490,13 @@ static int initialize_projection(struct iof_state *iof_state,
 						POOL_TYPE_INIT(entry_req, list)};
 
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
+						.init = rb_init,
 						.reset = rb_page_reset,
 						.release = rb_release,
 						POOL_TYPE_INIT(iof_rb, list)};
 
 		struct iof_pool_reg rb_large = { .handle = fs_handle,
-						 .init = rb_large_init,
+						 .init = rb_init,
 						 .reset = rb_large_reset,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
