@@ -56,10 +56,8 @@ enum op_type {
 	DEF_FUSE_OP(truncate),
 	DEF_FUSE_OP(rename),
 	DEF_FUSE_OP(utimens),
-	DEF_FUSE_OP(opendir),
 	DEF_FUSE_OP(readdir),
 	DEF_FUSE_OP(releasedir),
-	DEF_FUSE_OP(open),
 	DEF_FUSE_OP(release),
 	DEF_FUSE_OP(create),
 	DEF_FUSE_OP(fsync),
@@ -68,7 +66,6 @@ enum op_type {
 	DEF_FUSE_OP(mkdir),
 	DEF_FUSE_OP(rmdir),
 	DEF_FUSE_OP(write),
-	DEF_FUSE_OP(unlink),
 	DEF_FUSE_OP(readlink),
 	DEF_FUSE_OP(ioctl),
 	DEF_FUSE_OP(statfs),
@@ -272,19 +269,15 @@ static struct operation default_ops[] = {
 	DECL_FUSE_OP(truncate, ioc_truncate),
 	DECL_FUSE_OP(rename, ioc_rename),
 	DECL_FUSE_OP(utimens, ioc_utimens),
-	DECL_FUSE_OP(opendir, ioc_opendir),
 	DECL_FUSE_OP(readdir, ioc_readdir),
 	DECL_FUSE_OP(releasedir, ioc_closedir),
-	DECL_FUSE_OP(open, ioc_open),
 	DECL_FUSE_OP(release, ioc_release),
-	DECL_FUSE_OP(create, ioc_create),
 	DECL_FUSE_OP(fsync, ioc_fsync),
 	DECL_FUSE_OP(read_buf, ioc_read_buf),
 	DECL_FUSE_OP(symlink, ioc_symlink),
 	DECL_FUSE_OP(mkdir, ioc_mkdir),
 	DECL_FUSE_OP(rmdir, ioc_rmdir),
 	DECL_FUSE_OP(write, ioc_write),
-	DECL_FUSE_OP(unlink, ioc_unlink),
 	DECL_FUSE_OP(readlink, ioc_readlink),
 	DECL_FUSE_OP(ioctl, ioc_ioctl),
 	DECL_FUSE_OP(statfs, ioc_statfs),
@@ -339,19 +332,15 @@ struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
 	SET_FUSE_OP(fuse_ops, client_ops, truncate);
 	SET_FUSE_OP(fuse_ops, client_ops, rename);
 	SET_FUSE_OP(fuse_ops, client_ops, utimens);
-	SET_FUSE_OP(fuse_ops, client_ops, opendir);
 	SET_FUSE_OP(fuse_ops, client_ops, readdir);
 	SET_FUSE_OP(fuse_ops, client_ops, releasedir);
-	SET_FUSE_OP(fuse_ops, client_ops, open);
 	SET_FUSE_OP(fuse_ops, client_ops, release);
-	SET_FUSE_OP(fuse_ops, client_ops, create);
 	SET_FUSE_OP(fuse_ops, client_ops, fsync);
 	SET_FUSE_OP(fuse_ops, client_ops, read_buf);
 	SET_FUSE_OP(fuse_ops, client_ops, symlink);
 	SET_FUSE_OP(fuse_ops, client_ops, mkdir);
 	SET_FUSE_OP(fuse_ops, client_ops, rmdir);
 	SET_FUSE_OP(fuse_ops, client_ops, write);
-	SET_FUSE_OP(fuse_ops, client_ops, unlink);
 	SET_FUSE_OP(fuse_ops, client_ops, readlink);
 	SET_FUSE_OP(fuse_ops, client_ops, ioctl);
 	SET_FUSE_OP(fuse_ops, client_ops, statfs);

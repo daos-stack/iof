@@ -301,15 +301,8 @@ static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
  *
  * This converts "/" into "." and for all other paths removes the leading /
  */
-const char *iof_get_rel_path(const char *path)
-{
-	if (path[0] != '/')
-		return (char *)path;
-	path++;
-	if (path[0] == '\0')
-		return ".";
-	return (char *)path;
-}
+
+#define iof_get_rel_path(path) path
 
 /*
  * Assemble local path.  Take the local projection directory and
@@ -422,11 +415,10 @@ out:
 static void
 iof_opendir_handler(crt_rpc_t *rpc)
 {
-	struct iof_gah_string_in	*in = crt_req_get(rpc);
+	struct iof_gah_in		*in = crt_req_get(rpc);
 	struct iof_opendir_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 	struct ionss_dir_handle		*local_handle;
-	char *path = NULL;
 	int rc;
 	int fd;
 
@@ -434,17 +426,10 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	if (out->err)
 		goto out;
 
-	if (in->name.name[0] != '\0') {
-		path = (char *)iof_get_rel_path(in->name.name);
-	} else {
-		path = parent->proc_fd_name;
-	}
-
-	IOF_LOG_DEBUG("Opening path " GAH_PRINT_STR " %s",
-		      GAH_PRINT_VAL(in->gah), path);
+	IOF_TRACE_DEBUG(parent, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	errno = 0;
-	fd = openat(parent->fd, path, O_DIRECTORY | O_RDONLY);
+	fd = open(parent->proc_fd_name, O_DIRECTORY | O_RDONLY);
 
 	if (fd == -1) {
 		out->rc = errno;
@@ -474,8 +459,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 		     GAH_PRINT_FULL_VAL(out->gah));
 
 out:
-	IOF_LOG_DEBUG("path %s result err %d rc %d",
-		      in->name.name, out->err, out->rc);
+	IOF_TRACE_DEBUG(parent, "result err %d rc %d", out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1056,7 +1040,6 @@ iof_open_handler(crt_rpc_t *rpc)
 	struct ios_projection	*projection = NULL;
 	struct ionss_mini_file	mf = {.type = open_handle};
 	struct ionss_file_handle *parent;
-	char *path = NULL;
 	int fd;
 	int rc;
 
@@ -1072,20 +1055,11 @@ iof_open_handler(crt_rpc_t *rpc)
 			goto out;
 	}
 
-	/* in->fs_id will have been verified by the VALIDATE_ARGS_STR call
-	 * above
-	 */
-
-	if (in->name.name[0] != '\0')
-		path = (char *)iof_get_rel_path(in->name.name);
-	else
-		path = parent->proc_fd_name;
-
-	IOF_LOG_DEBUG("path %s flags 0%o",
-		      path, in->flags);
+	IOF_TRACE_DEBUG(parent, GAH_PRINT_STR " flags 0%o",
+			GAH_PRINT_VAL(in->gah), in->flags);
 
 	errno = 0;
-	fd = openat(parent->fd, path, in->flags);
+	fd = open(parent->proc_fd_name, in->flags);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -1095,12 +1069,11 @@ iof_open_handler(crt_rpc_t *rpc)
 	find_and_insert(projection, fd, &mf, out);
 
 out:
-	IOF_LOG_DEBUG("path %s flags 0%o ", path, in->flags);
 
 	LOG_FLAGS(rpc, in->flags);
 
-	IOF_LOG_INFO("%p path %s result err %d rc %d",
-		     rpc, path, out->err, out->rc);
+	IOF_TRACE_INFO(parent, GAH_PRINT_STR " result err %d rc %d",
+		       GAH_PRINT_VAL(in->gah), out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -1120,6 +1093,9 @@ iof_create_handler(crt_rpc_t *rpc)
 	struct iof_create_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 	struct ionss_mini_file		mf = {.type = open_handle};
+	struct ionss_mini_file		imf = {.type = inode_handle,
+					       .flags = O_PATH | O_NOATIME | O_RDONLY};
+	int ifd;
 	char *path = NULL;
 	int fd;
 	int rc;
@@ -1137,8 +1113,7 @@ iof_create_handler(crt_rpc_t *rpc)
 			in->common.name.name, in->flags, in->mode);
 
 	errno = 0;
-	fd = openat(parent->fd, iof_get_rel_path(in->common.name.name),
-		    in->flags, in->mode);
+	fd = openat(parent->fd, in->common.name.name, in->flags, in->mode);
 	if (fd == -1) {
 		out->rc = errno;
 		goto out;
@@ -1146,33 +1121,23 @@ iof_create_handler(crt_rpc_t *rpc)
 
 	mf.flags = in->flags;
 
-	if (in->reg_inode) {
-		struct ionss_mini_file	imf = {.type = inode_handle,
-					       .flags = O_PATH | O_NOATIME | O_RDONLY};
-		int ifd;
-
-		D_ASPRINTF(path, "/proc/self/fd/%d", fd);
-		if (!path) {
-			close(fd);
-			D_GOTO(out, out->rc = ENOMEM);
-		}
-
-		errno = 0;
-		ifd = openat(0, path, imf.flags);
-		if (ifd == -1) {
-			out->rc = errno;
-			if (!out->rc)
-				out->err = IOF_ERR_INTERNAL;
-			close(fd);
-			goto out;
-		}
-		imf.flags |= O_NOFOLLOW;
-		find_and_insert_create(parent->projection,
-				       fd, ifd, &mf, &imf, out);
-	} else {
-		find_and_insert_create(parent->projection,
-				       fd, 0, &mf, NULL, out);
+	D_ASPRINTF(path, "/proc/self/fd/%d", fd);
+	if (!path) {
+		close(fd);
+		D_GOTO(out, out->rc = ENOMEM);
 	}
+
+	errno = 0;
+	ifd = open(path, imf.flags);
+	if (ifd == -1) {
+		out->rc = errno;
+		if (!out->rc)
+			out->err = IOF_ERR_INTERNAL;
+		close(fd);
+		goto out;
+	}
+	imf.flags |= O_NOFOLLOW;
+	find_and_insert_create(parent->projection, fd, ifd, &mf, &imf, out);
 
 out:
 	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o",
@@ -2012,7 +1977,7 @@ out:
 
 static void iof_unlink_handler(crt_rpc_t *rpc)
 {
-	struct iof_open_in *in = crt_req_get(rpc);
+	struct iof_unlink_in *in = crt_req_get(rpc);
 	struct iof_status_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *parent;
 	int rc;

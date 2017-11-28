@@ -203,7 +203,6 @@ struct iof_create_in {
 	struct iof_gah_string_in common;
 	uint32_t mode;
 	uint32_t flags;
-	uint32_t reg_inode;
 };
 
 /* We reuse iof_gah_string_in in a few input structs and we need to
@@ -226,6 +225,11 @@ struct iof_rename_in {
 };
 
 struct iof_open_in {
+	struct ios_gah gah;
+	uint32_t flags;
+};
+
+struct iof_unlink_in {
 	struct ios_name name;
 	struct ios_gah gah;
 	uint32_t flags;

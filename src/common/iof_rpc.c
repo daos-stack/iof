@@ -115,7 +115,6 @@ struct crt_msg_field *create_in[] = {
 	&CMF_IOF_NAME,	/* name */
 	&CMF_INT,	/* mode */
 	&CMF_INT,	/* flags */
-	&CMF_INT,	/* reg_inode */
 };
 
 struct crt_msg_field *rename_in[] = {
@@ -126,8 +125,12 @@ struct crt_msg_field *rename_in[] = {
 	&CMF_INT,	/* flags */
 };
 
-/* Note this is also used for unlink/rmdir */
 struct crt_msg_field *open_in[] = {
+	&CMF_GAH,	/* gah */
+	&CMF_INT,	/* flags */
+};
+
+struct crt_msg_field *unlink_in[] = {
 	&CMF_IOF_NAME,	/* name */
 	&CMF_GAH,	/* gah */
 	&CMF_INT,	/* flags */
@@ -262,7 +265,7 @@ struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
 #define RPC_TYPE(NAME, in, out) { .fmt = DEFINE_CRT_REQ_FMT(#NAME, in, out) }
 
 struct rpc_data default_rpc_types[] = {
-	RPC_TYPE(opendir, gah_string_in, gah_pair),
+	RPC_TYPE(opendir, gah_in, gah_pair),
 	RPC_TYPE(readdir, readdir_in, readdir_out),
 	RPC_TYPE(closedir, gah_in, NULL),
 	RPC_TYPE(getattr, gah_string_in, iov_pair),
@@ -274,7 +277,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(rename, two_string_in, status_out),
 	RPC_TYPE(rename_ll, rename_in, status_out),
 	RPC_TYPE(readx, readx_in, readx_out),
-	RPC_TYPE(unlink, open_in, status_out),
+	RPC_TYPE(unlink, unlink_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
 	RPC_TYPE(create, create_in, create_out),
 	RPC_TYPE(close, gah_in, NULL),

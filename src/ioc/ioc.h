@@ -439,24 +439,9 @@ void ioc_ll_gen_cb(const struct crt_cb_info *);
 
 void ioc_getattr_cb(struct ioc_request *request);
 
-int ioc_opendir(const char *, struct fuse_file_info *);
-
 int ioc_closedir(const char *, struct fuse_file_info *);
 
-int ioc_open(const char *, struct fuse_file_info *);
-
-struct open_cb_r {
-	struct iof_file_handle *fh;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
-void ioc_open_cb(const struct crt_cb_info *);
-
 int ioc_release(const char *, struct fuse_file_info *);
-
-int ioc_create(const char *, mode_t, struct fuse_file_info *);
 
 int ioc_chmod_name(const char *, mode_t);
 
@@ -495,8 +480,6 @@ int ioc_write(const char *, const char *, size_t, off_t,
 	      struct fuse_file_info *);
 
 int ioc_rmdir(const char *);
-
-int ioc_unlink(const char *);
 
 int ioc_readlink(const char *, char *, size_t);
 

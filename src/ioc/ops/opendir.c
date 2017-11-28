@@ -62,43 +62,7 @@ opendir_cb(struct ioc_request *request)
 	}
 }
 
-static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
-	.on_send	= post_send,
-	.on_result	= opendir_cb,
-	.on_evict	= ioc_simple_resend
-};
-
 #define STAT_KEY opendir
-
-int ioc_opendir(const char *dir, struct fuse_file_info *fi)
-{
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct TYPE_NAME *dh = NULL;
-	struct iof_gah_string_in *in;
-	int rc;
-
-	if (strnlen(dir, NAME_MAX) == NAME_MAX)
-		return -EIO;
-
-	IOC_REQ_INIT(dh, fs_handle, api, in, rc);
-	if (rc)
-		D_GOTO(out, rc);
-	IOF_TRACE_INFO(dh, "dir %s", dir);
-	strncpy(in->name.name, dir, NAME_MAX);
-	in->gah = fs_handle->gah;
-	IOC_REQ_SEND(dh, fs_handle, rc);
-out:
-	IOF_TRACE_DEBUG(dh, "dir %s rc %d", dir, rc);
-	if (rc == 0) {
-		fi->fh = (uint64_t)dh;
-		IOF_TRACE_DEBUG(dh, GAH_PRINT_FULL_STR,
-				GAH_PRINT_FULL_VAL(dh->gah));
-	} else {
-		IOC_REQ_RELEASE(dh);
-	}
-	return rc;
-}
 
 static void
 opendir_ll_cb(struct ioc_request *request)
@@ -123,7 +87,7 @@ opendir_ll_cb(struct ioc_request *request)
 	}
 }
 
-static const struct ioc_request_api api_ll = {
+static const struct ioc_request_api api = {
 	.get_fsh	= get_fs_handle,
 	.on_send	= post_send,
 	.on_result	= opendir_ll_cb,
@@ -134,11 +98,11 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
 	struct TYPE_NAME		*dh = NULL;
-	struct iof_gah_string_in	*in;
+	struct iof_gah_in		*in;
 	int rc;
 
 	IOF_TRACE_INFO(req, "ino %lu", ino);
-	IOC_REQ_INIT_LL(dh, fs_handle, api_ll, in, req, rc);
+	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_LINK(req, dh, "request");
