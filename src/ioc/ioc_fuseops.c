@@ -277,7 +277,6 @@ static struct operation default_ops[] = {
 	DECL_FUSE_OP(symlink, ioc_symlink),
 	DECL_FUSE_OP(mkdir, ioc_mkdir),
 	DECL_FUSE_OP(rmdir, ioc_rmdir),
-	DECL_FUSE_OP(write, ioc_write),
 	DECL_FUSE_OP(readlink, ioc_readlink),
 	DECL_FUSE_OP(ioctl, ioc_ioctl),
 	DECL_FUSE_OP(statfs, ioc_statfs),

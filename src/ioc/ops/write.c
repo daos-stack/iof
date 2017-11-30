@@ -95,8 +95,9 @@ write_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
-int ioc_writex(const char *buff, size_t len, off_t position,
-		   struct iof_file_handle *handle)
+static int
+ioc_writex(const char *buff, size_t len, off_t position,
+	   struct iof_file_handle *handle)
 {
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_writex_in *in;
@@ -171,8 +172,8 @@ int ioc_writex(const char *buff, size_t len, off_t position,
 	return reply.len;
 }
 
-int ioc_write(const char *file, const char *buff, size_t len, off_t position,
-	      struct fuse_file_info *fi)
+void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
+		  off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	int rc;
@@ -180,40 +181,24 @@ int ioc_write(const char *file, const char *buff, size_t len, off_t position,
 	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
-
-	if (!IOF_IS_WRITEABLE(handle->fs_handle->flags)) {
-		IOF_TRACE_INFO(handle, "Attempt to modify Read-Only File "
-			       "System");
-		return -EROFS;
-	}
+		D_GOTO(out, rc = -handle->fs_handle->offline_reason);
 
 	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
-	if (!handle->common.gah_valid) {
+	if (!handle->common.gah_valid)
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
-		return -EIO;
-	}
+		D_GOTO(out, rc = -EIO);
 
 	rc = ioc_writex(buff, len, position, handle);
 
-	if (rc > 0)
-		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
-
-	return rc;
-}
-
-void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
-		  off_t position, struct fuse_file_info *fi)
-{	int rc;
-
-	rc = ioc_write(NULL, buff, len, position, fi);
-
-	if (rc < 0)
+out:
+	if (rc < 0) {
 		IOF_FUSE_REPLY_ERR(req, -rc);
-	else
+	} else {
 		fuse_reply_write(req, rc);
+		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
+	}
 }
