@@ -1147,7 +1147,7 @@ static void *
 iof_thread(void *arg)
 {
 	struct iof_ctx	*iof_ctx = arg;
-	int		ctx_rc = -DER_SUCCESS;
+	int		ctx_rc;
 	int		rc;
 
 	iof_tracker_signal(&iof_ctx->thread_start_tracker);
@@ -1179,6 +1179,8 @@ iof_thread(void *arg)
 			bool active;
 
 			do {
+				ctx_rc = iof_progress_drain(iof_ctx);
+
 				active = iof_pool_reclaim(iof_ctx->pool);
 
 				if (!active)
@@ -1187,21 +1189,17 @@ iof_thread(void *arg)
 				IOF_TRACE_WARNING(iof_ctx,
 						  "Active descriptors, waiting for one second");
 
-				ctx_rc = iof_progress_drain(iof_ctx);
-
 			} while (active && ctx_rc == -DER_SUCCESS);
+		} else {
+			ctx_rc = iof_progress_drain(iof_ctx);
 		}
 
 		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
-		if (rc == -DER_BUSY) {
-			IOF_TRACE_WARNING(iof_ctx,
-					  "RPCs in flight, waiting for one second");
-
-			ctx_rc = iof_progress_drain(iof_ctx);
-		} else if (rc != DER_SUCCESS) {
+		if (rc == -DER_BUSY)
+			IOF_TRACE_WARNING(iof_ctx, "RPCs in flight, waiting");
+		else if (rc != DER_SUCCESS)
 			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
 					rc);
-		}
 	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
 
 	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
