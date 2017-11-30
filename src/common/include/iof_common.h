@@ -335,25 +335,25 @@ struct rpc_data {
 #define DEF_RPC_TYPE(CLASS, TYPE) IOF_##CLASS##_##TYPE
 
 enum iof_rpc_type_default {
-	DEF_RPC_TYPE(DEFAULT, opendir),
-	DEF_RPC_TYPE(DEFAULT, readdir),
-	DEF_RPC_TYPE(DEFAULT, closedir),
-	DEF_RPC_TYPE(DEFAULT, getattr),
-	DEF_RPC_TYPE(DEFAULT, writex),
-	DEF_RPC_TYPE(DEFAULT, rename),
-	DEF_RPC_TYPE(DEFAULT, readx),
-	DEF_RPC_TYPE(DEFAULT, unlink),
-	DEF_RPC_TYPE(DEFAULT, open),
-	DEF_RPC_TYPE(DEFAULT, create),
-	DEF_RPC_TYPE(DEFAULT, close),
-	DEF_RPC_TYPE(DEFAULT, mkdir),
-	DEF_RPC_TYPE(DEFAULT, readlink),
-	DEF_RPC_TYPE(DEFAULT, symlink),
-	DEF_RPC_TYPE(DEFAULT, fsync),
-	DEF_RPC_TYPE(DEFAULT, fdatasync),
-	DEF_RPC_TYPE(DEFAULT, statfs),
-	DEF_RPC_TYPE(DEFAULT, lookup),
-	DEF_RPC_TYPE(DEFAULT, setattr),
+	DEF_RPC_TYPE(DEFAULT, opendir),		/* 0x10f00 */
+	DEF_RPC_TYPE(DEFAULT, readdir),		/* 0x10f01 */
+	DEF_RPC_TYPE(DEFAULT, closedir),	/* 0x10f02 */
+	DEF_RPC_TYPE(DEFAULT, getattr),		/* 0x10f03 */
+	DEF_RPC_TYPE(DEFAULT, writex),		/* 0x10f04 */
+	DEF_RPC_TYPE(DEFAULT, rename),		/* 0x10f05 */
+	DEF_RPC_TYPE(DEFAULT, readx),		/* 0x10f06 */
+	DEF_RPC_TYPE(DEFAULT, unlink),		/* 0x10f07 */
+	DEF_RPC_TYPE(DEFAULT, open),		/* 0x10f08 */
+	DEF_RPC_TYPE(DEFAULT, create),		/* 0x10f09 */
+	DEF_RPC_TYPE(DEFAULT, close),		/* 0x10f0a */
+	DEF_RPC_TYPE(DEFAULT, mkdir),		/* 0x10f0b */
+	DEF_RPC_TYPE(DEFAULT, readlink),	/* 0x10f0c */
+	DEF_RPC_TYPE(DEFAULT, symlink),		/* 0x10f0d */
+	DEF_RPC_TYPE(DEFAULT, fsync),		/* 0x10f0e */
+	DEF_RPC_TYPE(DEFAULT, fdatasync),	/* 0x10f0f */
+	DEF_RPC_TYPE(DEFAULT, statfs),		/* 0x10f10 */
+	DEF_RPC_TYPE(DEFAULT, lookup),		/* 0x10f11 */
+	DEF_RPC_TYPE(DEFAULT, setattr),		/* 0x10f12 */
 	IOF_DEFAULT_RPC_TYPES,
 };
 

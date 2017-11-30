@@ -2855,18 +2855,19 @@ int main(int argc, char **argv)
 
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
+
 		struct iof_pool_reg arp = {.handle = projection,
 					   .init = ar_init,
 					   .reset = ar_reset,
 					   .release = ar_release,
-					   .max_desc = 3,
+					   .max_desc = projection->max_read_count,
 					   POOL_TYPE_INIT(ionss_active_read,
 							  list)};
 		struct iof_pool_reg awp = {.handle = projection,
 					   .init = aw_init,
 					   .reset = aw_reset,
 					   .release = aw_release,
-					   .max_desc = 3,
+					   .max_desc = projection->max_write_count,
 					   POOL_TYPE_INIT(ionss_active_write,
 							  list)};
 
