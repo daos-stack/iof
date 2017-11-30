@@ -141,7 +141,6 @@ struct iof_projection_info {
 	int				fs_id;
 	struct iof_pool			pool;
 	struct iof_pool_type		*dh_pool;
-	struct iof_pool_type		*gh_pool;
 	struct iof_pool_type		*fgh_pool;
 	struct iof_pool_type		*close_pool;
 	struct iof_pool_type		*lookup_pool;
@@ -293,7 +292,6 @@ struct ioc_request {
 	crt_rpc_t			*rpc;
 	fuse_req_t			req;
 	struct iof_tracker		tracker;
-	void				*ptr;
 	const struct ioc_request_api	*cb;
 };
 
@@ -401,7 +399,7 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
 
 #define IOC_STATUS_TO_RC_LL(STATUS) \
-	((STATUS)->err == 0 ? (STATUS)->rc : (STATUS)->err)
+	((STATUS)->err == 0 ? (STATUS)->rc : EIO)
 
 #define IOC_GET_RESULT(REQ) crt_reply_get((REQ)->rpc)
 
@@ -437,8 +435,6 @@ int ioc_simple_resend(struct ioc_request *request);
 
 void ioc_ll_gen_cb(const struct crt_cb_info *);
 
-void ioc_getattr_cb(struct ioc_request *request);
-
 int ioc_closedir(const char *, struct fuse_file_info *);
 
 int ioc_release(const char *, struct fuse_file_info *);
@@ -456,10 +452,6 @@ int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
 
 int ioc_utimens(const char *, const struct timespec tv[2],
 		struct fuse_file_info *fi);
-
-int ioc_getattr(const char *, struct stat *, struct fuse_file_info *);
-
-int ioc_getattr_gah(struct iof_file_handle *, struct stat *);
 
 int ioc_truncate(const char *, off_t, struct fuse_file_info *);
 

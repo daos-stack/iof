@@ -330,44 +330,6 @@ int iof_get_path(int id, const char *old_path, char *new_path)
 	return IOF_SUCCESS;
 }
 
-static void
-iof_getattr_handler(crt_rpc_t *rpc)
-{
-	struct iof_gah_string_in *in = crt_req_get(rpc);
-	struct iof_getattr_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *parent;
-	struct stat stbuf = {0};
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
-	if (out->err)
-		goto out;
-
-	errno = 0;
-	rc = fstatat(parent->fd,
-		     iof_get_rel_path(in->name.name), &stbuf,
-		     AT_SYMLINK_NOFOLLOW);
-	if (rc)
-		out->rc = errno;
-	/* Deny access if this path is a mount point for another file system*/
-	else if (parent->projection->dev_no != stbuf.st_dev)
-		out->rc = EACCES;
-	else
-		d_iov_set(&out->stat, &stbuf, sizeof(struct stat));
-
-out:
-
-	IOF_LOG_DEBUG("path %s result err %d rc %d",
-		      in->name.name, out->err, out->rc);
-
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
-
-	if (parent)
-		ios_fh_decref(parent, 1);
-}
-
 /*
  * Given a GAH, return the file attributes.
  *
@@ -383,9 +345,8 @@ static void
 iof_getattr_gah_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
-	struct iof_getattr_out *out = crt_reply_get(rpc);
+	struct iof_attr_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
-	struct stat stbuf = {0};
 	int rc;
 
 	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
@@ -393,12 +354,10 @@ iof_getattr_gah_handler(crt_rpc_t *rpc)
 		goto out;
 
 	errno = 0;
-	rc = fstat(handle->fd, &stbuf);
+	rc = fstat(handle->fd, &out->stat);
 
 	if (rc)
 		out->rc = errno;
-	else
-		d_iov_set(&out->stat, &stbuf, sizeof(struct stat));
 
 out:
 	IOF_LOG_DEBUG("result err %d rc %d",
@@ -2375,9 +2334,8 @@ out:
 static void iof_setattr_handler(crt_rpc_t *rpc)
 {
 	struct iof_setattr_in *in = crt_req_get(rpc);
-	struct iof_data_out *out = crt_reply_get(rpc);
+	struct iof_attr_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *handle;
-	struct stat stbuf = {0};
 	int fd = -1;
 	int rc;
 
@@ -2516,11 +2474,9 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	}
 
 	errno = 0;
-	rc = fstat(handle->fd, &stbuf);
+	rc = fstat(handle->fd, &out->stat);
 	if (rc)
 		out->rc = errno;
-	else
-		d_iov_set(&out->data, &stbuf, sizeof(struct stat));
 
 out:
 	IOF_TRACE_DEBUG(handle, "set %#x err %d rc %d",
@@ -2582,7 +2538,6 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
 		DECL_RPC_HANDLER(readdir, iof_readdir_handler),
 		DECL_RPC_HANDLER(closedir, iof_closedir_handler),
-		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
 		DECL_RPC_HANDLER(getattr_gah, iof_getattr_gah_handler),
 		DECL_RPC_HANDLER(writex, iof_writex_handler),
 		DECL_RPC_HANDLER(truncate, iof_truncate_handler),

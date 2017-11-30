@@ -40,10 +40,13 @@
 #include "ioc.h"
 #include "log.h"
 
+/*
+ * TODO: Merge this with getattr_ll_cb() when this is updated to use requests
+ */
 static void
 attr_ll_cb(const struct crt_cb_info *cb_info)
 {
-	struct iof_data_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_attr_out	*out = crt_reply_get(cb_info->cci_rpc);
 	fuse_req_t		req = cb_info->cci_arg;
 	int			ret = EIO;
 
@@ -62,10 +65,7 @@ attr_ll_cb(const struct crt_cb_info *cb_info)
 	if (out->rc)
 		D_GOTO(out_err, ret = out->rc);
 
-	if (out->data.iov_len != sizeof(struct stat) || !out->data.iov_buf)
-		D_GOTO(out_err, ret = EIO);
-
-	IOF_FUSE_REPLY_ATTR(req, out->data.iov_buf);
+	IOF_FUSE_REPLY_ATTR(req, &out->stat);
 	return;
 
 out_err:

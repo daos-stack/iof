@@ -235,8 +235,8 @@ struct iof_unlink_in {
 	uint32_t flags;
 };
 
-struct iof_getattr_out {
-	d_iov_t stat;
+struct iof_attr_out {
+	struct stat stat;
 	int rc;
 	int err;
 };
@@ -372,7 +372,6 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, opendir),
 	DEF_RPC_TYPE(DEFAULT, readdir),
 	DEF_RPC_TYPE(DEFAULT, closedir),
-	DEF_RPC_TYPE(DEFAULT, getattr),
 	DEF_RPC_TYPE(DEFAULT, getattr_gah),
 	DEF_RPC_TYPE(DEFAULT, writex),
 	DEF_RPC_TYPE(DEFAULT, truncate),

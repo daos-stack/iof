@@ -264,7 +264,6 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
 		}
 static struct operation default_ops[] = {
 	DECL_FUSE_OP(init, ioc_init_full),
-	DECL_FUSE_OP(getattr, ioc_getattr),
 	DECL_FUSE_OP(chmod, ioc_chmod),
 	DECL_FUSE_OP(truncate, ioc_truncate),
 	DECL_FUSE_OP(rename, ioc_rename),

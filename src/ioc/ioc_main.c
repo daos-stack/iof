@@ -700,53 +700,14 @@ gh_init(void *arg, void *handle)
 	return 0;
 }
 
-/* Reset, and prepare for use a getattr descriptor */
+/* Reset and prepare for use a getfattr descriptor */
 static int
 gh_reset(void *arg)
 {
 	struct getattr_req *req = arg;
-	struct iof_gah_string_in *in;
 	int rc;
 
-	/* If this descriptor has previously been used the destroy the
-	 * existing RPC
-	 */
-	if (req->request.rpc) {
-		crt_req_decref(req->request.rpc);
-		crt_req_decref(req->request.rpc);
-		req->request.rpc = NULL;
-	}
-
-	/* Create a new RPC ready for later use.  Take an initial reference
-	 * to the RPC so that it is not cleaned up after a successful send.
-	 *
-	 * After calling send the getattr code will re-take the dropped
-	 * reference which means that on all subsequent calls to reset()
-	 * or release() the ref count will be two.
-	 *
-	 * This means that both descriptor creation and destruction are
-	 * done off the critical path.
-	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->fs_handle, getattr),
-			    &req->request.rpc);
-	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
-		return -1;
-	}
-	crt_req_addref(req->request.rpc);
-	in = crt_req_get(req->request.rpc);
-	in->gah = req->fs_handle->gah;
-
-	return 0;
-}
-
-/* Reset and prepare for use a getfattr descriptor */
-static int
-fgh_reset(void *arg)
-{
-	struct getattr_req *req = arg;
-	int rc;
+	req->request.req = NULL;
 
 	if (req->request.rpc) {
 		crt_req_decref(req->request.rpc);
@@ -1518,15 +1479,9 @@ static int initialize_projection(struct iof_state *iof_state,
 					   .release = fh_release,
 					   POOL_TYPE_INIT(iof_file_handle, list)};
 
-		struct iof_pool_reg gt = { .handle = fs_handle,
-					   .init = gh_init,
-					   .reset = gh_reset,
-					   .release = gh_release,
-					   POOL_TYPE_INIT(getattr_req, list)};
-
 		struct iof_pool_reg fgt = { .handle = fs_handle,
 					    .init = gh_init,
-					    .reset = fgh_reset,
+					    .reset = gh_reset,
 					    .release = gh_release,
 					    POOL_TYPE_INIT(getattr_req, list)};
 
@@ -1554,10 +1509,6 @@ static int initialize_projection(struct iof_state *iof_state,
 
 		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
 		if (!fs_handle->dh_pool)
-			return IOF_ERR_NOMEM;
-
-		fs_handle->gh_pool = iof_pool_register(&fs_handle->pool, &gt);
-		if (!fs_handle->gh_pool)
 			return IOF_ERR_NOMEM;
 
 		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);

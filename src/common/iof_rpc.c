@@ -136,6 +136,12 @@ struct crt_msg_field *unlink_in[] = {
 	&CMF_INT,	/* flags */
 };
 
+struct crt_msg_field *attr_out[] = {
+	&CMF_IOF_STAT,	/* stat */
+	&CMF_INT,	/* rc */
+	&CMF_INT,	/* err */
+};
+
 struct crt_msg_field *iov_pair[] = {
 	&CMF_IOVEC,
 	&CMF_INT,
@@ -268,8 +274,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(opendir, gah_in, gah_pair),
 	RPC_TYPE(readdir, readdir_in, readdir_out),
 	RPC_TYPE(closedir, gah_in, NULL),
-	RPC_TYPE(getattr, gah_string_in, iov_pair),
-	RPC_TYPE(getattr_gah, gah_in, iov_pair),
+	RPC_TYPE(getattr_gah, gah_in, attr_out),
 	RPC_TYPE(writex, writex_in, writex_out),
 	RPC_TYPE(truncate, truncate_in, status_out),
 	RPC_TYPE(ftruncate, ftruncate_in, status_out),
@@ -295,7 +300,7 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	RPC_TYPE(statfs, gah_in, iov_pair),
 	RPC_TYPE(lookup, gah_string_in, entry_out),
-	RPC_TYPE(setattr, setattr_in, iov_pair),
+	RPC_TYPE(setattr, setattr_in, attr_out),
 };
 
 const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
