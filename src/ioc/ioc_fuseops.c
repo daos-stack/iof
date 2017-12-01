@@ -45,38 +45,6 @@
 #include "ioc.h"
 #include "log.h"
 
-/* Try to make the function pointer type as generic as possible */
-typedef int (*fuse_func_t)(void *, ...);
-
-#define DEF_FUSE_OP(TYPE) op_type_##TYPE
-enum op_type {
-	DEF_FUSE_OP(init),
-	DEF_FUSE_OP(getattr),
-	DEF_FUSE_OP(chmod),
-	DEF_FUSE_OP(truncate),
-	DEF_FUSE_OP(rename),
-	DEF_FUSE_OP(utimens),
-	DEF_FUSE_OP(readdir),
-	DEF_FUSE_OP(releasedir),
-	DEF_FUSE_OP(release),
-	DEF_FUSE_OP(create),
-	DEF_FUSE_OP(fsync),
-	DEF_FUSE_OP(read_buf),
-	DEF_FUSE_OP(symlink),
-	DEF_FUSE_OP(mkdir),
-	DEF_FUSE_OP(rmdir),
-	DEF_FUSE_OP(write),
-	DEF_FUSE_OP(readlink),
-	DEF_FUSE_OP(ioctl),
-	DEF_FUSE_OP(statfs),
-	OP_TYPES
-};
-
-struct operation {
-	enum op_type op_type;
-	fuse_func_t fn_ptr;
-};
-
 #define SHOW_FLAG(FLAGS, FLAG) do {					\
 		if (FLAGS & FLAG)					\
 			IOF_LOG_INFO("Flag " #FLAG " enabled");		\
@@ -163,41 +131,6 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	return fs_handle;
 }
 
-static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
-{
-	struct iof_projection_info	*fs_handle = ioc_get_handle();
-	void				*handle;
-
-	handle = ioc_init_core(fs_handle, conn);
-	/* Disable caching entirely */
-	cfg->entry_timeout = 0;
-	cfg->negative_timeout = 0;
-	cfg->attr_timeout = 0;
-
-	/* Use FUSE provided inode numbers to match the backing filesystem */
-	cfg->use_ino = 1;
-
-	cfg->hard_remove = 1;
-
-	/* Do not resolve the PATH for every operation, but let IOF access
-	 * the information via the fh pointer instead
-	 */
-	cfg->nullpath_ok = 1;
-
-	IOF_TRACE_INFO(fs_handle, "timeouts entry %f negative %f attr %f",
-		     cfg->entry_timeout,
-		     cfg->negative_timeout,
-		     cfg->attr_timeout);
-
-	IOF_TRACE_INFO(fs_handle, "use_ino %d", cfg->use_ino);
-
-	IOF_TRACE_INFO(fs_handle, "nullpath_ok %d", cfg->nullpath_ok);
-
-	IOF_TRACE_INFO(fs_handle, "direct_io %d", cfg->direct_io);
-
-	return handle;
-}
-
 /*
  * We may have different FUSE operation implementations depending on the
  * features and type of projection (which is defined by 'flags'). The idea
@@ -257,35 +190,9 @@ static void *ioc_init_full(struct fuse_conn_info *conn, struct fuse_config *cfg)
  * always requires striped metadata to be turned on (but not vice versa),
  * we define 0010 as an unsupported combination of flags.
 */
-#define DECL_FUSE_OP(TYPE, FN) \
-		[DEF_FUSE_OP(TYPE)] = { \
-			.op_type = DEF_FUSE_OP(TYPE), \
-			.fn_ptr = (fuse_func_t) (FN) \
-		}
-static struct operation default_ops[] = {
-	DECL_FUSE_OP(init, ioc_init_full),
-	DECL_FUSE_OP(chmod, ioc_chmod),
-	DECL_FUSE_OP(truncate, ioc_truncate),
-	DECL_FUSE_OP(rename, ioc_rename),
-	DECL_FUSE_OP(utimens, ioc_utimens),
-	DECL_FUSE_OP(readdir, ioc_readdir),
-	DECL_FUSE_OP(releasedir, ioc_closedir),
-	DECL_FUSE_OP(release, ioc_release),
-	DECL_FUSE_OP(fsync, ioc_fsync),
-	DECL_FUSE_OP(read_buf, ioc_read_buf),
-	DECL_FUSE_OP(symlink, ioc_symlink),
-	DECL_FUSE_OP(mkdir, ioc_mkdir),
-	DECL_FUSE_OP(rmdir, ioc_rmdir),
-	DECL_FUSE_OP(readlink, ioc_readlink),
-	DECL_FUSE_OP(ioctl, ioc_ioctl),
-	DECL_FUSE_OP(statfs, ioc_statfs),
-};
 
 /* Ignore the first two bits (writeable and failover) */
 #define FLAGS_TO_MODE_INDEX(X) (((X) & 0x3F) >> 2)
-
-#define DEF_FUSE_IMPL(X) \
-	{ .count = (sizeof(X)/sizeof(*X)), .ops = X }
 
 /* Only supporting default (Private mode) at the moment */
 static uint8_t supported_impl[] = { 0x0 };
@@ -304,45 +211,6 @@ int iof_is_mode_supported(uint8_t flags)
 			return 1;
 	}
 	return 0;
-}
-
-struct fuse_operations *iof_get_fuse_ops(uint8_t flags)
-{
-	struct operation client_ops[OP_TYPES];
-	struct fuse_operations *fuse_ops;
-
-	D_ALLOC_PTR(fuse_ops);
-	if (!fuse_ops)
-		return NULL;
-
-	/* Temporary: Copy default_ops directly into client_ops. In future,
-	 * client_ops will be constructed dynamically by selecting the
-	 * correct implementations based on feature flags being set or unset.
-	 */
-	memcpy(client_ops, default_ops, sizeof(default_ops));
-
-#define SET_FUSE_OP(FUSE, CLI, TYPE) \
-	FUSE->TYPE = *(void **) &CLI[DEF_FUSE_OP(TYPE)].fn_ptr
-
-	SET_FUSE_OP(fuse_ops, client_ops, init);
-	SET_FUSE_OP(fuse_ops, client_ops, getattr);
-	SET_FUSE_OP(fuse_ops, client_ops, chmod);
-	SET_FUSE_OP(fuse_ops, client_ops, truncate);
-	SET_FUSE_OP(fuse_ops, client_ops, rename);
-	SET_FUSE_OP(fuse_ops, client_ops, utimens);
-	SET_FUSE_OP(fuse_ops, client_ops, readdir);
-	SET_FUSE_OP(fuse_ops, client_ops, releasedir);
-	SET_FUSE_OP(fuse_ops, client_ops, release);
-	SET_FUSE_OP(fuse_ops, client_ops, fsync);
-	SET_FUSE_OP(fuse_ops, client_ops, read_buf);
-	SET_FUSE_OP(fuse_ops, client_ops, symlink);
-	SET_FUSE_OP(fuse_ops, client_ops, mkdir);
-	SET_FUSE_OP(fuse_ops, client_ops, rmdir);
-	SET_FUSE_OP(fuse_ops, client_ops, write);
-	SET_FUSE_OP(fuse_ops, client_ops, readlink);
-	SET_FUSE_OP(fuse_ops, client_ops, ioctl);
-	SET_FUSE_OP(fuse_ops, client_ops, statfs);
-	return fuse_ops;
 }
 
 void ioc_ll_init(void *arg, struct fuse_conn_info *conn)

@@ -40,57 +40,6 @@
 #include "ioc.h"
 #include "log.h"
 
-int ioc_mkdir(const char *file, mode_t mode)
-{
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_create_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, mkdir);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	if (strnlen(file, NAME_MAX) == NAME_MAX)
-		return -EIO;
-
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
-
-	IOF_LOG_INFO("dir '%s' mode 0%o", file, (uint32_t)mode);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, mkdir), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	strncpy(in->common.name.name, file, NAME_MAX);
-	in->mode = mode;
-	in->common.gah = fs_handle->gah;
-
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		return -EIO;
-	}
-
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	IOF_LOG_DEBUG("path '%s' rc %d", file, IOC_STATUS_TO_RC(&reply));
-
-	return IOC_STATUS_TO_RC(&reply);
-}
-
 #define REQ_NAME request
 #define POOL_NAME mkdir_pool
 #define TYPE_NAME entry_req

@@ -183,17 +183,6 @@ struct iof_create_out {
 	int err;
 };
 
-struct iof_truncate_in {
-	d_string_t path;
-	uint64_t len;
-	uint32_t fs_id;
-};
-
-struct iof_ftruncate_in {
-	struct ios_gah gah;
-	uint64_t len;
-};
-
 struct iof_two_string_in {
 	struct iof_gah_string_in common;
 	d_string_t oldpath;
@@ -329,29 +318,6 @@ struct iof_writex_out {
 			  */
 };
 
-struct iof_chmod_in {
-	d_string_t path;
-	uint32_t fs_id;
-	int mode;
-};
-
-struct iof_chmod_gah_in {
-	struct ios_gah gah;
-	int mode;
-};
-
-struct iof_time_in {
-	d_string_t path;
-	d_iov_t time;
-	uint32_t fs_id;
-
-};
-
-struct iof_time_gah_in {
-	struct ios_gah gah;
-	d_iov_t time;
-};
-
 struct iof_setattr_in {
 	struct ios_gah gah;
 	struct stat stat;
@@ -372,30 +338,19 @@ enum iof_rpc_type_default {
 	DEF_RPC_TYPE(DEFAULT, opendir),
 	DEF_RPC_TYPE(DEFAULT, readdir),
 	DEF_RPC_TYPE(DEFAULT, closedir),
-	DEF_RPC_TYPE(DEFAULT, getattr_gah),
+	DEF_RPC_TYPE(DEFAULT, getattr),
 	DEF_RPC_TYPE(DEFAULT, writex),
-	DEF_RPC_TYPE(DEFAULT, truncate),
-	DEF_RPC_TYPE(DEFAULT, ftruncate),
-	DEF_RPC_TYPE(DEFAULT, rmdir),
 	DEF_RPC_TYPE(DEFAULT, rename),
-	DEF_RPC_TYPE(DEFAULT, rename_ll),
 	DEF_RPC_TYPE(DEFAULT, readx),
 	DEF_RPC_TYPE(DEFAULT, unlink),
 	DEF_RPC_TYPE(DEFAULT, open),
 	DEF_RPC_TYPE(DEFAULT, create),
 	DEF_RPC_TYPE(DEFAULT, close),
 	DEF_RPC_TYPE(DEFAULT, mkdir),
-	DEF_RPC_TYPE(DEFAULT, mkdir_ll),
 	DEF_RPC_TYPE(DEFAULT, readlink),
-	DEF_RPC_TYPE(DEFAULT, readlink_ll),
 	DEF_RPC_TYPE(DEFAULT, symlink),
-	DEF_RPC_TYPE(DEFAULT, symlink_ll),
 	DEF_RPC_TYPE(DEFAULT, fsync),
 	DEF_RPC_TYPE(DEFAULT, fdatasync),
-	DEF_RPC_TYPE(DEFAULT, chmod),
-	DEF_RPC_TYPE(DEFAULT, chmod_gah),
-	DEF_RPC_TYPE(DEFAULT, utimens),
-	DEF_RPC_TYPE(DEFAULT, utimens_gah),
 	DEF_RPC_TYPE(DEFAULT, statfs),
 	DEF_RPC_TYPE(DEFAULT, lookup),
 	DEF_RPC_TYPE(DEFAULT, setattr),

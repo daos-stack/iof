@@ -55,7 +55,6 @@ struct iof_stats {
 	ATOMIC unsigned int readdir;
 	ATOMIC unsigned int closedir;
 	ATOMIC unsigned int getattr;
-	ATOMIC unsigned int chmod;
 	ATOMIC unsigned int create;
 	ATOMIC unsigned int readlink;
 	ATOMIC unsigned int rmdir;
@@ -67,16 +66,10 @@ struct iof_stats {
 	ATOMIC unsigned int release;
 	ATOMIC unsigned int symlink;
 	ATOMIC unsigned int rename;
-	ATOMIC unsigned int truncate;
-	ATOMIC unsigned int utimens;
 	ATOMIC unsigned int read;
 	ATOMIC unsigned int write;
 	ATOMIC uint64_t read_bytes;
 	ATOMIC uint64_t write_bytes;
-	ATOMIC unsigned int ftruncate;
-	ATOMIC unsigned int getfattr;
-	ATOMIC unsigned int fchmod;
-	ATOMIC unsigned int futimens;
 	ATOMIC unsigned int il_ioctl;
 	ATOMIC unsigned int fsync;
 	ATOMIC unsigned int lookup;
@@ -165,7 +158,6 @@ struct iof_projection_info {
 
 int iof_is_mode_supported(uint8_t flags);
 
-struct fuse_operations *iof_get_fuse_ops(uint8_t flags);
 struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 
 /* Everything above here relates to how the ION plugin communicates with the
@@ -434,48 +426,6 @@ int iof_fs_send(struct ioc_request *request);
 int ioc_simple_resend(struct ioc_request *request);
 
 void ioc_ll_gen_cb(const struct crt_cb_info *);
-
-int ioc_closedir(const char *, struct fuse_file_info *);
-
-int ioc_release(const char *, struct fuse_file_info *);
-
-int ioc_chmod_name(const char *, mode_t);
-
-int ioc_getattr_name(const char *, struct stat *);
-
-int ioc_truncate_name(const char *, off_t);
-
-int ioc_utimens_name(const char *, const struct timespec tv[2]);
-
-int ioc_readdir(const char *, void *, fuse_fill_dir_t, off_t,
-		struct fuse_file_info *, enum fuse_readdir_flags);
-
-int ioc_utimens(const char *, const struct timespec tv[2],
-		struct fuse_file_info *fi);
-
-int ioc_truncate(const char *, off_t, struct fuse_file_info *);
-
-int ioc_rename(const char *, const char *, unsigned int);
-
-int ioc_chmod(const char *, mode_t, struct fuse_file_info *);
-
-int ioc_symlink(const char *, const char *);
-
-int ioc_fsync(const char *, int, struct fuse_file_info *);
-
-int ioc_read_buf(const char *, struct fuse_bufvec **, size_t, off_t,
-		 struct fuse_file_info *);
-
-int ioc_mkdir(const char *, mode_t);
-
-int ioc_rmdir(const char *);
-
-int ioc_readlink(const char *, char *, size_t);
-
-int ioc_statfs(const char *, struct statvfs *);
-
-int ioc_ioctl(const char *, int, void *, struct fuse_file_info *,
-	      unsigned int, void *);
 
 void ioc_ll_lookup(fuse_req_t, fuse_ino_t, const char *);
 

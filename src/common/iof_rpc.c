@@ -78,11 +78,6 @@ struct crt_msg_field *gah_string_in[] = {
 	&CMF_IOF_NAME,	/* name */
 };
 
-struct crt_msg_field *string_in[] = {
-	&CMF_STRING,
-	&CMF_INT,
-};
-
 struct crt_msg_field *string_out[] = {
 	&CMF_STRING,
 	&CMF_INT,
@@ -196,17 +191,6 @@ struct crt_msg_field *readx_out[] = {
 	&CMF_INT,	/* err */
 };
 
-struct crt_msg_field *truncate_in[] = {
-	&CMF_STRING,
-	&CMF_UINT64,
-	&CMF_INT,
-};
-
-struct crt_msg_field *ftruncate_in[] = {
-	&CMF_GAH,
-	&CMF_UINT64
-};
-
 struct crt_msg_field *status_out[] = {
 	&CMF_INT,
 	&CMF_INT,
@@ -235,28 +219,6 @@ struct crt_msg_field *writex_out[] = {
 	&CMF_UINT64,
 };
 
-struct crt_msg_field *chmod_in[] = {
-	&CMF_STRING,
-	&CMF_INT,
-	&CMF_INT,
-};
-
-struct crt_msg_field *chmod_gah_in[] = {
-	&CMF_GAH,
-	&CMF_INT,
-};
-
-struct crt_msg_field *utimens_in[] = {
-	&CMF_STRING,
-	&CMF_IOVEC,
-	&CMF_INT,
-};
-
-struct crt_msg_field *utimens_gah_in[] = {
-	&CMF_GAH,
-	&CMF_IOVEC,
-};
-
 struct crt_msg_field *setattr_in[] = {
 	&CMF_GAH,	/* gah */
 	&CMF_IOF_STAT,	/* struct stat */
@@ -274,30 +236,19 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(opendir, gah_in, gah_pair),
 	RPC_TYPE(readdir, readdir_in, readdir_out),
 	RPC_TYPE(closedir, gah_in, NULL),
-	RPC_TYPE(getattr_gah, gah_in, attr_out),
+	RPC_TYPE(getattr, gah_in, attr_out),
 	RPC_TYPE(writex, writex_in, writex_out),
-	RPC_TYPE(truncate, truncate_in, status_out),
-	RPC_TYPE(ftruncate, ftruncate_in, status_out),
-	RPC_TYPE(rmdir, string_in, status_out),
-	RPC_TYPE(rename, two_string_in, status_out),
-	RPC_TYPE(rename_ll, rename_in, status_out),
+	RPC_TYPE(rename, rename_in, status_out),
 	RPC_TYPE(readx, readx_in, readx_out),
 	RPC_TYPE(unlink, unlink_in, status_out),
 	RPC_TYPE(open, open_in, gah_pair),
 	RPC_TYPE(create, create_in, create_out),
 	RPC_TYPE(close, gah_in, NULL),
-	RPC_TYPE(mkdir, create_in, status_out),
-	RPC_TYPE(mkdir_ll, create_in, entry_out),
-	RPC_TYPE(readlink, string_in, string_out),
-	RPC_TYPE(readlink_ll, gah_in, string_out),
-	RPC_TYPE(symlink, two_string_in, status_out),
-	RPC_TYPE(symlink_ll, two_string_in, entry_out),
+	RPC_TYPE(mkdir, create_in, entry_out),
+	RPC_TYPE(readlink, gah_in, string_out),
+	RPC_TYPE(symlink, two_string_in, entry_out),
 	RPC_TYPE(fsync, gah_in, status_out),
 	RPC_TYPE(fdatasync, gah_in, status_out),
-	RPC_TYPE(chmod, chmod_in, status_out),
-	RPC_TYPE(chmod_gah, chmod_gah_in, status_out),
-	RPC_TYPE(utimens, utimens_in, status_out),
-	RPC_TYPE(utimens_gah, utimens_gah_in, status_out),
 	RPC_TYPE(statfs, gah_in, iov_pair),
 	RPC_TYPE(lookup, gah_string_in, entry_out),
 	RPC_TYPE(setattr, setattr_in, attr_out),

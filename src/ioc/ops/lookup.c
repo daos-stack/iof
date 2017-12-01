@@ -58,7 +58,7 @@ void iof_entry_cb(struct ioc_request *request)
 
 	if (request->rpc->cr_opc == FS_TO_OP(desc->fs_handle, lookup))
 		pool = desc->fs_handle->lookup_pool;
-	else if (request->rpc->cr_opc ==  FS_TO_OP(desc->fs_handle, mkdir_ll))
+	else if (request->rpc->cr_opc ==  FS_TO_OP(desc->fs_handle, mkdir))
 		pool = desc->fs_handle->mkdir_pool;
 	else
 		pool = desc->fs_handle->symlink_pool;

@@ -40,119 +40,6 @@
 #include "ioc.h"
 #include "log.h"
 
-struct readlink_cb_r {
-	struct iof_string_out *out;
-	crt_rpc_t *rpc;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
-static void
-ioc_readlink_cb(const struct crt_cb_info *cb_info)
-{
-	struct readlink_cb_r *reply = cb_info->cci_arg;
-	struct iof_string_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  Return EIO on any error
-		 */
-		IOF_LOG_INFO("Bad RPC reply %d", cb_info->cci_rc);
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->err) {
-		IOF_LOG_ERROR("Error from target %d", out->err);
-
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->rc) {
-		reply->rc = out->rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
-
-	iof_tracker_signal(&reply->tracker);
-}
-
-int ioc_readlink(const char *link, char *target, size_t len)
-{
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_string_in *in;
-	struct readlink_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, readlink);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	IOF_LOG_INFO("link %s", link);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, readlink), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->path = (d_string_t)link;
-	in->fs_id = fs_handle->fs_id;
-
-	rc = crt_req_send(rpc, ioc_readlink_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		return -EIO;
-	}
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	if (!reply.rpc)
-		return -EIO;
-
-	IOF_LOG_DEBUG("%d %d %p %s",
-		      reply.err,
-		      reply.rc,
-		      reply.out->path,
-		      reply.out->path);
-
-	if (reply.out->path) {
-		IOF_LOG_DEBUG("Path is %s", reply.out->path);
-		strncpy(target, reply.out->path, len);
-	} else {
-		reply.err = EIO;
-	}
-
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
-
-	IOF_LOG_DEBUG("link %s rc %d", link, IOC_STATUS_TO_RC(&reply));
-
-	return IOC_STATUS_TO_RC(&reply);
-}
-
 static void
 readlink_ll_cb(const struct crt_cb_info *cb_info)
 {
@@ -195,7 +82,7 @@ ioc_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, readlink_ll), &rpc);
+			    FS_TO_OP(fs_handle, readlink), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

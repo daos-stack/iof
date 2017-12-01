@@ -716,7 +716,7 @@ gh_reset(void *arg)
 	}
 
 	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->fs_handle, getattr_gah),
+			    FS_TO_OP(req->fs_handle, getattr),
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
@@ -791,8 +791,8 @@ close_release(void *arg)
 		return 0;					\
 	}
 entry_init(lookup);
-entry_init(mkdir_ll);
-entry_init(symlink_ll);
+entry_init(mkdir);
+entry_init(symlink);
 
 static int
 entry_reset(void *arg)
@@ -1367,26 +1367,19 @@ static int initialize_projection(struct iof_state *iof_state,
 	REGISTER_STAT(open);
 	REGISTER_STAT(release);
 	REGISTER_STAT(read);
-	REGISTER_STAT(getfattr);
 	REGISTER_STAT(il_ioctl);
 	REGISTER_STAT(lookup);
 	REGISTER_STAT(forget);
 	REGISTER_STAT64(read_bytes);
 
 	if (writeable) {
-		REGISTER_STAT(chmod);
 		REGISTER_STAT(create);
 		REGISTER_STAT(rmdir);
 		REGISTER_STAT(mkdir);
 		REGISTER_STAT(unlink);
 		REGISTER_STAT(symlink);
 		REGISTER_STAT(rename);
-		REGISTER_STAT(truncate);
-		REGISTER_STAT(utimens);
 		REGISTER_STAT(write);
-		REGISTER_STAT(ftruncate);
-		REGISTER_STAT(fchmod);
-		REGISTER_STAT(futimens);
 		REGISTER_STAT(fsync);
 		REGISTER_STAT64(write_bytes);
 	}
@@ -1526,13 +1519,13 @@ static int initialize_projection(struct iof_state *iof_state,
 		if (!fs_handle->lookup_pool)
 			return IOF_ERR_NOMEM;
 
-		entry_t.init = mkdir_ll_entry_init;
+		entry_t.init = mkdir_entry_init;
 		fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool,
 							  &entry_t);
 		if (!fs_handle->mkdir_pool)
 			return IOF_ERR_NOMEM;
 
-		entry_t.init = symlink_ll_entry_init;
+		entry_t.init = symlink_entry_init;
 		fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool,
 							    &entry_t);
 		if (!fs_handle->symlink_pool)

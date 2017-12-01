@@ -40,57 +40,6 @@
 #include "ioc.h"
 #include "log.h"
 
-int ioc_symlink(const char *oldpath, const char *newpath)
-{
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_two_string_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, symlink);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	if (strnlen(newpath, NAME_MAX) == NAME_MAX)
-		return -EIO;
-
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
-
-	IOF_LOG_INFO("newpath %s oldpath %s", newpath, oldpath);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, symlink), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, ret = %u",
-			      rc);
-		return -EIO;
-	}
-
-	in = crt_req_get(rpc);
-	strncpy(in->common.name.name, newpath, NAME_MAX);
-	in->oldpath = (d_string_t)oldpath;
-	in->common.gah = fs_handle->gah;
-
-	iof_tracker_init(&reply.tracker, 1);
-
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, ret = %u", rc);
-		return -EIO;
-	}
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	IOF_LOG_DEBUG("path %s rc %d", newpath, IOC_STATUS_TO_RC(&reply));
-
-	return IOC_STATUS_TO_RC(&reply);
-}
-
 #define REQ_NAME request
 #define POOL_NAME symlink_pool
 #define TYPE_NAME entry_req

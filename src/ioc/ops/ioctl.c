@@ -66,39 +66,6 @@ static bool handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
 	return true;
 }
 
-int ioc_ioctl(const char *file, int cmd, void *arg, struct fuse_file_info *fi,
-	      unsigned int flags, void *data)
-{
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_gah_info gah_info = {0};
-
-	IOF_TRACE_INFO(handle, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
-		       GAH_PRINT_VAL(handle->common.gah));
-
-	STAT_ADD(handle->fs_handle->stats, ioctl);
-
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		return -handle->fs_handle->offline_reason;
-
-	if (!handle->common.gah_valid) {
-		/* If the server has reported that the GAH, nothing to do */
-		return -EIO;
-	}
-
-	if (handle_gah_ioctl(cmd, handle, &gah_info, handle)) {
-		if (data == NULL)
-			return -EIO;
-
-		memcpy(data, &gah_info, sizeof(gah_info));
-
-		return 0;
-	}
-
-	IOF_TRACE_INFO(handle, "Real ioctl support is not implemented");
-
-	return -ENOTSUP;
-}
-
 void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 		  struct fuse_file_info *fi, unsigned flags,
 		  const void *in_buf, size_t in_bufsz, size_t out_bufsz)

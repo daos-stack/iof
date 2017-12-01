@@ -46,39 +46,7 @@
 #define TYPE_NAME iof_dir_handle
 #include "ioc_ops.h"
 
-static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
-	.on_evict	= ioc_simple_resend
-};
-
 #define STAT_KEY closedir
-
-int ioc_closedir(const char *dir, struct fuse_file_info *fi)
-{
-	struct TYPE_NAME *dh = (struct TYPE_NAME *)fi->fh;
-	struct iof_projection_info *fs_handle = dh->fs_handle;
-	struct iof_gah_in *in;
-	int rc;
-
-	IOC_REQ_INIT(dh, fs_handle, api, in, rc);
-	if (rc)
-		D_GOTO(out, rc);
-	IOF_TRACE_INFO(dh, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
-
-	/* If the GAH has been reported as invalid by the server in the past
-	 * then do not attempt to do anything with it.
-	 *
-	 * However, even if the local handle has been reported invalid then
-	 * still continue to release the GAH on the server side.
-	 */
-	if (!dh->gah_valid)
-		D_GOTO(out, rc = -EIO);
-	in->gah = dh->gah;
-	IOC_REQ_SEND(dh, fs_handle, rc);
-out:
-	IOC_REQ_RELEASE(dh);
-	return rc;
-}
 
 static void closedir_ll_cb(struct ioc_request *request)
 {
@@ -98,14 +66,11 @@ static void closedir_ll_cb(struct ioc_request *request)
 		IOF_FUSE_REPLY_ERR(f_req, rc);
 }
 
-static const struct ioc_request_api api_ll = {
+static const struct ioc_request_api api = {
 	.get_fsh	= get_fs_handle,
 	.on_result	= closedir_ll_cb,
 	.on_evict	= ioc_simple_resend
 };
-
-#undef STAT_KEY
-#define STAT_KEY release
 
 void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 {
@@ -119,7 +84,7 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	d_list_del(&dh->list);
 	pthread_mutex_unlock(&fs_handle->od_lock);
 
-	IOC_REQ_INIT_LL(dh, fs_handle, api_ll, in, req, rc);
+	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 	IOF_TRACE_LINK(req, dh, "request");

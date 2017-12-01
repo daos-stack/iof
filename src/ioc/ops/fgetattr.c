@@ -46,7 +46,7 @@
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
-#define STAT_KEY getfattr
+#define STAT_KEY getattr
 
 static void getattr_ll_cb(struct ioc_request *request)
 {

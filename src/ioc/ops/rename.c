@@ -40,66 +40,6 @@
 #include "ioc.h"
 #include "log.h"
 
-static int
-ioc_rename_priv(const char *oldpath, const char *newpath)
-{
-	struct iof_projection_info *fs_handle = ioc_get_handle();
-	struct iof_two_string_in *in;
-	struct status_cb_r reply = {0};
-	crt_rpc_t *rpc = NULL;
-	int rc;
-
-	STAT_ADD(fs_handle->stats, rename);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		return -fs_handle->offline_reason;
-
-	if (strnlen(newpath, NAME_MAX) == NAME_MAX)
-		return -EIO;
-
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		return -EROFS;
-	}
-
-	IOF_LOG_INFO("oldpath %s newpath %s", oldpath, newpath);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, rename), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
-			      rc);
-		return -EIO;
-	}
-
-	iof_tracker_init(&reply.tracker, 1);
-	in = crt_req_get(rpc);
-	in->oldpath = (d_string_t)oldpath;
-	strncpy(in->common.name.name, newpath, NAME_MAX);
-	in->common.gah = fs_handle->gah;
-
-	rc = crt_req_send(rpc, ioc_status_cb, &reply);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
-		return -EIO;
-	}
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
-
-	IOF_LOG_DEBUG("path %s rc %d", oldpath, IOC_STATUS_TO_RC(&reply));
-
-	return IOC_STATUS_TO_RC(&reply);
-}
-
-int ioc_rename(const char *oldpath, const char *newpath, unsigned int flags)
-{
-	if (flags) {
-		IOF_LOG_INFO("Unsupported rename flags %x", flags);
-		return -ENOTSUP;
-	}
-	return ioc_rename_priv(oldpath, newpath);
-}
-
 void
 ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	      fuse_ino_t newparent, const char *newname, unsigned int flags)
@@ -126,7 +66,7 @@ ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, rename_ll), &rpc);
+			    FS_TO_OP(fs_handle, rename), &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %u",
 			      rc);

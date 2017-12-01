@@ -296,40 +296,6 @@ static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
 				   .hop_key_hash = fh_hash,
 };
 
-/* Convert an absolute path into a real one, returning a pointer
- * to a string.
- *
- * This converts "/" into "." and for all other paths removes the leading /
- */
-
-#define iof_get_rel_path(path) path
-
-/*
- * Assemble local path.  Take the local projection directory and
- * concatename onto it a remote path.
- */
-int iof_get_path(int id, const char *old_path, char *new_path)
-{
-	char *mnt;
-	int ret;
-
-	/*lookup mnt by ID in projection data structure*/
-	if (id >= base.projection_count) {
-		IOF_LOG_ERROR("Filesystem ID invalid");
-		return IOF_BAD_DATA;
-	}
-
-	mnt = base.fs_list[id].mnt;
-
-	ret = snprintf(new_path, IOF_MAX_PATH_LEN, "%s%s", mnt,
-			old_path);
-	if (ret > IOF_MAX_PATH_LEN)
-		return IOF_ERR_OVERFLOW;
-	IOF_LOG_DEBUG("New Path: %s", new_path);
-
-	return IOF_SUCCESS;
-}
-
 /*
  * Given a GAH, return the file attributes.
  *
@@ -342,7 +308,7 @@ int iof_get_path(int id, const char *old_path, char *new_path)
  * will never be called on a directory.
  */
 static void
-iof_getattr_gah_handler(crt_rpc_t *rpc)
+iof_getattr_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_attr_out *out = crt_reply_get(rpc);
@@ -1488,41 +1454,6 @@ out:
 static void
 iof_rename_handler(crt_rpc_t *rpc)
 {
-	struct iof_two_string_in	*in = crt_req_get(rpc);
-	struct iof_status_out		*out = crt_reply_get(rpc);
-	struct ionss_file_handle	*parent;
-	int rc;
-
-	VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(parent->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = renameat(parent->fd, iof_get_rel_path(in->oldpath),
-		      parent->fd, iof_get_rel_path(in->common.name.name));
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	IOF_LOG_DEBUG("oldpath %s newpath %s result err %d rc %d",
-		      in->oldpath, in->common.name.name, out->err, out->rc);
-
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (parent)
-		ios_fh_decref(parent, 1);
-}
-
-static void
-iof_rename_ll_handler(crt_rpc_t *rpc)
-{
 	struct iof_rename_in		*in = crt_req_get(rpc);
 	struct iof_status_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*old_parent = NULL;
@@ -1585,42 +1516,6 @@ static void
 iof_symlink_handler(crt_rpc_t *rpc)
 {
 	struct iof_two_string_in	*in = crt_req_get(rpc);
-	struct iof_status_out		*out = crt_reply_get(rpc);
-	struct ionss_file_handle	*parent;
-
-	int rc;
-
-	VALIDATE_ARGS_GAH_STR2(rpc, in, out, parent);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(parent->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = symlinkat(in->oldpath, parent->fd,
-		       iof_get_rel_path(in->common.name.name));
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->common.name.name, in->oldpath, out->err, out->rc);
-
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (parent)
-		ios_fh_decref(parent, 1);
-}
-
-static void
-iof_symlink_ll_handler(crt_rpc_t *rpc)
-{
-	struct iof_two_string_in	*in = crt_req_get(rpc);
 	struct iof_entry_out		*out = crt_reply_get(rpc);
 	struct ionss_file_handle	*parent;
 
@@ -1651,41 +1546,6 @@ static void
 iof_mkdir_handler(crt_rpc_t *rpc)
 {
 	struct iof_create_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *parent;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE_H(rpc, in->common, out, parent);
-	if (out->err)
-		goto out;
-
-
-	VALIDATE_WRITE(parent->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = mkdirat(parent->fd, iof_get_rel_path(in->common.name.name),
-		     in->mode);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
-
-	if (parent)
-		ios_fh_decref(parent, 1);
-
-	IOF_TRACE_DOWN(rpc);
-}
-
-static void
-iof_mkdir_ll_handler(crt_rpc_t *rpc)
-{
-	struct iof_create_in *in = crt_req_get(rpc);
 	struct iof_entry_out *out = crt_reply_get(rpc);
 	struct ionss_file_handle *parent;
 	int rc;
@@ -1714,38 +1574,10 @@ out:
 
 /* This function needs additional checks to handle longer links.
  *
- * There is a upper limit on the lenth FUSE has provided in the CNSS but this
- * function should ensure that it's not introducing further restricions.
  */
+
 static void
 iof_readlink_handler(crt_rpc_t *rpc)
-{
-	struct iof_string_in *in = crt_req_get(rpc);
-	struct iof_string_out *out = crt_reply_get(rpc);
-	char reply[IOF_MAX_PATH_LEN] = {0};
-	int rc;
-
-	VALIDATE_ARGS_STR(rpc, in, out);
-	if (out->err)
-		goto out;
-
-	errno = 0;
-	rc = readlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
-			reply, IOF_MAX_PATH_LEN);
-
-	if (rc < 0)
-		out->rc = errno;
-	else
-		out->path = (d_string_t)reply;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-}
-
-static void
-iof_readlink_ll_handler(crt_rpc_t *rpc)
 {
 	struct iof_gah_in *in = crt_req_get(rpc);
 	struct iof_string_out *out = crt_reply_get(rpc);
@@ -1772,166 +1604,6 @@ out:
 
 	if (file)
 		ios_fh_decref(file, 1);
-}
-
-static void
-iof_truncate_handler(crt_rpc_t *rpc)
-{
-	struct iof_truncate_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	char new_path[IOF_MAX_PATH_LEN];
-	int rc;
-
-	VALIDATE_ARGS_STR(rpc, in, out);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
-	if (out->err || out->rc)
-		goto out;
-
-	rc = iof_get_path(in->fs_id, in->path, &new_path[0]);
-	if (rc) {
-		IOF_LOG_ERROR("could not construct filesystem path, rc = %d",
-			      rc);
-		out->err = rc;
-		goto out;
-	}
-
-	errno = 0;
-	rc = truncate(new_path, in->len);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-}
-
-static void
-iof_ftruncate_handler(crt_rpc_t *rpc)
-{
-	struct iof_ftruncate_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(handle->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = ftruncate(handle->fd, in->len);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (handle)
-		ios_fh_decref(handle, 1);
-}
-
-static void
-iof_chmod_handler(crt_rpc_t *rpc)
-{
-	struct iof_chmod_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	int rc;
-
-	VALIDATE_ARGS_STR(rpc, in, out);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
-	if (out->err || out->rc)
-		goto out;
-
-	IOF_LOG_INFO("Setting mode for %s to 0%o", in->path, in->mode);
-
-	/* The documentation for fchmodat() references AT_SYMLINK_NOFOLLOW
-	 * however then says it is not supported.  This seems to match chmod
-	 * itself however could be a bug
-	 */
-	errno = 0;
-	rc = fchmodat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path), in->mode,
-		      0);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-}
-
-static void iof_chmod_gah_handler(crt_rpc_t *rpc)
-{
-	struct iof_chmod_gah_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(handle->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = fchmod(handle->fd, in->mode);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (handle)
-		ios_fh_decref(handle, 1);
-}
-
-static void
-iof_rmdir_handler(crt_rpc_t *rpc)
-{
-	struct iof_string_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	int rc;
-
-	VALIDATE_ARGS_STR(rpc, in, out);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
-	if (out->err || out->rc)
-		goto out;
-
-	errno = 0;
-	rc = unlinkat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
-		      AT_REMOVEDIR);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 }
 
 static void iof_unlink_handler(crt_rpc_t *rpc)
@@ -2257,80 +1929,6 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
-static void
-iof_utimens_handler(crt_rpc_t *rpc)
-{
-	struct iof_time_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	int rc;
-
-	VALIDATE_ARGS_STR(rpc, in, out);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(&base.fs_list[in->fs_id], out);
-	if (out->err || out->rc)
-		goto out;
-
-	if (!in->time.iov_buf) {
-		IOF_LOG_ERROR("No input times");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_INFO("Setting times for %s", in->path);
-
-	errno = 0;
-	rc = utimensat(ID_TO_FD(in->fs_id), iof_get_rel_path(in->path),
-		       in->time.iov_buf, AT_SYMLINK_NOFOLLOW);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-}
-
-static void iof_utimens_gah_handler(crt_rpc_t *rpc)
-{
-	struct iof_time_gah_in *in = crt_req_get(rpc);
-	struct iof_status_out *out = crt_reply_get(rpc);
-	struct ionss_file_handle *handle;
-	int rc;
-
-	VALIDATE_ARGS_GAH_FILE(rpc, in, out, handle);
-	if (out->err)
-		goto out;
-
-	VALIDATE_WRITE(handle->projection, out);
-	if (out->err || out->rc)
-		goto out;
-
-	if (!in->time.iov_buf) {
-		IOF_LOG_ERROR("No input times");
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
-
-	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-	errno = 0;
-	rc = futimens(handle->fd, in->time.iov_buf);
-
-	if (rc)
-		out->rc = errno;
-
-out:
-	rc = crt_reply_send(rpc);
-	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
-
-	if (handle)
-		ios_fh_decref(handle, 1);
-}
-
 static void iof_setattr_handler(crt_rpc_t *rpc)
 {
 	struct iof_setattr_in *in = crt_req_get(rpc);
@@ -2538,30 +2136,19 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
 		DECL_RPC_HANDLER(readdir, iof_readdir_handler),
 		DECL_RPC_HANDLER(closedir, iof_closedir_handler),
-		DECL_RPC_HANDLER(getattr_gah, iof_getattr_gah_handler),
+		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
 		DECL_RPC_HANDLER(writex, iof_writex_handler),
-		DECL_RPC_HANDLER(truncate, iof_truncate_handler),
-		DECL_RPC_HANDLER(ftruncate, iof_ftruncate_handler),
-		DECL_RPC_HANDLER(chmod, iof_chmod_handler),
-		DECL_RPC_HANDLER(chmod_gah, iof_chmod_gah_handler),
-		DECL_RPC_HANDLER(rmdir, iof_rmdir_handler),
 		DECL_RPC_HANDLER(rename, iof_rename_handler),
-		DECL_RPC_HANDLER(rename_ll, iof_rename_ll_handler),
 		DECL_RPC_HANDLER(readx, iof_readx_handler),
 		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
 		DECL_RPC_HANDLER(open, iof_open_handler),
 		DECL_RPC_HANDLER(create, iof_create_handler),
 		DECL_RPC_HANDLER(close, iof_close_handler),
 		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
-		DECL_RPC_HANDLER(mkdir_ll, iof_mkdir_ll_handler),
 		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
-		DECL_RPC_HANDLER(readlink_ll, iof_readlink_ll_handler),
 		DECL_RPC_HANDLER(symlink, iof_symlink_handler),
-		DECL_RPC_HANDLER(symlink_ll, iof_symlink_ll_handler),
 		DECL_RPC_HANDLER(fsync, iof_fsync_handler),
 		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),
-		DECL_RPC_HANDLER(utimens, iof_utimens_handler),
-		DECL_RPC_HANDLER(utimens_gah, iof_utimens_gah_handler),
 		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
 		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
 		DECL_RPC_HANDLER(setattr, iof_setattr_handler),
