@@ -57,18 +57,16 @@ struct ios_base {
 	struct ios_gah_store	*gs;
 	struct proto		*proto;
 	struct iof_pool		pool;
-	uint			projection_count;
+	uint32_t		projection_count;
 	crt_group_t		*primary_group;
 	d_rank_t		my_rank;
 	uint32_t		num_ranks;
-	uint			poll_interval;
 	crt_context_t		crt_ctx;
 	pthread_rwlock_t	gah_rwlock;
-	uint32_t		max_read;
-	uint32_t		max_iov_read;
-	uint32_t		max_write;
-	uint32_t		max_iov_write;
-	uint32_t		max_readdir;
+	/* Global tunable options */
+	char			*group_name;
+	uint32_t		poll_interval;
+	uint32_t		thread_count;
 };
 
 /* A miniature struct that describes a file handle, this is used
@@ -134,9 +132,22 @@ struct ios_projection {
 	struct iof_pool_type	*aw_pool;
 	struct ionss_file_handle	*root;
 	struct d_chash_table	file_ht;
-	uint			id;
-	uint			flags;
-	uint			active;
+	uint32_t		id;
+
+	/* Per-projection tunable options */
+	uint32_t		max_read;
+	uint32_t		max_iov_read;
+	uint32_t		max_write;
+	uint32_t		max_iov_write;
+	uint32_t		readdir_size;
+
+	/* Per-projection tunable flags */
+	bool			cnss_threads;
+	bool			fuse_reply_buf;
+	bool			writeable;
+	bool			failover;
+
+	bool			active;
 	uint64_t		dev_no;
 	pthread_mutex_t		lock;
 	int			current_read_count;
@@ -148,9 +159,10 @@ struct ios_projection {
 };
 
 struct ionss_dir_handle {
-	DIR	*h_dir;
-	uint	fd;
-	off_t	offset;
+	struct ios_projection	*projection;
+	DIR			*h_dir;
+	uint			fd;
+	off_t			offset;
 };
 
 #define IONSS_READDIR_ENTRIES_PER_RPC (2)
@@ -229,5 +241,7 @@ ios_fh_find(struct ios_base *, struct ios_gah *);
 
 struct ionss_dir_handle *
 ios_dirh_find(struct ios_base *, struct ios_gah *);
+
+int parse_config(char *path, struct ios_base *base);
 
 #endif

@@ -98,6 +98,7 @@
 #define IOF_HAS_FAILOVER(FLAGS) ((FLAGS) & IOF_FAILOVER)
 
 #define IOF_CNSS_MT			0x80
+#define IOF_FUSE_READ_BUF		0x100
 
 enum iof_projection_mode {
 	/* Private Access Mode */
@@ -130,6 +131,12 @@ struct iof_fs_info {
 	int id;
 	/*Feature flags, as described above*/
 	uint8_t flags;
+	/* Per-projection tunable options */
+	uint32_t max_read;
+	uint32_t max_write;
+	uint32_t readdir_size;
+	uint32_t max_iov_read;
+	uint32_t max_iov_write;
 };
 
 /* The name of a filesystem entry
@@ -144,12 +151,7 @@ struct ios_name {
  * the compiler automatically padding the struct.
  */
 struct iof_psr_query {
-	uint32_t max_read;
-	uint32_t max_write;
 	d_iov_t query_list;
-	uint32_t readdir_size;
-	uint32_t max_iov_read;
-	uint32_t max_iov_write;
 };
 
 struct iof_gah_string_in {

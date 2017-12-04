@@ -35,6 +35,8 @@ import shlex
 import logging
 import getpass
 import tempfile
+import yaml
+import socket
 
 #pylint: disable=broad-except
 #pylint: disable=too-many-locals
@@ -47,7 +49,6 @@ class IofRunner():
         self.test_info = test_info
         self.node_control = node_control
         self.logger = logging.getLogger("TestRunnerLogger")
-        self.fs_list = []
         self.use_fs_list = []
         self.proc = None
 
@@ -87,11 +88,12 @@ class IofRunner():
         self.use_fs_list = \
             self.test_info.get_test_info(keyname='fsList',
                                          default=['exp', 'FS_2', 'FS_1'])
+        config = {"projections": []}
         for fs in self.use_fs_list:
             abs_path = os.path.join(ion_dir, fs)
+            config["projections"].append({"full_path": abs_path})
             testmsg = "creating dirs to be used as Filesystem backend"
             cmdstr = "mkdir -p %s" % abs_path
-            self.fs_list.append(abs_path)
             procrtn = self.node_control.execute_remote_cmd(cmdstr,
                                                            self.dir_path,
                                                            'IOF_TEST_ION',
@@ -100,6 +102,22 @@ class IofRunner():
                 self.logger.error(
                     """"TestIOF: Failed to create dirs for Filesystem
                      backend %s. Error code: %d\n""", fs, procrtn)
+        config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
+                                                  prefix="ionss_",
+                                                  dir=ion_dir, mode='w',
+                                                  delete=False)
+        self.test_info.set_passToConfig('ION_CONFIG', config_file.name)
+        yaml.dump(config, config_file.file, default_flow_style=False)
+        config_file.close()
+        testmsg = "Creating IONSS config files"
+        host = socket.getfqdn().split(".")[0]
+        cmdstr = "scp %s:%s %s" % (host, config_file.name, config_file.name)
+        procrtn = self.node_control.execute_remote_cmd(cmdstr, self.dir_path,
+                                                       'IOF_TEST_ION', testmsg)
+        if procrtn:
+            self.logger.error(
+                "TestIOF: Failed to create the IONSS config. Error code: %d\n",
+                procrtn)
 
     def add_prefix_logdir(self):
         """Add the log directory to the prefix"""
@@ -166,10 +184,10 @@ class IofRunner():
         ionss = self.add_server()
         cnss = self.add_client()
         test_path = self.test_info.get_defaultENV('IOF_TEST_BIN')
-        fs = ' '.join(self.fs_list)
         ion_env = " -x ION_TEMPDIR"
-        local_server = "%s%s%s %s/ionss %s" % \
-                        (pass_env, ion_env, ionss, test_path, fs)
+        local_server = "%s%s%s %s/ionss --config=%s" % \
+                        (pass_env, ion_env, ionss, test_path,
+                         self.test_info.get_passToConfig("ION_CONFIG"))
         local_client = "%s%s %s/cnss :" % \
                         (pass_env, cnss, test_path)
         cmdstr = cmd + local_client + local_server

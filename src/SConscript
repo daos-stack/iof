@@ -56,7 +56,9 @@ CNSS_SRC = ['cnss.c',
 IOC_SRC = ['ioc_main.c',
            'ioc_fuseops.c',
            'inode.c']
-IONSS_SRC = ['ionss.c', 'fh.c']
+IONSS_SRC = ['ionss.c',
+             'fh.c',
+             'config.c']
 RPC_SRC = ['closedir',
            'create',
            'fgetattr',
@@ -214,6 +216,7 @@ def scons():
 
     # Build the IONSS application
     ienv = tenv.Clone()
+    ienv.AppendUnique(LIBS='yaml')
     prereqs.require(ienv, 'fuse', headers_only=True)
     ionss_obj = []
     for src in IONSS_SRC:

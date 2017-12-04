@@ -81,7 +81,7 @@ static struct ios_base base;
 			out->err = IOF_BAD_DATA;			\
 			break;						\
 		}							\
-		if (!IOF_IS_WRITEABLE((fs_handle)->flags)) {		\
+		if (!(fs_handle)->writeable) {				\
 			IOF_TRACE_INFO(fs_handle,			\
 				"Attempt to modify Read-Only Projection!"); \
 			(out)->rc = EROFS;				\
@@ -351,6 +351,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 		D_GOTO(out, out->err = IOF_ERR_NOMEM);
 	}
 
+	local_handle->projection = parent->projection;
 	local_handle->fd = fd;
 	local_handle->h_dir = fdopendir(local_handle->fd);
 	local_handle->offset = 0;
@@ -459,9 +460,9 @@ iof_readdir_handler(crt_rpc_t *rpc)
 			goto out;
 		}
 
-		if (len > base.max_readdir) {
+		if (len > handle->projection->readdir_size) {
 			IOF_LOG_WARNING("invalid readdir size %zi", len);
-			len = base.max_readdir;
+			len = handle->projection->readdir_size;
 		}
 
 		max_reply_count = len / sizeof(struct iof_readdir_reply);
@@ -1241,8 +1242,8 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	int rc;
 
 	count = in->xtvec.xt_len - ard->segment_offset;
-	if (count > base.max_read) /* Only read max_read at a time */
-		count = base.max_read;
+	if (count > projection->max_read) /* Only read max_read at a time */
+		count = projection->max_read;
 	ard->req_len = count;
 	offset = in->xtvec.xt_off + ard->segment_offset;
 
@@ -1254,7 +1255,7 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	if (ard->read_len == -1) {
 		out->rc = errno;
 		goto out;
-	} else if (ard->read_len <= base.max_iov_read) {
+	} else if (ard->read_len <= projection->max_iov_read) {
 		/* Can send last bit in immediate data */
 		out->iov_len = ard->read_len;
 		d_iov_set(&out->data, ard->local_bulk.buf,
@@ -1625,12 +1626,12 @@ out:
 		ios_fh_decref(parent, 1);
 }
 
-#define VALIDATE_WRITEX_IN(in, out)					\
+#define VALIDATE_WRITEX_IN(in, out, max_iov_write)			\
 	do {								\
 		uint64_t xtlen = (in)->xtvec.xt_len;			\
 		size_t bulk_len;					\
 		int rc;							\
-		if ((in)->data.iov_len > base.max_iov_write) {		\
+		if ((in)->data.iov_len > max_iov_write) {		\
 			out->err = IOF_ERR_INTERNAL;			\
 			break;						\
 		}							\
@@ -1748,8 +1749,9 @@ iof_process_write(struct ionss_active_write *awd)
 
 
 	awd->req_len = in->xtvec.xt_len - awd->segment_offset;
-	if (awd->req_len > base.max_write) /* Only write max_write at a time */
-		awd->req_len = base.max_write;
+	/* Only write max_write at a time */
+	if (awd->req_len > projection->max_write)
+		awd->req_len = projection->max_write;
 
 	bulk_desc.bd_rpc = awd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_GET;
@@ -1858,7 +1860,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 
 	projection = handle->projection;
 
-	VALIDATE_WRITEX_IN(in, out);
+	VALIDATE_WRITEX_IN(in, out, projection->max_iov_write);
 	if (out->err)
 		D_GOTO(out, 0);
 
@@ -2153,12 +2155,6 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	struct iof_psr_query *query = crt_reply_get(query_rpc);
 	int ret;
 
-	query->max_read = base.max_read;
-	query->max_write = base.max_write;
-	query->max_iov_read = base.max_iov_read;
-	query->max_iov_write = base.max_iov_write;
-	query->readdir_size = base.max_readdir;
-
 	d_iov_set(&query->query_list, base.fs_list,
 		  base.projection_count * sizeof(struct iof_fs_info));
 
@@ -2366,36 +2362,6 @@ cleanup:
 	return rc;
 }
 
-/*
- * Parse a uint32_t from a command line option and allow either k or m
- * suffixes.  Updates the value if str contains a valid value or returns
- * -1 on failure.
- */
-static int parse_size(uint32_t *value, const char *str)
-{
-	uint32_t new_value = *value;
-	int ret;
-
-	/* Read the first size */
-	ret = sscanf(str, "%u", &new_value);
-	if (ret != 1)
-		return -1;
-
-	/* Advance pch to the next non-numeric character */
-	while (isdigit(*str))
-		str++;
-
-	if (*str == 'k')
-		new_value *= 1024;
-	else if (*str == 'm')
-		new_value *= (1024 * 1024);
-	else if (*str != '\0')
-		return -1;
-
-	*value = new_value;
-	return 0;
-}
-
 void show_help(const char *prog)
 {
 	printf("I/O Forwarding I/O Node System Services\n");
@@ -2437,7 +2403,7 @@ static int
 ar_create_bulk(struct ionss_active_read *ard)
 {
 	if (IOF_BULK_ALLOC(ard->projection->base->crt_ctx, ard, local_bulk,
-			   ard->projection->base->max_read, true))
+			   ard->projection->max_read, true))
 		return 0;
 	return -1;
 }
@@ -2490,7 +2456,7 @@ static int
 aw_create_bulk(struct ionss_active_write *awd)
 {
 	if (IOF_BULK_ALLOC(awd->projection->base->crt_ctx, awd, local_bulk,
-			   awd->projection->base->max_write, false))
+			   awd->projection->max_write, false))
 		return 0;
 	return -1;
 }
@@ -2541,14 +2507,11 @@ aw_release(void *arg)
 
 int main(int argc, char **argv)
 {
-	char *ionss_grp = IOF_DEFAULT_SET;
+	char *config_file = NULL;
 	int i;
 	int ret;
-	unsigned int thread_count = 2;
 	int err;
 	int c;
-	bool cnss_threads = true;
-	bool failover = true;
 	struct rlimit rlim = {0};
 
 	char *version = iof_get_version();
@@ -2556,27 +2519,12 @@ int main(int argc, char **argv)
 	iof_log_init("ION", "IONSS", NULL);
 	IOF_LOG_INFO("IONSS version: %s", version);
 
-	base.poll_interval = 1000 * 1000;
-	base.max_read = 1024 * 1024;
-	base.max_write = 1024 * 1024;
-	base.max_iov_read = 64;
-	base.max_iov_write = 64;
-	base.max_readdir = 1024 * 64;
 	pthread_rwlock_init(&base.gah_rwlock, NULL);
 
 	while (1) {
 		static struct option long_options[] = {
-			{"group-name", required_argument, 0, 1},
-			{"poll-interval", required_argument, 0, 2},
-			{"max-read", required_argument, 0, 3},
-			{"max-write", required_argument, 0, 4},
-			{"readdir-size", required_argument, 0, 5},
-			{"max-direct-read", required_argument, 0, 6},
-			{"max-direct-write", required_argument, 0, 7},
-			{"cnss-threads", no_argument, 0, 8},
-			{"disable-failover", no_argument, 0, 9},
-			{"thread-count", required_argument, 0, 't'},
 			{"help", no_argument, 0, 'h'},
+			{"config", required_argument, 0, 'c'},
 			{0, 0, 0, 0}
 		};
 
@@ -2586,79 +2534,23 @@ int main(int argc, char **argv)
 			break;
 
 		switch (c) {
-		case 1:
-			ionss_grp = optarg;
-			break;
-		case 2:
-			ret = sscanf(optarg, "%u", &base.poll_interval);
-			if (ret != 1) {
-				printf("Unable to set poll interval to %s\n",
-				       optarg);
-			}
-			break;
-		case 3:
-			ret = parse_size(&base.max_read, optarg);
-			if (ret != 0) {
-				printf("Unable to set max read to %s\n",
-				       optarg);
-			}
-			break;
-		case 4:
-			ret = parse_size(&base.max_write, optarg);
-			if (ret != 0) {
-				printf("Unable to set max write to %s\n",
-				       optarg);
-			}
-			break;
-		case 5:
-			ret = parse_size(&base.max_readdir, optarg);
-			if (ret != 0) {
-				printf("Unable to set readdir size to %s\n",
-				       optarg);
-			}
-			break;
-		case 6:
-			ret = parse_size(&base.max_iov_read, optarg);
-			if (ret != 0) {
-				printf("Unable to set read-direct size to %s\n",
-				       optarg);
-			}
-			break;
-		case 7:
-			ret = parse_size(&base.max_iov_write, optarg);
-			if (ret != 0) {
-				printf("Unable to set write-direct size to "
-				       " %s\n", optarg);
-			}
-			break;
-		case 8:
-			cnss_threads = true;
-			break;
-		case 9:
-			failover = false;
-			break;
-		case 't':
-			ret = sscanf(optarg, "%d", &thread_count);
-			if (ret != 1 || thread_count < 1) {
-				printf("Unable to set thread count to %s\n",
-				       optarg);
-			}
-			break;
-
 		case 'h':
 			show_help(argv[0]);
 			exit(0);
+			break;
+		case 'c':
+			config_file = optarg;
 			break;
 		case '?':
 			exit(1);
 			break;
 		}
 	}
-
-	base.projection_count = argc - optind;
+	parse_config(config_file, &base);
 
 	if (base.projection_count < 1) {
-		IOF_LOG_ERROR("Expected at least one directory as command line option");
+		IOF_LOG_ERROR("Expected at least one "
+			      "directory to be projected");
 		return IOF_BAD_DATA;
 	}
 
@@ -2681,15 +2573,8 @@ int main(int argc, char **argv)
 			D_GOTO(cleanup, ret = IOF_ERR_INTERNAL);
 	}
 
-	/*hardcoding the number and path for projected filesystems*/
 	D_ALLOC_ARRAY(base.fs_list, base.projection_count);
 	if (!base.fs_list) {
-		ret = IOF_ERR_NOMEM;
-		goto cleanup;
-	}
-
-	D_ALLOC_ARRAY(base.projection_array, base.projection_count);
-	if (!base.projection_array) {
 		ret = IOF_ERR_NOMEM;
 		goto cleanup;
 	}
@@ -2717,7 +2602,6 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
-		char *proj_path = argv[i + optind];
 		struct iof_pool_reg fhp = { .handle = projection,
 					    .init = fh_init,
 					    .reset = fh_reset,
@@ -2726,11 +2610,11 @@ int main(int argc, char **argv)
 		int fd;
 		int rc;
 
-		fd = open(proj_path,
+		fd = open(projection->full_path,
 			  O_DIRECTORY | O_PATH | O_NOATIME | O_RDONLY);
 		if (fd == -1) {
 			IOF_LOG_ERROR("Could not open export directory %s",
-				      proj_path);
+				      projection->full_path);
 			err = 1;
 
 			continue;
@@ -2757,19 +2641,21 @@ int main(int argc, char **argv)
 		rc = fstat(fd, &buf);
 		if (rc) {
 			IOF_LOG_ERROR("Could not stat export path %s %d",
-				      proj_path, errno);
+				      projection->full_path, errno);
 			err = 1;
 			continue;
 		}
 
 		projection->dev_no = buf.st_dev;
 
-		/* Set feature flags. These will be sent to the client */
-		projection->flags = IOF_FS_DEFAULT;
-		if (failover)
-			projection->flags |= IOF_FAILOVER;
-		if (faccessat(fd, ".", W_OK, 0) == 0)
-			projection->flags |= IOF_WRITEABLE;
+		/* Perform this test only if the user has not
+		 * explicitly disabled write for this projection
+		 *
+		 * TODO: Similar test for fail-over
+		 */
+		if (projection->writeable)
+			projection->writeable = (faccessat(fd, ".",
+							   W_OK, 0) == 0);
 
 		projection->fh_pool = iof_pool_register(&base.pool, &fhp);
 		if (!projection->fh_pool)
@@ -2795,14 +2681,8 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (cnss_threads)
-			projection->flags |= IOF_CNSS_MT;
-
-		IOF_LOG_INFO("Projecting %s %#x", proj_path,
-			     (int)projection->flags);
-
-		projection->active = 1;
-		projection->full_path = strdup(proj_path);
+		IOF_LOG_INFO("Projecting %s", projection->full_path);
+		projection->active = true;
 		projection->id = i;
 	}
 	if (err) {
@@ -2817,14 +2697,14 @@ int main(int argc, char **argv)
 	}
 
 	/*initialize CaRT*/
-	ret = crt_init(ionss_grp, CRT_FLAG_BIT_SERVER);
+	ret = crt_init(base.group_name, CRT_FLAG_BIT_SERVER);
 	if (ret) {
 		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
 		goto cleanup;
 	}
 
 	cnss_count = 0;
-	base.primary_group = crt_group_lookup(ionss_grp);
+	base.primary_group = crt_group_lookup(base.group_name);
 	if (base.primary_group == NULL) {
 		IOF_LOG_ERROR("Failed to look up primary group");
 		ret = 1;
@@ -2877,7 +2757,23 @@ int main(int argc, char **argv)
 					projection->full_path);
 			continue;
 		}
-		base.fs_list[i].flags = projection->flags;
+
+		base.fs_list[i].readdir_size = projection->readdir_size;
+		base.fs_list[i].max_read = projection->max_read;
+		base.fs_list[i].max_iov_read = projection->max_iov_read;
+		base.fs_list[i].max_write = projection->max_write;
+		base.fs_list[i].max_iov_write = projection->max_iov_write;
+
+		base.fs_list[i].flags = IOF_FS_DEFAULT;
+		if (projection->failover)
+			base.fs_list[i].flags |= IOF_FAILOVER;
+		if (projection->writeable)
+			base.fs_list[i].flags |= IOF_WRITEABLE;
+		if (projection->cnss_threads)
+			base.fs_list[i].flags |= IOF_CNSS_MT;
+		if (projection->fuse_reply_buf)
+			base.fs_list[i].flags |= IOF_FUSE_READ_BUF;
+
 		base.fs_list[i].gah = projection->root->gah;
 		base.fs_list[i].id = projection->id;
 		strncpy(base.fs_list[i].mnt, projection->full_path,
@@ -2891,11 +2787,12 @@ int main(int argc, char **argv)
 
 	shutdown = 0;
 
-	if (thread_count == 1) {
+	if (base.thread_count == 1) {
 		int rc;
 		/* progress loop */
 		do {
-			rc = crt_progress(base.crt_ctx, base.poll_interval,
+			rc = crt_progress(base.crt_ctx,
+					  base.poll_interval,
 					  check_shutdown, &shutdown);
 			if (rc != 0 && rc != -DER_TIMEDOUT) {
 				IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
@@ -2907,23 +2804,23 @@ int main(int argc, char **argv)
 		pthread_t *progress_tids;
 		int thread;
 
-		D_ALLOC_ARRAY(progress_tids, thread_count);
+		D_ALLOC_ARRAY(progress_tids, base.thread_count);
 		if (!progress_tids) {
 			ret = 1;
 			goto cleanup;
 		}
-		for (thread = 0; thread < thread_count ; thread++) {
+		for (thread = 0; thread < base.thread_count; thread++) {
 			IOF_LOG_INFO("Starting thread %d", thread);
 			ret = pthread_create(&progress_tids[thread], NULL,
 					     progress_thread, &base);
 		}
 
-		for (thread = 0; thread < thread_count ; thread++) {
+		for (thread = 0; thread < base.thread_count; thread++) {
 			ret = pthread_join(progress_tids[thread], NULL);
 
 			if (ret)
-				IOF_LOG_ERROR("Could not join progress thread %d",
-					      thread);
+				IOF_LOG_ERROR("Could not join progress "
+					      "thread %d", thread);
 		}
 		D_FREE(progress_tids);
 	}

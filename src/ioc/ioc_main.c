@@ -1323,11 +1323,11 @@ static int initialize_projection(struct iof_state *iof_state,
 	D_INIT_LIST_HEAD(&fs_handle->opendir_list);
 	pthread_mutex_init(&fs_handle->od_lock, NULL);
 
-	fs_handle->max_read = query->max_read;
-	fs_handle->max_iov_read = query->max_iov_read;
-	fs_handle->proj.max_write = query->max_write;
-	fs_handle->proj.max_iov_write = query->max_iov_write;
-	fs_handle->readdir_size = query->readdir_size;
+	fs_handle->max_read = fs_info->max_read;
+	fs_handle->max_iov_read = fs_info->max_iov_read;
+	fs_handle->proj.max_write = fs_info->max_write;
+	fs_handle->proj.max_iov_write = fs_info->max_iov_write;
+	fs_handle->readdir_size = fs_info->readdir_size;
 	fs_handle->gah = fs_info->gah;
 
 	base_name = basename(fs_info->mnt);

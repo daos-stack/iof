@@ -92,7 +92,7 @@ out:
 		 * For now it's easy to pick between them, and both of them are
 		 * passing valgrind tests.
 		 */
-		if (true) {
+		if (rb->fs_handle->flags & IOF_FUSE_READ_BUF) {
 			rc = fuse_reply_buf(rb->req, buff, bytes_read);
 			if (rc != 0)
 				IOF_TRACE_ERROR(rb->req,

@@ -164,12 +164,7 @@ struct crt_msg_field *readdir_out[] = {
 };
 
 struct crt_msg_field *psr_out[] = {
-	&CMF_UINT32,
-	&CMF_UINT32,
 	&CMF_IOVEC,
-	&CMF_UINT32,
-	&CMF_UINT32,
-	&CMF_UINT32,
 };
 
 struct crt_msg_field *readx_in[] = {
@@ -225,8 +220,7 @@ struct crt_msg_field *setattr_in[] = {
 };
 
 /*query RPC format*/
-struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query",
-							 NULL,
+struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query", NULL,
 							 psr_out);
 
 #define RPC_TYPE(NAME, in, out) { .fmt = DEFINE_CRT_REQ_FMT(#NAME, in, out) }

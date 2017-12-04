@@ -57,6 +57,7 @@ import getpass
 import resource
 import subprocess
 import tempfile
+import yaml
 import logging
 import unittest
 #pylint: disable=import-error
@@ -116,6 +117,7 @@ class Testlocal(unittest.TestCase,
     init_cstats = []
     final_cstats = []
     d = {}
+    ionss_config_file = None
     ionss_logfiles = []
     ionss_logfiles_marker = []
     cnss_logfile = None
@@ -203,6 +205,7 @@ class Testlocal(unittest.TestCase,
                    len(list(self.d["init_cstats_{0}".format(mnt)]))
 
 #pylint: disable=too-many-branches
+#pylint: disable=too-many-locals
     def setUp(self):
         """set up the test"""
 
@@ -232,7 +235,6 @@ class Testlocal(unittest.TestCase,
         self.active_file = os.path.join(common_methods.CTRL_DIR, 'active')
         self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
                                       dir=export_tmp_dir)
-
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
 
         if ompi_bin:
@@ -242,6 +244,16 @@ class Testlocal(unittest.TestCase,
 
         self.export_dir = os.path.join(self.e_dir, 'exp')
         os.mkdir(self.export_dir)
+        config = {"projections":
+                  [{"full_path": self.export_dir},
+                   {"full_path": '/usr'}]}
+        config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
+                                                  prefix="ionss_",
+                                                  dir=self.e_dir, mode='w',
+                                                  delete=False)
+        self.ionss_config_file = config_file.name
+        yaml.dump(config, config_file.file, default_flow_style=False)
+        config_file.close()
 
         log_top_dir = os.getenv("IOF_TESTLOG",
                                 os.path.join(os.path.dirname(
@@ -297,11 +309,7 @@ class Testlocal(unittest.TestCase,
             cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
 
         cmd.extend(valgrind)
-        cmd.append('ionss')
-        self.export_dirs = [self.export_dir, '/usr']
-        cmd.extend(self.export_dirs)
-
-        # cmd.append('--poll-interval=1')
+        cmd.extend(['ionss', '--config', config_file.name])
 
         self.proc = self.common_launch_process('', ' '.join(cmd))
 
@@ -436,6 +444,7 @@ class Testlocal(unittest.TestCase,
 
         # Finally, remove any temporary files created.
         os.unlink("%s/IONSS.attach_info_tmp" % self.cnss_prefix)
+        os.unlink(self.ionss_config_file)
         os.rmdir(self.cnss_prefix)
         shutil.rmtree(self.export_dir)
         os.rmdir(self.e_dir)
