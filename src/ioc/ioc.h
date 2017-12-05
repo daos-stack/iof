@@ -106,7 +106,12 @@ struct iof_state {
 struct iof_group_info {
 	struct iof_service_group	grp;
 	char				*grp_name;
-	bool				attached;
+
+	/* Set to true if the CaRT group attached */
+	bool				crt_attached;
+
+	/* Set to true if registered with the IONSS */
+	bool				iof_registered;
 };
 
 struct iof_rb {

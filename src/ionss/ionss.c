@@ -2944,6 +2944,8 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
 
+cleanup:
+
 	/* After shutdown has been invoked close all files and free any memory,
 	 * in normal operation all files should be closed as a result of CNSS
 	 * requests prior to shutdown being triggered however perform a full
@@ -2980,7 +2982,6 @@ int main(int argc, char **argv)
 
 	D_FREE(base.projection_array);
 
-cleanup:
 	/* TODO:
 	 *
 	 * This means a resource leak, or failed cleanup after client eviction.

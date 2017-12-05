@@ -380,6 +380,13 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	}
 	IOF_TRACE_LINK(*query_rpc, iof_state, "query_rpc");
 
+	ret = crt_req_set_timeout(*query_rpc, 5);
+	if (ret) {
+		IOF_TRACE_ERROR(iof_state, "Could not set timeout, ret = %d",
+				ret);
+		return ret;
+	}
+
 	ret = crt_req_send(*query_rpc, query_cb, &reply);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, ret = %d",
@@ -393,7 +400,7 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	if (reply.err)
 		return reply.err;
 
-	return ret;
+	return 0;
 }
 
 static int iof_uint_read(char *buf, size_t buflen, void *arg)
@@ -990,7 +997,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 					group->grp_name, ret);
 			continue;
 		}
-		group->attached = true;
+		group->crt_attached = true;
 		num_attached++;
 	}
 
@@ -1025,8 +1032,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = crt_rpc_register(QUERY_PSR_OP, CRT_RPC_FEAT_NO_TIMEOUT,
-			       &QUERY_RPC_FMT);
+	ret = crt_rpc_register(QUERY_PSR_OP, 0, &QUERY_RPC_FMT);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
 				"ret: %d", ret);
@@ -1628,7 +1634,7 @@ static int iof_post_start(void *arg)
 		struct iof_group_info *group = &iof_state->groups[grp_num];
 		int active;
 
-		if (!group->attached)
+		if (!group->crt_attached)
 			continue;
 
 		ret = query_projections(iof_state, group, &total_projections,
@@ -1640,6 +1646,8 @@ static int iof_post_start(void *arg)
 			continue;
 		}
 		active_projections += active;
+
+		group->iof_registered = true;
 	}
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir,
@@ -1747,7 +1755,7 @@ static void iof_finish(void *arg)
 
 		group = &iof_state->groups[i];
 
-		if (!group->attached) {
+		if (!group->iof_registered) {
 			iof_tracker_signal(&tracker);
 			continue;
 		}
@@ -1781,7 +1789,7 @@ static void iof_finish(void *arg)
 
 		D_FREE(group->grp_name);
 
-		if (!group->attached)
+		if (!group->crt_attached)
 			continue;
 
 		ret = crt_group_detach(group->grp.dest_grp);

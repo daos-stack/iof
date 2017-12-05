@@ -288,7 +288,7 @@ int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 					      &rp->fmt);
 
 		if (rc != 0)
-			IOF_LOG_ERROR("Failed to register RPC %s, rc=%d\n",
+			IOF_LOG_ERROR("Failed to register RPC %s, rc=%d",
 				      rp->fmt.crf_name, rc);
 
 		if (rc != 0 && ret == 0)
