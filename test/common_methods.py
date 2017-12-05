@@ -68,7 +68,7 @@ IMPORT_MNT = None
 CTRL_DIR = None
 
 try:
-    from colorama import Fore, Style, Back
+    from colorama import Fore, Style
     COLORAMA = 'yes'
 except ImportError:
     COLORAMA = 'no'
@@ -148,16 +148,16 @@ class ColorizedOutput():
                 f.write("{0}\n".format(output))
 
 #pylint: disable=too-many-branches
-    def list_output(self, output_list, dump_to_console=False):
+    def list_output(self, output_list):
         """Writes entire list of strings to internals.out, only output
         colorized warnings or errors to console by default,
         otherwise if dump_to_console is set output entire list to console"""
         with open(self.internals_log_file, 'a') as f:
             for item in output_list:
                 prefix = item.split(' ', 1)[0]
-                if prefix == 'HILITE:':
+                if prefix == 'MARK:':
                     f.write("***** {0} *****\n".format(item.split(' ', 1)[1]))
-                else:
+                elif item != '':
                     f.write("{0}\n".format(item))
         for item in output_list:
             prefix = item.split(' ', 1)[0]
@@ -166,20 +166,8 @@ class ColorizedOutput():
                     self.logger.info(Fore.RED + item.split(' ', 1)[1])
                 elif prefix == 'WARN:':
                     self.logger.info(Fore.YELLOW + item.split(' ', 1)[1])
-                elif prefix == 'HILITE:':
-                    if dump_to_console:
-                        self.logger.info(Back.YELLOW)
-                        self.logger.info(Fore.BLACK + item.split(' ', 1)[1])
-                else:
-                    if dump_to_console:
-                        self.logger.info(item)
                 print(Style.RESET_ALL, end="")
-            else:
-                if dump_to_console:
-                    if prefix == 'HILITE:':
-                        self.logger.info("***** %s *****", item)
-                    else:
-                        self.logger.info(item)
+
 #pylint: enable=too-many-branches
 
 class InternalsPathFramework(ColorizedOutput):
@@ -326,32 +314,6 @@ class InternalsPathFramework(ColorizedOutput):
                 else:
                     self.error_output('IOF projection:{0} and backend '
                                       'fs:{1} differ.'.format(mount_dir, idir))
-
-    def descriptor_to_trace(self, log_dir):
-        """Find the file handle to use for descriptor tracing:
-        if an error or warning is found in trace logs, use that descriptor,
-        otherwise use first fuse op instance in logs"""
-        descriptor = None
-        log_dump = False
-        fuse_file = os.path.join('src', 'ioc', 'ops')
-        with open(log_dir, 'r') as f:
-            for line in f:
-                if 'TRACE' in line:
-                    if 'ERR' in line or 'WARN' in line:
-                        fields = line.strip().split()
-                        descriptor = fields[7].strip().split('(')[1].strip().\
-                                     split(')')[0]
-                        log_dump = True
-                        return descriptor, log_dump
-        with open(log_dir, 'r') as f:
-            for line in f:
-                if fuse_file in line and 'TRACE' in line:
-                    fields = line.strip().split()
-                    descriptor = fields[7].strip().split('(')[1].strip().\
-                                 split(')')[0]
-                    return descriptor, log_dump
-        self.error('Descriptor not found to trace')
-        return None, None
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
                  iof_ionss_setup.IonssExport):

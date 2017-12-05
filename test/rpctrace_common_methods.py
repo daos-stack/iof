@@ -42,6 +42,7 @@ Methods associated to RPC tracing for error debuging.
 
 import sys
 import string
+import os
 from collections import Counter
 from tabulate import tabulate
 import common_methods
@@ -50,6 +51,7 @@ import common_methods
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-nested-blocks
 class RpcTrace(common_methods.ColorizedOutput):
     """RPC tracing methods
     RPC = CaRT Priv
@@ -81,7 +83,8 @@ class RpcTrace(common_methods.ColorizedOutput):
     DEALLOC_SEARCH_STR = 'decref to 0'
     SEARCH_STRS = [ALLOC_SEARCH_STRS, SUBMIT_SEARCH_STR, SENT_SEARCH_STR,
                    DEALLOC_SEARCH_STR]
-    VERBOSE_STATE_TRANSITIONS = True
+    VERBOSE_STATE_TRANSITIONS = False
+    VERBOSE_LOG = True
 
     SOURCE = None
 
@@ -351,8 +354,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                                reuse_iter)
                         self.trace_dict[descriptor_iter] = [obj_type,
                                                             parent]
-                        self.warning_output('Descriptor {0} already '
-                                            'present'.format(new_obj))
+                        self.desc_dict[descriptor_iter] = []
                         reused_desc.append(new_obj)
 
         with open(log_path, 'r') as f:
@@ -372,68 +374,168 @@ class RpcTrace(common_methods.ColorizedOutput):
 
     def rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
+        output = []
         trace = descriptor
-        reuse_iter = 0
-        while trace in self.trace_dict:
-            self.normal_output('\nDescriptor Hierarchy ({0}):'.format(trace))
+        #checking if descriptor is an rpc, in which case it is only linked
+        #to other descriptors with TRACE
+        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
+        desc_is_rpc = bool(descriptor not in self.trace_dict and \
+                           [item for sublist in rpc_type_list \
+                            for item in sublist if item[0] == descriptor])
+
+        if desc_is_rpc: #tracing an rpc
+            output.append('No hierarchy available - descriptor is an RPC')
+        else:
             while trace in self.trace_dict:
-                self.normal_output('{0}: {1}'.format(self.trace_dict['{0}'.\
-                                                     format(trace)][0], trace))
+                output.append('{0}: {1}'.format(self.trace_dict['{0}'.\
+                                                format(trace)][0], trace))
                 if trace in self.rpc_dict:
                     #print out all linked rpcs in the hierarchy as well
                     for i in self.desc_dict[trace]:
-                        self.normal_output('\t{0} {1}'.format(i[0], i[1]))
+                        output.append('\t{0} {1}'.format(i[0], i[1]))
                 trace = self.trace_dict[trace][1]
-            #handle reused descriptor hierarchies
-            reuse_iter += 1
-            trace = '{0}_{1}'.format(descriptor, reuse_iter)
+        if not output:
+            self.error_output('Descriptor {0} not currently registered or '
+                              'linked'.format(descriptor))
 
-    def rpc_trace_output_logdump(self, descriptor, log_path, log_dump):
+        else:
+            output.insert(0, '\nDescriptor Hierarchy ({0}):'.format(descriptor))
+            self.list_output(output)
+
+    def rpc_trace_output_logdump(self, descriptor, log_path):
         """Prints all log messages relating to the given descriptor or any
            pointer in the descriptor's hierarchy"""
         trace = descriptor
-        reuse_iter = 0
+        suffix = None
+        position_desc_cnt = 0
+        #checking if descriptor for log dump is resued or unique
+        try:
+            suffix = int(descriptor.split('_')[1])
+            desc = descriptor.split('_')[0]
+        except IndexError:
+            desc = descriptor
+        #checking if descriptor is an rpc, in which case it is only linked
+        #to other descriptors with TRACE
+        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
+        desc_is_rpc = bool(descriptor not in self.trace_dict and \
+                           [item for sublist in rpc_type_list \
+                            for item in sublist if item[0] == descriptor])
+
         output = []
-        while trace in self.trace_dict:
-            with open(log_path, 'r') as f:
-                output.append('\nLog dump for descriptor hierarchy ({0}):'\
-                                   .format(trace))
-                for line in f:
-                    if "TRACE" in line:
+        with open(log_path, 'r') as f:
+            output.append('\nLog dump for descriptor hierarchy ({0}):'\
+                          .format(descriptor))
+            for line in f:
+                desc_log_marked = False
+                if desc_is_rpc: #tracing an rpc
+                    if 'TRACE' in line:
                         fields = line.strip().split()
-                        #lowest level descriptor log message is related to
                         rpc = fields[7].strip().split('(')[1].strip().\
                               split(')')[0]
-                        parent_trace = trace
-                        while parent_trace in self.trace_dict and \
-                              parent_trace in self.desc_dict:
-                            if rpc == parent_trace:
-                                output.append('HILITE: {0}'.\
-                                                      format(' '.\
-                                                             join(line.\
-                                                                  splitlines()\
-                                                                  )))
-                                break
-                            for i in self.desc_dict[parent_trace]:
-                                if rpc == i[0]:
-                                    output.append('HILITE: {0}'.\
+                        if rpc == desc:
+                            output.append('MARK: {0}'.\
+                                          format(' '.join(line.splitlines())))
+                            desc_log_marked = True
+                elif 'TRACE' in line and 'Registered new' in line:
+                    fields = line.strip().split()
+                    rpc = fields[7].strip().split('(')[1].strip().\
+                          split(')')[0]
+                    if rpc != desc:
+                        continue
+                    if suffix is None:#tracing a unique descriptor
+                        output.append('MARK: {0}'.\
+                                      format(' '.join(line.splitlines())))
+                        for nxtline in f:#start log dump after "registered" log
+                            desc_log_marked = False
+                            if 'TRACE' in nxtline:
+                                fields = nxtline.strip().split()
+                                rpc = fields[7].strip().split('(')[1].\
+                                      strip().split(')')[0]
+                                trace = descriptor
+                                while trace in self.trace_dict and \
+                                      trace in self.desc_dict:
+                                    #tracing for reused descriptor in hierarchy
+                                    if trace[-2:-1] == '_':
+                                        desc = trace[:-2]
+                                    else:
+                                        desc = trace
+                                    if rpc == desc:
+                                        output.append\
+                                        ('MARK: {0}'.format(' '.\
+                                                            join(nxtline.\
+                                                                 splitlines())))
+                                        desc_log_marked = True
+                                        break
+                                    for i in self.desc_dict[trace]:
+                                        if rpc == i[0]:
+                                            output.append\
+                                            ('MARK: {0}'.\
+                                             format(' '.\
+                                                    join(nxtline.splitlines())))
+                                            desc_log_marked = True
+                                            break
+                                    trace = self.trace_dict[trace][1]
+                            if not desc_log_marked and self.VERBOSE_LOG:
+                                #print the remaining non-relevant log messages
+                                output.append(' '.join(nxtline.splitlines()))
+                        self.list_output(output)
+                        return
+
+                    else: #tracing a reused descriptor
+                        #start the log dump where the specific reused descriptor
+                        #is registered, logging will include all instances of
+                        #this descriptor after
+                        if position_desc_cnt == suffix:
+                            output.append('MARK: {0}'.\
+                                          format(' '.join(line.splitlines())))
+                            for nxtline in f:
+                                desc_log_marked = False
+                                if 'TRACE' in nxtline:
+                                    fields = nxtline.strip().split()
+                                    rpc = fields[7].strip().split('(')[1].\
+                                          strip().split(')')[0]
+                                    trace = descriptor
+                                    while trace in self.trace_dict and \
+                                          trace in self.desc_dict:
+                                        #tracing for reused descriptor in
+                                        #hierarchy
+                                        if trace[-2:-1] == '_':
+                                            desc = trace[:-2]
+                                        else:
+                                            desc = trace
+                                        if rpc == desc:
+                                            output.append\
+                                                ('MARK: {0}'.\
+                                                 format(' '.join(nxtline.\
+                                                                 splitlines())))
+                                            desc_log_marked = True
+                                            break
+                                        for i in self.desc_dict[trace]:
+                                            if rpc == i[0]:
+                                                output.append\
+                                                    ('MARK: {0}'.\
                                                      format(' '.\
-                                                            join(line.\
+                                                            join(nxtline.\
                                                                  splitlines())))
-                                    break
-                            parent_trace = self.\
-                                           trace_dict['{0}'.\
-                                                      format(parent_trace)][1]
-                    else:
-                        output.append('{0}'.format(' '.join(line.\
-                                                                 splitlines())))
-            #handle reused descriptor logs
-            reuse_iter += 1
-            trace = '{0}_{1}'.format(descriptor, reuse_iter)
+                                                desc_log_marked = True
+                                                break
+                                        trace = self.trace_dict[trace][1]
+                                if not desc_log_marked and self.VERBOSE_LOG:
+                                    #print the remaining non-relevant log mesgs
+                                    output.append(' '.join(nxtline.\
+                                                           splitlines()))
 
-        self.list_output(output, log_dump)
+                            self.list_output(output)
+                            return
+                        position_desc_cnt += 1
 
-    def rpc_trace_output(self, descriptor, log_path, log_dump):
+                if not desc_log_marked and self.VERBOSE_LOG:
+                    #print the remaining non-relevant log messages
+                    output.append(' '.join(line.splitlines()))
+
+        self.list_output(output)
+
+    def rpc_trace_output(self, descriptor, log_path):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
            log messages related to descriptor"""
         output = []
@@ -445,7 +547,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             if v[1] in self.trace_dict:
                 output.append('{0:<30}{1:<30}{2} [{3}]'.\
                               format(k, v[0], v[1],
-                                     self.trace_dict['{0}'.format(v[1])][0]))
+                                     self.trace_dict[v[1]][0]))
             else:
                 output.append('WARN: {0:<24}{1:<30}{2} [None]'.\
                               format(k, v[0], v[1]))
@@ -477,7 +579,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.rpc_trace_output_hierarchy(descriptor)
 
         #Log dump for descriptor hierarchy
-        self.rpc_trace_output_logdump(descriptor, log_path, log_dump)
+        self.rpc_trace_output_logdump(descriptor, log_path)
 
     def descriptor_error_state_tracing(self, log_path):
         """Check for any descriptors that are not registered/deregistered"""
@@ -543,3 +645,48 @@ class RpcTrace(common_methods.ColorizedOutput):
         for d in self.desc_state:
             if self.desc_state[d] == 'Registered':
                 self.error_output('{0} is not deregistered'.format(d))
+
+    def descriptor_to_trace(self, log_dir):
+        """Find the file handle to use for descriptor tracing:
+        if an error or warning is found in trace logs, use that descriptor,
+        otherwise use first fuse op instance in logs"""
+        descriptor = None
+        position_desc_cnt = 0
+        fuse_file = os.path.join('src', 'ioc', 'ops')
+        with open(log_dir, 'r') as f:
+            for line in f:
+                if 'TRACE' in line:
+                    if 'ERR' in line or 'WARN' in line:
+                        fields = line.strip().split()
+                        descriptor = fields[7].strip().split('(')[1].strip().\
+                                     split(')')[0]
+                        self.warning_output('Tracing descriptor {0} with '
+                                            'error/warning'.format(descriptor))
+                        reused_descs = [v for k, v in self.trace_dict.items() \
+                                        if descriptor in k]
+                        if len(reused_descs) > 1:
+                            for nxtline in f:
+                                if 'TRACE' in nxtline and 'Registered new' in \
+                                    nxtline:
+                                    fields = nxtline.strip().split()
+                                    new_obj = fields[7].strip().split('(')[1].\
+                                              strip().split(')')[0]
+                                    if new_obj == descriptor:
+                                        position_desc_cnt += 1
+
+                        pos = len(reused_descs) - position_desc_cnt - 1
+                        if pos > 0:
+                            descriptor = '{0}_{1}'.\
+                                          format(descriptor,
+                                                 len(reused_descs) - \
+                                                 position_desc_cnt - 1)
+                        return descriptor
+        with open(log_dir, 'r') as f:
+            for line in f:
+                if fuse_file in line and 'TRACE' in line:
+                    fields = line.strip().split()
+                    descriptor = fields[7].strip().split('(')[1].strip().\
+                                 split(')')[0]
+                    return descriptor
+        self.error_output('Descriptor not found to trace')
+        return None

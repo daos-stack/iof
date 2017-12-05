@@ -384,17 +384,17 @@ class Testlocal(unittest.TestCase,
             self.targets_rpctrace[index].rpc_reporting(ionss_log)
 
         #Descriptor tracing for the CNSS
-        (descriptor, log_dump) = self.descriptor_to_trace(self.cnss_logfile)
+        reused_desc = []
+        reused_desc = self.origin_rpctrace.\
+                      descriptor_rpc_trace(self.cnss_logfile)
+        if reused_desc:
+            self.normal_output('Reused descriptors:')
+            for d in reused_desc:
+                self.normal_output(d)
+
+        descriptor = self.origin_rpctrace.descriptor_to_trace(self.cnss_logfile)
         if descriptor is not None:
-            reused_desc = []
-            reused_desc = self.origin_rpctrace.\
-                          descriptor_rpc_trace(self.cnss_logfile)
-            if reused_desc:
-                self.warning_output('Reused descriptors:')
-                for d in reused_desc:
-                    self.warning_output(d)
-            self.origin_rpctrace.rpc_trace_output(descriptor, self.cnss_logfile,
-                                                  log_dump)
+            self.origin_rpctrace.rpc_trace_output(descriptor, self.cnss_logfile)
 
     def tearDown(self):
         """tear down the test"""
