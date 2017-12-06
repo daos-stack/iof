@@ -46,6 +46,8 @@ from collections import Counter
 from tabulate import tabulate
 import common_methods
 
+# pylint: disable=too-many-locals
+# pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-instance-attributes
 class RpcTrace(common_methods.ColorizedOutput):
@@ -58,7 +60,7 @@ class RpcTrace(common_methods.ColorizedOutput):
     """dictionary maps rpc to 'alloc/submit/sent/dealloc' state"""
     op_state_list = []
     """list entries (opcode, rpc state)"""
-    rpc_op_list = []
+    rpc_op_dict = {}
     """list entries (rpc, opcode)"""
     trace_dict = {}
     """dictionary maps descriptor to descriptor type and parent"""
@@ -79,6 +81,7 @@ class RpcTrace(common_methods.ColorizedOutput):
     DEALLOC_SEARCH_STR = 'decref to 0'
     SEARCH_STRS = [ALLOC_SEARCH_STRS, SUBMIT_SEARCH_STR, SENT_SEARCH_STR,
                    DEALLOC_SEARCH_STR]
+    VERBOSE_STATE_TRANSITIONS = True
 
     SOURCE = None
 
@@ -86,48 +89,43 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.SOURCE = source
         self.internals_log_file = internals_log_file
 
-    def rpc_error_state_tracing(self, rpc, rpc_state, opcode, function_name):
+    def rpc_error_state_tracing(self, rpc, rpc_state, opcode):
         """Error checking for rpc state"""
-        ret_str = ''
+
+        # Returns a tuple of (State, Extra string)
+        status = None
+        message = None
         if rpc in self.rpc_dict:
-            if (rpc_state == self.ALLOC_STATE) and (self.rpc_dict['{0}'.\
-                format(rpc)] == self.DEALLOC_STATE):
-                self.rpc_dict['{0}'.format(rpc)] = rpc_state
-                ret_str = 'SUCCESS: {0:<20}{1:<20}op: {2:<5} ({3})'.\
-                          format(rpc, rpc_state, opcode, function_name)
-            elif (rpc_state == self.DEALLOC_STATE) and (self.rpc_dict['{0}'.\
-                  format(rpc)] != self.DEALLOC_STATE):
-                self.rpc_dict['{0}'.format(rpc)] = rpc_state
-                ret_str = 'SUCCESS: {0:<20}{1:<20}op: {2:<5} ({3})'.\
-                          format(rpc, rpc_state, opcode, function_name)
-            elif (rpc_state == self.SUBMIT_STATE) and (self.rpc_dict['{0}'.\
-                  format(rpc)] == self.ALLOC_STATE):
-                self.rpc_dict['{0}'.format(rpc)] = rpc_state
-                ret_str = 'SUCCESS: {0:<20}{1:<20}op: {2:<5} ({3})'.\
-                          format(rpc, rpc_state, opcode, function_name)
-            elif (rpc_state == self.SENT_STATE) and (self.rpc_dict['{0}'.\
-                  format(rpc)] == self.SUBMIT_STATE):
-                self.rpc_dict['{0}'.format(rpc)] = rpc_state
-                ret_str = 'SUCCESS: {0:<20}{1:<20}op: {2:<5} ({3})'.\
-                          format(rpc, rpc_state, opcode, function_name)
+            if (rpc_state == self.ALLOC_STATE) and \
+               (self.rpc_dict[rpc] == self.DEALLOC_STATE):
+                status = 'SUCCESS'
+            elif (rpc_state == self.DEALLOC_STATE) and \
+                 (self.rpc_dict[rpc] != self.DEALLOC_STATE):
+                status = 'SUCCESS'
+            elif (rpc_state == self.SUBMIT_STATE) and \
+                 (self.rpc_dict[rpc] == self.ALLOC_STATE):
+                status = 'SUCCESS'
+            elif (rpc_state == self.SENT_STATE) and \
+                 (self.rpc_dict[rpc] == self.SUBMIT_STATE):
+                status = 'SUCCESS'
             else:
-                ret_str = 'ERROR: {0:<20}{1:<20}op: {2:<5} ({3}) ' \
-                          '(previous state: {4})'.\
-                          format(rpc, rpc_state, opcode, function_name,
-                                 self.rpc_dict['{0}'.format(rpc)])
+                status = 'ERROR'
+                message = 'previous state: {0}'.format(self.rpc_dict[rpc])
         else:
             if rpc_state == self.ALLOC_STATE:
-                ret_str = 'SUCCESS: {0:<20}{1:<20}op: {2:<5} ({3})'.\
-                          format(rpc, rpc_state, opcode, function_name)
+                status = 'SUCCESS'
             else:
-                ret_str = 'WARN: {0:<20}{1:<20}op: {2:<5} ({3}) ' \
-                          '(no alloc\'d state registered)'.\
-                          format(rpc, rpc_state, opcode, function_name)
-            self.rpc_dict['{0}'.format(rpc)] = rpc_state
-            rpc_opcode = (rpc, opcode)
-            self.rpc_op_list.append(rpc_opcode)
+                status = 'WARN'
+                message = "no alloc'd state registered"
 
-        return ret_str
+            self.rpc_op_dict[rpc] = opcode
+
+        if rpc_state == self.DEALLOC_STATE:
+            del self.rpc_dict[rpc]
+            del self.rpc_op_dict[rpc]
+        else:
+            self.rpc_dict[rpc] = rpc_state
+        return (status, message)
 
     def rpc_tabulate(self):
         """Use tabulate pkg to formulate table of opcodes and RPC states"""
@@ -236,7 +234,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         """RPC reporting for RPC state machine"""
         self.rpc_dict = {}
         self.op_state_list = []
-        self.rpc_op_list = []
+        self.rpc_op_dict = {}
 
         if self.SOURCE is None:
             self.error_output('Source not designated for rpc reporting in logs')
@@ -244,62 +242,80 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.normal_output('\nCaRT RPC Reporting ({0}):\nLogfile: {1}\n'.\
                            format(self.SOURCE, logfile_path))
 
-        with open(logfile_path, 'r') as f:
-            output_rpcs = []
-            errors = []
-            output_rpcs.append('RPC State Transitions:')
-            output_rpcs.append('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
-                               format('RPC', 'STATE', 'Opcode/Funct', '---',
-                                      '-----', '------------'))
-            for line in f:
-                if any(s in line for s in self.SEARCH_STRS[0]) or \
-                   any(s in line for s in self.SEARCH_STRS[1:]):
-                    rpc_state = None
-                    rpc = None
-                    opcode = None
-                    function_name = None
-                    fields = line.strip().split()
-                    #remove ending punctuation from log msg
-                    translator = str.maketrans('', '', string.punctuation)
-                    str_match = fields[-1].translate(translator)
-                    if str_match == '0': #'decref to 0'
-                        str_match = ' '.join(fields[-3:]).translate(translator)
-                    elif str_match == 'received': #'allocated per RPC request
-                                                  # received'
-                        str_match = ' '.join(fields[-5:]).translate(translator)
+        f = open(logfile_path, 'r')
+        output_rpcs = []
+        errors = []
 
-                    rpc = fields[8]
+        for line in f:
+            if any(s in line for s in self.SEARCH_STRS[0]) or \
+               any(s in line for s in self.SEARCH_STRS[1:]):
+                rpc_state = None
+                rpc = None
+                opcode = None
+                fields = line.strip().split()
+                #remove ending punctuation from log msg
+                translator = str.maketrans('', '', string.punctuation)
+                str_match = fields[-1].translate(translator)
+                if str_match == '0': #'decref to 0'
+                    str_match = ' '.join(fields[-3:]).translate(translator)
+                elif str_match == 'received': #'allocated per RPC request
+                    # received'
+                    str_match = ' '.join(fields[-5:]).translate(translator)
+
+                rpc = fields[8]
+
+                if any(s in str_match for s in self.SEARCH_STRS[0]):
+                    rpc_state = self.ALLOC_STATE
+                    opcode = fields[10][:-2]
+                elif str_match == self.SEARCH_STRS[-1]:
+                    rpc_state = self.DEALLOC_STATE
+                    opcode = fields[10][:-2]
+                #opcode not printed in submitted/sent log messages;
+                #use rpc_op_list{} to store RPC and opcode
+                elif str_match == self.SEARCH_STRS[1]:
+                    rpc_state = self.SUBMIT_STATE
+                    opcode = self.rpc_op_dict.get(rpc, None)
+                elif str_match == self.SEARCH_STRS[2]:
+                    rpc_state = self.SENT_STATE
+                    opcode = self.rpc_op_dict.get(rpc, None)
+
+                if rpc and opcode and rpc_state:
+                    self.op_state_list.append((opcode, rpc_state))
+                    (state, extra) = self.rpc_error_state_tracing(rpc,
+                                                                  rpc_state,
+                                                                  opcode)
                     function_name = fields[6]
-                    if any(s in str_match for s in self.SEARCH_STRS[0]):
-                        rpc_state = self.ALLOC_STATE
-                        opcode = fields[10][:-2]
-                    elif str_match == self.SEARCH_STRS[-1]:
-                        rpc_state = self.DEALLOC_STATE
-                        opcode = fields[10][:-2]
-                    #opcode not printed in submitted/sent log messages;
-                    #use rpc_op_list{} to store RPC and opcode
-                    elif str_match == self.SEARCH_STRS[1]:
-                        rpc_state = self.SUBMIT_STATE
-                        op_dict = dict(self.rpc_op_list)
-                        opcode = op_dict.get('{0}'.format(rpc), None)
-                    elif str_match == self.SEARCH_STRS[2]:
-                        rpc_state = self.SENT_STATE
-                        op_dict = dict(self.rpc_op_list)
-                        opcode = op_dict.get('{0}'.format(rpc), None)
+                    prefix = '{0}: {1}'.format(state, rpc)
+                    if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
+                        if extra:
+                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3} {4}' \
+                                               .format(prefix,
+                                                       rpc_state[4:],
+                                                       opcode,
+                                                       function_name,
+                                                       extra))
+                        else:
+                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3}' \
+                                               .format(prefix,
+                                                       rpc_state[4:],
+                                                       opcode,
+                                                       function_name))
 
-                    if rpc and opcode and rpc_state:
-                        self.op_state_list.append((opcode, rpc_state))
-                        ret_str = self.rpc_error_state_tracing(rpc, rpc_state,
-                                                               opcode,
-                                                               function_name)
-                        output_rpcs.append(ret_str)
+        if output_rpcs:
+            output_rpcs.insert(0, 'RPC State Transitions:')
+            output_rpcs.insert(1, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
+                               format('RPC', 'STATE', 'Op', 'Function'))
+            output_rpcs.insert(2, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
+                               format('---', '-----', '--', '--------'))
+            output_rpcs.append('')
 
-            output_rpcs.append('\nOpcode State Transition Tally:')
-            (ret_str, errors) = self.rpc_tabulate()
-            output_rpcs.append(ret_str)
-            output_rpcs.extend(errors)
+        output_rpcs.append('Opcode State Transition Tally:')
+        (ret_str, errors) = self.rpc_tabulate()
+        output_rpcs.append(ret_str)
+        output_rpcs.extend(errors)
 
         self.list_output(output_rpcs)
+        f.close()
 
     def descriptor_rpc_trace(self, log_path):
         """Parses twice thru log to create a hierarchy of descriptors and also
@@ -322,9 +338,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                     parent = fields[-1]
                     obj_type = fields[-3]
                     if new_obj not in self.trace_dict:
-                        self.trace_dict['{0}'.format(new_obj)] = [obj_type,
-                                                                  parent]
-                        self.desc_dict['{0}'.format(new_obj)] = []
+                        self.trace_dict[new_obj] = [obj_type, parent]
+                        self.desc_dict[new_obj] = []
                     else:
                         #add all reused descriptors to the dict, and append
                         #iteration number
@@ -349,8 +364,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                     rpc = fields[7].strip().split('(')[1].strip().split(')')[0]
                     rpc_type = fields[9]
                     if obj in self.desc_dict:
-                        self.desc_dict['{0}'.format(obj)].\
-                            append((rpc, rpc_type))
+                        self.desc_dict[obj].append((rpc, rpc_type))
                     else:
                         self.error_output('Descriptor {0} is not present'.\
                                           format(obj))
@@ -367,9 +381,9 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                      format(trace)][0], trace))
                 if trace in self.rpc_dict:
                     #print out all linked rpcs in the hierarchy as well
-                    for i in self.desc_dict['{0}'.format(trace)]:
+                    for i in self.desc_dict[trace]:
                         self.normal_output('\t{0} {1}'.format(i[0], i[1]))
-                trace = self.trace_dict['{0}'.format(trace)][1]
+                trace = self.trace_dict[trace][1]
             #handle reused descriptor hierarchies
             reuse_iter += 1
             trace = '{0}_{1}'.format(descriptor, reuse_iter)
@@ -400,7 +414,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                                   splitlines()\
                                                                   )))
                                 break
-                            for i in self.desc_dict['{0}'.format(parent_trace)]:
+                            for i in self.desc_dict[parent_trace]:
                                 if rpc == i[0]:
                                     output.append('HILITE: {0}'.\
                                                      format(' '.\
@@ -433,8 +447,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                               format(k, v[0], v[1],
                                      self.trace_dict['{0}'.format(v[1])][0]))
             else:
-                output.append('WARN: {0:<24}{1:<30}{2}[{3}]'.\
-                              format(k, v[0], v[1], None))
+                output.append('WARN: {0:<24}{1:<30}{2} [None]'.\
+                              format(k, v[0], v[1]))
         self.list_output(output)
         output = []
 
@@ -454,7 +468,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                         temp_v.append('{:>65}:{:<15}'.format(i[0], i[1]))
                 if v:
                     v_output = '\n'.join(temp_v)
-                type_field = '[{0}]'.format(self.trace_dict['{0}'.format(k)][0])
+                type_field = '[{0}]'.format(self.trace_dict[k][0])
                 output.append('{:<20}{:<20}{}'.\
                               format(k, type_field, v_output))
         self.list_output(output)
@@ -475,52 +489,57 @@ class RpcTrace(common_methods.ColorizedOutput):
                                format('Descriptor', 'State', 'Funct',
                                       '----------', '-----', '-----'))
             for line in f:
-                if 'TRACE' in line:
-                    state = None
-                    fields = line.strip().split()
-                    desc = fields[7].strip().split('(')[1][:-1]
-                    function_name = fields[7].strip().split('(')[0]
+                if 'TRACE' not in line:
+                    continue
 
-                    if 'Registered' in line:
-                        state = 'Registered'
-                        if desc not in self.desc_state or \
-                           self.desc_state['{0}'.format(desc)] == \
-                                           'Deregistered':
-                            self.desc_state['{0}'.format(desc)] = state
-                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
-                                          format(desc, state, function_name))
-                        else:
-                            output.append('ERROR: {0:<20}{1:<20}({2}) ' \
-                                          '(previous state: {3})'.\
-                                          format(desc, state, function_name,
-                                                 self.desc_state['{0}'.\
-                                                                 format(desc)]))
-                    elif 'Link' in line:
-                        state = 'Linked'
-                        if desc in self.desc_state and \
-                           self.desc_state['{0}'.format(desc)] == 'Registered':
-                            output.append('WARN: {0:<20}{1:<20}({2}) '
-                                          '(Registered and Linked)'.\
-                                          format(desc, state, function_name))
-                        else:
-                            self.desc_state['{0}'.format(desc)] = state
-                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
-                                          format(desc, state, function_name))
-                    elif 'Deregistered' in line:
-                        state = 'Deregistered'
-                        if desc in self.desc_state and \
-                           self.desc_state['{0}'.format(desc)] == \
-                                            'Deregistered' or \
-                           desc not in self.desc_state:
-                            output.append('ERROR: {0:<20}{1:<20}({2})'.\
-                                          format(desc, state, function_name))
-                        else:
-                            self.desc_state['{0}'.format(desc)] = state
-                            output.append('SUCCESS: {0:<20}{1:<20}({2})'.\
-                                          format(desc, state, function_name))
+                state = None
+                fields = line.strip().split()
+                desc = fields[7].strip().split('(')[1][:-1]
+                res = None
+
+                if 'Registered' in line:
+                    state = 'Registered'
+                    if desc in self.desc_state:
+                        res = ('ERROR', state, 'previous state: {0}' \
+                               .format(self.desc_state[desc]))
+                    else:
+                        res = ('SUCCESS', state)
+                    self.desc_state[desc] = state
+                elif 'Link' in line:
+                    state = 'Linked'
+                    if self.desc_state.get(desc, None) == 'Registered':
+                        res = ('WARN', state, 'Registered and Linked')
+                    else:
+                        res = ('SUCCESS', state)
+                    self.desc_state[desc] = state
+                elif 'Deregistered' in line:
+                    state = 'Deregistered'
+                    if desc not in self.desc_state:
+                        res = ('ERROR', state)
+                    else:
+                        del self.desc_state[desc]
+                        res = ('SUCCESS', state)
+                if not res:
+                    continue
+
+                function_name = fields[7].strip().split('(')[0]
+                if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
+                    desc = '{0}: {1}'.format(res[0], desc)
+                    if len(res) == 2:
+                        output.append('{0:<30}{1:<20}{2}()' \
+                                      .format(desc,
+                                              res[1],
+                                              function_name))
+                    else:
+                        output.append('{0:<30}{1:<20}{2}() ({3})' \
+                                      .format(desc,
+                                              res[1],
+                                              function_name,
+                                              res[2]))
+
             self.list_output(output)
 
         #check if all descriptors are deregistered
         for d in self.desc_state:
-            if self.desc_state['{0}'.format(d)] == 'Registered':
+            if self.desc_state[d] == 'Registered':
                 self.error_output('{0} is not deregistered'.format(d))
