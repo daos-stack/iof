@@ -1963,7 +1963,7 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 
 	/* atime/mtime handling.
 	 *
-	 * These can be requested independantly but must be set as a pair so
+	 * These can be requested independently but must be set as a pair so
 	 * sample the old value, and then either use them or the FUSE provided
 	 * values.
 	 */
