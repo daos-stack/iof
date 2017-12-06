@@ -63,36 +63,6 @@ struct iof_projection_info *ioc_get_handle(void)
 	return context->private_data;
 }
 
-/*
- * A common callback that is used by several of the I/O RPCs that only return
- * status, with no data or metadata, for example rmdir and truncate.
- *
- * out->err will always be a errno that can be passed back to FUSE.
- */
-void
-ioc_status_cb(const struct crt_cb_info *cb_info)
-{
-	struct status_cb_r *reply = cb_info->cci_arg;
-	struct iof_status_out *out = crt_reply_get(cb_info->cci_rpc);
-
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  Return EIO on any error
-		 */
-		IOF_TRACE_INFO(reply, "Bad RPC reply %d", cb_info->cci_rc);
-		reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
-	if (out->err) {
-		IOF_TRACE_DEBUG(reply, "reply indicates error %d", out->err);
-		reply->err = EIO;
-	}
-	reply->rc = out->rc;
-	iof_tracker_signal(&reply->tracker);
-}
-
 /* A generic callback for handling RPC replies from low-level FUSE RPCs.
  *
  * This can be used with RPCs where the reply type is either status_out

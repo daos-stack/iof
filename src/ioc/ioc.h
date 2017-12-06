@@ -454,8 +454,6 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 #define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
 					((CB_INFO)->cci_rc == -DER_OOG))
 
-void ioc_status_cb(const struct crt_cb_info *);
-
 int iof_fs_send(struct ioc_request *request);
 
 int ioc_simple_resend(struct ioc_request *request);
@@ -512,6 +510,8 @@ void ioc_ll_setattr(fuse_req_t, fuse_ino_t, struct stat *, int,
 		    struct fuse_file_info *);
 
 void ioc_ll_symlink(fuse_req_t, const char *, fuse_ino_t, const char *);
+
+void ioc_ll_fsync(fuse_req_t, fuse_ino_t, int, struct fuse_file_info *);
 
 void iof_entry_cb(struct ioc_request *request);
 
