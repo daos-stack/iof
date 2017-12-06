@@ -87,15 +87,15 @@
 #define IOF_TRACE_INFO(ptr, ...)			\
 	IOF_TRACE(ptr, DEF_LOG_HANDLE, INFO, __VA_ARGS__)
 
-#define IOF_TRACE_UP(ptr, parent, type)			\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
-		"%s:%d TRACE: %s(%p) Registered new %s from %p\n",\
+#define IOF_TRACE_UP(ptr, parent, type)					\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
+		"%s:%d TRACE: %s(%p) Registered new '%s' from %p\n",	\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
 /* Link RPC to descriptor */
-#define IOF_TRACE_LINK(ptr, parent, type)		\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,		\
-		"%s:%d TRACE: %s(%p) Link %s to %p\n",	\
+#define IOF_TRACE_LINK(ptr, parent, type)				\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
+		"%s:%d TRACE: %s(%p) Link '%s' to %p\n",		\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
 #define IOF_TRACE_DOWN(ptr)				\

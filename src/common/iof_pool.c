@@ -49,7 +49,7 @@
 static void
 debug_dump(struct iof_pool_type *type)
 {
-	IOF_TRACE_INFO(type, "Pool type %p", type);
+	IOF_TRACE_INFO(type, "Pool type %p '%s'", type, type->reg.name);
 	IOF_TRACE_DEBUG(type, "handle %p size %d offset %d", type->reg.handle,
 			type->reg.size, type->reg.offset);
 	IOF_TRACE_DEBUG(type, "Count: free %d pending %d total %d",
@@ -235,7 +235,7 @@ create(struct iof_pool_type *type)
 	}
 	type->count++;
 
-	IOF_TRACE_UP(ptr, type, "handle");
+	IOF_TRACE_UP(ptr, type, type->reg.name);
 	return ptr;
 }
 
@@ -273,11 +273,14 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 {
 	struct iof_pool_type *type;
 
+	if (!reg->name)
+		return NULL;
+
 	D_ALLOC_PTR(type);
 	if (!type)
 		return NULL;
 
-	IOF_TRACE_UP(type, pool, "iof_pool_type");
+	IOF_TRACE_UP(type, pool, reg->name);
 
 	pthread_mutex_init(&type->lock, NULL);
 	D_INIT_LIST_HEAD(&type->free_list);

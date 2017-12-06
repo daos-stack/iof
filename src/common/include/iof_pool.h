@@ -56,6 +56,7 @@ struct iof_pool_reg {
 	/* Called once at teardown */
 	void	(*release)(void *);
 	void	*handle;
+	char	*name;
 	int	size;
 	int	offset;
 
@@ -72,7 +73,8 @@ struct iof_pool_reg {
  */
 
 #define POOL_TYPE_INIT(itype, imember) .size = sizeof(struct itype),	\
-		.offset = offsetof(struct itype, imember)
+		.offset = offsetof(struct itype, imember),		\
+		.name = #itype,
 
 /* A datastructure used to manage a type.  Includes both the
  * registration data and any live state
