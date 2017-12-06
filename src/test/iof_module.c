@@ -38,61 +38,69 @@
 
 /*** Python/C Shim used for testing ***/
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <python3.4m/Python.h>
 
 #define BUF_SIZE 4096
 
-/* No support for Python versions < 3 */
-#define PyInt_FromLong(x) (PyLong_FromLong((x)))
-#define PyInt_AsLong(x) (PyLong_AsLong((x)))
-#define PyString_AsString(x) (PyBytes_AsString(x))
-#define PyString_Size(x) (PyBytes_Size(x))
-#define Py_InitModule4 Py_InitModule4_64
-
 struct module_state {
-	PyObject *error;
+	PyObject	*error;
+	int		open_fd;
 };
-
-#define GETSTATE(m) ((struct module_state *)PyModule_GetState(m))
 
 /* Test low-level POSIX APIs */
 static PyObject *open_test_file(PyObject *self, PyObject *args)
 {
-	char *mount_dir;
-	char test_file[BUF_SIZE];
+	struct module_state	*st = PyModule_GetState(self);
+	const char		*mount_dir;
+	char			*template = NULL;
 	int fd;
-	size_t len;
+	int rc;
 
 	if (!PyArg_ParseTuple(args, "s", &mount_dir))
-		Py_RETURN_NONE;
+		return NULL;
 
-	len = strlen(mount_dir);
-	snprintf(test_file, BUF_SIZE - len, "%s/posix_test_file", mount_dir);
-	test_file[BUF_SIZE - 1] = 0;
-
-	errno = 0;
-	fd = open(test_file, O_RDWR | O_CREAT, 0600);
-
-	if (errno == 0) {
-		printf("\nOpened %s, fd = %d\n", test_file, fd);
-		return PyInt_FromLong(fd);
+	rc = asprintf(&template, "%s/posix_test_file_XXXXXX", mount_dir);
+	if (rc == -1 || !template) {
+		PyErr_SetString(st->error, "Unable to open file");
+		return NULL;
 	}
 
-	printf("Open file errno = %s\n", strerror(errno));
-	Py_RETURN_NONE;
+	errno = 0;
+	fd = mkstemp(template);
+	if (fd == -1) {
+		printf("mkstemp = %s\n", strerror(errno));
+		free(template);
+		PyErr_SetString(st->error, "Unable to open file");
+		return NULL;
+	}
+
+	printf("\nOpened %s, fd = %d\n", template, fd);
+	free(template);
+	st->open_fd = fd;
+	return PyLong_FromLong(fd);
 }
 
 static PyObject *test_write_file(PyObject *self, PyObject *args)
 {
-	int fd;
-	char write_buf[BUF_SIZE];
-	ssize_t bytes;
-	size_t len;
+	struct module_state *st = PyModule_GetState(self);
+	int	fd;
+	char	write_buf[BUF_SIZE];
+	ssize_t	bytes;
+	size_t	len;
 
 	if (!PyArg_ParseTuple(args, "i", &fd))
-		Py_RETURN_NONE;
+		return NULL;
+
+	if (st->open_fd == 0 || st->open_fd != fd) {
+		PyErr_SetString(st->error, "Invalid fd");
+		return NULL;
+	}
 
 	snprintf(write_buf, BUF_SIZE, "Writing to a test file\n");
 	len = strlen(write_buf);
@@ -109,7 +117,7 @@ static PyObject *test_write_file(PyObject *self, PyObject *args)
 	if (errno == 0) {
 		printf("Wrote %zd bytes, expected %zu %d %s\n", bytes, len,
 		       errno, strerror(errno));
-		return PyInt_FromLong(fd);
+		return PyLong_FromLong(fd);
 	}
 
 	printf("Write file errno = %s\n", strerror(errno));
@@ -118,12 +126,18 @@ static PyObject *test_write_file(PyObject *self, PyObject *args)
 
 static PyObject *test_read_file(PyObject *self, PyObject *args)
 {
-	int fd;
-	char read_buf[BUF_SIZE] = {0};
-	ssize_t bytes;
+	struct module_state *st = PyModule_GetState(self);
+	int	fd;
+	char	read_buf[BUF_SIZE] = {0};
+	ssize_t	bytes;
 
 	if (!PyArg_ParseTuple(args, "i", &fd))
-		Py_RETURN_NONE;
+		return NULL;
+
+	if (st->open_fd == 0 || st->open_fd != fd) {
+		PyErr_SetString(st->error, "Invalid fd");
+		return NULL;
+	}
 
 	if (!test_write_file(self, args))
 		Py_RETURN_NONE;
@@ -140,7 +154,7 @@ static PyObject *test_read_file(PyObject *self, PyObject *args)
 	if (errno == 0) {
 		printf("Read %zd bytes\n", bytes);
 		printf("Read: '%s'\n", read_buf);
-		return PyInt_FromLong(fd);
+		return PyLong_FromLong(fd);
 	}
 
 	printf("Read file errno = %s\n", strerror(errno));
@@ -149,39 +163,86 @@ static PyObject *test_read_file(PyObject *self, PyObject *args)
 
 static PyObject *close_test_file(PyObject *self, PyObject *args)
 {
+	struct module_state *st = PyModule_GetState(self);
 	int fd, rc;
 
 	if (!PyArg_ParseTuple(args, "i", &fd))
-		Py_RETURN_NONE;
+		return NULL;
+
+	if (st->open_fd == 0 || st->open_fd != fd) {
+		PyErr_SetString(st->error, "Invalid fd");
+		return NULL;
+	}
 
 	errno = 0;
 	rc = close(fd);
 
-	if (errno == 0) {
-		printf("Closed fd  = %d\n", fd);
-		return PyInt_FromLong(rc);
+	if (rc == 0) {
+		st->open_fd = 0;
+		printf("Closed fd = %d\n", fd);
+		Py_RETURN_NONE;
 	}
 
 	printf("Close file errno = %s\n", strerror(errno));
+
+	PyErr_SetString(st->error, "Unable to close file");
+	return NULL;
+}
+
+static PyObject *test_unlink(PyObject *self, PyObject *args)
+{
+	struct module_state	*st = PyModule_GetState(self);
+	char			*filename = NULL;
+	const char		*path;
+	int rc;
+	int err;
+
+	if (!PyArg_ParseTuple(args, "s", &path))
+		return NULL;
+
+	rc = asprintf(&filename, "%s/no_file", path);
+	if (rc == -1 || !filename) {
+		PyErr_SetString(st->error, "Unable to create filename");
+		return NULL;
+	}
+
+	errno = 0;
+	rc = unlink(filename);
+	err = errno;
+	free(filename);
+
+	printf("unlink returned %d errno = %s\n", rc, strerror(err));
+
+	if (rc != -1 || err != ENOENT) {
+		PyErr_SetString(st->error, "Incorrect return values");
+		return NULL;
+	}
+
 	Py_RETURN_NONE;
 }
 
 static PyMethodDef iofMethods[] = {
-	{ "open_test_file", (PyCFunction)open_test_file, METH_VARARGS, NULL },
-	{ "test_write_file", (PyCFunction)test_write_file, METH_VARARGS, NULL },
-	{ "test_read_file", (PyCFunction)test_read_file, METH_VARARGS, NULL },
-	{ "close_test_file", (PyCFunction)close_test_file, METH_VARARGS, NULL },
+	{ "open_test_file", open_test_file, METH_VARARGS, NULL },
+	{ "test_write_file", test_write_file, METH_VARARGS, NULL },
+	{ "test_read_file", test_read_file, METH_VARARGS, NULL },
+	{ "close_test_file", close_test_file, METH_VARARGS, NULL },
+	{ "test_unlink", test_unlink, METH_VARARGS, NULL},
+	{ NULL, NULL, 0, NULL},
 };
 
 static int iofmod_traverse(PyObject *m, visitproc visit, void *arg)
 {
-	Py_VISIT(GETSTATE(m)->error);
+	struct module_state *st = PyModule_GetState(m);
+
+	Py_VISIT(st->error);
 	return 0;
 }
 
 static int iofmod_clear(PyObject *m)
 {
-	Py_CLEAR(GETSTATE(m)->error);
+	struct module_state *st = PyModule_GetState(m);
+
+	Py_CLEAR(st->error);
 	return 0;
 }
 
@@ -204,12 +265,13 @@ PyMODINIT_FUNC PyInit_iofmod(void)
 
 	module = PyModule_Create(&moduledef);
 
-	st = GETSTATE(module);
-	st->error = PyErr_NewException("myextension.Error", NULL, NULL);
+	st = PyModule_GetState(module);
+	st->error = PyErr_NewException("iofmod.failure", NULL, NULL);
 	if (!st->error) {
 		Py_DECREF(module);
 			return NULL;
 	}
+	Py_INCREF(st->error);
 
 	return module;
 }

@@ -749,6 +749,8 @@ class Testlocal(unittest.TestCase,
         if not have_iofmod:
             self.skipTest("iofmod not loadable")
 
+        FD_TESTS = ['test_write_file', 'test_read_file']
+
         subtest_count = 0
         for possible in sorted(dir(iofmod)):
             if not possible.startswith('test_'):
@@ -761,18 +763,24 @@ class Testlocal(unittest.TestCase,
             subtest_count += 1
             with self.subTest(possible):
                 self.mark_log('Starting test iofmod.%s' % possible)
-                fd = iofmod.open_test_file(self.import_dir)
-                if fd is None:
-                    self.fail('File descriptor returned null on open')
+                if possible in FD_TESTS:
+                    fd = iofmod.open_test_file(self.import_dir)
+                    if fd is None:
+                        self.fail('File descriptor returned null on open')
 
-                ret = obj(fd)
-                self.logger.info("%s returned %s", possible, ret)
-                if ret is None:
-                    self.fail('%s returned null' % possible)
+                    ret = obj(fd)
+                    self.logger.info("%s returned %s", possible, str(ret))
+                    if ret is None:
+                        iofmod.close_test_file(fd)
+                        self.fail('%s returned null' % possible)
 
-                ret = iofmod.close_test_file(fd)
-                if ret is None:
-                    self.fail('File not closed successfully')
+                    # This will raise an exception of failure.
+                    iofmod.close_test_file(fd)
+
+                else:
+                    ret = obj(self.import_dir)
+                    self.logger.info("%s returned %s", possible, ret)
+
                 self.mark_log('Finished test iofmod.%s, cleaning up' % possible)
 
                 self.clean_export_dir()
