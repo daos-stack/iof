@@ -67,6 +67,8 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
+	IOF_TRACE_LINK(req, desc, "mkdir");
+
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
 
 	strncpy(desc->ie->name, name, NAME_MAX);

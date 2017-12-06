@@ -93,9 +93,10 @@ out:
 	if (rc) {
 		drop_ino_ref(desc->fs_handle, desc->ie->parent);
 		IOF_FUSE_REPLY_ERR(request->req, rc);
-	}
-	else
+	} else {
 		fuse_reply_entry(request->req, &entry);
+		IOF_TRACE_DOWN(request->req);
+	}
 	IOC_REQ_RELEASE_POOL(desc, pool);
 }
 
@@ -120,6 +121,8 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
+	IOF_TRACE_LINK(req, desc, "lookup");
+
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
 
 	/* Find the GAH of the parent */

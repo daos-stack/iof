@@ -1876,6 +1876,5 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 
 	self.handle = state;
 	*fns = &self;
-	IOF_TRACE_UP(self.handle, *fns, "iof_state");
 	return IOF_SUCCESS;
 }

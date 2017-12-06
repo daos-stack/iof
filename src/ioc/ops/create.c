@@ -175,7 +175,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	if (!handle)
 		D_GOTO(out_err, ret = ENOMEM);
 
-	IOF_TRACE_LINK(handle, req, "handle");
+	IOF_TRACE_LINK(req, handle, "create");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req = req;

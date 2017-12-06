@@ -68,7 +68,10 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
+	IOF_TRACE_LINK(req, desc, "symlink");
+
 	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
+
 	strncpy(in->common.name.name, name, NAME_MAX);
 	desc->dest = strdup(link);
 	if (!desc->dest)

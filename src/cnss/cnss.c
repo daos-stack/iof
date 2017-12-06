@@ -60,25 +60,23 @@
 /* A descriptor for the plugin */
 struct plugin_entry {
 	/* The callback functions, as provided by the plugin */
-	struct cnss_plugin *fns;
+	struct cnss_plugin	*fns;
 	/* The size of the fns struct */
-	size_t fns_size;
+	size_t			fns_size;
 
 	/* The dl_open() reference to this so it can be closed cleanly */
-	void *dl_handle;
+	void			*dl_handle;
 
 	/* The list of plugins */
-	d_list_t list;
+	d_list_t		list;
 
 	/* Flag to say if plugin is active */
-	int active;
+	bool			active;
 
-	/* The copy of the plugin->cnss callback functions this
-	 * plugin uses
-	 */
-	struct cnss_plugin_cb self_fns;
+	/* The copy of the plugin->cnss callback functions this plugin uses */
+	struct cnss_plugin_cb	self_fns;
 
-	d_list_t fuse_list;
+	d_list_t		fuse_list;
 };
 
 struct fs_info {
@@ -143,7 +141,7 @@ struct fs_info {
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
 					_li->fns->name, _rc);	\
-				_li->active = 0;			\
+				_li->active = false;			\
 			}						\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
@@ -181,7 +179,7 @@ struct fs_info {
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
 					     _li->fns->name, _rc);	\
-				_li->active = 0;			\
+				_li->active = false;			\
 			}						\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
@@ -213,16 +211,48 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 	if (!entry)
 		return CNSS_ERR_NOMEM;
 
+	IOF_TRACE_UP(entry, info, "plugin_entry");
+
 	rc = fn(&entry->fns, &entry->fns_size);
 	if (rc != 0) {
+		IOF_TRACE_INFO(entry, "Plugin at entry point %p failed (%d)",
+			       FN_TO_PVOID(fn), rc);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
-		IOF_LOG_INFO("Plugin at entry point %p failed (%d)",
-			     FN_TO_PVOID(fn), rc);
 		return CNSS_SUCCESS;
 	}
 
-	IOF_TRACE_UP(entry, info, "plugin_entry");
+	if (!entry->fns->name) {
+		IOF_TRACE_ERROR(entry, "Disabling plugin: name is required\n");
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return CNSS_BAD_DATA;
+	}
+
+	if (entry->fns->version != CNSS_PLUGIN_VERSION) {
+		IOF_TRACE_ERROR(entry,
+				"Plugin version incorrect %x %x, disabling",
+				entry->fns->version,
+				CNSS_PLUGIN_VERSION);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return CNSS_BAD_DATA;
+	}
+
+	rc = ctrl_create_subdir(NULL, entry->fns->name,
+				&entry->self_fns.plugin_dir);
+	if (rc != 0) {
+		IOF_TRACE_ERROR(entry,
+				"ctrl dir creation failed (%d), disabling", rc);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return CNSS_BAD_DATA;
+	}
+
+	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
+
+	entry->active = true;
+
 	entry->dl_handle = dl_handle;
 
 	entry->self_fns.fuse_version = 3;
@@ -251,35 +281,11 @@ static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
 		     (void *)entry->fns->handle,
 		     FN_TO_PVOID(fn));
 
-	if (entry->fns->version == CNSS_PLUGIN_VERSION) {
-		entry->active = 1;
-	} else {
-		IOF_LOG_INFO("Plugin %s(%p) version incorrect %x %x, disabling",
-			     entry->fns->name,
-			     (void *)entry->fns->handle,
-			     entry->fns->version,
-			     CNSS_PLUGIN_VERSION);
-	}
-
-	if (entry->fns->name == NULL) {
-		IOF_LOG_ERROR("Disabling plugin: name is required\n");
-		entry->active = 0;
-	}
-	rc = ctrl_create_subdir(NULL, entry->fns->name,
-				&entry->self_fns.plugin_dir);
-	if (rc != 0) {
-		IOF_LOG_ERROR("Disabling plugin %s: ctrl dir creation failed"
-			      " %d", entry->fns->name, rc);
-		entry->active = 0;
-	}
-
-	if (sizeof(struct cnss_plugin) != entry->fns_size) {
-		IOF_LOG_INFO("Plugin %s(%p) size incorrect %zd %zd, some functions may be disabled",
-			     entry->fns->name,
-			     (void *)entry->fns->handle,
-			     entry->fns_size,
-			     sizeof(struct cnss_plugin));
-	}
+	if (sizeof(struct cnss_plugin) != entry->fns_size)
+		IOF_TRACE_WARNING(entry->fns->handle,
+				  "Plugin size incorrect %zd %zd, some functions may be disabled",
+				  entry->fns_size,
+				  sizeof(struct cnss_plugin));
 
 	return CNSS_SUCCESS;
 }

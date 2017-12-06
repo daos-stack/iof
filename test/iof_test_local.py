@@ -445,10 +445,13 @@ class Testlocal(unittest.TestCase,
         for dir_path, _, file_list in os.walk(self.log_path, topdown=False):
             for fname in file_list:
                 full_path = os.path.join(dir_path, fname)
-                fstat = os.stat(full_path)
-                if fstat.st_size == 0:
-                    os.unlink(full_path)
-                    self.logger.debug("Deleted %s", full_path)
+                try:
+                    fstat = os.stat(full_path)
+                    if fstat.st_size == 0:
+                        os.unlink(full_path)
+                        self.logger.debug("Deleted %s", full_path)
+                except FileNotFoundError:
+                    pass
             try:
                 os.rmdir(dir_path)
                 self.logger.debug("Removed %s", dir_path)

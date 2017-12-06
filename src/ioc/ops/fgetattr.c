@@ -86,7 +86,7 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
-	IOF_TRACE_LINK(req, desc, "request");
+	IOF_TRACE_LINK(req, desc, "getattr");
 
 	if (handle) {
 		if (!handle->common.gah_valid)
