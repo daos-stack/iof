@@ -130,8 +130,8 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 			IOF_LOG_ERROR("Failed to make local bulk handle %d",
 				      rc);
 			D_FREE(iov.iov_buf);
-			ret = EIO;
-			goto out;
+			crt_req_decref(rpc);
+			D_GOTO(out, ret = EIO);
 		}
 		bulk = in->bulk;
 	}
@@ -145,18 +145,14 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 
 	iof_fs_wait(&fs_handle->proj, &reply.tracker);
 
-	if (reply.err != 0) {
-		ret = reply.err;
-		goto out;
-	}
+	if (reply.err != 0)
+		D_GOTO(out, ret = reply.err);
 
 	if (reply.out->err != 0) {
 		if (reply.out->err == IOF_GAH_INVALID)
 			dir_handle->gah_valid = 0;
 		IOF_LOG_ERROR("Error from target %d", reply.out->err);
-		crt_req_decref(reply.rpc);
-		ret = EIO;
-		goto out;
+		D_GOTO(out, ret = EIO);
 	}
 
 	IOF_LOG_DEBUG("Reply received iov: %d bulk: %d", reply.out->iov_count,
@@ -168,8 +164,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		if (reply.out->replies.iov_len != reply.out->iov_count *
 			sizeof(struct iof_readdir_reply)) {
 			IOF_LOG_ERROR("Incorrect iov reply");
-			ret = EIO;
-			goto out;
+			D_GOTO(out, ret = EIO);
 		}
 		dir_handle->replies = reply.out->replies.iov_buf;
 		dir_handle->rpc = reply.rpc;

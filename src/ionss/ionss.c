@@ -356,32 +356,31 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	errno = 0;
 	fd = open(parent->proc_fd_name, O_DIRECTORY | O_RDONLY);
 
-	if (fd == -1) {
-		out->rc = errno;
-		goto out;
-	}
+	if (fd == -1)
+		D_GOTO(out, out->rc = errno);
 
 	D_ALLOC_PTR(local_handle);
 	if (!local_handle) {
-		out->err = IOF_ERR_NOMEM;
 		close(fd);
-		goto out;
+		D_GOTO(out, out->err = IOF_ERR_NOMEM);
 	}
 
 	local_handle->fd = fd;
 	local_handle->h_dir = fdopendir(local_handle->fd);
 	local_handle->offset = 0;
 
+	pthread_rwlock_wrlock(&base.gah_rwlock);
 	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
+	pthread_rwlock_unlock(&base.gah_rwlock);
+
 	if (rc != IOS_SUCCESS) {
 		closedir(local_handle->h_dir);
 		D_FREE(local_handle);
-		out->err = IOF_ERR_INTERNAL;
-		goto out;
+		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
 	}
 
-	IOF_LOG_INFO("Handle %p " GAH_PRINT_FULL_STR, local_handle,
-		     GAH_PRINT_FULL_VAL(out->gah));
+	IOF_TRACE_INFO(local_handle, GAH_PRINT_FULL_STR,
+		       GAH_PRINT_FULL_VAL(out->gah));
 
 out:
 	IOF_TRACE_DEBUG(parent, "result err %d rc %d", out->err, out->rc);
@@ -623,7 +622,9 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		D_FREE(handle);
 	}
 
+	pthread_rwlock_wrlock(&base.gah_rwlock);
 	ios_gah_deallocate(base.gs, &in->gah);
+	pthread_rwlock_unlock(&base.gah_rwlock);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
