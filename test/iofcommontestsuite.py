@@ -65,7 +65,6 @@ By default the output is displayed on the screen.
 #pylint: disable=too-many-locals
 #pylint: disable=broad-except
 import os
-import shlex
 import subprocess
 import time
 import logging
@@ -136,11 +135,15 @@ class CommonTestSuite():
         """create the log directory name"""
         pass
 
-    def common_launch_cmd(self, msg, cmdstr):
+    def common_launch_cmd(self, cmd):
         """Launch a test and wait for it to complete"""
+
+        cmdarg = cmd
+        msg = cmd[0].split('/')[-1]
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
-          msg, cmdstr)
-        cmdarg = shlex.split(cmdstr)
+                         msg,
+                         ' '.join(cmd))
+
         to_redirect = os.getenv('TR_REDIRECT_OUTPUT', "no").lower()
 
         # If TR_REDIRECT_OUTPUT = "no"; the output is redirected to the screen
@@ -163,11 +166,6 @@ class CommonTestSuite():
             try:
                 with open(cmdfileout, mode='a') as outfile, \
                     open(cmdfileerr, mode='a') as errfile:
-                    outfile.write("==============================\n " + \
-                                  " Command: " + str(cmdstr) + \
-                                  "\n============================\n")
-                    outfile.flush()
-                    errfile.write("\n============================\n")
                     procrtn = subprocess.call(cmdarg, timeout=180,
                                               stdout=outfile,
                                               stderr=errfile)
@@ -180,11 +178,15 @@ class CommonTestSuite():
 
         return procrtn
 
-    def common_launch_process(self, msg, cmdstr):
+    def common_launch_process(self, cmd):
         """Launch a process"""
+
+        cmdarg = cmd
+        msg = cmd[0].split('/')[-1]
         self.logger.info("Testnss: start %s - input string:\n %s\n", \
-          msg, cmdstr)
-        cmdarg = shlex.split(cmdstr)
+                        msg,
+                         ' '.join(cmd))
+
         to_redirect = os.getenv('TR_REDIRECT_OUTPUT', "no").lower()
 
         # If TR_REDIRECT_OUTPUT = "no"; the output is redirected to the screen
@@ -205,11 +207,6 @@ class CommonTestSuite():
             cmdfileerr = os.path.join(log_path, "common_launch_process.err")
             with open(cmdfileout, mode='a') as outfile, \
                 open(cmdfileerr, mode='a') as errfile:
-                outfile.write("=======================================\n " + \
-                              " Command: " + str(cmdstr) + \
-                              "\n======================================\n")
-                outfile.flush()
-                errfile.write("\n============================\n")
                 proc = subprocess.Popen(cmdarg,
                                         stdout=outfile,
                                         stderr=errfile)

@@ -54,7 +54,6 @@ import stat
 import time
 import shutil
 import getpass
-import resource
 import subprocess
 import tempfile
 import yaml
@@ -157,17 +156,6 @@ class Testlocal(unittest.TestCase,
             method = method[5:]
         return os.path.join(parts[1], method)
 
-    def setLimits(self):
-        """Set the open file resource limit to maximum"""
-
-        (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
-        self.logger.info("File limits are soft:%d hard:%d", soft, hard)
-
-        if soft != hard:
-            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
-            (soft, hard) = resource.getrlimit(resource.RLIMIT_NOFILE)
-            self.logger.info("File limits are soft:%d hard:%d", soft, hard)
-
     def internals_path_testing_setup(self):
         """Call all methods for internals path testing framework. pyunit will
         call this during setUp() of each test, go method will call this
@@ -218,8 +206,6 @@ class Testlocal(unittest.TestCase,
 
         if self.id() == '__main__.Testlocal.go':
             self.test_method = 'go'
-
-        self.setLimits()
 
         # set the standalone test flag
         self.test_local = True
@@ -310,7 +296,7 @@ class Testlocal(unittest.TestCase,
         cmd.extend(valgrind)
         cmd.extend(['ionss', '-c', config_file.name])
 
-        self.proc = self.common_launch_process('', ' '.join(cmd))
+        self.proc = self.common_launch_process(cmd)
 
         if valgrind:
             waittime = 120
@@ -439,7 +425,7 @@ class Testlocal(unittest.TestCase,
         for mount in ['.ctrl', 'usr', 'exp']:
             mp = os.path.join(self.cnss_prefix, mount)
             try:
-                self.common_launch_cmd("", "fusermount -q -u %s" % mp)
+                self.common_launch_cmd(['fusermount', '-q', '-u', mp])
             except FileNotFoundError:
                 pass
             os.rmdir(mp)
@@ -569,8 +555,12 @@ class Testlocal(unittest.TestCase,
         self.logger.info('Test file is %s %d', target_file, target_file_size)
         test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', target_file)
 
-        cmd = 'dd if=%s of=/dev/null bs=64k iflag=direct' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
+        cmd = ['dd',
+               'if=%s' % test_file,
+               'of=/dev/null',
+               'bs=64k',
+               'iflag=direct']
+        rtn = self.common_launch_cmd(cmd)
         if rtn != 0:
             self.fail('DD returned error')
 
@@ -578,8 +568,14 @@ class Testlocal(unittest.TestCase,
         """Write a large file"""
         test_file = os.path.join(self.import_dir, 'test_file')
 
-        cmd = 'dd if=/dev/zero of=%s bs=4k count=8 oflag=direct' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
+        cmd = ['dd',
+               'if=/dev/zero',
+               'of=%s' % test_file,
+               'bs=4k',
+               'count=8',
+               'oflag=direct']
+
+        rtn = self.common_launch_cmd(cmd)
         if rtn != 0:
             self.fail('DD returned error')
 
@@ -633,13 +629,13 @@ class Testlocal(unittest.TestCase,
         self.logger.info('Test file is %s %d', target_file, target_file_size)
         test_file = os.path.join(self.cnss_prefix, 'usr', 'bin', target_file)
 
-        cmd = 'dd if=%s of=/dev/null bs=4k' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
+        cmd = ['dd', 'if=%s' % test_file, 'of=/dev/null', 'bs=4k']
+        rtn = self.common_launch_cmd(cmd)
         if rtn != 0:
             self.fail('DD returned error')
 
-        cmd = 'dd if=%s of=/dev/null bs=65k' % test_file
-        rtn = self.common_launch_cmd('dd', cmd)
+        cmd = ['dd', 'if=%s' % test_file, 'of=/dev/null', 'bs=64k']
+        rtn = self.common_launch_cmd(cmd)
         if rtn != 0:
             self.fail('DD bs=65k returned error')
 
@@ -739,7 +735,7 @@ class Testlocal(unittest.TestCase,
         short_run = list(mdtest)
         short_run.extend(['-i', '3', '-I', '10'])
         start_time = time.time()
-        rtn = self.common_launch_cmd('mdtest', ' '.join(short_run))
+        rtn = self.common_launch_cmd(short_run)
         elapsed = time.time() - start_time
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
@@ -749,7 +745,7 @@ class Testlocal(unittest.TestCase,
         long_run = list(mdtest)
         long_run.extend(['-i', '5', '-I', '500'])
         start_time = time.time()
-        rtn = self.common_launch_cmd(mdtest_cmdstr, ' '.join(long_run))
+        rtn = self.common_launch_cmd(long_run)
         elapsed = time.time() - start_time
         print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
         if rtn != 0:
