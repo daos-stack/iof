@@ -88,9 +88,9 @@ class RpcTrace(common_methods.ColorizedOutput):
 
     SOURCE = None
 
-    def __init__(self, source, internals_log_file):
+    def __init__(self, source, output_stream):
         self.SOURCE = source
-        self.internals_log_file = internals_log_file
+        self.set_log(output_stream)
 
     def rpc_error_state_tracing(self, rpc, rpc_state, opcode):
         """Error checking for rpc state"""

@@ -332,11 +332,11 @@ class Testlocal(unittest.TestCase,
 
         if self.internals_tracing == 'yes':
             #Create a dump file for all testing and internals path output
-            self.internals_log_file = os.path.realpath(os.path.\
-                                                       join(self.log_path,
-                                                            'internals.out'))
-            with open(self.internals_log_file, 'w') as f:
-                f.write('\nStarting for {0}:\n'.format(self.id()))
+            i_log_file = os.path.realpath(os.path.join(self.log_path,
+                                                       'internals.out'))
+            self.internals_log_file = open(i_log_file, 'w')
+            self.internals_log_file.write('\nStarting for {0}:\n' \
+                                          .format(self.id()))
 
             if self.test_method == 'pyunit':
                 self.internals_path_testing_setup()
@@ -403,6 +403,9 @@ class Testlocal(unittest.TestCase,
         if descriptor is not None:
             self.origin_rpctrace.rpc_trace_output(descriptor, self.cnss_logfile)
 
+        self.internals_log_file.close()
+        self.internals_log_file = None
+
     def tearDown(self):
         """tear down the test"""
 
@@ -421,10 +424,10 @@ class Testlocal(unittest.TestCase,
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
 
-        self.cleanup(procrtn)
-
         if self.internals_tracing == 'yes':
             self.rpc_descriptor_tracing()
+
+        self.cleanup(procrtn)
 
         self.normal_output("Ending {0}".format(self.id()))
 

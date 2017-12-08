@@ -69,9 +69,9 @@ CTRL_DIR = None
 
 try:
     from colorama import Fore, Style
-    COLORAMA = 'yes'
+    COLORAMA = True
 except ImportError:
-    COLORAMA = 'no'
+    COLORAMA = False
 
 def import_list():
     """Return a array of imports
@@ -104,71 +104,66 @@ def get_writeable_import():
 class ColorizedOutput():
     """Contains all output methods for using colorized output"""
 
-    internals_log_file = None
     logger = logging.getLogger("TestRunnerLogger")
+    stream = None
+
+    def set_log(self, stream):
+        """ Set a logfile stream """
+        self.stream = stream
+
+    def colour_output(self, colour, output, prefix=None):
+        """Show output in colour"""
+        if prefix:
+            prefix = ' :{0}'.format(prefix)
+        else:
+            prefix = ''
+        if colour and COLORAMA:
+            self.logger.info(getattr(Fore, colour) + output)
+            print(Style.RESET_ALL, end="")
+        else:
+            self.logger.info(prefix + output)
+        if self.stream:
+            self.stream.write("{0}{1}\n".format(prefix, output))
 
     def success_output(self, output):
         """Green output to console, writes output to internals.out"""
-        if COLORAMA == 'yes':
-            self.logger.info(Fore.GREEN + output)
-            print(Style.RESET_ALL, end="")
-        else:
-            self.logger.info(output)
-        if self.internals_log_file is not None:
-            with open(self.internals_log_file, 'a') as f:
-                f.write("{0}\n".format(output))
+        self.colour_output('GREEN', output)
 
     def error_output(self, output):
         """Red output to console, writes output to internals.out"""
-        if COLORAMA == 'yes':
-            self.logger.info(Fore.RED + output)
-            print(Style.RESET_ALL, end="")
-        else:
-            self.logger.info("ERROR: %s", output)
-        if self.internals_log_file is not None:
-            with open(self.internals_log_file, 'a') as f:
-                f.write("ERROR: {0}\n".format(output))
+        self.colour_output('RED', output, 'ERROR')
 
     def warning_output(self, output):
         """Yellow output to console, writes output to internals.out"""
-        if COLORAMA == 'yes':
-            self.logger.info(Fore.YELLOW + output)
-            print(Style.RESET_ALL, end="")
-        else:
-            self.logger.info("WARN: %s", output)
-        if self.internals_log_file is not None:
-            with open(self.internals_log_file, 'a') as f:
-                f.write("WARN: {0}\n".format(output))
+        self.colour_output('YELLOW', output, 'WARN')
 
     def normal_output(self, output):
         """Normal output to console, writes output to internals.out"""
-        self.logger.info(output)
-        if self.internals_log_file is not None:
-            with open(self.internals_log_file, 'a') as f:
-                f.write("{0}\n".format(output))
+        self.colour_output(None, output)
 
-#pylint: disable=too-many-branches
     def list_output(self, output_list):
         """Writes entire list of strings to internals.out, only output
         colorized warnings or errors to console by default,
         otherwise if dump_to_console is set output entire list to console"""
-        with open(self.internals_log_file, 'a') as f:
+        if self.stream:
             for item in output_list:
-                prefix = item.split(' ', 1)[0]
-                if prefix == 'MARK:':
-                    f.write("***** {0} *****\n".format(item.split(' ', 1)[1]))
-                elif item != '':
-                    f.write("{0}\n".format(item))
+                if item.startswith('MARK:'):
+                    self.stream.write("***** {0} *****\n".format(item[6:]))
+                else:
+                    self.stream.write("{0}\n".format(item))
+        if not COLORAMA:
+            return
         for item in output_list:
-            prefix = item.split(' ', 1)[0]
-            if COLORAMA == 'yes':
-                if prefix == 'ERROR:':
-                    self.logger.info(Fore.RED + item.split(' ', 1)[1])
-                elif prefix == 'WARN:':
-                    self.logger.info(Fore.YELLOW + item.split(' ', 1)[1])
-                print(Style.RESET_ALL, end="")
+            try:
+                (prefix, output) = item.split(' ', 1)
+            except ValueError:
+                prefix = None
 
-#pylint: enable=too-many-branches
+            if prefix == 'ERROR:':
+                self.logger.info(Fore.RED + output)
+            elif prefix == 'WARN:':
+                self.logger.info(Fore.YELLOW + output)
+            print(Style.RESET_ALL, end="")
 
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
