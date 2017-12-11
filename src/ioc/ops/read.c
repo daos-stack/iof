@@ -45,21 +45,22 @@ static void
 read_bulk_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_rb *rb = cb_info->cci_arg;
-	struct iof_readx_in *in = crt_req_get(cb_info->cci_rpc);
 	struct iof_readx_out *out = crt_reply_get(cb_info->cci_rpc);
 	int rc = 0;
 	size_t bytes_read = 0;
 	void *buff = NULL;
 
 	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(rb, "Bad RPC reply %d",
-			       cb_info->cci_rc);
+		IOF_TRACE_INFO(rb, "Bad RPC reply %d", cb_info->cci_rc);
+		rb->error = true;
 		D_GOTO(out, rc = EIO);
 	}
 
 	if (out->err) {
-		IOF_TRACE_ERROR(rb, "Error from target %d",
-				out->err);
+		IOF_TRACE_ERROR(rb, "Error from target %d", out->err);
+		rb->error = true;
+		if (out->err == IOF_GAH_INVALID)
+			rb->handle->common.gah_valid = 0;
 		D_GOTO(out, rc = EIO);
 	}
 
@@ -73,7 +74,7 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		bytes_read = out->data.iov_len;
 	} else if (out->bulk_len > 0) {
 		bytes_read = out->bulk_len;
-		buff = rb->buf->buf[0].mem;
+		buff = rb->lb.buf;
 	}
 
 out:
@@ -99,11 +100,9 @@ out:
 						rc, strerror(-rc));
 
 		} else {
-			struct fuse_bufvec *buf;
-
-			buf = rb->buf;
-			buf->buf[0].size = bytes_read;
-			rc = fuse_reply_data(rb->req, buf, 0);
+			rb->fbuf.buf[0].size = bytes_read;
+			rb->fbuf.buf[0].mem = buff;
+			rc = fuse_reply_data(rb->req, &rb->fbuf, 0);
 			if (rc != 0)
 				IOF_TRACE_ERROR(rb->req,
 						"fuse_reply_data returned %d:%s",
@@ -111,56 +110,38 @@ out:
 		}
 	}
 	iof_pool_release(rb->pt, rb);
-	crt_bulk_free(in->data_bulk);
 }
 
 static void
 ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	struct iof_file_handle *handle)
 {
-	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_readx_in *in = NULL;
 	fuse_req_t req = rb->req;
-	crt_rpc_t *rpc = NULL;
-	d_sg_list_t sgl = {0};
-	d_iov_t iov = {0};
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, readx), &rpc);
-	if (rc || !rpc)
+	rc = crt_req_set_endpoint(rb->rpc, &handle->common.ep);
+	if (rc)
 		D_GOTO(out_err, rc = EIO);
 
-	IOF_TRACE_UP(rpc, handle, "read_bulk_rpc");
-	in = crt_req_get(rpc);
+	IOF_TRACE_UP(rb, handle, "read_bulk_rpc");
+	in = crt_req_get(rb->rpc);
 	in->gah = handle->common.gah;
 	in->xtvec.xt_off = position;
 	in->xtvec.xt_len = len;
+	in->data_bulk = rb->lb.handle;
 
-	iov.iov_len = len;
-	iov.iov_buf_len = len;
-	iov.iov_buf = (void *)rb->buf->buf[0].mem;
-	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
-
-	rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
-			     &in->data_bulk);
+	rc = crt_req_send(rb->rpc, read_bulk_cb, rb);
 	if (rc)
 		D_GOTO(out_err, rc = EIO);
 
-	rc = crt_req_send(rpc, read_bulk_cb, rb);
-	if (rc)
-		D_GOTO(out_err, rc = EIO);
-
+	crt_req_addref(rb->rpc);
+	iof_pool_restock(rb->pt);
 	return;
 
 out_err:
 	IOF_FUSE_REPLY_ERR(req, rc);
 	iof_pool_release(rb->pt, rb);
-	if (in->data_bulk)
-		crt_bulk_free(in->data_bulk);
-	if (rpc)
-		crt_req_decref(rpc);
 }
 
 void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
@@ -190,6 +171,7 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		D_GOTO(out_err, rc = ENOMEM);
 
 	rb->req = req;
+	rb->handle = handle;
 	rb->pt = pt;
 
 	ioc_read_bulk(rb, len, position, handle);

@@ -862,60 +862,65 @@ entry_release(void *arg)
 }
 
 static int
-rb_page_reset(void *arg)
-{
-	struct iof_rb *rb = arg;
-
-	if (rb->buf)
-		return 0;
-
-	D_ALLOC_PTR(rb->buf);
-	if (!rb->buf)
-		return -1;
-
-	D_ALLOC(rb->buf->buf[0].mem, 4096);
-	if (!rb->buf->buf[0].mem) {
-		D_FREE(rb->buf);
-		return -1;
-	}
-
-	rb->buf->count = 1;
-	rb->buf->buf[0].fd = -1;
-
-	return 0;
-}
-
-static int
-rb_init(void *arg, void *handle)
+rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
 	rb->fs_handle = handle;
+	rb->buf_size = 4096;
+	rb->fbuf.count = 1;
+	rb->fbuf.buf[0].fd = -1;
 
 	return 0;
 }
 
 static int
-rb_large_reset(void *arg)
+rb_large_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
-	if (rb->buf)
-		return 0;
+	rb->fs_handle = handle;
+	rb->buf_size = rb->fs_handle->max_read;
+	rb->fbuf.count = 1;
+	rb->fbuf.buf[0].fd = -1;
 
-	/* TODO: This should use MMAP */
-	D_ALLOC_PTR(rb->buf);
-	if (!rb->buf)
-		return -1;
+	return 0;
+}
 
-	D_ALLOC(rb->buf->buf[0].mem, rb->fs_handle->max_read);
-	if (!rb->buf->buf[0].mem) {
-		D_FREE(rb->buf);
-		return -1;
+static int
+rb_reset(void *arg)
+{
+	struct iof_rb *rb = arg;
+	int rc;
+
+	rb->req = 0;
+
+	if (rb->rpc) {
+		crt_req_decref(rb->rpc);
+		crt_req_decref(rb->rpc);
+		rb->rpc = NULL;
 	}
 
-	rb->buf->count = 1;
-	rb->buf->buf[0].fd = -1;
+	if (rb->error) {
+		IOF_BULK_FREE(rb, lb);
+		rb->error = false;
+	}
+
+	if (!rb->lb.buf) {
+		IOF_BULK_ALLOC(rb->fs_handle->proj.crt_ctx, rb, lb,
+			       rb->buf_size, false);
+		if (!rb->lb.buf)
+			return -1;
+	}
+
+	rc = crt_req_create(rb->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(fs_handle, readx), &rb->rpc);
+	if (rc || !rb->rpc) {
+		IOF_TRACE_ERROR(rb, "Could not create request, rc = %u", rc);
+		IOF_BULK_FREE(rb, lb);
+		return -1;
+	}
+	crt_req_addref(rb->rpc);
 
 	return 0;
 }
@@ -925,8 +930,10 @@ rb_release(void *arg)
 {
 	struct iof_rb *rb = arg;
 
-	D_FREE(rb->buf->buf[0].mem);
-	D_FREE(rb->buf);
+	IOF_BULK_FREE(rb, lb);
+
+	crt_req_decref(rb->rpc);
+	crt_req_decref(rb->rpc);
 }
 
 static int
@@ -1555,14 +1562,14 @@ static int initialize_projection(struct iof_state *iof_state,
 						POOL_TYPE_INIT(entry_req, list)};
 
 		struct iof_pool_reg rb_page = { .handle = fs_handle,
-						.init = rb_init,
-						.reset = rb_page_reset,
+						.init = rb_page_init,
+						.reset = rb_reset,
 						.release = rb_release,
 						POOL_TYPE_INIT(iof_rb, list)};
 
 		struct iof_pool_reg rb_large = { .handle = fs_handle,
-						 .init = rb_init,
-						 .reset = rb_large_reset,
+						 .init = rb_large_init,
+						 .reset = rb_reset,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
 

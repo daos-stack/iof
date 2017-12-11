@@ -118,9 +118,14 @@ struct iof_group_info {
 struct iof_rb {
 	d_list_t			list;
 	struct iof_projection_info	*fs_handle;
-	struct fuse_bufvec		*buf;
+	struct iof_file_handle		*handle;
+	struct fuse_bufvec		fbuf;
+	struct iof_local_bulk		lb;
+	crt_rpc_t			*rpc;
 	fuse_req_t			req;
 	struct iof_pool_type		*pt;
+	size_t				buf_size;
+	bool				error;
 };
 
 struct iof_wb {
