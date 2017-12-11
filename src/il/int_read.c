@@ -179,7 +179,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, read_bulk_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send open rpc, rc = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
 		*errcode = EIO;
 		return -1;
 	}

@@ -48,6 +48,7 @@
 #include "ios_gah.h"
 #include "iof_atomic.h"
 #include "iof_fs.h"
+#include "iof_bulk.h"
 #include "iof_pool.h"
 
 struct iof_stats {
@@ -122,6 +123,16 @@ struct iof_rb {
 	struct iof_pool_type		*pt;
 };
 
+struct iof_wb {
+	d_list_t			list;
+	struct iof_projection_info	*fs_handle;
+	struct iof_file_handle		*handle;
+	struct iof_local_bulk		lb;
+	crt_rpc_t			*rpc;
+	fuse_req_t			req;
+	bool				error;
+};
+
 struct iof_projection_info {
 	struct iof_projection		proj;
 	struct iof_ctx			ctx;
@@ -149,6 +160,7 @@ struct iof_projection_info {
 	struct iof_pool_type		*fh_pool;
 	struct iof_pool_type		*rb_pool_page;
 	struct iof_pool_type		*rb_pool_large;
+	struct iof_pool_type		*write_pool;
 	uint32_t			max_read;
 	uint32_t			max_iov_read;
 	uint32_t			readdir_size;
@@ -269,6 +281,17 @@ struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
 		int __rc;						\
 		IOF_TRACE_DEBUG(req, "Returning attr");			\
 		__rc = fuse_reply_attr(req, attr, 0);			\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(req, "fuse_reply_attr returned %d:%s", \
+					__rc, strerror(-__rc));		\
+		IOF_TRACE_DOWN(req);					\
+	} while (0)
+
+#define IOF_FUSE_REPLY_WRITE(req, bytes)				\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(req, "Returning write(%zi)", bytes);	\
+		__rc = fuse_reply_write(req, bytes);			\
 		if (__rc != 0)						\
 			IOF_TRACE_ERROR(req, "fuse_reply_attr returned %d:%s", \
 					__rc, strerror(-__rc));		\

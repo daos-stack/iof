@@ -929,6 +929,65 @@ rb_release(void *arg)
 	D_FREE(rb->buf);
 }
 
+static int
+wb_init(void *arg, void *handle)
+{
+	struct iof_wb *wb = arg;
+
+	wb->fs_handle = handle;
+
+	return 0;
+}
+
+static int
+wb_reset(void *arg)
+{
+	struct iof_wb *wb = arg;
+	int rc;
+
+	wb->req = 0;
+
+	if (wb->rpc) {
+		crt_req_decref(wb->rpc);
+		crt_req_decref(wb->rpc);
+		wb->rpc = NULL;
+	}
+
+	if (wb->error) {
+		IOF_BULK_FREE(wb, lb);
+		wb->error = false;
+	}
+
+	if (!wb->lb.buf) {
+		IOF_BULK_ALLOC(wb->fs_handle->proj.crt_ctx, wb, lb,
+			       wb->fs_handle->proj.max_write, true);
+		if (!wb->lb.buf)
+			return -1;
+	}
+
+	rc = crt_req_create(wb->fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(fs_handle, writex), &wb->rpc);
+	if (rc || !wb->rpc) {
+		IOF_TRACE_ERROR(wb, "Could not create request, rc = %u", rc);
+		IOF_BULK_FREE(wb, lb);
+		return -1;
+	}
+	crt_req_addref(wb->rpc);
+
+	return 0;
+}
+
+static void
+wb_release(void *arg)
+{
+	struct iof_wb *wb = arg;
+
+	crt_req_decref(wb->rpc);
+	crt_req_decref(wb->rpc);
+
+	IOF_BULK_FREE(wb, lb);
+}
+
 static int iof_thread_start(struct iof_ctx *);
 static void iof_thread_stop(struct iof_ctx *);
 
@@ -1507,6 +1566,12 @@ static int initialize_projection(struct iof_state *iof_state,
 						 .release = rb_release,
 						 POOL_TYPE_INIT(iof_rb, list)};
 
+		struct iof_pool_reg wb = { .handle = fs_handle,
+					   .init = wb_init,
+					   .reset = wb_reset,
+					   .release = wb_release,
+					   POOL_TYPE_INIT(iof_wb, list)};
+
 		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
 		if (!fs_handle->dh_pool)
 			return IOF_ERR_NOMEM;
@@ -1551,6 +1616,12 @@ static int initialize_projection(struct iof_state *iof_state,
 							     &rb_large);
 		if (!fs_handle->rb_pool_large)
 			return IOF_ERR_NOMEM;
+
+		fs_handle->write_pool = iof_pool_register(&fs_handle->pool,
+						&wb);
+		if (!fs_handle->write_pool)
+			return IOF_ERR_NOMEM;
+
 	}
 
 	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: %s",

@@ -41,164 +41,135 @@
 #include "log.h"
 #include "ios_gah.h"
 
-struct write_cb_r {
-	struct iof_file_handle *handle;
-	size_t len;
-	struct iof_tracker tracker;
-	int err;
-	int rc;
-};
-
 static void
 write_cb(const struct crt_cb_info *cb_info)
 {
-	struct write_cb_r *reply = cb_info->cci_arg;
-	struct iof_writex_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_wb		*wb = cb_info->cci_arg;
+	struct iof_writex_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_writex_in	*in = crt_req_get(wb->rpc);
+	fuse_req_t		req = wb->req;
+	int rc;
 
 	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		IOF_TRACE_INFO(reply->handle, "Bad RPC reply %d",
-			       cb_info->cci_rc);
-		if (cb_info->cci_rc == -DER_TIMEDOUT)
-			reply->err = EAGAIN;
-		else
-			reply->err = EIO;
-		iof_tracker_signal(&reply->tracker);
-		return;
+		IOF_TRACE_INFO(req, "Bad RPC reply %d", cb_info->cci_rc);
+		D_GOTO(hard_err, rc = EIO);
 	}
 
 	if (out->err) {
 		/* Convert the error types, out->err is a IOF error code
 		 * so translate it to a errno we can pass back to FUSE.
 		 */
-		IOF_TRACE_ERROR(reply->handle, "Error from target %d",
-				out->err);
+		IOF_TRACE_ERROR(req, "Error from target %d", out->err);
 
-		reply->err = EIO;
 		if (out->err == IOF_GAH_INVALID)
-			reply->handle->common.gah_valid = 0;
+			wb->handle->common.gah_valid = 0;
 
-		if (out->err == IOF_ERR_NOMEM)
-			reply->err = EAGAIN;
-
-		iof_tracker_signal(&reply->tracker);
+		D_GOTO(hard_err, rc = EIO);
 		return;
 	}
 
-	reply->len = out->len;
-	reply->rc = out->rc;
-	iof_tracker_signal(&reply->tracker);
+	if (out->rc)
+		D_GOTO(err, rc = out->rc);
+
+	IOF_FUSE_REPLY_WRITE(req, out->len);
+
+	STAT_ADD_COUNT(wb->fs_handle->stats, write_bytes, out->len);
+
+	iof_pool_release(wb->fs_handle->write_pool, wb);
+
+	return;
+
+hard_err:
+	/* This is overly cautious however if there is any non-I/O error
+	 * returned after submitting the RPC then recreate the bulk handle
+	 * before reuse.
+	 */
+	if (in->data_bulk)
+		wb->error = true;
+err:
+	IOF_FUSE_REPLY_ERR(req, rc);
+
+	iof_pool_release(wb->fs_handle->write_pool, wb);
 }
 
-static int
+static void
 ioc_writex(const char *buff, size_t len, off_t position,
-	   struct iof_file_handle *handle)
+	   struct iof_wb *wb, struct iof_file_handle *handle)
 {
-	struct iof_projection_info *fs_handle = handle->fs_handle;
-	struct iof_writex_in *in;
-	crt_bulk_t bulk;
-	struct write_cb_r reply = {0};
-
-	d_sg_list_t sgl = {0};
-	d_iov_t iov = {0};
-	crt_rpc_t *rpc = NULL;
+	struct iof_writex_in *in = crt_req_get(wb->rpc);
 	int rc;
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep,
-			    FS_TO_OP(fs_handle, writex), &rpc);
-	if (rc || !rpc) {
-		IOF_TRACE_ERROR(handle, "Could not create request, rc = %u",
+	rc = crt_req_set_endpoint(wb->rpc, &handle->common.ep);
+	if (rc) {
+		IOF_TRACE_ERROR(handle, "Could not set endpoint, rc = %u",
 				rc);
-		return -EIO;
+		D_GOTO(err, rc = EIO);
 	}
-	IOF_TRACE_LINK(rpc, handle, "writex_rpc");
-
-	in = crt_req_get(rpc);
+	IOF_TRACE_LINK(wb, handle, "writex_rpc");
 
 	in->gah = handle->common.gah;
 
+	memcpy(wb->lb.buf, buff, len);
+
 	in->xtvec.xt_len = len;
 	if (len <= handle->fs_handle->proj.max_iov_write) {
-		d_iov_set(&in->data, (void *)buff, len);
+		d_iov_set(&in->data, wb->lb.buf, len);
 	} else {
-		in->bulk_len = iov.iov_len = len;
-		iov.iov_buf_len = len;
-		iov.iov_buf = (void *)buff;
-		sgl.sg_iovs = &iov;
-		sgl.sg_nr.num = 1;
-
-		rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RO,
-				     &in->data_bulk);
-		if (rc) {
-			IOF_TRACE_ERROR(handle,
-					"Failed to make local bulk handle %d",
-					rc);
-			return -EIO;
-		}
+		in->bulk_len = len;
+		in->data_bulk = wb->lb.handle;
 	}
 
-	iof_tracker_init(&reply.tracker, 1);
 	in->xtvec.xt_off = position;
 
-	bulk = in->data_bulk;
-
-	reply.handle = handle;
-
-	rc = crt_req_send(rpc, write_cb, &reply);
+	rc = crt_req_send(wb->rpc, write_cb, wb);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send open rpc, rc = %u", rc);
-		return -EIO;
+		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
+		D_GOTO(err, rc = EIO);
 	}
+	crt_req_addref(wb->rpc);
 
-	iof_fs_wait(&fs_handle->proj, &reply.tracker);
+	return;
 
-	if (bulk != NULL) {
-		rc = crt_bulk_free(bulk);
-		if (rc)
-			return -EIO;
-	}
-
-	if (reply.err != 0)
-		return -reply.err;
-
-	if (reply.rc != 0)
-		return -reply.rc;
-
-	return reply.len;
+err:
+	IOF_FUSE_REPLY_ERR(wb->req, rc);
+	iof_pool_release(handle->fs_handle->write_pool, wb);
 }
 
 void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 		  off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_wb *wb = NULL;
 	int rc;
+
+	IOF_TRACE_UP(req, handle, "write");
 
 	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
-		D_GOTO(out, rc = -handle->fs_handle->offline_reason);
-
-	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
-		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
+		D_GOTO(err, rc = handle->fs_handle->offline_reason);
 
 	if (!handle->common.gah_valid)
 		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it
+		 * then do not try and use it.
 		 */
-		D_GOTO(out, rc = -EIO);
+		D_GOTO(err, rc = EIO);
 
-	rc = ioc_writex(buff, len, position, handle);
+	wb = iof_pool_acquire(handle->fs_handle->write_pool);
+	if (!wb)
+		D_GOTO(err, rc = ENOMEM);
 
-out:
-	if (rc < 0) {
-		IOF_FUSE_REPLY_ERR(req, -rc);
-	} else {
-		fuse_reply_write(req, rc);
-		STAT_ADD_COUNT(handle->fs_handle->stats, write_bytes, rc);
-	}
+	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
+		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
+
+	wb->req = req;
+	wb->handle = handle;
+
+	ioc_writex(buff, len, position, wb, handle);
+
+	return;
+err:
+	IOF_FUSE_REPLY_ERR(req, rc);
+	if (wb)
+		iof_pool_release(handle->fs_handle->write_pool, wb);
 }
