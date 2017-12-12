@@ -411,7 +411,7 @@ int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 
 /* Drop a reference on the GAH in the hash table */
-int drop_ino_ref(struct iof_projection_info *, fuse_ino_t);
+void drop_ino_ref(struct iof_projection_info *, fuse_ino_t);
 
 void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 

@@ -95,17 +95,22 @@ find_gah_ref(struct iof_projection_info *fs_handle,
 }
 
 /* Drop a reference on the GAH in the hash table */
-int drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
+void
+drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
 {
 	d_list_t *rlink;
 
+	if (ino == 1)
+		return;
+
 	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 
-	if (!rlink)
-		return -1;
+	if (!rlink) {
+		IOF_TRACE_WARNING(fs_handle, "Could not find entry %lu", ino);
+		return;
+	}
 	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
 	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
-	return 0;
 }
 
 static void ie_close_cb(struct ioc_request *request)
