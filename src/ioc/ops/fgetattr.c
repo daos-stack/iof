@@ -71,10 +71,16 @@ static const struct ioc_request_api api = {
 void
 ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
-	struct iof_projection_info *fs_handle	= fuse_req_userdata(req);
-	struct TYPE_NAME *desc			= NULL;
-	struct iof_gah_in *in;
+	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct iof_file_handle		*handle = NULL;
+	struct TYPE_NAME		*desc = NULL;
+	struct iof_gah_in		*in;
 	int rc;
+
+	if (fi)
+		handle = (void *)fi->fh;
+
+	IOF_TRACE_UP(req, handle ? handle : (void *)fs_handle, "getattr");
 
 	IOF_TRACE_INFO(req, "ino %lu", ino);
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
@@ -82,14 +88,21 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		D_GOTO(err, rc);
 	IOF_TRACE_LINK(req, desc, "request");
 
-	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0)
-		D_GOTO(err, rc = ENOENT);
+	if (handle) {
+		if (!handle->common.gah_valid)
+			D_GOTO(err, rc = EIO);
+
+		in->gah = handle->common.gah;
+	} else {
+		rc = find_gah(fs_handle, ino, &in->gah);
+		if (rc != 0)
+			D_GOTO(err, rc = ENOENT);
+	}
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);
 	if (rc != 0)
 		D_GOTO(err, rc);
 	return;
 err:
-	IOC_REQ_RELEASE(desc);
 	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REQ_RELEASE(desc);
 }

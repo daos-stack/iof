@@ -80,39 +80,38 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	struct iof_file_handle		*handle = NULL;
 	struct iof_setattr_in		*in;
 	crt_rpc_t			*rpc = NULL;
-	int ret;
 	int rc;
 
-	if (fi) {
+	if (fi)
 		handle = (void *)fi->fh;
-		IOF_TRACE_UP(req, handle, "setattr");
-	} else {
-		IOF_TRACE_UP(req, fs_handle, "setattr");
-	}
+
+	IOF_TRACE_UP(req, handle ? handle : (void *)fs_handle, "getattr");
 
 	STAT_ADD(fs_handle->stats, setattr);
 
 	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(out_err, ret = fs_handle->offline_reason);
+		D_GOTO(err, rc = fs_handle->offline_reason);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, setattr), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %d",
-			      rc);
-		D_GOTO(out_err, ret = EIO);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
+		D_GOTO(err, rc = EIO);
 	}
 
 	in = crt_req_get(rpc);
 
 	if (handle) {
+		if (!handle->common.gah_valid)
+			D_GOTO(err, rc = EIO);
+
 		in->gah = handle->common.gah;
 	} else {
 		/* Find the GAH of the inode */
 		rc = find_gah(fs_handle, ino, &in->gah);
 		if (rc != 0)
-			D_GOTO(out_err, ret = ENOENT);
+			D_GOTO(err, rc = ENOENT);
 	}
 
 	in->to_set = to_set;
@@ -121,14 +120,14 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 
 	rc = crt_req_send(rpc, attr_ll_cb, req);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
-		D_GOTO(out_err, ret = EIO);
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
+		D_GOTO(err, rc = EIO);
 	}
 
 	return;
 
-out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+err:
+	IOF_FUSE_REPLY_ERR(req, rc);
 
 	if (rpc)
 		crt_req_decref(rpc);
