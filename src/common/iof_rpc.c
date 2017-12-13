@@ -153,7 +153,6 @@ struct crt_msg_field *readdir_in[] = {
 	&CMF_GAH,
 	&CMF_BULK,
 	&CMF_UINT64,
-	&CMF_INT,
 };
 
 struct crt_msg_field *readdir_out[] = {

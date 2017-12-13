@@ -88,20 +88,6 @@ static struct ios_base base;
 		}							\
 	} while (0)
 
-#define VALIDATE_ARGS_STR(rpc, in, out) \
-	do {\
-		if (in->fs_id >= base.projection_count) { \
-			IOF_LOG_ERROR("Invalid Projection: " \
-				      "[ID=%d]", in->fs_id); \
-			out->err = IOF_BAD_DATA; \
-			break; \
-		} \
-		if (!in->path) { \
-			IOF_LOG_ERROR("No input path"); \
-			out->err = IOF_ERR_CART; \
-		} \
-	} while (0)
-
 #define VALIDATE_ARGS_GAH_H(rpc, in, out, handle, handle_type)	\
 	do {								\
 		handle = ios_##handle_type##_find(&base, &(in).gah);	\

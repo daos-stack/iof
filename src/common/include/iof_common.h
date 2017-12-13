@@ -157,11 +157,6 @@ struct iof_gah_string_in {
 	struct ios_name name;
 };
 
-struct iof_string_in {
-	d_string_t path;
-	uint32_t fs_id;
-};
-
 struct iof_string_out {
 	d_string_t path;
 	int rc;
@@ -240,7 +235,6 @@ struct iof_readdir_in {
 	struct ios_gah gah;
 	crt_bulk_t bulk;
 	uint64_t offset;
-	uint32_t fs_id;
 };
 
 /* Each READDIR rpc contains an array of these */

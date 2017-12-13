@@ -113,7 +113,6 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	in = crt_req_get(rpc);
 	in->gah = dir_handle->gah;
 	in->offset = offset;
-	in->fs_id = fs_handle->fs_id;
 
 	iov.iov_len = len;
 	iov.iov_buf_len = len;

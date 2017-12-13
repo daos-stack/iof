@@ -147,17 +147,6 @@ struct ios_projection {
 	d_list_t		write_list;
 };
 
-/* Convert from a fs_id as received over the network to a projection pointer.
- * Returns a possibly NULL pointer to a ios_projection struct.
- */
-#define ID_TO_PROJECTION(BASE, ID) ((ID) < (BASE)->projection_count \
-					? &(BASE)->projection_array[ID] : NULL)
-
-/* Convert from a fs_id to a directory fd.  Users of this macro should be
- * updated to use ID_TO_PROJECTION instead.
- */
-#define ID_TO_FD(ID) (base.projection_array[(ID)].root->fd)
-
 struct ionss_dir_handle {
 	DIR	*h_dir;
 	uint	fd;
