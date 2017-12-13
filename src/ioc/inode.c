@@ -109,8 +109,7 @@ drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
 		IOF_TRACE_WARNING(fs_handle, "Could not find entry %lu", ino);
 		return;
 	}
-	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
-	d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+	d_chash_rec_ndecref(&fs_handle->inode_ht, 2, rlink);
 }
 
 static void ie_close_cb(struct ioc_request *request)

@@ -55,16 +55,6 @@
 		}							\
 		(src)->REQ_NAME.cb = &api;				\
 		in = crt_req_get((src)->REQ_NAME.rpc);			\
-		iof_tracker_init(&(src)->REQ_NAME.tracker, 1);		\
-	} while (0)
-
-#define IOC_REQ_SEND(src, fsh, rc)					\
-	do {								\
-		rc = iof_fs_send(&(src)->REQ_NAME);			\
-		if (rc)							\
-			break;						\
-		iof_fs_wait(&(fsh)->proj, &(src)->REQ_NAME.tracker);	\
-		rc = IOC_STATUS_TO_RC(&(src)->REQ_NAME);		\
 	} while (0)
 
 #define IOC_REQ_INIT_LL(src, fsh, api, in, fuse_req, rc)		\

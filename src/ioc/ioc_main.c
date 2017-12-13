@@ -229,7 +229,6 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	struct ioc_request *request = cb_info->cci_arg;
 	struct iof_projection_info *fs_handle =
 			request->cb->get_fsh(request);
-	fuse_req_t f_req = request->req;
 
 	/* No Error */
 	if (!cb_info->cci_rc)
@@ -249,8 +248,6 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 done:
 	if (request->cb->on_result)
 		request->cb->on_result(request);
-	if (f_req == NULL)
-		iof_tracker_signal(&request->tracker);
 }
 
 /*

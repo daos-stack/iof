@@ -318,7 +318,6 @@ struct ioc_request {
 	crt_endpoint_t			ep;
 	crt_rpc_t			*rpc;
 	fuse_req_t			req;
-	struct iof_tracker		tracker;
 	const struct ioc_request_api	*cb;
 };
 
