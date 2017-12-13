@@ -71,6 +71,7 @@ iof_pool_init(struct iof_pool *pool)
 	D_INIT_LIST_HEAD(&pool->list);
 
 	pthread_mutex_init(&pool->lock, NULL);
+	pool->init = true;
 	return 0;
 }
 
@@ -79,6 +80,9 @@ void
 iof_pool_destroy(struct iof_pool *pool)
 {
 	struct iof_pool_type *type, *tnext;
+
+	if (!pool->init)
+		return;
 
 	d_list_for_each_entry(type, &pool->list, type_list) {
 		debug_dump(type);

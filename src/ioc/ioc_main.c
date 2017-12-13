@@ -1258,11 +1258,12 @@ iof_thread_stop(struct iof_ctx *iof_ctx)
 		NULL, NULL,					\
 		&fs_handle->stats->_STAT)
 
-static int initialize_projection(struct iof_state *iof_state,
-				 struct iof_group_info *group,
-				 struct iof_fs_info *fs_info,
-				 struct iof_psr_query *query,
-				 int id)
+static bool
+initialize_projection(struct iof_state *iof_state,
+		      struct iof_group_info *group,
+		      struct iof_fs_info *fs_info,
+		      struct iof_psr_query *query,
+		      int id)
 {
 	struct iof_projection_info	*fs_handle;
 	struct cnss_plugin_cb		*cb;
@@ -1270,6 +1271,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	bool				writeable = false;
 	char				*base_name;
 	int				ret;
+	bool				rcb;
 
 	cb = iof_state->cb;
 
@@ -1277,21 +1279,21 @@ static int initialize_projection(struct iof_state *iof_state,
 	 * clear how best to handle it
 	 */
 	if (!iof_is_mode_supported(fs_info->flags))
-		return IOF_NOT_SUPP;
+		return false;
 
 	if (fs_info->flags & IOF_WRITEABLE)
 		writeable = true;
 
 	D_ALLOC_PTR(fs_handle);
 	if (!fs_handle)
-		return IOF_ERR_NOMEM;
+		return false;
+
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
 
 	ret = iof_pool_init(&fs_handle->pool);
-	if (ret != 0) {
-		D_FREE(fs_handle);
-		return IOF_ERR_NOMEM;
-	}
+	if (ret != 0)
+		D_GOTO(err, 0);
+
 	IOF_TRACE_UP(&fs_handle->pool, fs_handle, "iof_pool");
 
 	fs_handle->iof_state = iof_state;
@@ -1304,10 +1306,8 @@ static int initialize_projection(struct iof_state *iof_state,
 					   D_HASH_FT_EPHEMERAL,
 					   4, fs_handle, &hops,
 					   &fs_handle->inode_ht);
-	if (ret != 0) {
-		D_FREE(fs_handle);
-		return IOF_ERR_NOMEM;
-	}
+	if (ret != 0)
+		D_GOTO(err, 0);
 
 	/* Keep a list of open directory handles
 	 *
@@ -1335,7 +1335,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	D_ASPRINTF(fs_handle->mount_point, "%s/%s", iof_state->cnss_prefix,
 		   base_name);
 	if (!fs_handle->mount_point)
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	IOF_TRACE_DEBUG(fs_handle, "Projected Mount %s", base_name);
 
@@ -1348,11 +1348,11 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	D_ALLOC_PTR(fs_handle->stats);
 	if (!fs_handle->stats)
-		return 1;
+		D_GOTO(err, 0);
 
 	D_ASPRINTF(fs_handle->base_dir, "%d", fs_handle->proj.cli_fs_id);
 	if (!fs_handle->base_dir)
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	cb->create_ctrl_subdir(iof_state->projections_dir,
 			       fs_handle->base_dir,
@@ -1438,10 +1438,9 @@ static int initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.grp_id = group->grp.grp_id;
 
 	ret = crt_context_create(NULL, &fs_handle->ctx.crt_ctx);
-
 	if (ret) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create context");
-		return 1;
+		D_GOTO(err, 0);
 	}
 
 	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
@@ -1449,7 +1448,7 @@ static int initialize_projection(struct iof_state *iof_state,
 	ret = iof_thread_start(&fs_handle->ctx);
 	if (ret) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
-		return 1;
+		D_GOTO(err, 0);
 	}
 
 	args.argc = 4;
@@ -1459,46 +1458,33 @@ static int initialize_projection(struct iof_state *iof_state,
 	args.allocated = 1;
 	D_ALLOC_ARRAY(args.argv, args.argc);
 	if (!args.argv)
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	D_STRNDUP(args.argv[0], "", 1);
 	if (!args.argv[0])
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	D_STRNDUP(args.argv[1], "-ofsname=IOF", 32);
 	if (!args.argv[1])
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	D_STRNDUP(args.argv[2], "-osubtype=pam", 32);
 	if (!args.argv[2])
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	D_ASPRINTF(args.argv[3], "-omax_read=%u", fs_handle->max_read);
 	if (!args.argv[3])
-		return IOF_ERR_NOMEM;
+		D_GOTO(err, 0);
 
 	if (!writeable) {
 		D_STRNDUP(args.argv[4], "-oro", 32);
 		if (!args.argv[4])
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 	}
 
-	fs_handle->fuse_ll_ops = iof_get_fuse_ll_ops(writeable);
-	if (!fs_handle->fuse_ll_ops)
-		return IOF_ERR_NOMEM;
-
-	ret = cb->register_fuse_fs(cb->handle,
-				   fs_handle->fuse_ops,
-				   fs_handle->fuse_ll_ops,
-				   &args,
-				   fs_handle->mount_point,
-				  (fs_handle->flags & IOF_CNSS_MT) != 0,
-				   fs_handle);
-	if (ret) {
-		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
-		D_FREE(fs_handle);
-		return 1;
-	}
+	fs_handle->fuse_ops = iof_get_fuse_ops(writeable);
+	if (!fs_handle->fuse_ops)
+		D_GOTO(err, 0);
 
 	{
 		/* Register the directory handle type
@@ -1555,54 +1541,65 @@ static int initialize_projection(struct iof_state *iof_state,
 
 		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
 		if (!fs_handle->dh_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
 		if (!fs_handle->fgh_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->close_pool = iof_pool_register(&fs_handle->pool,
 							  &ct);
 		if (!fs_handle->close_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		entry_t.init = lookup_entry_init;
 		fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool,
 							   &entry_t);
 		if (!fs_handle->lookup_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		entry_t.init = mkdir_entry_init;
 		fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool,
 							  &entry_t);
 		if (!fs_handle->mkdir_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		entry_t.init = symlink_entry_init;
 		fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool,
 							    &entry_t);
 		if (!fs_handle->symlink_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
 		if (!fs_handle->fh_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->rb_pool_page = iof_pool_register(&fs_handle->pool,
 							    &rb_page);
 		if (!fs_handle->rb_pool_page)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->rb_pool_large = iof_pool_register(&fs_handle->pool,
 							     &rb_large);
 		if (!fs_handle->rb_pool_large)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
 
 		fs_handle->write_pool = iof_pool_register(&fs_handle->pool,
 						&wb);
 		if (!fs_handle->write_pool)
-			return IOF_ERR_NOMEM;
+			D_GOTO(err, 0);
+	}
 
+	rcb = cb->register_fuse_fs(cb->handle,
+				   NULL,
+				   fs_handle->fuse_ops,
+				   &args,
+				   fs_handle->mount_point,
+				  (fs_handle->flags & IOF_CNSS_MT) != 0,
+				   fs_handle);
+	if (!rcb) {
+		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
+		D_GOTO(err, 0);
 	}
 
 	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: %s",
@@ -1610,12 +1607,17 @@ static int initialize_projection(struct iof_state *iof_state,
 
 	d_list_add_tail(&fs_handle->link, &iof_state->fs_list);
 
-	return 0;
+	return true;
+err:
+	iof_pool_destroy(&fs_handle->pool);
+	D_FREE(fs_handle);
+	return false;
 }
 
-static int query_projections(struct iof_state *iof_state,
-			     struct iof_group_info *group,
-			     int *total, int *active)
+static bool
+query_projections(struct iof_state *iof_state,
+		  struct iof_group_info *group,
+		  int *total, int *active)
 {
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
@@ -1631,7 +1633,7 @@ static int query_projections(struct iof_state *iof_state,
 				      &query_rpc);
 	if (ret || (query == NULL)) {
 		IOF_TRACE_ERROR(iof_state, "Query operation failed");
-		return IOF_ERR_PROJECTION;
+		return false;
 	}
 	IOF_TRACE_LINK(query_rpc, iof_state, "query_rpc");
 
@@ -1642,14 +1644,16 @@ static int query_projections(struct iof_state *iof_state,
 	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
 
 	for (i = 0; i < fs_num; i++) {
-		ret = initialize_projection(iof_state, group, &tmp[i], query,
+		bool rcb;
+
+		rcb = initialize_projection(iof_state, group, &tmp[i], query,
 					    (*total)++);
 
-		if (ret != 0) {
+		if (!rcb) {
 			IOF_TRACE_ERROR(iof_state, "Could not initialize "
 					"projection %s from %s", tmp[i].mnt,
 					group->grp_name);
-			continue;
+			return false;
 		}
 
 		(*active)++;
@@ -1659,18 +1663,19 @@ static int query_projections(struct iof_state *iof_state,
 	if (ret)
 		IOF_TRACE_ERROR(iof_state, "Could not decrement ref count on "
 				"query rpc");
-	return 0;
+	return true;
 }
 
 
 static int iof_post_start(void *arg)
 {
-	struct iof_state *iof_state = arg;
-	int ret;
+	struct cnss_plugin_cb	*cb;
+	struct iof_state	*iof_state = arg;
+	int			active_projections = 0;
+	int			total_projections = 0;
 	int grp_num;
-	int total_projections = 0;
-	int active_projections = 0;
-	struct cnss_plugin_cb *cb;
+	bool rcb;
+	int ret;
 
 	cb = iof_state->cb;
 
@@ -1689,10 +1694,10 @@ static int iof_post_start(void *arg)
 		if (!group->crt_attached)
 			continue;
 
-		ret = query_projections(iof_state, group, &total_projections,
+		rcb = query_projections(iof_state, group, &total_projections,
 					&active);
 
-		if (ret) {
+		if (!rcb) {
 			IOF_TRACE_ERROR(iof_state, "Couldn't mount projections "
 					"from %s", group->grp_name);
 			continue;
@@ -1707,6 +1712,11 @@ static int iof_post_start(void *arg)
 					  total_projections);
 
 	if (total_projections == 0) {
+		IOF_TRACE_ERROR(iof_state, "No projections found");
+		return 1;
+	}
+
+	if (active_projections == 0) {
 		IOF_TRACE_ERROR(iof_state, "No projections found");
 		return 1;
 	}
@@ -1771,10 +1781,7 @@ static void iof_deregister_fuse(void *arg)
 	IOF_TRACE_DOWN(fs_handle);
 	d_list_del(&fs_handle->link);
 
-	if (fs_handle->fuse_ops)
-		D_FREE(fs_handle->fuse_ops);
-	else
-		D_FREE(fs_handle->fuse_ll_ops);
+	D_FREE(fs_handle->fuse_ops);
 
 	pthread_mutex_destroy(&fs_handle->od_lock);
 

@@ -220,7 +220,7 @@ void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
 	ioc_init_core(fs_handle, conn);
 }
 
-struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool writeable)
+struct fuse_lowlevel_ops *iof_get_fuse_ops(bool writeable)
 {
 	struct fuse_lowlevel_ops *fuse_ops;
 

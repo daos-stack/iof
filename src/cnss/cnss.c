@@ -190,106 +190,6 @@ static const char *get_config_option(const char *var)
 	return getenv((const char *)var);
 }
 
-static int register_fuse(void *arg,
-			 struct fuse_operations *ops,
-			 struct fuse_lowlevel_ops *flo,
-			 struct fuse_args *args,
-			 const char *mnt,
-			 int threaded,
-			 void *private_data);
-
-/* Load a plugin from a fn pointer, return -1 if there was a fatal problem */
-static int add_plugin(struct cnss_info *info, cnss_plugin_init_t fn,
-		      void *dl_handle)
-{
-	struct plugin_entry *entry;
-	int rc;
-
-	IOF_LOG_INFO("Loading plugin at entry point %p", FN_TO_PVOID(fn));
-
-	D_ALLOC_PTR(entry);
-	if (!entry)
-		return CNSS_ERR_NOMEM;
-
-	IOF_TRACE_UP(entry, info, "plugin_entry");
-
-	rc = fn(&entry->fns, &entry->fns_size);
-	if (rc != 0) {
-		IOF_TRACE_INFO(entry, "Plugin at entry point %p failed (%d)",
-			       FN_TO_PVOID(fn), rc);
-		IOF_TRACE_DOWN(entry);
-		D_FREE(entry);
-		return CNSS_SUCCESS;
-	}
-
-	if (!entry->fns->name) {
-		IOF_TRACE_ERROR(entry, "Disabling plugin: name is required\n");
-		IOF_TRACE_DOWN(entry);
-		D_FREE(entry);
-		return CNSS_BAD_DATA;
-	}
-
-	if (entry->fns->version != CNSS_PLUGIN_VERSION) {
-		IOF_TRACE_ERROR(entry,
-				"Plugin version incorrect %x %x, disabling",
-				entry->fns->version,
-				CNSS_PLUGIN_VERSION);
-		IOF_TRACE_DOWN(entry);
-		D_FREE(entry);
-		return CNSS_BAD_DATA;
-	}
-
-	rc = ctrl_create_subdir(NULL, entry->fns->name,
-				&entry->self_fns.plugin_dir);
-	if (rc != 0) {
-		IOF_TRACE_ERROR(entry,
-				"ctrl dir creation failed (%d), disabling", rc);
-		IOF_TRACE_DOWN(entry);
-		D_FREE(entry);
-		return CNSS_BAD_DATA;
-	}
-
-	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
-
-	entry->active = true;
-
-	entry->dl_handle = dl_handle;
-
-	entry->self_fns.fuse_version = 3;
-
-	entry->self_fns.get_config_option = get_config_option;
-	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
-	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
-	entry->self_fns.register_ctrl_event = ctrl_register_event;
-	entry->self_fns.register_ctrl_tracker = ctrl_register_tracker;
-	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
-	entry->self_fns.register_ctrl_constant_int64 =
-		ctrl_register_constant_int64;
-	entry->self_fns.register_ctrl_constant_uint64 =
-		ctrl_register_constant_uint64;
-	entry->self_fns.register_ctrl_uint64_variable =
-		ctrl_register_uint64_variable;
-	entry->self_fns.register_fuse_fs = register_fuse;
-	entry->self_fns.handle = entry;
-
-	d_list_add(&entry->list, &info->plugins);
-
-	D_INIT_LIST_HEAD(&entry->fuse_list);
-
-	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
-		     entry->fns->name,
-		     (void *)entry->fns->handle,
-		     FN_TO_PVOID(fn));
-
-	if (sizeof(struct cnss_plugin) != entry->fns_size)
-		IOF_TRACE_WARNING(entry->fns->handle,
-				  "Plugin size incorrect %zd %zd, some functions may be disabled",
-				  entry->fns_size,
-				  sizeof(struct cnss_plugin));
-
-	return CNSS_SUCCESS;
-}
-
 static void iof_fuse_umount(struct fs_info *info)
 {
 	if (info->session)
@@ -374,52 +274,52 @@ static void *loop_fn(void *args)
  * a filesystem.
  * Returns 0 on success, or non-zero on error.
  */
-static int register_fuse(void *arg,
-			 struct fuse_operations *ops,
-			 struct fuse_lowlevel_ops *flo,
-			 struct fuse_args *args,
-			 const char *mnt,
-			 int threaded,
-			 void *private_data)
+static bool
+register_fuse(void *arg,
+	      struct fuse_operations *ops,
+	      struct fuse_lowlevel_ops *flo,
+	      struct fuse_args *args,
+	      const char *mnt,
+	      bool threaded,
+	      void *private_data)
 {
 	struct plugin_entry *plugin = (struct plugin_entry *)arg;
 	struct fs_info *info;
 	int rc;
 
 	if (!mnt) {
-		IOF_LOG_ERROR("Invalid Mount point");
-		return 1;
+		IOF_TRACE_ERROR(arg, "Invalid Mount point");
+		return false;
 	}
 
 	if ((mkdir(mnt, 0755) && errno != EEXIST)) {
-		IOF_LOG_ERROR("Could not create directory %s for import", mnt);
-		return 1;
+		IOF_TRACE_ERROR(arg, "Could not create directory %s for import",
+				mnt);
+		return false;
 	}
 
 	D_ALLOC_PTR(info);
-	if (!info) {
-		IOF_LOG_ERROR("Could not allocate fuse info");
-		return 1;
-	}
+	if (!info)
+		return false;
 
 	info->mt = threaded;
 
+	/* TODO: The plugin should provide the sub-directory only, not the
+	 * entire mount point and this function should add the cnss_prefix
+	 */
 	info->mnt = strdup(mnt);
-	if (!info->mnt) {
-		IOF_LOG_ERROR("Could not allocate mnt");
+	if (!info->mnt)
 		goto cleanup_no_mutex;
-	}
 
 	if (pthread_mutex_init(&info->lock, NULL)) {
-		IOF_LOG_ERROR("Count not create mutex");
+		IOF_TRACE_ERROR(arg, "Count not create mutex");
 		goto cleanup_no_mutex;
 	}
 
 	info->private_data = private_data;
 
 	if (flo) {
-		int rc;
-
+		/* TODO: Cleanup properly here */
 		info->session = fuse_session_new(args,
 						 flo,
 						 sizeof(*flo),
@@ -434,18 +334,15 @@ static int register_fuse(void *arg,
 		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
 
 		if (!info->fuse) {
-			IOF_LOG_ERROR("Could not initialize fuse");
+			IOF_TRACE_ERROR(arg, "Could not initialize fuse");
 			fuse_opt_free_args(args);
 			iof_fuse_umount(info);
 			goto cleanup;
 		}
 
 		rc = fuse_mount(info->fuse, info->mnt);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not successfully mount %s",
-				info->mnt);
+		if (rc != 0)
 			goto cleanup;
-		}
 	}
 
 	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
@@ -469,14 +366,14 @@ static int register_fuse(void *arg,
 
 	d_list_add(&info->entries, &plugin->fuse_list);
 
-	return 0;
+	return true;
 cleanup:
 	pthread_mutex_destroy(&info->lock);
 cleanup_no_mutex:
 	D_FREE(info->mnt);
 	D_FREE(info);
 
-	return 1;
+	return false;
 }
 
 static int
@@ -615,6 +512,100 @@ static void issue_barrier(void)
 	pthread_mutex_destroy(&b_info.lock);
 }
 
+/* Load a plugin from a fn pointer, return false if there was a fatal problem */
+static bool
+add_plugin(struct cnss_info *info,
+	   cnss_plugin_init_t fn,
+	   void *dl_handle)
+{
+	struct plugin_entry *entry;
+	int rc;
+
+	IOF_LOG_INFO("Loading plugin at entry point %p", FN_TO_PVOID(fn));
+
+	D_ALLOC_PTR(entry);
+	if (!entry)
+		return false;
+
+	IOF_TRACE_UP(entry, info, "plugin_entry");
+
+	rc = fn(&entry->fns, &entry->fns_size);
+	if (rc != 0) {
+		IOF_TRACE_INFO(entry, "Plugin at entry point %p failed (%d)",
+			       FN_TO_PVOID(fn), rc);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return false;
+	}
+
+	if (!entry->fns->name) {
+		IOF_TRACE_ERROR(entry, "Disabling plugin: name is required\n");
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return false;
+	}
+
+	if (entry->fns->version != CNSS_PLUGIN_VERSION) {
+		IOF_TRACE_ERROR(entry,
+				"Plugin version incorrect %x %x, disabling",
+				entry->fns->version,
+				CNSS_PLUGIN_VERSION);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return false;
+	}
+
+	rc = ctrl_create_subdir(NULL, entry->fns->name,
+				&entry->self_fns.plugin_dir);
+	if (rc != 0) {
+		IOF_TRACE_ERROR(entry,
+				"ctrl dir creation failed (%d), disabling", rc);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
+		return false;
+	}
+
+	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
+
+	entry->active = true;
+
+	entry->dl_handle = dl_handle;
+
+	entry->self_fns.fuse_version = 3;
+
+	entry->self_fns.get_config_option = get_config_option;
+	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
+	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
+	entry->self_fns.register_ctrl_event = ctrl_register_event;
+	entry->self_fns.register_ctrl_tracker = ctrl_register_tracker;
+	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
+	entry->self_fns.register_ctrl_constant_int64 =
+		ctrl_register_constant_int64;
+	entry->self_fns.register_ctrl_constant_uint64 =
+		ctrl_register_constant_uint64;
+	entry->self_fns.register_ctrl_uint64_variable =
+		ctrl_register_uint64_variable;
+	entry->self_fns.register_fuse_fs = register_fuse;
+	entry->self_fns.handle = entry;
+
+	d_list_add(&entry->list, &info->plugins);
+
+	D_INIT_LIST_HEAD(&entry->fuse_list);
+
+	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
+		     entry->fns->name,
+		     (void *)entry->fns->handle,
+		     FN_TO_PVOID(fn));
+
+	if (sizeof(struct cnss_plugin) != entry->fns_size)
+		IOF_TRACE_WARNING(entry->fns->handle,
+				  "Plugin size incorrect %zd %zd, some functions may be disabled",
+				  entry->fns_size,
+				  sizeof(struct cnss_plugin));
+
+	return true;
+}
+
 int main(void)
 {
 	char *cnss = "CNSS";
@@ -629,6 +620,7 @@ int main(void)
 	int ret;
 	bool service_process_set = false;
 	char *ctrl_prefix;
+	bool rcb;
 
 	iof_log_init("CN", "CNSS", NULL);
 
@@ -672,11 +664,9 @@ int main(void)
 		IOF_LOG_INFO("Skipping IOF plugin");
 	} else {
 		/* Load the build-in iof "plugin" */
-		ret = add_plugin(cnss_info, iof_plugin_init, NULL);
-		if (ret != 0) {
-			ret = CNSS_ERR_PLUGIN;
-			goto shutdown_ctrl_fs;
-		}
+		rcb = add_plugin(cnss_info, iof_plugin_init, NULL);
+		if (!rcb)
+			D_GOTO(shutdown_ctrl_fs, ret = CNSS_ERR_PLUGIN);
 	}
 
 	/* Check to see if an additional plugin file has been requested and
@@ -701,11 +691,9 @@ int main(void)
 			     dl_handle,
 			     FN_TO_PVOID(fn));
 		if (fn) {
-			ret = add_plugin(cnss_info, fn, dl_handle);
-			if (ret != 0) {
-				ret = CNSS_ERR_PLUGIN;
-				goto shutdown_ctrl_fs;
-			}
+			rcb = add_plugin(cnss_info, fn, dl_handle);
+			if (!rcb)
+				D_GOTO(shutdown_ctrl_fs, ret = CNSS_ERR_PLUGIN);
 		}
 	}
 

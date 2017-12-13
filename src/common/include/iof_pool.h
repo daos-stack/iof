@@ -107,6 +107,7 @@ struct iof_pool_type {
 struct iof_pool {
 	d_list_t		list;
 	pthread_mutex_t		lock;
+	bool			init;
 };
 
 /* Create a new pool, called once at startup */

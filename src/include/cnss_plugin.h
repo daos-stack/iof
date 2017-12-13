@@ -40,6 +40,7 @@
  * a forward compatible plugin
  */
 #include <unistd.h>
+#include <stdbool.h>
 #include <inttypes.h>
 
 #ifndef __CNSS_PLUGIN_H__
@@ -95,11 +96,11 @@ struct cnss_plugin_cb {
 							 * around getenv
 							 */
 
-	/* Launch FUSE mount.  Returns 0 on success */
-	int (*register_fuse_fs)(void *handle, struct fuse_operations*,
-				struct fuse_lowlevel_ops*,
-				struct fuse_args*,
-				const char *, int, void *);
+	/* Launch FUSE mount.  Returns true on success */
+	bool (*register_fuse_fs)(void *handle, struct fuse_operations*,
+				 struct fuse_lowlevel_ops*,
+				 struct fuse_args*,
+				 const char *, bool, void *);
 
 	/* Registers a variable, exported as a control file system file
 	 * and associates optional callbacks with read and write events.
@@ -228,7 +229,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f00b
+#define CNSS_PLUGIN_VERSION 0x10f00c
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network

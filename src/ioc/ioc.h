@@ -150,8 +150,7 @@ struct iof_projection_info {
 	char				*mount_point;
 	char				*base_dir;
 	/* fuse client implementation */
-	struct fuse_operations		*fuse_ops;
-	struct fuse_lowlevel_ops	*fuse_ll_ops;
+	struct fuse_lowlevel_ops	*fuse_ops;
 	/* Feature Flags */
 	uint8_t				flags;
 	int				fs_id;
@@ -182,7 +181,7 @@ struct iof_projection_info {
 
 int iof_is_mode_supported(uint8_t flags);
 
-struct fuse_lowlevel_ops *iof_get_fuse_ll_ops(bool);
+struct fuse_lowlevel_ops *iof_get_fuse_ops(bool);
 
 /* Everything above here relates to how the ION plugin communicates with the
  * CNSS, everything below here relates to internals to the plugin.  At some
