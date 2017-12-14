@@ -46,6 +46,9 @@
 #include <stdio.h>
 #include <python3.4m/Python.h>
 
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #define BUF_SIZE 4096
 
 struct module_state {
@@ -221,12 +224,66 @@ static PyObject *test_unlink(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+static PyObject *test_dir_mode(PyObject *self, PyObject *args)
+{
+	struct module_state	*st = PyModule_GetState(self);
+	char			*filename = NULL;
+	const char		*path;
+	int rc;
+	int err;
+
+	if (!PyArg_ParseTuple(args, "s", &path))
+		return NULL;
+
+	rc = asprintf(&filename, "%s/t_dir", path);
+	if (rc == -1 || !filename) {
+		PyErr_SetString(st->error, "Unable to create filename");
+		return NULL;
+	}
+
+	errno = 0;
+	rc = mkdir(filename, S_IXUSR);
+	err = errno;
+
+	printf("mkdir returned %d errno = %s\n", rc, strerror(err));
+
+	if (rc != 0) {
+		PyErr_SetString(st->error, "Incorrect mkdir return values");
+		return NULL;
+	}
+
+	errno = 0;
+	rc = chmod(filename, S_IRUSR | S_IXUSR);
+	err = errno;
+	printf("chmod returned %d errno = %s\n", rc, strerror(err));
+
+	if (rc != 0) {
+		PyErr_SetString(st->error, "Incorrect chmod return values");
+		return NULL;
+	}
+
+	errno = 0;
+	rc = rmdir(filename);
+	err = errno;
+
+	printf("rmdir returned %d errno = %s\n", rc, strerror(err));
+
+	if (rc != 0) {
+		PyErr_SetString(st->error, "Incorrect rmdir return values");
+		return NULL;
+	}
+
+	free(filename);
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef iofMethods[] = {
 	{ "open_test_file", open_test_file, METH_VARARGS, NULL },
 	{ "test_write_file", test_write_file, METH_VARARGS, NULL },
 	{ "test_read_file", test_read_file, METH_VARARGS, NULL },
 	{ "close_test_file", close_test_file, METH_VARARGS, NULL },
 	{ "test_unlink", test_unlink, METH_VARARGS, NULL},
+	{ "test_dir_mode", test_dir_mode, METH_VARARGS, NULL},
 	{ NULL, NULL, 0, NULL},
 };
 

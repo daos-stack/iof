@@ -1936,14 +1936,21 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
-	IOF_TRACE_INFO(handle, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
+	if (handle->mf.type == inode_handle) {
+		int e;
 
-	if (handle->mf.type != inode_handle) {
-		fd = handle->fd;
+		errno = 0;
+		fd = open(handle->proc_fd_name, O_RDONLY);
+		e = errno;
+
+		if (fd == -1) {
+			IOF_TRACE_INFO(handle, "Failed to re-open %d", e);
+			if (e != EACCES && (in->to_set & FUSE_SET_ATTR_MODE))
+				D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+		}
+		IOF_TRACE_DEBUG(handle, "Re-opened %d as %d", handle->fd, fd);
 	} else {
-		fd = open(handle->proc_fd_name, O_RDWR);
-		if (fd == -1)
-			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+		fd = handle->fd;
 	}
 
 	/* Now set any attributes as requested by FUSE.  Try each bit that this
@@ -1997,7 +2004,10 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		IOF_TRACE_DEBUG(handle, "setting mode to %#x",
 				in->stat.st_mode);
 		errno = 0;
-		rc = fchmod(fd,  in->stat.st_mode);
+		if (fd == -1)
+			rc = chmod(handle->proc_fd_name, in->stat.st_mode);
+		else
+			rc = fchmod(fd,  in->stat.st_mode);
 		if (rc)
 			D_GOTO(out, out->rc = errno);
 

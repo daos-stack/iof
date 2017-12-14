@@ -258,7 +258,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 					__err);				\
 			__err = EIO;					\
 		}							\
-		if (__err == ENOTSUP)					\
+		if (__err == ENOTSUP || __err == EIO)			\
 			IOF_TRACE_WARNING(req, "Returning %d '%s'",	\
 					  __err, strerror(__err));	\
 		else							\

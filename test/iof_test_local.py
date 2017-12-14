@@ -776,27 +776,30 @@ class Testlocal(unittest.TestCase,
             subtest_count += 1
             with self.subTest(possible):
                 self.mark_log('Starting test iofmod.%s' % possible)
-                if possible in FD_TESTS:
-                    fd = iofmod.open_test_file(self.import_dir)
-                    if fd is None:
-                        self.fail('File descriptor returned null on open')
+                try:
+                    self.clean_export_dir()
+                except PermissionError:
+                    self.skipTest("Unable to clean import dir")
+                try:
+                    if possible in FD_TESTS:
+                        fd = iofmod.open_test_file(self.import_dir)
+                        if fd is None:
+                            self.fail('File descriptor returned null on open')
 
-                    ret = obj(fd)
-                    self.logger.info("%s returned %s", possible, str(ret))
-                    if ret is None:
+                        ret = obj(fd)
+                        self.logger.info("%s returned %s", possible, str(ret))
+                        if ret is None:
+                            iofmod.close_test_file(fd)
+                            self.fail('%s returned null' % possible)
+
+                        # This will raise an exception of failure.
                         iofmod.close_test_file(fd)
-                        self.fail('%s returned null' % possible)
 
-                    # This will raise an exception of failure.
-                    iofmod.close_test_file(fd)
-
-                else:
-                    ret = obj(self.import_dir)
-                    self.logger.info("%s returned %s", possible, ret)
-
-                self.mark_log('Finished test iofmod.%s, cleaning up' % possible)
-
-                self.clean_export_dir()
+                    else:
+                        ret = obj(self.import_dir)
+                        self.logger.info("%s returned %s", possible, ret)
+                finally:
+                    self.mark_log('Finished test iofmod.%s' % possible)
 
         return subtest_count
 
