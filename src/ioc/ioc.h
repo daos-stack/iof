@@ -381,8 +381,6 @@ struct close_req {
 	d_list_t			list;
 };
 
-#define IOF_REQ_FS_HANDLE(REQ) ((REQ)->reply.ctx.fs_handle)
-
 struct ioc_inode_entry {
 	struct ios_gah	gah;
 	char		name[256];
@@ -421,8 +419,6 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
  * This macro could also with with other *cb_r structs which use the same
  * conventions for err/rc
  */
-#define IOC_STATUS_TO_RC(STATUS) \
-	((STATUS)->err == 0 ? -(STATUS)->rc : -(STATUS)->err)
 
 #define IOC_STATUS_TO_RC_LL(STATUS) \
 	((STATUS)->err == 0 ? (STATUS)->rc : EIO)
@@ -447,11 +443,6 @@ void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 			}						\
 		}							\
 	} while (0)
-/* Check if a remote host is down.  Used in RPC callback to check the cb_info
- * for permanent failure of the remote ep.
- */
-#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
-					((CB_INFO)->cci_rc == -DER_OOG))
 
 int iof_fs_send(struct ioc_request *request);
 

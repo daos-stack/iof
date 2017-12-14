@@ -219,6 +219,12 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	}
 }
 
+/* Check if a remote host is down.  Used in RPC callback to check the cb_info
+ * for permanent failure of the remote ep.
+ */
+#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
+					((CB_INFO)->cci_rc == -DER_OOG))
+
 /* A generic callback function to handle completion of RPCs sent from FUSE,
  * and replay the RPC to a different end point in case the target has been
  * evicted (denoted by an "Out Of Group" return code). For all other failures

@@ -47,35 +47,24 @@
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
-static void
-opendir_cb(struct ioc_request *request)
-{
-	struct iof_opendir_out *out = IOC_GET_RESULT(request);
-	struct TYPE_NAME *dh = CONTAINER(request);
-
-	IOC_RESOLVE_STATUS(request, out);
-	if (IOC_STATUS_TO_RC(request) == 0) {
-		dh->gah = out->gah;
-		dh->gah_valid = 1;
-		dh->handle_valid = 1;
-		dh->ep = dh->fs_handle->proj.grp->psr_ep;
-	}
-}
-
 #define STAT_KEY opendir
 
 static void
 opendir_ll_cb(struct ioc_request *request)
 {
-	struct TYPE_NAME *dh		= CONTAINER(request);
-	fuse_req_t f_req		= request->req;
-	struct fuse_file_info fi	= {0};
+	struct TYPE_NAME	*dh = CONTAINER(request);
+	struct iof_opendir_out	*out = IOC_GET_RESULT(request);
+	fuse_req_t		f_req = request->req;
+	struct fuse_file_info	fi = {0};
 	int rc;
 
-	request->req = NULL;
-	opendir_cb(request);
+	IOC_RESOLVE_STATUS(request, out);
 	rc = IOC_STATUS_TO_RC_LL(request);
 	if (rc == 0) {
+		dh->gah = out->gah;
+		dh->gah_valid = 1;
+		dh->handle_valid = 1;
+		dh->ep = dh->fs_handle->proj.grp->psr_ep;
 		pthread_mutex_lock(&dh->fs_handle->od_lock);
 		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
 		pthread_mutex_unlock(&dh->fs_handle->od_lock);
