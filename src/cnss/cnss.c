@@ -549,14 +549,12 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	pthread_mutex_destroy(&info->lock);
 
-	D_FREE(info->mnt);
 	if (plugin->active && plugin->fns->deregister_fuse)
 		plugin->fns->deregister_fuse(info->private_data);
 
 	if (info->session)
 		fuse_session_destroy(info->session);
 
-	D_FREE(info);
 	return rc;
 }
 
@@ -572,6 +570,9 @@ void shutdown_fs(struct cnss_info *cnss_info)
 			rc = deregister_fuse(plugin, info);
 			if (rc)
 				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
+
+			D_FREE(info->mnt);
+			D_FREE(info);
 		}
 	}
 }
