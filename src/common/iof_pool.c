@@ -198,8 +198,13 @@ iof_pool_reclaim(struct iof_pool *pool)
 			type->count--;
 		}
 		IOF_TRACE_DEBUG(type, "%d in use", type->count);
-		if (type->count)
+		if (type->count) {
+			IOF_TRACE_INFO(type,
+				       "Active descriptors (%d) of type '%s'",
+				       type->count,
+				       type->reg.name);
 			active_descriptors = true;
+		}
 		pthread_mutex_unlock(&type->lock);
 	}
 	pthread_mutex_unlock(&pool->lock);

@@ -1746,6 +1746,46 @@ static int iof_post_start(void *arg)
 	return 0;
 }
 
+static int
+ino_flush(d_list_t *rlink, void *arg)
+{
+	struct fuse_session *session = arg;
+	struct ioc_inode_entry *ie = container_of(rlink,
+						  struct ioc_inode_entry,
+						  list);
+	int rc;
+
+	if (ie->parent != 1)
+		return 0;
+
+	rc = fuse_lowlevel_notify_inval_entry(session,
+					      ie->parent,
+					      ie->name,
+					      strlen(ie->name));
+	if (rc != 0 && rc != -ENOENT)
+		IOF_LOG_WARNING("%lu %lu '%s': %d",
+				ie->parent, ie->ino, ie->name, rc);
+	else
+		IOF_LOG_INFO("%lu %lu '%s': %d",
+			     ie->parent, ie->ino, ie->name, rc);
+
+	return 0;
+}
+
+/* Called once per projection, before the FUSE filesystem has been torn down */
+static void iof_flush_fuse(void *arg1, void *arg2)
+{
+	struct fuse_session *session = arg1;
+	struct iof_projection_info *fs_handle = arg2;
+	int rc;
+
+	IOF_TRACE_INFO(fs_handle, "Flushing inode table");
+
+	rc = d_chash_table_traverse(&fs_handle->inode_ht, ino_flush, session);
+
+	IOF_TRACE_INFO(fs_handle, "Flush complete: %d", rc);
+}
+
 /* Called once per projection, after the FUSE filesystem has been torn down */
 static void iof_deregister_fuse(void *arg)
 {
@@ -1890,13 +1930,14 @@ static void iof_finish(void *arg)
 	D_FREE(iof_state);
 }
 
-struct cnss_plugin self = {.name                  = "iof",
-			   .version               = CNSS_PLUGIN_VERSION,
-			   .require_service       = 0,
-			   .start                 = iof_reg,
-			   .post_start            = iof_post_start,
-			   .deregister_fuse       = iof_deregister_fuse,
-			   .destroy_plugin_data   = iof_finish};
+struct cnss_plugin self = {.name		= "iof",
+			   .version		= CNSS_PLUGIN_VERSION,
+			   .require_service	= 0,
+			   .start		= iof_reg,
+			   .post_start		= iof_post_start,
+			   .deregister_fuse	= iof_deregister_fuse,
+			   .flush_fuse		= iof_flush_fuse,
+			   .destroy_plugin_data	= iof_finish};
 
 int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 {

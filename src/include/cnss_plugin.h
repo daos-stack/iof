@@ -206,6 +206,10 @@ struct cnss_plugin {
 					  * handle.  Called only if
 					  * register_fuse_fs returned true
 					  */
+	void (*flush_fuse)(void *, void *); /* Flush a previously registered
+					     * fuse handle.  Called only if
+					     * register_fuse_fs returned true
+					     */
 	void (*dump_log)(void *); /* Optional log dump */
 };
 

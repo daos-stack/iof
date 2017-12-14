@@ -59,7 +59,7 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 		return;
 	}
 
-	IOF_TRACE_INFO(rlink, "%lu %lu", ino, nlookup);
+	IOF_TRACE_INFO(fs_handle, "%p %lu %lu", rlink, ino, nlookup);
 
 	d_chash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
 }
@@ -86,6 +86,8 @@ ioc_ll_forget_multi(fuse_req_t req, size_t count,
 	STAT_ADD(fs_handle->stats, forget);
 
 	fuse_reply_none(req);
+
+	IOF_TRACE_INFO(fs_handle, "Forgetting %zi", count);
 
 	for (i = 0; i < count; i++)
 		ioc_ll_forget_one(fs_handle,

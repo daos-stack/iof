@@ -390,6 +390,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
 
+	if (plugin->active && plugin->fns->flush_fuse)
+		plugin->fns->flush_fuse(info->session, info->private_data);
+
 	if (info->running) {
 
 		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
@@ -454,6 +457,25 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		fuse_session_destroy(info->session);
 
 	return rc;
+}
+
+void flush_fs(struct cnss_info *cnss_info)
+{
+	struct plugin_entry *plugin;
+	struct fs_info *info;
+
+	d_list_for_each_entry(plugin, &cnss_info->plugins, list) {
+		if (!plugin->active || !plugin->fns->flush_fuse)
+			continue;
+
+		d_list_for_each_entry(info, &plugin->fuse_list, entries) {
+			if (!info->session)
+				continue;
+
+			plugin->fns->flush_fuse(info->session,
+						info->private_data);
+		}
+	}
 }
 
 void shutdown_fs(struct cnss_info *cnss_info)
@@ -828,6 +850,8 @@ int main(int argc, char **argv)
 
 	CALL_PLUGIN_FN(&cnss_info->plugins, stop_client_services);
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush_client_services);
+
+	flush_fs(cnss_info);
 
 	if (service_process_set)
 		issue_barrier();
