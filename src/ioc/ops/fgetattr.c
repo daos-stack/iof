@@ -80,19 +80,17 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	if (fi)
 		handle = (void *)fi->fh;
 
-	IOF_TRACE_UP(req, handle ? handle : (void *)fs_handle, "getattr");
-
 	IOF_TRACE_INFO(req, "ino %lu", ino);
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
-	IOF_TRACE_LINK(req, desc, "getattr");
 
 	if (handle) {
 		if (!handle->common.gah_valid)
 			D_GOTO(err, rc = EIO);
 
 		in->gah = handle->common.gah;
+		IOF_TRACE_ALIAS(req, handle, "getattr_fh_fuse_req");
 	} else {
 		rc = find_gah(fs_handle, ino, &in->gah);
 		if (rc != 0)

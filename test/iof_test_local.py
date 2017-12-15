@@ -407,15 +407,9 @@ class Testlocal(unittest.TestCase,
                 self.targets_rpctrace[index].rpc_reporting(ionss_log)
 
         #Descriptor tracing for the CNSS
-        missing_links = []
-        reused_desc = []
-        reused_desc = self.origin_rpctrace.\
-                      descriptor_rpc_trace(self.cnss_logfile)
-        if reused_desc:
-            self.normal_output('Reused descriptors:')
-            for d in reused_desc:
-                self.normal_output(d)
+        self.origin_rpctrace.descriptor_rpc_trace(self.cnss_logfile)
 
+        missing_links = []
         descriptor = self.origin_rpctrace.descriptor_to_trace(self.cnss_logfile)
         if descriptor is not None:
             missing_links = self.origin_rpctrace.\

@@ -144,7 +144,7 @@ restock(struct iof_pool_type *type, int count)
 			d_list_add(entry, &type->free_list);
 			type->free_count++;
 		} else {
-			IOF_TRACE_INFO(type, "entry %p failed reset", ptr);
+			IOF_TRACE_INFO(ptr, "entry %p failed reset", ptr);
 			type->count--;
 			D_FREE(ptr);
 		}
@@ -192,7 +192,6 @@ iof_pool_reclaim(struct iof_pool *pool)
 				type->release_count++;
 			}
 
-			IOF_TRACE_DOWN(ptr);
 			d_list_del(entry);
 			D_FREE(ptr);
 			type->free_count--;
@@ -238,7 +237,6 @@ create(struct iof_pool_type *type)
 	}
 	type->count++;
 
-	IOF_TRACE_UP(ptr, type, type->reg.name);
 	return ptr;
 }
 
@@ -363,6 +361,7 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 	d_list_t *entry = ptr + type->reg.offset;
 
 	IOF_TRACE_DEBUG(ptr, "Releasing");
+	IOF_TRACE_DOWN(ptr);
 	pthread_mutex_lock(&type->lock);
 	type->pending_count++;
 	d_list_add_tail(entry, &type->pending_list);

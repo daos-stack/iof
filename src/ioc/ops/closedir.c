@@ -78,7 +78,7 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	struct iof_gah_in *in;
 	int rc;
 
-	IOF_TRACE_INFO(dh, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
+	IOF_TRACE_INFO(req, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
 
 	pthread_mutex_lock(&fs_handle->od_lock);
 	d_list_del(&dh->list);
@@ -87,10 +87,9 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
-	IOF_TRACE_LINK(req, dh, "request");
 
 	if (!dh->gah_valid) {
-		IOF_TRACE_INFO(dh, "Release with bad dh");
+		IOF_TRACE_INFO(req, "Release with bad dh");
 
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it.

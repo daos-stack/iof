@@ -81,10 +81,11 @@ void iof_entry_cb(struct ioc_request *request)
 
 	if (rlink == &desc->ie->list) {
 		desc->ie = NULL;
-		IOF_TRACE_INFO(desc, "New file %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(request->req, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 	} else {
-		IOF_TRACE_INFO(desc, "Existing file rlink %p %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(request->req,
+			       "Existing file rlink %p %lu " GAH_PRINT_STR,
 			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
 		drop_ino_ref(desc->fs_handle, desc->ie->parent);
 		ie_close(desc->fs_handle, desc->ie);
@@ -94,8 +95,7 @@ out:
 		drop_ino_ref(desc->fs_handle, desc->ie->parent);
 		IOF_FUSE_REPLY_ERR(request->req, rc);
 	} else {
-		fuse_reply_entry(request->req, &entry);
-		IOF_TRACE_DOWN(request->req);
+		IOF_FUSE_REPLY_ENTRY(request->req, entry);
 	}
 	IOC_REQ_RELEASE_POOL(desc, pool);
 }
@@ -121,9 +121,8 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
-	IOF_TRACE_LINK(req, desc, "lookup");
 
-	IOF_TRACE_INFO(desc, "Req %p ie %p", req, &desc->ie->list);
+	IOF_TRACE_INFO(req, "Req %p ie %p", req, &desc->ie->list);
 
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->gah);

@@ -289,7 +289,7 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 
 	STAT_ADD(dir_handle->fs_handle->stats, readdir);
 
-	IOF_TRACE_LINK(req, dir_handle, "readdir");
+	IOF_TRACE_UP(req, dir_handle, "readdir_fuse_req");
 
 	if (FS_IS_OFFLINE(fs_handle)) {
 		ret = fs_handle->offline_reason;

@@ -554,7 +554,6 @@ dh_reset(void *arg)
 			    &dh->open_req.rpc);
 	if (rc || !dh->open_req.rpc)
 		return false;
-	IOF_TRACE_LINK(dh->open_req.rpc, dh, "opendir_rpc");
 
 	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
 			    FS_TO_OP(dh->fs_handle, closedir),
@@ -563,7 +562,6 @@ dh_reset(void *arg)
 		crt_req_decref(dh->open_req.rpc);
 		return false;
 	}
-	IOF_TRACE_LINK(dh->close_req.rpc, dh, "closedir_rpc");
 	return true;
 }
 
@@ -631,7 +629,6 @@ fh_reset(void *arg)
 		D_FREE(fh->ie);
 		return false;
 	}
-	IOF_TRACE_LINK(fh->open_rpc, fh, "open_rpc");
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
@@ -640,7 +637,6 @@ fh_reset(void *arg)
 		crt_req_decref(fh->open_rpc);
 		return false;
 	}
-	IOF_TRACE_LINK(fh->creat_rpc, fh, "creat_rpc");
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
 			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
@@ -650,7 +646,6 @@ fh_reset(void *arg)
 		crt_req_decref(fh->creat_rpc);
 		return false;
 	}
-	IOF_TRACE_LINK(fh->release_rpc, fh, "release_rpc");
 
 	crt_req_addref(fh->open_rpc);
 	crt_req_addref(fh->creat_rpc);
@@ -1617,7 +1612,6 @@ query_projections(struct iof_state *iof_state,
 		IOF_TRACE_ERROR(iof_state, "Query operation failed");
 		return false;
 	}
-	IOF_TRACE_LINK(query_rpc, iof_state, "query_rpc");
 
 	iof_state->iof_ctx.poll_interval = query->poll_interval;
 	iof_state->iof_ctx.callback_fn = query->progress_callback ?

@@ -38,6 +38,12 @@
 #ifndef __IOC_OPS_H__
 #define __IOC_OPS_H__
 
+#define STR_H(s) #s
+#define TO_STR(s) STR_H(s)
+#define TRACE_TYPE TO_STR(TYPE_NAME)
+#define TRACE_REQ TO_STR(STAT_KEY) "_fuse_req"
+#define TRACE_RPC TO_STR(STAT_KEY) "_rpc"
+
 #define IOC_REQ_INIT(src, fsh, api, in, rc)				\
 	do {								\
 		rc = 0;							\
@@ -47,8 +53,10 @@
 			break;						\
 		}							\
 		/* Acquire new object only if NULL */			\
-		if (!src)						\
+		if (!src) {						\
 			src = iof_pool_acquire(fsh->POOL_NAME);		\
+			IOF_TRACE_UP(src, fsh, TRACE_TYPE);		\
+		}							\
 		if (!src) {						\
 			rc = -ENOMEM;					\
 			break;						\
@@ -64,6 +72,8 @@
 		if (rc)							\
 			break;						\
 		(src)->REQ_NAME.req = fuse_req;				\
+		IOF_TRACE_UP(fuse_req, src, TRACE_REQ);			\
+		IOF_TRACE_LINK((src)->REQ_NAME.rpc, fuse_req, TRACE_RPC);\
 	} while (0)
 
 #define IOC_REQ_SEND_LL(src, fsh, rc) \

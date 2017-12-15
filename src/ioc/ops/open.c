@@ -74,7 +74,8 @@ ioc_open_ll_cb(const struct crt_cb_info *cb_info)
 	req = handle->open_req;
 	handle->open_req = 0;
 
-	fuse_reply_open(req, &fi);
+	IOF_FUSE_REPLY_OPEN(req, fi);
+
 	return;
 
 out_err:
@@ -131,11 +132,14 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		ret = ENOMEM;
 		goto out_err;
 	}
+	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
+	IOF_TRACE_UP(req, handle, "open_fuse_req");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req = req;
 
 	in = crt_req_get(handle->open_rpc);
+	IOF_TRACE_LINK(handle->open_rpc, req, "open_file_rpc");
 
 	/* Find the GAH of the file to open */
 	rc = find_gah(fs_handle, ino, &in->gah);
@@ -145,12 +149,12 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	}
 
 	in->flags = fi->flags;
-	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
+	IOF_TRACE_INFO(req, "flags 0%o", fi->flags);
 
 	crt_req_addref(handle->open_rpc);
 	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
 		ret = EIO;
 		goto out_err;
 	}

@@ -123,7 +123,7 @@ class ColorizedOutput():
         else:
             self.logger.info(prefix + output)
         if self.stream:
-            self.stream.write("{0}{1}\n".format(prefix, output))
+            self.stream.write("{0} {1}\n".format(prefix, output))
 
     def success_output(self, output):
         """Green output to console, writes output to internals.out"""

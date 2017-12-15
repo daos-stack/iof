@@ -61,13 +61,13 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		goto out_err;
 	}
 
-	IOF_TRACE_INFO(handle, GAH_PRINT_STR,
+	IOF_TRACE_UP(req, handle, "release_fuse_req");
+
+	IOF_TRACE_INFO(req, GAH_PRINT_STR,
 		       GAH_PRINT_VAL(handle->common.gah));
 
-	IOF_TRACE_LINK(req, handle, "request");
-
 	if (!handle->common.gah_valid) {
-		IOF_TRACE_INFO(handle, "Release with bad handle");
+		IOF_TRACE_INFO(req, "Release with bad handle");
 
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it.
@@ -78,11 +78,12 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	in = crt_req_get(handle->release_rpc);
 	in->gah = handle->common.gah;
+	IOF_TRACE_LINK(handle->release_rpc, req, "release_file_rpc");
 
 	crt_req_addref(handle->release_rpc);
 	rc = crt_req_send(handle->release_rpc, ioc_ll_gen_cb, req);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %u", rc);
 		ret = EIO;
 		goto out_err;
 	}

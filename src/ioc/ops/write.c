@@ -99,13 +99,14 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 	struct iof_writex_in *in = crt_req_get(wb->rpc);
 	int rc;
 
+	IOF_TRACE_LINK(wb->rpc, wb->req, "writex_rpc");
+
 	rc = crt_req_set_endpoint(wb->rpc, &handle->common.ep);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not set endpoint, rc = %u",
+		IOF_TRACE_ERROR(wb->req, "Could not set endpoint, rc = %u",
 				rc);
 		D_GOTO(err, rc = EIO);
 	}
-	IOF_TRACE_LINK(wb, handle, "writex_rpc");
 
 	in->gah = handle->common.gah;
 
@@ -121,7 +122,7 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 
 	rc = crt_req_send(wb->rpc, write_cb, wb);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %u", rc);
+		IOF_TRACE_ERROR(wb->req, "Could not send rpc, rc = %u", rc);
 		D_GOTO(err, rc = EIO);
 	}
 	crt_req_addref(wb->rpc);
@@ -140,8 +141,6 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	struct iof_wb *wb = NULL;
 	int rc;
 
-	IOF_TRACE_UP(req, handle, "write");
-
 	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
@@ -157,7 +156,10 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
 
-	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
+	IOF_TRACE_UP(wb, handle, "writebuf");
+	IOF_TRACE_UP(req, wb, "write_fuse_req");
+
+	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	wb->req = req;
@@ -189,8 +191,6 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	struct fuse_bufvec dst = { .count = 1 };
 	int rc;
 
-	IOF_TRACE_UP(req, handle, "write");
-
 	STAT_ADD(handle->fs_handle->stats, write);
 
 	if (FS_IS_OFFLINE(handle->fs_handle))
@@ -215,8 +215,10 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	wb = iof_pool_acquire(handle->fs_handle->write_pool);
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
+	IOF_TRACE_UP(wb, handle, "writebuf");
+	IOF_TRACE_UP(req, wb, "write_buf_fuse_req");
 
-	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
+	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	wb->req = req;

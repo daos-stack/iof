@@ -51,13 +51,13 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	void *buff = NULL;
 
 	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(rb, "Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(rb->req, "Bad RPC reply %d", cb_info->cci_rc);
 		rb->failure = true;
 		D_GOTO(out, rc = EIO);
 	}
 
 	if (out->err) {
-		IOF_TRACE_ERROR(rb, "Error from target %d", out->err);
+		IOF_TRACE_ERROR(rb->req, "Error from target %d", out->err);
 		rb->failure = true;
 		if (out->err == IOF_GAH_INVALID)
 			rb->handle->common.gah_valid = 0;
@@ -108,6 +108,7 @@ out:
 						"fuse_reply_data returned %d:%s",
 						rc, strerror(-rc));
 		}
+		IOF_TRACE_DOWN(rb->req);
 	}
 	iof_pool_release(rb->pt, rb);
 }
@@ -124,12 +125,12 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	if (rc)
 		D_GOTO(out_err, rc = EIO);
 
-	IOF_TRACE_UP(rb, handle, "read_bulk_rpc");
 	in = crt_req_get(rb->rpc);
 	in->gah = handle->common.gah;
 	in->xtvec.xt_off = position;
 	in->xtvec.xt_len = len;
 	in->data_bulk = rb->lb.handle;
+	IOF_TRACE_LINK(rb->rpc, req, "read_bulk_rpc");
 
 	rc = crt_req_send(rb->rpc, read_bulk_cb, rb);
 	if (rc)
@@ -153,8 +154,7 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	struct iof_rb *rb = NULL;
 	int rc;
 
-	IOF_TRACE_LINK(req, handle, "read");
-	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
+	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	if (FS_IS_OFFLINE(fs_handle)) {
@@ -169,6 +169,8 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	rb = iof_pool_acquire(pt);
 	if (!rb)
 		D_GOTO(out_err, rc = ENOMEM);
+	IOF_TRACE_UP(rb, handle, "readbuf");
+	IOF_TRACE_UP(req, rb, "read_fuse_req");
 
 	rb->req = req;
 	rb->handle = handle;

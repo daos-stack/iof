@@ -90,7 +90,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 
 	if (rlink == &handle->ie->list) {
 		handle->ie = NULL;
-		IOF_TRACE_INFO(handle, "New file %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(req, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 	} else {
 		/* This is an interesting, but not impossible case, although it
@@ -108,15 +108,14 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 		 * the file, so even if it had been unlinked it would still
 		 * exist and thus the inode was unlikely to be reused.
 		 */
-		IOF_TRACE_INFO(handle, "Existing file rlink %p %lu "
+		IOF_TRACE_INFO(req, "Existing file rlink %p %lu "
 			       GAH_PRINT_STR, rlink, entry.ino,
 			       GAH_PRINT_VAL(out->gah));
 		drop_ino_ref(handle->fs_handle, handle->ie->parent);
 		ie_close(handle->fs_handle, handle->ie);
 	}
 
-	fuse_reply_create(req, &entry, &fi);
-	IOF_TRACE_DOWN(req);
+	IOF_FUSE_REPLY_CREATE(req, entry, fi);
 	return;
 
 out_err:
@@ -134,7 +133,6 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	int ret;
 	int rc;
 
-	IOF_TRACE_UP(req, fs_handle, "create");
 	STAT_ADD(fs_handle->stats, create);
 
 	if (FS_IS_OFFLINE(fs_handle))
@@ -145,7 +143,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	 * would otherwise be using and check that is set.
 	 */
 	if (!(fi->flags & LARGEFILE)) {
-		IOF_TRACE_INFO(fs_handle, "O_LARGEFILE required 0%o",
+		IOF_TRACE_INFO(req, "O_LARGEFILE required 0%o",
 			       fi->flags);
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
@@ -153,20 +151,20 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	/* Check for flags that do not make sense in this context.
 	 */
 	if (fi->flags & IOF_UNSUPPORTED_CREATE_FLAGS) {
-		IOF_TRACE_INFO(fs_handle, "unsupported flag requested 0%o",
+		IOF_TRACE_INFO(req, "unsupported flag requested 0%o",
 			       fi->flags);
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
 
 	/* Check that only the flag for a regular file is specified */
 	if ((mode & S_IFMT) != S_IFREG) {
-		IOF_TRACE_INFO(fs_handle, "unsupported mode requested 0%o",
+		IOF_TRACE_INFO(req, "unsupported mode requested 0%o",
 			       mode);
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_TRACE_INFO(fs_handle, "Attempt to modify Read-Only File "
+		IOF_TRACE_INFO(req, "Attempt to modify Read-Only File "
 			       "System");
 		D_GOTO(out_err, ret = EROFS);
 	}
@@ -175,15 +173,17 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	if (!handle)
 		D_GOTO(out_err, ret = ENOMEM);
 
-	IOF_TRACE_LINK(req, handle, "create");
+	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
+	IOF_TRACE_UP(req, handle, "create_fuse_req");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req = req;
 
-	IOF_TRACE_INFO(handle, "file '%s' flags 0%o mode 0%o", name, fi->flags,
+	IOF_TRACE_INFO(req, "file '%s' flags 0%o mode 0%o", name, fi->flags,
 		       mode);
 
 	in = crt_req_get(handle->creat_rpc);
+	IOF_TRACE_LINK(handle->creat_rpc, req, "create_file_rpc");
 
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
@@ -200,7 +200,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	crt_req_addref(handle->creat_rpc);
 	rc = crt_req_send(handle->creat_rpc, ioc_create_ll_cb, handle);
 	if (rc) {
-		IOF_TRACE_ERROR(handle, "Could not send rpc, rc = %d", rc);
+		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
 		drop_ino_ref(fs_handle, parent);
 		D_GOTO(out_err, ret = EIO);
 	}

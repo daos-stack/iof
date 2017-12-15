@@ -74,9 +74,9 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_gah_info gah_info = {0};
 	int ret = EIO;
-	int rc;
 
-	IOF_TRACE_UP(req, handle, "ioctl");
+	IOF_TRACE_UP(req, handle, "ioctl_fuse_req");
+
 	IOF_TRACE_INFO(req, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
 		       GAH_PRINT_VAL(handle->common.gah));
 
@@ -93,12 +93,7 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
 
-	rc = fuse_reply_ioctl(req, 0, &gah_info, sizeof(gah_info));
-	if (rc != 0)
-		IOF_TRACE_ERROR(req, "fuse_reply_ioctl returned %d:%s", rc,
-				strerror(-rc));
-
-	IOF_TRACE_DOWN(req);
+	IOF_FUSE_REPLY_IOCTL(req, gah_info, sizeof(gah_info));
 	return;
 
 out_err:

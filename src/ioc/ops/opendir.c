@@ -69,7 +69,7 @@ opendir_ll_cb(struct ioc_request *request)
 		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
 		pthread_mutex_unlock(&dh->fs_handle->od_lock);
 		fi.fh = (uint64_t) dh;
-		fuse_reply_open(f_req, &fi);
+		IOF_FUSE_REPLY_OPEN(f_req, fi);
 	} else {
 		IOC_REQ_RELEASE(dh);
 		IOF_FUSE_REPLY_ERR(f_req, rc);
@@ -94,7 +94,6 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
-	IOF_TRACE_LINK(req, dh, "request");
 
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, ino, &in->gah);
