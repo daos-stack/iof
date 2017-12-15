@@ -66,7 +66,10 @@ struct ios_base {
 	/* Global tunable options */
 	char			*group_name;
 	uint32_t		poll_interval;
+	uint32_t		cnss_poll_interval;
 	uint32_t		thread_count;
+	bool			progress_callback;
+	crt_progress_cond_cb_t  callback_fn;
 };
 
 /* A miniature struct that describes a file handle, this is used
@@ -140,10 +143,12 @@ struct ios_projection {
 	uint32_t		max_write;
 	uint32_t		max_iov_write;
 	uint32_t		readdir_size;
+	char			*mount_path;
 
 	/* Per-projection tunable flags */
 	bool			cnss_threads;
-	bool			fuse_reply_buf;
+	bool			fuse_read_buf;
+	bool			fuse_write_buf;
 	bool			writeable;
 	bool			failover;
 

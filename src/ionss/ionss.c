@@ -2155,6 +2155,8 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	struct iof_psr_query *query = crt_reply_get(query_rpc);
 	int ret;
 
+	query->poll_interval = base.cnss_poll_interval;
+	query->progress_callback = base.progress_callback;
 	d_iov_set(&query->query_list, base.fs_list,
 		  base.projection_count * sizeof(struct iof_fs_info));
 
@@ -2221,7 +2223,7 @@ static void *progress_thread(void *arg)
 	/* progress loop */
 	do {
 		rc = crt_progress(b->crt_ctx, b->poll_interval,
-				  check_shutdown, &shutdown);
+				  b->callback_fn, &shutdown);
 		if (rc != 0 && rc != -DER_TIMEDOUT) {
 			IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 			break;
@@ -2362,19 +2364,109 @@ cleanup:
 	return rc;
 }
 
-void show_help(const char *prog)
+static void show_help(const char *prog)
 {
 	printf("I/O Forwarding I/O Node System Services\n");
 	printf("\n");
-	printf("Usage: %s [OPTION]... [PATH]...\n", prog);
-	printf("Projects filesystem access to PATHs from remote I/O Forwarding instances\n");
+	printf("Usage: %s [OPTION] ...\n", prog);
 	printf("\n");
-	printf("\t\t--group-name\tName of CaRT group to form\n");
-	printf("\t\t--poll-interval\tCaRT Poll interval to use on IONSS\n");
-	printf("\t\t--max-read\tMaximum size of read requests\n");
-	printf("\t\t--max-write\tMaximum size of write requests\n");
-	printf("\t-h\t--help\t\tThis help text\n");
-	printf("\n");
+	printf("\t-h, --help\tThis help text\n");
+	printf(
+	"\t-c, --config\tYAML configuration file with following structure:\n"
+	"\n"
+	"#################################################################\n"
+	"#################     IOF Configuration File     ################\n"
+	"#################################################################\n"
+	"\n"
+	"# Minimally, this file must contain a list of projections\n"
+	"# consisting of paths to the directories to be projected\n"
+	"projections:\n"
+	"\n"
+	"    # Projection 1\n"
+	"    - full_path:        /path/to/directory_1\n"
+	"\n"
+	"      # Client mount point relative to CNSS Prefix.\n"
+	"      # If not specified, the directory name is used\n"
+	"      mount_path:       /relative/mount/path\n"
+	"\n"
+	"      # Common options overriding global/default values, e.g.\n"
+	"      failover:         disable\n"
+	"      cnss_threads:     false\n"
+	"      max_read:         16M\n"
+	"      max_write:        16M\n"
+	"\n"
+	"    # Projection 2\n"
+	"    - full_path:        /path/to/directory_2\n"
+	"\n"
+	"    # Projection 3\n"
+	"    - full_path:        /path/to/directory_3\n"
+	"\n"
+	"# ======================== GLOBAL OPTIONS =======================\n"
+	"\n"
+	"# NOTE: Values specified for options are defaults\n"
+	"\n"
+	"# Name of the service process group\n"
+	"group_name:             IONSS\n"
+	"\n"
+	"# IONSS polling interval (in microseconds) for CART progress\n"
+	"poll_interval:          10000\n"
+	"\n"
+	"# CNSS polling interval (in microseconds) for CART progress\n"
+	"cnss_poll_interval:     10000\n"
+	"\n"
+	"# Number of threads to be used on the IONSS\n"
+	"thread_count:           2\n"
+	"\n"
+	"# Enable/disable use of CART progress callback function on IONSS\n"
+	"progress_callback:      true\n"
+	"\n"
+	"# The following options can be specified either per projection or\n"
+	"# globally. If both are specified, the value specified for that\n"
+	"# projection takes precedence\n"
+	"# For expressing sizes, short-hand multiplers are permitted:\n"
+	"# K=1024, M=1048576 (Case Insensitive)\n"
+	"\n"
+	"# Enable or disable the use of FUSE threads on the CNSS.\n"
+	"cnss_threads:           true\n"
+	"\n"
+	"# Select FUSE API to use on the client while reading and writing:\n"
+	"# If true, use 'fuse_reply_buf'; if false, use 'fuse_reply_data'\n"
+	"fuse_read_buf:          true\n"
+	"fuse_write_buf:         true\n"
+	"\n"
+	"# Controls whether a client fails over to a new primary service\n"
+	"# rank (PSR) in case the current PSR gets evicted. Valid values\n"
+	"# are \"auto\" and \"disable\". If \"auto\" is specified, fail-over is\n"
+	"# enabled only if available for the file system being projected.\n"
+	"failover:               auto\n"
+	"\n"
+	"# Whether the projection is writeable.  Valid values are \"auto\"\n"
+	"# and \"disable\". If \"disable\" is specified, the projection\n"
+	"# is treated as read-only even if the directory being projected\n"
+	"# is writeable by the user. Otherwise it is set according to the\n"
+	"# availabile permissions\n"
+	"writeable:              auto\n"
+	"\n"
+	"# Size of the buffer to be used for a readdir operation\n"
+	"readdir_size:           64K\n"
+	"\n"
+	"# Size of the buffer to be used for a bulk read operation\n"
+	"max_read:               1M\n"
+	"\n"
+	"# Size of the buffer to be used for a bulk write operation\n"
+	"max_write:              1M\n"
+	"\n"
+	"# Size of the buffer to be used for a direct read operation\n"
+	"max_iov_read:           64\n"
+	"\n"
+	"# Size of the buffer to be used for a direct write operation\n"
+	"max_iov_write:          64\n"
+	"\n"
+	"# NOTE: The word \"direct\" above means that if the transfer size\n"
+	"# is small enough, the data is transferred within the same request\n"
+	"# without having to initiate a bulk transfer; this is not to be\n"
+	"# confused with POSIX Direct I/O.\n"
+	"\n");
 }
 
 static bool
@@ -2512,7 +2604,7 @@ int main(int argc, char **argv)
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(argc, argv, "h", long_options, NULL);
+		c = getopt_long(argc, argv, "hc:", long_options, NULL);
 
 		if (c == -1)
 			break;
@@ -2530,13 +2622,11 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
-	parse_config(config_file, &base);
 
-	if (base.projection_count < 1) {
-		IOF_LOG_ERROR("Expected at least one "
-			      "directory to be projected");
+	if (parse_config(config_file, &base))
 		return IOF_BAD_DATA;
-	}
+
+	base.callback_fn = base.progress_callback ? check_shutdown : NULL;
 
 	/* The ionss holds open a fd for every inode it knows about so is heavy
 	 * on the open file count, so increase the rlimit for open files to
@@ -2640,7 +2730,6 @@ int main(int argc, char **argv)
 		if (projection->writeable)
 			projection->writeable = (faccessat(fd, ".",
 							   W_OK, 0) == 0);
-
 		projection->fh_pool = iof_pool_register(&base.pool, &fhp);
 		if (!projection->fh_pool)
 			continue;
@@ -2666,6 +2755,9 @@ int main(int argc, char **argv)
 		}
 
 		IOF_LOG_INFO("Projecting %s", projection->full_path);
+		IOF_LOG_INFO("Access: Read-%s; Failover: %s",
+			     projection->writeable ? "Write" : "Only",
+			     projection->failover ? "Enabled" : "Disabled");
 		projection->active = true;
 		projection->id = i;
 	}
@@ -2734,6 +2826,7 @@ int main(int argc, char **argv)
 
 	/* Create a fs_list from the projection array */
 	for (i = 0; i < base.projection_count ; i++) {
+		char *mnt = NULL;
 		struct ios_projection *projection = &base.projection_array[i];
 
 		if (!projection->active) {
@@ -2755,13 +2848,27 @@ int main(int argc, char **argv)
 			base.fs_list[i].flags |= IOF_WRITEABLE;
 		if (projection->cnss_threads)
 			base.fs_list[i].flags |= IOF_CNSS_MT;
-		if (projection->fuse_reply_buf)
+		if (projection->fuse_read_buf)
 			base.fs_list[i].flags |= IOF_FUSE_READ_BUF;
+		if (projection->fuse_write_buf)
+			base.fs_list[i].flags |= IOF_FUSE_WRITE_BUF;
 
 		base.fs_list[i].gah = projection->root->gah;
 		base.fs_list[i].id = projection->id;
-		strncpy(base.fs_list[i].mnt, projection->full_path,
-			IOF_NAME_LEN_MAX);
+
+		if (projection->mount_path != NULL)
+			mnt = basename(projection->mount_path);
+		if (mnt == NULL || mnt[0] == '\0') {
+			mnt = basename(projection->full_path);
+			IOF_LOG_WARNING("No mount point specified for "
+					"projection; Using target directory "
+					"name %s", mnt);
+		}
+		strncpy(base.fs_list[i].mnt, mnt, (IOF_NAME_LEN_MAX - 1));
+		if (strlen(mnt) >= IOF_NAME_LEN_MAX)
+			IOF_LOG_WARNING("Mount point has been truncated to %s",
+					base.fs_list[i].mnt);
+
 	}
 
 	ret = ionss_register();
@@ -2775,9 +2882,8 @@ int main(int argc, char **argv)
 		int rc;
 		/* progress loop */
 		do {
-			rc = crt_progress(base.crt_ctx,
-					  base.poll_interval,
-					  check_shutdown, &shutdown);
+			rc = crt_progress(base.crt_ctx, base.poll_interval,
+					  base.callback_fn, &shutdown);
 			if (rc != 0 && rc != -DER_TIMEDOUT) {
 				IOF_LOG_ERROR("crt_progress failed rc: %d", rc);
 				break;
@@ -2837,6 +2943,7 @@ cleanup:
 		pthread_mutex_destroy(&projection->lock);
 
 		D_FREE(projection->full_path);
+		D_FREE(projection->mount_path);
 	}
 
 	iof_pool_destroy(&base.pool);

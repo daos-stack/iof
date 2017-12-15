@@ -289,15 +289,14 @@ class Testlocal(unittest.TestCase,
         cmd.extend(['-n', '1',
                     '-x', 'D_LOG_MASK=%s' % self.log_mask,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
-                    '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
-                    '-x', 'CNSS_PREFIX=%s' % self.cnss_prefix])
+                    '-x', 'OFI_INTERFACE=%s' % self.ofi_interface])
         if log_to_file:
             cnss_file = os.path.join(self.log_path, 'cnss.log')
             unlink_file(cnss_file)
             cmd.extend(['-x', 'D_LOG_FILE=%s' % cnss_file])
 
         cmd.extend(valgrind)
-        cmd.extend(['cnss',
+        cmd.extend(['cnss', '-p', self.cnss_prefix,
                     ':',
                     '-n', '3',
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
@@ -309,7 +308,7 @@ class Testlocal(unittest.TestCase,
             cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
 
         cmd.extend(valgrind)
-        cmd.extend(['ionss', '--config', config_file.name])
+        cmd.extend(['ionss', '-c', config_file.name])
 
         self.proc = self.common_launch_process('', ' '.join(cmd))
 
@@ -692,7 +691,6 @@ class Testlocal(unittest.TestCase,
                                      'TESTING', 'tests')
 
         environ = os.environ
-        environ['CNSS_PREFIX'] = self.cnss_prefix
         environ['D_LOG_MASK'] = self.log_mask
         environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
         environ['OFI_INTERFACE'] = self.ofi_interface

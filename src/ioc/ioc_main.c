@@ -1162,7 +1162,9 @@ iof_thread(void *arg)
 
 	iof_tracker_signal(&iof_ctx->thread_start_tracker);
 	do {
-		rc = crt_progress(iof_ctx->crt_ctx, 1, iof_check_complete,
+		rc = crt_progress(iof_ctx->crt_ctx,
+				  iof_ctx->poll_interval,
+				  iof_ctx->callback_fn,
 				  &iof_ctx->thread_stop_tracker);
 
 		if (rc == -DER_TIMEDOUT) {
@@ -1301,9 +1303,20 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
-	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private");
-	if (IOF_HAS_FAILOVER(fs_handle->flags))
-		IOF_TRACE_INFO(fs_handle, "Fail Over Enabled");
+	fs_handle->ctx.poll_interval = iof_state->iof_ctx.poll_interval;
+	fs_handle->ctx.callback_fn = iof_state->iof_ctx.callback_fn;
+	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private; "
+			"Access: Read-%s | Fail Over: %s",
+			fs_handle->flags & IOF_WRITEABLE
+					 ? "Write" : "Only",
+			fs_handle->flags & IOF_FAILOVER
+					 ? "Enabled" : "Disabled");
+	IOF_TRACE_INFO(fs_handle, "FUSE: %sthreaded | API => "
+			"Write: ioc_ll_write%s, Read: fuse_reply_%s",
+			fs_handle->flags & IOF_CNSS_MT
+					 ? "Single " : "Multi-",
+			fs_handle->flags & IOF_FUSE_WRITE_BUF ? "_buf" : "",
+			fs_handle->flags & IOF_FUSE_READ_BUF ? "buf" : "data");
 
 	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK |
 					   D_HASH_FT_EPHEMERAL,
@@ -1640,6 +1653,12 @@ query_projections(struct iof_state *iof_state,
 	}
 	IOF_TRACE_LINK(query_rpc, iof_state, "query_rpc");
 
+	iof_state->iof_ctx.poll_interval = query->poll_interval;
+	iof_state->iof_ctx.callback_fn = query->progress_callback ?
+					 iof_check_complete : NULL;
+	IOF_TRACE_INFO(iof_state, "Poll Interval: %u microseconds; "
+				  "Progress Callback: %s", query->poll_interval,
+		       query->progress_callback ? "Enabled" : "Disabled");
 	/*calculate number of projections*/
 	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
 	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",

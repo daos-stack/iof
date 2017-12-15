@@ -87,6 +87,8 @@ struct iof_ctx {
 	struct iof_tracker		thread_start_tracker;
 	struct iof_tracker		thread_stop_tracker;
 	struct iof_tracker		thread_shutdown_tracker;
+	uint32_t			poll_interval;
+	crt_progress_cond_cb_t		callback_fn;
 };
 
 /*For IOF Plugin*/

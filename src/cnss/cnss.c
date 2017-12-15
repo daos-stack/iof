@@ -42,6 +42,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <getopt.h>
 #include <dlfcn.h>
 #include <fuse3/fuse.h>
 #include <fuse3/fuse_lowlevel.h>
@@ -606,11 +607,25 @@ add_plugin(struct cnss_info *info,
 	return true;
 }
 
-int main(void)
+static void show_help(const char *prog)
+{
+	printf("I/O Forwarding Compute Node System Services\n");
+	printf("\n");
+	printf("Usage: %s [OPTION] ...\n", prog);
+	printf("\n");
+	printf("\t-h, --help\tThis help text\n");
+	printf("\t-p, --prefix\tPath to the CNSS Working directory.\n"
+		"\t\t\tThis may also be set via the CNSS_PREFIX"
+		" environment variable.\n"
+		"\n");
+
+}
+
+int main(int argc, char **argv)
 {
 	char *cnss = "CNSS";
 	char *plugin_file = NULL;
-	const char *prefix;
+	const char *prefix = NULL;
 	char *version = iof_get_version();
 	struct plugin_entry *list_iter;
 	struct plugin_entry *list_iter_next;
@@ -626,10 +641,43 @@ int main(void)
 
 	IOF_LOG_INFO("CNSS version: %s", version);
 
-	prefix = getenv("CNSS_PREFIX");
+	while (1) {
+		static struct option long_options[] = {
+			{"help", no_argument, 0, 'h'},
+			{"prefix", required_argument, 0, 'p'},
+			{0, 0, 0, 0}
+		};
+		char c = getopt_long(argc, argv, "hp:", long_options, NULL);
 
+		if (c == -1)
+			break;
+
+		switch (c) {
+		case 'h':
+			show_help(argv[0]);
+			exit(0);
+			break;
+		case 'p':
+			prefix = optarg;
+			break;
+		case '?':
+			exit(1);
+			break;
+		}
+	}
+
+	if (prefix == NULL)
+		prefix = getenv("CNSS_PREFIX");
+	else {
+		ret = setenv("CNSS_PREFIX", prefix, 1);
+		if (ret) {
+			IOF_LOG_ERROR("setenv failed for "
+				      "CNSS_PREFIX, rc %d", ret);
+			return CNSS_ERR_PREFIX;
+		}
+	}
 	if (prefix == NULL) {
-		IOF_LOG_ERROR("CNSS_PREFIX is required");
+		IOF_LOG_ERROR("CNSS prefix is required");
 		return CNSS_ERR_PREFIX;
 	}
 

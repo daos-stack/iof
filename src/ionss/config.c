@@ -74,17 +74,22 @@
 	X(max_iov_read, set_size)		\
 	X(max_iov_write, set_size)		\
 	X(cnss_threads, set_flag)		\
-	X(fuse_reply_buf, set_flag)		\
+	X(fuse_read_buf, set_flag)		\
+	X(fuse_write_buf, set_flag)		\
 	X(failover, set_feature)		\
 	X(writeable, set_feature)
 
 #define GLOBAL_OPTIONS				\
 	X(group_name, set_string)		\
 	X(poll_interval, set_decimal)		\
-	X(thread_count, set_decimal)
+	X(cnss_poll_interval, set_decimal)	\
+	X(thread_count, set_decimal)		\
+	X(progress_callback, set_flag)
+
 
 #define PROJ_OPTIONS				\
-	X(full_path, set_string)
+	X(full_path, set_string, false)		\
+	X(mount_path, set_string, true)
 
 #define X(name, ...) const char *key_##name = #name;
 COMMON_OPTIONS
@@ -92,18 +97,21 @@ GLOBAL_OPTIONS
 PROJ_OPTIONS
 #undef X
 
-const char	*default_group_name	= "IONSS";
-const uint32_t	default_thread_count	= 2;
-const uint32_t	default_poll_interval	= (1000 * 1000);
-const uint32_t	default_readdir_size	= (64 * 1024);
-const uint32_t	default_max_read	= (1024 * 1024);
-const uint32_t	default_max_write	= (1024 * 1024);
-const uint32_t	default_max_iov_read	= 64;
-const uint32_t	default_max_iov_write	= 64;
-const bool	default_cnss_threads	= true;
-const bool	default_fuse_reply_buf	= true;
-const bool	default_failover	= true;
-const bool	default_writeable	= true;
+const char	*default_group_name		= "IONSS";
+const uint32_t	default_thread_count		= 2;
+const uint32_t	default_poll_interval		= (1000 * 1000);
+const uint32_t	default_cnss_poll_interval	= (1);
+const bool	default_progress_callback	= true;
+const uint32_t	default_readdir_size		= (64 * 1024);
+const uint32_t	default_max_read		= (1024 * 1024);
+const uint32_t	default_max_write		= (1024 * 1024);
+const uint32_t	default_max_iov_read		= 64;
+const uint32_t	default_max_iov_write		= 64;
+const bool	default_cnss_threads		= true;
+const bool	default_fuse_read_buf		= true;
+const bool	default_fuse_write_buf		= true;
+const bool	default_failover		= true;
+const bool	default_writeable		= true;
 
 struct parsed_option_s {
 	const char *key;
@@ -238,7 +246,7 @@ static int set_flag(struct parsed_option_s *option,
 	return parse_boolean(&option->bool_val,
 			     (char *)node->data.scalar.value,
 			     (int)node->data.scalar.length,
-			     (char*[]) { "disable", "enable" });
+			     (char*[]) { "true", "false" });
 }
 
 static int set_string(struct parsed_option_s *option,
@@ -414,7 +422,7 @@ int parse_config(char *path, struct ios_base *base)
 	if (!base->projection_array)
 		D_GOTO(cleanup, ret = -1);
 
-#define X(name, fn)							\
+#define X(name, fn, ...)						\
 	{								\
 		sel_option = find_option(options, num_options,		\
 					 key_##name,			\
@@ -428,7 +436,7 @@ int parse_config(char *path, struct ios_base *base)
 #undef X
 
 	for (i = 0; i < base->projection_count; i++) {
-#define X(name, fn)							\
+#define X(name, fn, ...)						\
 	{								\
 		sel_option = find_option(proj.options[i],		\
 					 proj.num_options,		\
@@ -449,14 +457,17 @@ int parse_config(char *path, struct ios_base *base)
 		COMMON_OPTIONS
 #undef X
 
-#define X(name, fn)							\
+#define X(name, fn, optional, ...)					\
 	{								\
 		sel_option = find_option(proj.options[i],		\
 					 proj.num_options,		\
 					 key_##name,			\
 					 strlen(key_##name));		\
 		assert(sel_option != NULL);				\
-		assert(sel_option->is_set);				\
+		if (!optional && sel_option->is_set == false) {		\
+			IOF_LOG_ERROR("%s must be set", key_##name);	\
+			D_GOTO(cleanup, ret = -1);			\
+		}							\
 		memcpy(&base->projection_array[i].name,			\
 		       &sel_option->buf,				\
 		       sizeof(base->projection_array[i].name));		\

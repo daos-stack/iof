@@ -84,22 +84,22 @@
  * Bit [5,4]	: 00=Default, 01=Lustre, 010=DW-Scratch, 011=DW-Cache
  *
  */
-#define IOF_FS_DEFAULT			0x00
-#define IOF_FS_LUSTRE			0x10
-#define IOF_DW_SCRATCH			0x20
-#define IOF_DW_CACHE			0x30
+#define IOF_FS_DEFAULT			0x00UL
+#define IOF_FS_LUSTRE			0x10UL
+#define IOF_DW_SCRATCH			0x20UL
+#define IOF_DW_CACHE			0x30UL
 
-#define IOF_WRITEABLE			0x01
-#define IOF_FAILOVER			0x02
-#define IOF_STRIPED_METADATA		0x04
-#define IOF_STRIPED_DATA		0x08
+#define IOF_WRITEABLE			0x01UL
+#define IOF_FAILOVER			0x02UL
+#define IOF_STRIPED_METADATA		0x04UL
+#define IOF_STRIPED_DATA		0x08UL
 
 #define IOF_IS_WRITEABLE(FLAGS) ((FLAGS) & IOF_WRITEABLE)
 #define IOF_HAS_FAILOVER(FLAGS) ((FLAGS) & IOF_FAILOVER)
 
-#define IOF_CNSS_MT			0x80
-#define IOF_FUSE_READ_BUF		0x100
-#define IOF_FUSE_WRITE_BUF		0x200
+#define IOF_CNSS_MT			0x080UL
+#define IOF_FUSE_READ_BUF		0x100UL
+#define IOF_FUSE_WRITE_BUF		0x200UL
 
 enum iof_projection_mode {
 	/* Private Access Mode */
@@ -131,7 +131,7 @@ struct iof_fs_info {
 	struct ios_gah gah;
 	int id;
 	/*Feature flags, as described above*/
-	uint8_t flags;
+	uint64_t flags;
 	/* Per-projection tunable options */
 	uint32_t max_read;
 	uint32_t max_write;
@@ -152,7 +152,9 @@ struct ios_name {
  * the compiler automatically padding the struct.
  */
 struct iof_psr_query {
-	d_iov_t query_list;
+	d_iov_t		query_list;
+	uint32_t	poll_interval;
+	bool		progress_callback;
 };
 
 struct iof_gah_string_in {
