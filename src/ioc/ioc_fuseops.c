@@ -220,7 +220,7 @@ void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
 	ioc_init_core(fs_handle, conn);
 }
 
-struct fuse_lowlevel_ops *iof_get_fuse_ops(bool writeable)
+struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t flags)
 {
 	struct fuse_lowlevel_ops *fuse_ops;
 
@@ -243,7 +243,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(bool writeable)
 	fuse_ops->readdir = ioc_ll_readdir;
 	fuse_ops->ioctl = ioc_ll_ioctl;
 
-	if (!writeable)
+	if (!(flags & IOF_WRITEABLE))
 		return fuse_ops;
 
 	fuse_ops->symlink = ioc_ll_symlink;
@@ -255,6 +255,10 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(bool writeable)
 	fuse_ops->setattr = ioc_ll_setattr;
 	fuse_ops->rename = ioc_ll_rename;
 	fuse_ops->fsync = ioc_ll_fsync;
+	fuse_ops->write = ioc_ll_write;
+
+	if (flags & IOF_FUSE_WRITE_BUF)
+		fuse_ops->write_buf = ioc_ll_write_buf;
 
 	return fuse_ops;
 }

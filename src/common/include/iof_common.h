@@ -99,6 +99,7 @@
 
 #define IOF_CNSS_MT			0x80
 #define IOF_FUSE_READ_BUF		0x100
+#define IOF_FUSE_WRITE_BUF		0x200
 
 enum iof_projection_mode {
 	/* Private Access Mode */

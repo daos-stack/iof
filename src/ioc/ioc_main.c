@@ -1482,7 +1482,7 @@ initialize_projection(struct iof_state *iof_state,
 			D_GOTO(err, 0);
 	}
 
-	fs_handle->fuse_ops = iof_get_fuse_ops(writeable);
+	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
 	if (!fs_handle->fuse_ops)
 		D_GOTO(err, 0);
 

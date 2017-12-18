@@ -93,8 +93,8 @@ err:
 }
 
 static void
-ioc_writex(const char *buff, size_t len, off_t position,
-	   struct iof_wb *wb, struct iof_file_handle *handle)
+ioc_writex(size_t len, off_t position, struct iof_wb *wb,
+	   struct iof_file_handle *handle)
 {
 	struct iof_writex_in *in = crt_req_get(wb->rpc);
 	int rc;
@@ -108,8 +108,6 @@ ioc_writex(const char *buff, size_t len, off_t position,
 	IOF_TRACE_LINK(wb, handle, "writex_rpc");
 
 	in->gah = handle->common.gah;
-
-	memcpy(wb->lb.buf, buff, len);
 
 	in->xtvec.xt_len = len;
 	if (len <= handle->fs_handle->proj.max_iov_write) {
@@ -165,7 +163,72 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	wb->req = req;
 	wb->handle = handle;
 
-	ioc_writex(buff, len, position, wb, handle);
+	memcpy(wb->lb.buf, buff, len);
+
+	ioc_writex(len, position, wb, handle);
+
+	return;
+err:
+	IOF_FUSE_REPLY_ERR(req, rc);
+	if (wb)
+		iof_pool_release(handle->fs_handle->write_pool, wb);
+}
+
+/*
+ * write_buf() callback for fuse.  Essentially the same as ioc_ll_write()
+ * however with two advantages, it allows us to check parameters before
+ * doing any allocation/memcpy() and it uses fuse_buf_copy() to put the data
+ * directly into our data buffer avoiding an additional memcpy().
+ */
+void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
+		      off_t position, struct fuse_file_info *fi)
+{
+	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
+	struct iof_wb *wb = NULL;
+	size_t len = bufv->buf[0].size;
+	struct fuse_bufvec dst = { .count = 1 };
+	int rc;
+
+	IOF_TRACE_UP(req, handle, "write");
+
+	STAT_ADD(handle->fs_handle->stats, write);
+
+	if (FS_IS_OFFLINE(handle->fs_handle))
+		D_GOTO(err, rc = handle->fs_handle->offline_reason);
+
+	if (!handle->common.gah_valid)
+		/* If the server has reported that the GAH is invalid
+		 * then do not try and use it.
+		 */
+		D_GOTO(err, rc = EIO);
+
+	/* Check for buffer count being 1.  According to the documentation this
+	 * will always be the case, and if it isn't then our code will be using
+	 * the wrong value for len
+	 */
+	if (bufv->count != 1)
+		D_GOTO(err, rc = EIO);
+
+	IOF_TRACE_INFO(handle, "Count %zi [0].flags %#x",
+		       bufv->count, bufv->buf[0].flags);
+
+	wb = iof_pool_acquire(handle->fs_handle->write_pool);
+	if (!wb)
+		D_GOTO(err, rc = ENOMEM);
+
+	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
+		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
+
+	wb->req = req;
+	wb->handle = handle;
+
+	dst.buf[0].size = len;
+	dst.buf[0].mem = wb->lb.buf;
+	rc = fuse_buf_copy(&dst, bufv, 0);
+	if (rc != len)
+		D_GOTO(err, rc = EIO);
+
+	ioc_writex(len, position, wb, handle);
 
 	return;
 err:
