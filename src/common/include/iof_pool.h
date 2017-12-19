@@ -51,9 +51,10 @@ struct iof_pool_reg {
 	bool	(*init)(void *, void *);
 
 	/* Prepare an object for use by freeing any old data
-	 * and allocating new data
+	 * and allocating new data.
+	 * Returns true on success.
 	 */
-	int	(*reset)(void *);
+	bool	(*reset)(void *);
 
 	/* Called once at teardown */
 	void	(*release)(void *);

@@ -127,7 +127,7 @@ restock(struct iof_pool_type *type, int count)
 
 	d_list_for_each_safe(entry, enext, &type->pending_list) {
 		void *ptr = (void *)entry - type->reg.offset;
-		int rc = 0;
+		bool rcb = true;
 
 		IOF_TRACE_DEBUG(ptr, "Resetting");
 
@@ -137,9 +137,9 @@ restock(struct iof_pool_type *type, int count)
 		if (type->reg.reset) {
 			type->reset_count++;
 			reset_calls++;
-			rc = type->reg.reset(ptr);
+			rcb = type->reg.reset(ptr);
 		}
-		if (rc == 0) {
+		if (rcb) {
 			d_list_add(entry, &type->free_list);
 			type->free_count++;
 		} else {
@@ -228,7 +228,7 @@ create(struct iof_pool_type *type)
 	}
 
 	if (type->reg.reset) {
-		if (type->reg.reset(ptr) != 0) {
+		if (!type->reg.reset(ptr)) {
 			IOF_TRACE_INFO(type, "entry %p failed reset", ptr);
 			D_FREE(ptr);
 			return NULL;

@@ -2386,7 +2386,7 @@ fh_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 fh_reset(void *arg)
 {
 	struct ionss_file_handle *fh = arg;
@@ -2396,7 +2396,7 @@ fh_reset(void *arg)
 	atomic_fetch_add(&fh->ref, 1);
 	memset(&fh->proc_fd_name, 0, 64);
 
-	return 0;
+	return true;
 }
 
 static bool
@@ -2410,7 +2410,7 @@ ar_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 ar_reset(void *arg)
 {
 	struct ionss_active_read *ard = arg;
@@ -2430,10 +2430,10 @@ ar_reset(void *arg)
 			       ard->projection->max_read,
 			       true);
 		if (!ard->local_bulk.buf)
-			return -1;
+			return false;
 	}
 
-	return 0;
+	return true;
 }
 
 static void
@@ -2455,7 +2455,7 @@ aw_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 aw_reset(void *arg)
 {
 	struct ionss_active_write *awd = arg;
@@ -2475,10 +2475,10 @@ aw_reset(void *arg)
 			       awd->projection->max_write,
 			       false);
 		if (!awd->local_bulk.buf)
-			return -1;
+			return false;
 	}
 
-	return 0;
+	return true;
 }
 
 static void

@@ -532,7 +532,7 @@ dh_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 dh_reset(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
@@ -555,7 +555,7 @@ dh_reset(void *arg)
 			    FS_TO_OP(dh->fs_handle, opendir),
 			    &dh->open_req.rpc);
 	if (rc || !dh->open_req.rpc)
-		return -1;
+		return false;
 	IOF_TRACE_LINK(dh->open_req.rpc, dh, "opendir_rpc");
 
 	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
@@ -563,10 +563,10 @@ dh_reset(void *arg)
 			    &dh->close_req.rpc);
 	if (rc || !dh->close_req.rpc) {
 		crt_req_decref(dh->open_req.rpc);
-		return -1;
+		return false;
 	}
 	IOF_TRACE_LINK(dh->close_req.rpc, dh, "closedir_rpc");
-	return 0;
+	return true;
 }
 
 static void
@@ -593,7 +593,7 @@ fh_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 fh_reset(void *arg)
 {
 	struct iof_file_handle *fh = arg;
@@ -624,7 +624,7 @@ fh_reset(void *arg)
 	if (!fh->ie) {
 		D_ALLOC_PTR(fh->ie);
 		if (!fh->ie)
-			return -1;
+			return false;
 		atomic_fetch_add(&fh->ie->ref, 1);
 	}
 
@@ -632,7 +632,7 @@ fh_reset(void *arg)
 			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
 	if (rc || !fh->open_rpc) {
 		D_FREE(fh->ie);
-		return -1;
+		return false;
 	}
 	IOF_TRACE_LINK(fh->open_rpc, fh, "open_rpc");
 
@@ -641,7 +641,7 @@ fh_reset(void *arg)
 	if (rc || !fh->creat_rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_rpc);
-		return -1;
+		return false;
 	}
 	IOF_TRACE_LINK(fh->creat_rpc, fh, "creat_rpc");
 
@@ -651,14 +651,14 @@ fh_reset(void *arg)
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_rpc);
 		crt_req_decref(fh->creat_rpc);
-		return -1;
+		return false;
 	}
 	IOF_TRACE_LINK(fh->release_rpc, fh, "release_rpc");
 
 	crt_req_addref(fh->open_rpc);
 	crt_req_addref(fh->creat_rpc);
 	crt_req_addref(fh->release_rpc);
-	return 0;
+	return true;
 }
 
 static void
@@ -685,7 +685,7 @@ gh_init(void *arg, void *handle)
 }
 
 /* Reset and prepare for use a getfattr descriptor */
-static int
+static bool
 gh_reset(void *arg)
 {
 	struct getattr_req *req = arg;
@@ -704,11 +704,11 @@ gh_reset(void *arg)
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
-		return -1;
+		return false;
 	}
 	crt_req_addref(req->request.rpc);
 
-	return 0;
+	return true;
 }
 
 /* Destroy a descriptor which could be either getattr or getfattr */
@@ -731,7 +731,7 @@ close_init(void *arg, void *handle)
 }
 
 /* Reset and prepare for use a getfattr descriptor */
-static int
+static bool
 close_reset(void *arg)
 {
 	struct close_req *req = arg;
@@ -748,11 +748,11 @@ close_reset(void *arg)
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
-		return -1;
+		return false;
 	}
 	crt_req_addref(req->request.rpc);
 
-	return 0;
+	return true;
 }
 
 /* Destroy a descriptor which could be either getattr or getfattr */
@@ -778,7 +778,7 @@ entry_init(lookup);
 entry_init(mkdir);
 entry_init(symlink);
 
-static int
+static bool
 entry_reset(void *arg)
 {
 	struct entry_req *req = arg;
@@ -801,7 +801,7 @@ entry_reset(void *arg)
 	if (!req->ie) {
 		D_ALLOC_PTR(req->ie);
 		if (!req->ie)
-			return -1;
+			return false;
 		atomic_fetch_add(&req->ie->ref, 1);
 	}
 
@@ -820,11 +820,11 @@ entry_reset(void *arg)
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
 		D_FREE(req->ie);
-		return -1;
+		return false;
 	}
 	crt_req_addref(req->request.rpc);
 
-	return 0;
+	return true;
 }
 
 /* Destroy a descriptor which could be either getattr or getfattr */
@@ -864,7 +864,7 @@ rb_large_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 rb_reset(void *arg)
 {
 	struct iof_rb *rb = arg;
@@ -887,7 +887,7 @@ rb_reset(void *arg)
 		IOF_BULK_ALLOC(rb->fs_handle->proj.crt_ctx, rb, lb,
 			       rb->buf_size, false);
 		if (!rb->lb.buf)
-			return -1;
+			return false;
 	}
 
 	rc = crt_req_create(rb->fs_handle->proj.crt_ctx, NULL,
@@ -895,11 +895,11 @@ rb_reset(void *arg)
 	if (rc || !rb->rpc) {
 		IOF_TRACE_ERROR(rb, "Could not create request, rc = %u", rc);
 		IOF_BULK_FREE(rb, lb);
-		return -1;
+		return false;
 	}
 	crt_req_addref(rb->rpc);
 
-	return 0;
+	return true;
 }
 
 static void
@@ -923,7 +923,7 @@ wb_init(void *arg, void *handle)
 	return true;
 }
 
-static int
+static bool
 wb_reset(void *arg)
 {
 	struct iof_wb *wb = arg;
@@ -946,7 +946,7 @@ wb_reset(void *arg)
 		IOF_BULK_ALLOC(wb->fs_handle->proj.crt_ctx, wb, lb,
 			       wb->fs_handle->proj.max_write, true);
 		if (!wb->lb.buf)
-			return -1;
+			return false;
 	}
 
 	rc = crt_req_create(wb->fs_handle->proj.crt_ctx, NULL,
@@ -954,11 +954,11 @@ wb_reset(void *arg)
 	if (rc || !wb->rpc) {
 		IOF_TRACE_ERROR(wb, "Could not create request, rc = %u", rc);
 		IOF_BULK_FREE(wb, lb);
-		return -1;
+		return false;
 	}
 	crt_req_addref(wb->rpc);
 
-	return 0;
+	return true;
 }
 
 static void
