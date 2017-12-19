@@ -52,13 +52,13 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 
 	if (cb_info->cci_rc != 0) {
 		IOF_TRACE_INFO(rb, "Bad RPC reply %d", cb_info->cci_rc);
-		rb->error = true;
+		rb->failure = true;
 		D_GOTO(out, rc = EIO);
 	}
 
 	if (out->err) {
 		IOF_TRACE_ERROR(rb, "Error from target %d", out->err);
-		rb->error = true;
+		rb->failure = true;
 		if (out->err == IOF_GAH_INVALID)
 			rb->handle->common.gah_valid = 0;
 		D_GOTO(out, rc = EIO);

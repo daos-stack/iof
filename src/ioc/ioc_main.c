@@ -522,16 +522,18 @@ d_chash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,
 			    .hop_rec_free = ih_free,
 };
 
-int dh_init(void *arg, void *handle)
+static bool
+dh_init(void *arg, void *handle)
 {
 	struct iof_dir_handle *dh = arg;
 
 	dh->fs_handle = handle;
 
-	return 0;
+	return true;
 }
 
-int dh_reset(void *arg)
+static int
+dh_reset(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
 	int rc;
@@ -567,7 +569,8 @@ int dh_reset(void *arg)
 	return 0;
 }
 
-void dh_release(void *arg)
+static void
+dh_release(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
 
@@ -581,13 +584,13 @@ void dh_release(void *arg)
  * for getfattr.  The only difference is the RPC id so the datatypes are
  * the same, as are the init and release functions.
  */
-static int
+static bool
 fh_init(void *arg, void *handle)
 {
 	struct iof_file_handle *fh = arg;
 
 	fh->fs_handle = handle;
-	return 0;
+	return true;
 }
 
 static int
@@ -672,13 +675,13 @@ fh_release(void *arg)
 	D_FREE(fh->ie);
 }
 
-static int
+static bool
 gh_init(void *arg, void *handle)
 {
 	struct getattr_req *req = arg;
 
 	req->fs_handle = handle;
-	return 0;
+	return true;
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -718,13 +721,13 @@ gh_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
-static int
+static bool
 close_init(void *arg, void *handle)
 {
 	struct close_req *req = arg;
 
 	req->fs_handle = handle;
-	return 0;
+	return true;
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -763,13 +766,13 @@ close_release(void *arg)
 }
 
 #define entry_init(type)					\
-	static int type##_entry_init(void *arg, void *handle)	\
+	static bool type##_entry_init(void *arg, void *handle)	\
 	{							\
 		struct entry_req *req = arg;			\
 								\
 		req->fs_handle = handle;			\
 		req->opcode = FS_TO_OP(dh->fs_handle, type);	\
-		return 0;					\
+		return true;					\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -835,7 +838,7 @@ entry_release(void *arg)
 	D_FREE(req->ie);
 }
 
-static int
+static bool
 rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
@@ -845,10 +848,10 @@ rb_page_init(void *arg, void *handle)
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
 
-	return 0;
+	return true;
 }
 
-static int
+static bool
 rb_large_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
@@ -858,7 +861,7 @@ rb_large_init(void *arg, void *handle)
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
 
-	return 0;
+	return true;
 }
 
 static int
@@ -875,9 +878,9 @@ rb_reset(void *arg)
 		rb->rpc = NULL;
 	}
 
-	if (rb->error) {
+	if (rb->failure) {
 		IOF_BULK_FREE(rb, lb);
-		rb->error = false;
+		rb->failure = false;
 	}
 
 	if (!rb->lb.buf) {
@@ -910,14 +913,14 @@ rb_release(void *arg)
 	crt_req_decref(rb->rpc);
 }
 
-static int
+static bool
 wb_init(void *arg, void *handle)
 {
 	struct iof_wb *wb = arg;
 
 	wb->fs_handle = handle;
 
-	return 0;
+	return true;
 }
 
 static int
@@ -934,9 +937,9 @@ wb_reset(void *arg)
 		wb->rpc = NULL;
 	}
 
-	if (wb->error) {
+	if (wb->failure) {
 		IOF_BULK_FREE(wb, lb);
-		wb->error = false;
+		wb->failure = false;
 	}
 
 	if (!wb->lb.buf) {

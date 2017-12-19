@@ -2377,13 +2377,13 @@ void show_help(const char *prog)
 	printf("\n");
 }
 
-static int
+static bool
 fh_init(void *arg, void *handle)
 {
 	struct ionss_file_handle *fh = arg;
 
 	fh->projection = handle;
-	return 0;
+	return true;
 }
 
 static int
@@ -2399,22 +2399,7 @@ fh_reset(void *arg)
 	return 0;
 }
 
-static int
-ar_create_bulk(struct ionss_active_read *ard)
-{
-	if (IOF_BULK_ALLOC(ard->projection->base->crt_ctx, ard, local_bulk,
-			   ard->projection->max_read, true))
-		return 0;
-	return -1;
-}
-
-static void
-ar_destroy_bulk(struct ionss_active_read *ard)
-{
-	IOF_BULK_FREE(ard, local_bulk);
-}
-
-static int
+static bool
 ar_init(void *arg, void *handle)
 {
 	struct ionss_active_read *ard = arg;
@@ -2422,7 +2407,7 @@ ar_init(void *arg, void *handle)
 
 	ard->projection = projection;
 
-	return ar_create_bulk(ard);
+	return true;
 }
 
 static int
@@ -2433,15 +2418,22 @@ ar_reset(void *arg)
 	ard->data_offset = 0;
 	ard->segment_offset = 0;
 
-	/* If the previous bulk worked, leave the handle as is */
-	if (!ard->failed)
-		return 0;
+	if (ard->failed) {
+		IOF_BULK_FREE(ard, local_bulk);
+		ard->failed = false;
+	}
 
-	ard->failed = false;
+	if (!ard->local_bulk.buf) {
+		IOF_BULK_ALLOC(ard->projection->base->crt_ctx,
+			       ard,
+			       local_bulk,
+			       ard->projection->max_read,
+			       true);
+		if (!ard->local_bulk.buf)
+			return -1;
+	}
 
-	ar_destroy_bulk(ard);
-
-	return ar_create_bulk(ard);
+	return 0;
 }
 
 static void
@@ -2449,25 +2441,10 @@ ar_release(void *arg)
 {
 	struct ionss_active_read *ard = arg;
 
-	ar_destroy_bulk(ard);
+	IOF_BULK_FREE(ard, local_bulk);
 }
 
-static int
-aw_create_bulk(struct ionss_active_write *awd)
-{
-	if (IOF_BULK_ALLOC(awd->projection->base->crt_ctx, awd, local_bulk,
-			   awd->projection->max_write, false))
-		return 0;
-	return -1;
-}
-
-static void
-aw_destroy_bulk(struct ionss_active_write *awd)
-{
-	IOF_BULK_FREE(awd, local_bulk);
-}
-
-static int
+static bool
 aw_init(void *arg, void *handle)
 {
 	struct ionss_active_write *awd = arg;
@@ -2475,7 +2452,7 @@ aw_init(void *arg, void *handle)
 
 	awd->projection = projection;
 
-	return aw_create_bulk(awd);
+	return true;
 }
 
 static int
@@ -2486,15 +2463,22 @@ aw_reset(void *arg)
 	awd->data_offset = 0;
 	awd->segment_offset = 0;
 
-	/* If the previous bulk worked, leave the handle as is */
-	if (!awd->failed)
-		return 0;
+	if (awd->failed) {
+		IOF_BULK_FREE(awd, local_bulk);
+		awd->failed = false;
+	}
 
-	awd->failed = false;
+	if (!awd->local_bulk.buf) {
+		IOF_BULK_ALLOC(awd->projection->base->crt_ctx,
+			       awd,
+			       local_bulk,
+			       awd->projection->max_write,
+			       false);
+		if (!awd->local_bulk.buf)
+			return -1;
+	}
 
-	aw_destroy_bulk(awd);
-
-	return aw_create_bulk(awd);
+	return 0;
 }
 
 static void
@@ -2502,7 +2486,7 @@ aw_release(void *arg)
 {
 	struct ionss_active_write *awd = arg;
 
-	aw_destroy_bulk(awd);
+	IOF_BULK_FREE(awd, local_bulk);
 }
 
 int main(int argc, char **argv)

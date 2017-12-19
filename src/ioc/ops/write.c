@@ -85,7 +85,7 @@ hard_err:
 	 * before reuse.
 	 */
 	if (in->data_bulk)
-		wb->error = true;
+		wb->failure = true;
 err:
 	IOF_FUSE_REPLY_ERR(req, rc);
 

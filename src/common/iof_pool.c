@@ -143,7 +143,7 @@ restock(struct iof_pool_type *type, int count)
 			d_list_add(entry, &type->free_list);
 			type->free_count++;
 		} else {
-			IOF_TRACE_DEBUG(ptr, "entry failed reset");
+			IOF_TRACE_INFO(type, "entry %p failed reset", ptr);
 			type->count--;
 			D_FREE(ptr);
 		}
@@ -214,7 +214,6 @@ static void *
 create(struct iof_pool_type *type)
 {
 	void *ptr;
-	int rc;
 
 	D_ALLOC(ptr, type->reg.size);
 	if (!ptr)
@@ -222,17 +221,15 @@ create(struct iof_pool_type *type)
 
 	type->init_count++;
 	if (type->reg.init) {
-		rc = type->reg.init(ptr, type->reg.handle);
-
-		if (rc != 0) {
+		if (!type->reg.init(ptr, type->reg.handle)) {
 			D_FREE(ptr);
 			return NULL;
 		}
 	}
 
 	if (type->reg.reset) {
-		rc = type->reg.reset(ptr);
-		if (rc != 0) {
+		if (type->reg.reset(ptr) != 0) {
+			IOF_TRACE_INFO(type, "entry %p failed reset", ptr);
 			D_FREE(ptr);
 			return NULL;
 		}

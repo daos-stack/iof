@@ -45,8 +45,10 @@
 
 /* A datastructure used to describe and register a type */
 struct iof_pool_reg {
-	/* Perform any one-time setup or assigning constants. */
-	int	(*init)(void *, void *);
+	/* Perform any one-time setup or assigning constants.
+	 * Returns true on success.
+	 */
+	bool	(*init)(void *, void *);
 
 	/* Prepare an object for use by freeing any old data
 	 * and allocating new data

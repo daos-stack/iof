@@ -125,7 +125,7 @@ struct iof_rb {
 	fuse_req_t			req;
 	struct iof_pool_type		*pt;
 	size_t				buf_size;
-	bool				error;
+	bool				failure;
 };
 
 struct iof_wb {
@@ -135,7 +135,7 @@ struct iof_wb {
 	struct iof_local_bulk		lb;
 	crt_rpc_t			*rpc;
 	fuse_req_t			req;
-	bool				error;
+	bool				failure;
 };
 
 struct iof_projection_info {
