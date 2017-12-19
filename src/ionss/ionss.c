@@ -2481,13 +2481,12 @@ static void show_help(const char *prog)
 	"\n");
 }
 
-static bool
+static void
 fh_init(void *arg, void *handle)
 {
 	struct ionss_file_handle *fh = arg;
 
 	fh->projection = handle;
-	return true;
 }
 
 static bool
@@ -2503,15 +2502,12 @@ fh_reset(void *arg)
 	return true;
 }
 
-static bool
+static void
 ar_init(void *arg, void *handle)
 {
 	struct ionss_active_read *ard = arg;
-	struct ios_projection *projection = handle;
 
-	ard->projection = projection;
-
-	return true;
+	ard->projection = handle;
 }
 
 static bool
@@ -2548,15 +2544,12 @@ ar_release(void *arg)
 	IOF_BULK_FREE(ard, local_bulk);
 }
 
-static bool
+static void
 aw_init(void *arg, void *handle)
 {
 	struct ionss_active_write *awd = arg;
-	struct ios_projection *projection = handle;
 
-	awd->projection = projection;
-
-	return true;
+	awd->projection = handle;
 }
 
 static bool

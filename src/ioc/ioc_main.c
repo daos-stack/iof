@@ -522,14 +522,12 @@ d_chash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,
 			    .hop_rec_free = ih_free,
 };
 
-static bool
+static void
 dh_init(void *arg, void *handle)
 {
 	struct iof_dir_handle *dh = arg;
 
 	dh->fs_handle = handle;
-
-	return true;
 }
 
 static bool
@@ -584,13 +582,12 @@ dh_release(void *arg)
  * for getfattr.  The only difference is the RPC id so the datatypes are
  * the same, as are the init and release functions.
  */
-static bool
+static void
 fh_init(void *arg, void *handle)
 {
 	struct iof_file_handle *fh = arg;
 
 	fh->fs_handle = handle;
-	return true;
 }
 
 static bool
@@ -675,13 +672,12 @@ fh_release(void *arg)
 	D_FREE(fh->ie);
 }
 
-static bool
+static void
 gh_init(void *arg, void *handle)
 {
 	struct getattr_req *req = arg;
 
 	req->fs_handle = handle;
-	return true;
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -721,13 +717,12 @@ gh_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
-static bool
+static void
 close_init(void *arg, void *handle)
 {
 	struct close_req *req = arg;
 
 	req->fs_handle = handle;
-	return true;
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -766,13 +761,12 @@ close_release(void *arg)
 }
 
 #define entry_init(type)					\
-	static bool type##_entry_init(void *arg, void *handle)	\
+	static void type##_entry_init(void *arg, void *handle)	\
 	{							\
 		struct entry_req *req = arg;			\
 								\
 		req->fs_handle = handle;			\
 		req->opcode = FS_TO_OP(dh->fs_handle, type);	\
-		return true;					\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -838,7 +832,7 @@ entry_release(void *arg)
 	D_FREE(req->ie);
 }
 
-static bool
+static void
 rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
@@ -847,11 +841,9 @@ rb_page_init(void *arg, void *handle)
 	rb->buf_size = 4096;
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
-
-	return true;
 }
 
-static bool
+static void
 rb_large_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
@@ -860,8 +852,6 @@ rb_large_init(void *arg, void *handle)
 	rb->buf_size = rb->fs_handle->max_read;
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
-
-	return true;
 }
 
 static bool
@@ -913,14 +903,12 @@ rb_release(void *arg)
 	crt_req_decref(rb->rpc);
 }
 
-static bool
+static void
 wb_init(void *arg, void *handle)
 {
 	struct iof_wb *wb = arg;
 
 	wb->fs_handle = handle;
-
-	return true;
 }
 
 static bool

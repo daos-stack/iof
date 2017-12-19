@@ -225,12 +225,8 @@ create(struct iof_pool_type *type)
 		return NULL;
 
 	type->init_count++;
-	if (type->reg.init) {
-		if (!type->reg.init(ptr, type->reg.handle)) {
-			D_FREE(ptr);
-			return NULL;
-		}
-	}
+	if (type->reg.init)
+		type->reg.init(ptr, type->reg.handle);
 
 	if (type->reg.reset) {
 		if (!type->reg.reset(ptr)) {
