@@ -208,7 +208,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 			IOF_TRACE_WARNING(fs_handle,
 					  "Marking projection %d offline: %s",
 					  fs_handle->fs_id,
-					  fs_handle->mount_point);
+					  fs_handle->mnt_dir.name);
 			if (!g->grp.enabled)
 				fs_handle->offline_reason = -rc;
 			else
@@ -967,9 +967,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
 	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
-	char *prefix;
 	int ret;
-	DIR *prefix_dir;
 	int num_attached = 0;
 	int num_groups = 1;
 	int i;
@@ -1039,21 +1037,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
 					  IOF_IOCTL_VERSION);
-
-	prefix = getenv("CNSS_PREFIX");
-	D_REALPATH(iof_state->cnss_prefix, prefix);
-	if (!iof_state->cnss_prefix)
-		return 1;
-	prefix_dir = opendir(iof_state->cnss_prefix);
-	if (prefix_dir)
-		closedir(prefix_dir);
-	else {
-		if (mkdir(iof_state->cnss_prefix, 0755)) {
-			IOF_TRACE_ERROR(iof_state, "Could not create "
-					"cnss_prefix");
-			return 1;
-		}
-	}
 
 	/*registrations*/
 	ret = crt_register_eviction_cb(ioc_eviction_cb, iof_state);
@@ -1262,7 +1245,6 @@ initialize_projection(struct iof_state *iof_state,
 	struct cnss_plugin_cb		*cb;
 	struct fuse_args		args = {0};
 	bool				writeable = false;
-	char				*base_name;
 	int				ret;
 	bool				rcb;
 
@@ -1334,17 +1316,13 @@ initialize_projection(struct iof_state *iof_state,
 	fs_handle->readdir_size = fs_info->readdir_size;
 	fs_handle->gah = fs_info->gah;
 
-	base_name = basename(fs_info->mnt);
+	strncpy(fs_handle->mnt_dir.name, fs_info->dir_name.name, NAME_MAX);
 
-	D_ASPRINTF(fs_handle->mount_point, "%s/%s", iof_state->cnss_prefix,
-		   base_name);
-	if (!fs_handle->mount_point)
-		D_GOTO(err, 0);
-
-	IOF_TRACE_DEBUG(fs_handle, "Projected Mount %s", base_name);
+	IOF_TRACE_DEBUG(fs_handle,
+			"Projected Mount %s", fs_handle->mnt_dir.name);
 
 	IOF_TRACE_INFO(fs_handle, "Mountpoint for this projection: %s",
-		       fs_handle->mount_point);
+		       fs_handle->mnt_dir.name);
 
 	fs_handle->fs_id = fs_info->id;
 	fs_handle->proj.cli_fs_id = id;
@@ -1354,17 +1332,25 @@ initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle->stats)
 		D_GOTO(err, 0);
 
-	D_ASPRINTF(fs_handle->base_dir, "%d", fs_handle->proj.cli_fs_id);
-	if (!fs_handle->base_dir)
-		D_GOTO(err, 0);
+	snprintf(fs_handle->ctrl_dir.name,
+		 NAME_MAX,
+		 "%d",
+		 fs_handle->proj.cli_fs_id);
 
 	cb->create_ctrl_subdir(iof_state->projections_dir,
-			       fs_handle->base_dir,
+			       fs_handle->ctrl_dir.name,
 			       &fs_handle->fs_dir);
 
 	/* Register the mount point with the control
 	 * filesystem
 	 */
+	D_ASPRINTF(fs_handle->mount_point,
+		   "%s/%s",
+		   cb->prefix,
+		   fs_handle->mnt_dir.name);
+	if (!fs_handle->mount_point)
+		D_GOTO(err, 0);
+
 	cb->register_ctrl_constant(fs_handle->fs_dir,
 				   "mount_point",
 				   fs_handle->mount_point);
@@ -1590,7 +1576,7 @@ initialize_projection(struct iof_state *iof_state,
 				   NULL,
 				   fs_handle->fuse_ops,
 				   &args,
-				   fs_handle->mount_point,
+				   fs_handle->mnt_dir.name,
 				  (fs_handle->flags & IOF_CNSS_MT) != 0,
 				   fs_handle);
 	if (!rcb) {
@@ -1599,7 +1585,7 @@ initialize_projection(struct iof_state *iof_state,
 	}
 
 	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: %s",
-			fs_handle->mount_point);
+			fs_handle->mnt_dir.name);
 
 	d_list_add_tail(&fs_handle->link, &iof_state->fs_list);
 
@@ -1652,8 +1638,9 @@ query_projections(struct iof_state *iof_state,
 					    (*total)++);
 
 		if (!rcb) {
-			IOF_TRACE_ERROR(iof_state, "Could not initialize "
-					"projection %s from %s", tmp[i].mnt,
+			IOF_TRACE_ERROR(iof_state,
+					"Could not initialize projection %s from %s",
+					tmp[i].dir_name.name,
 					group->grp_name);
 			return false;
 		}
@@ -1823,12 +1810,11 @@ static void iof_deregister_fuse(void *arg)
 	IOF_TRACE_DOWN(fs_handle);
 	d_list_del(&fs_handle->link);
 
+	D_FREE(fs_handle->mount_point);
 	D_FREE(fs_handle->fuse_ops);
 
 	pthread_mutex_destroy(&fs_handle->od_lock);
 
-	D_FREE(fs_handle->base_dir);
-	D_FREE(fs_handle->mount_point);
 	D_FREE(fs_handle->stats);
 	D_FREE(fs_handle);
 }
@@ -1906,7 +1892,6 @@ static void iof_finish(void *arg)
 	IOF_TRACE_DOWN(&iof_state->iof_ctx);
 	IOF_TRACE_DOWN(iof_state);
 	D_FREE(iof_state->groups);
-	D_FREE(iof_state->cnss_prefix);
 	D_FREE(iof_state);
 }
 

@@ -58,8 +58,6 @@
 #define IOF_GAH_INVALID        10
 #define IOF_ERR_CTRL_FS        11
 
-#define IOF_NAME_LEN_MAX 256
-
 /* IOF Registration op codes for RPC's*/
 
 #define QUERY_PSR_OP	(0x201)
@@ -124,9 +122,16 @@ enum iof_projection_mode {
 	IOF_PROJECTION_MODES
 };
 
+/* The name of a filesystem entry
+ *
+ */
+struct ios_name {
+	char name[NAME_MAX + 1];
+};
+
 struct iof_fs_info {
 	/*Associated mount point*/
-	char mnt[IOF_NAME_LEN_MAX];
+	struct ios_name dir_name;
 	/*id of filesystem*/
 	struct ios_gah gah;
 	int id;
@@ -138,13 +143,6 @@ struct iof_fs_info {
 	uint32_t readdir_size;
 	uint32_t max_iov_read;
 	uint32_t max_iov_write;
-};
-
-/* The name of a filesystem entry
- *
- */
-struct ios_name {
-	char name[NAME_MAX + 1];
 };
 
 /* The response to the initial query RPC.

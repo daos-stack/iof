@@ -590,6 +590,7 @@ add_plugin(struct cnss_info *info,
 
 	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
 
+	entry->self_fns.prefix = info->prefix;
 	entry->active = true;
 
 	entry->dl_handle = dl_handle;
@@ -703,6 +704,15 @@ int main(int argc, char **argv)
 		return CNSS_ERR_PREFIX;
 	}
 
+	/* chdir to the cnss_prefix, as that allows all future I/O access
+	 * to use relative paths.
+	 */
+	ret = chdir(prefix);
+	if (ret != 0) {
+		IOF_LOG_ERROR("Could not chdir to CNSS_PREFIX");
+		return CNSS_ERR_PREFIX;
+	}
+
 	ret = crt_group_config_path_set(prefix);
 	if (ret != 0) {
 		IOF_LOG_ERROR("Could not set group config prefix");
@@ -715,6 +725,7 @@ int main(int argc, char **argv)
 	IOF_TRACE_UP(cnss_info, NULL, "cnss_info");
 
 	ctrl_info_init(&cnss_info->info);
+	cnss_info->prefix = prefix;
 
 	D_ASPRINTF(ctrl_prefix, "%s/.ctrl", prefix);
 	if (!ctrl_prefix)

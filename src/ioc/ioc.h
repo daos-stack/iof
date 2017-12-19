@@ -149,8 +149,12 @@ struct iof_projection_info {
 	struct ctrl_dir			*fs_dir;
 	struct ctrl_dir			*stats_dir;
 	struct iof_stats		*stats;
+	/* The name of the mount directory */
+	struct ios_name			mnt_dir;
 	char				*mount_point;
-	char				*base_dir;
+
+	/* The name of the ctrlfs direcory */
+	struct ios_name			ctrl_dir;
 	/* fuse client implementation */
 	struct fuse_lowlevel_ops	*fuse_ops;
 	/* Feature Flags */

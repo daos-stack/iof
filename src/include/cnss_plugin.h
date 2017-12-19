@@ -91,6 +91,7 @@ typedef int (*ctrl_fs_uint64_write_cb_t)(uint64_t value, void *cb_arg);
 struct cnss_plugin_cb {
 	void *handle;
 	struct ctrl_dir *plugin_dir;
+	const char *prefix;
 	int fuse_version;
 	const char *(*get_config_option)(const char *); /* A wrapper
 							 * around getenv

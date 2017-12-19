@@ -2869,10 +2869,10 @@ int main(int argc, char **argv)
 					"projection; Using target directory "
 					"name %s", mnt);
 		}
-		strncpy(base.fs_list[i].mnt, mnt, (IOF_NAME_LEN_MAX - 1));
-		if (strlen(mnt) >= IOF_NAME_LEN_MAX)
+		strncpy(base.fs_list[i].dir_name.name, mnt, NAME_MAX);
+		if (strlen(mnt) >= NAME_MAX)
 			IOF_LOG_WARNING("Mount point has been truncated to %s",
-					base.fs_list[i].mnt);
+					base.fs_list[i].dir_name.name);
 	}
 
 	ret = ionss_register();
