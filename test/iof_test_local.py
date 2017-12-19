@@ -746,7 +746,7 @@ class Testlocal(unittest.TestCase,
         if elapsed > 5 or self.test_valgrind:
             return
         long_run = list(mdtest)
-        long_run.extend(['-i', '5', '-I', '1000'])
+        long_run.extend(['-i', '5', '-I', '500'])
         start_time = time.time()
         rtn = self.common_launch_cmd(mdtest_cmdstr, ' '.join(long_run))
         elapsed = time.time() - start_time
