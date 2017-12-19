@@ -265,6 +265,11 @@ class Testlocal(unittest.TestCase,
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
 
+        if 'mdtest' in self.id():
+            #turn off debugging for mdtest
+            self.log_mask = "WARN"
+            self.internals_tracing = "no"
+
         self.test_valgrind = iofcommontestsuite.valgrind_suffix(self.log_path,
                                                                 pmix=False)
 
