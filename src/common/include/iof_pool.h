@@ -57,7 +57,6 @@ struct iof_pool_reg {
 
 	/* Called once at teardown */
 	void	(*release)(void *);
-	void	*handle;
 	char	*name;
 	int	size;
 	int	offset;
@@ -87,6 +86,7 @@ struct iof_pool_type {
 	d_list_t		free_list;
 	d_list_t		pending_list;
 	pthread_mutex_t		lock;
+	struct iof_pool		*pool;
 
 	/* Counters for current number of objects */
 	int			count; /* Total currently created */
@@ -107,13 +107,14 @@ struct iof_pool_type {
 };
 
 struct iof_pool {
-	d_list_t		list;
-	pthread_mutex_t		lock;
-	bool			init;
+	d_list_t	list;
+	void		*arg;
+	pthread_mutex_t	lock;
+	bool		init;
 };
 
 /* Create a new pool, called once at startup */
-int iof_pool_init(struct iof_pool *);
+int iof_pool_init(struct iof_pool *, void *arg);
 
 /* Destroy a pool, called once at shutdown */
 void iof_pool_destroy(struct iof_pool *);

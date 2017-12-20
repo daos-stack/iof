@@ -2658,12 +2658,6 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	ret = iof_pool_init(&base.pool);
-	if (ret != 0) {
-		ret = IOF_ERR_NOMEM;
-		goto cleanup;
-	}
-
 	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
 
 	base.gs = ios_gah_init();
@@ -2681,13 +2675,19 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 		struct stat buf = {0};
-		struct iof_pool_reg fhp = { .handle = projection,
-					    .init = fh_init,
-					    .reset = fh_reset,
-					    POOL_TYPE_INIT(ionss_file_handle,
-							   clist)};
+		struct iof_pool_reg fhp = {.init = fh_init,
+					   .reset = fh_reset,
+					   POOL_TYPE_INIT(ionss_file_handle,
+							  clist)};
 		int fd;
 		int rc;
+
+		ret = iof_pool_init(&projection->pool, projection);
+		if (ret != 0) {
+			ret = IOF_ERR_NOMEM;
+			err = 1;
+			goto cleanup;
+		}
 
 		fd = open(projection->full_path,
 			  O_DIRECTORY | O_PATH | O_NOATIME | O_RDONLY);
@@ -2735,7 +2735,8 @@ int main(int argc, char **argv)
 		if (projection->writeable)
 			projection->writeable = (faccessat(fd, ".",
 							   W_OK, 0) == 0);
-		projection->fh_pool = iof_pool_register(&base.pool, &fhp);
+		projection->fh_pool = iof_pool_register(&projection->pool,
+							&fhp);
 		if (!projection->fh_pool)
 			continue;
 
@@ -2803,15 +2804,13 @@ int main(int argc, char **argv)
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 
-		struct iof_pool_reg arp = {.handle = projection,
-					   .init = ar_init,
+		struct iof_pool_reg arp = {.init = ar_init,
 					   .reset = ar_reset,
 					   .release = ar_release,
 					   .max_desc = projection->max_read_count,
 					   POOL_TYPE_INIT(ionss_active_read,
 							  list)};
-		struct iof_pool_reg awp = {.handle = projection,
-					   .init = aw_init,
+		struct iof_pool_reg awp = {.init = aw_init,
 					   .reset = aw_reset,
 					   .release = aw_release,
 					   .max_desc = projection->max_write_count,
@@ -2820,10 +2819,12 @@ int main(int argc, char **argv)
 
 		if (!projection->active)
 			continue;
-		projection->ar_pool = iof_pool_register(&base.pool, &arp);
+		projection->ar_pool = iof_pool_register(&projection->pool,
+							&arp);
 		if (!projection->ar_pool)
 			projection->active = 0;
-		projection->aw_pool = iof_pool_register(&base.pool, &awp);
+		projection->aw_pool = iof_pool_register(&projection->pool,
+							&awp);
 		if (!projection->aw_pool)
 			projection->active = 0;
 	}
@@ -2872,7 +2873,6 @@ int main(int argc, char **argv)
 		if (strlen(mnt) >= IOF_NAME_LEN_MAX)
 			IOF_LOG_WARNING("Mount point has been truncated to %s",
 					base.fs_list[i].mnt);
-
 	}
 
 	ret = ionss_register();
@@ -2948,9 +2948,9 @@ cleanup:
 
 		D_FREE(projection->full_path);
 		D_FREE(projection->mount_path);
-	}
 
-	iof_pool_destroy(&base.pool);
+		iof_pool_destroy(&projection->pool);
+	}
 
 	pthread_rwlock_destroy(&base.gah_rwlock);
 

@@ -56,7 +56,6 @@ struct ios_base {
 	struct iof_fs_info	*fs_list;
 	struct ios_gah_store	*gs;
 	struct proto		*proto;
-	struct iof_pool		pool;
 	uint32_t		projection_count;
 	crt_group_t		*primary_group;
 	d_rank_t		my_rank;
@@ -130,6 +129,7 @@ struct ios_projection {
 	struct ios_base		*base;
 	char			*full_path;
 	char			fs_type[IOF_MAX_FSTYPE_LEN];
+	struct iof_pool		pool;
 	struct iof_pool_type	*fh_pool;
 	struct iof_pool_type	*ar_pool;
 	struct iof_pool_type	*aw_pool;

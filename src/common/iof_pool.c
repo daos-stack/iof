@@ -50,7 +50,7 @@ static void
 debug_dump(struct iof_pool_type *type)
 {
 	IOF_TRACE_INFO(type, "Pool type %p '%s'", type, type->reg.name);
-	IOF_TRACE_DEBUG(type, "handle %p size %d offset %d", type->reg.handle,
+	IOF_TRACE_DEBUG(type, "size %d offset %d",
 			type->reg.size, type->reg.offset);
 	IOF_TRACE_DEBUG(type, "Count: free %d pending %d total %d",
 			type->free_count, type->pending_count, type->count);
@@ -65,13 +65,14 @@ debug_dump(struct iof_pool_type *type)
 
 /* Create a object pool */
 int
-iof_pool_init(struct iof_pool *pool)
+iof_pool_init(struct iof_pool *pool, void *arg)
 {
 	IOF_TRACE_DEBUG(pool, "Created a pool");
 	D_INIT_LIST_HEAD(&pool->list);
 
 	pthread_mutex_init(&pool->lock, NULL);
 	pool->init = true;
+	pool->arg = arg;
 	return 0;
 }
 
@@ -226,7 +227,7 @@ create(struct iof_pool_type *type)
 
 	type->init_count++;
 	if (type->reg.init)
-		type->reg.init(ptr, type->reg.handle);
+		type->reg.init(ptr, type->pool->arg);
 
 	if (type->reg.reset) {
 		if (!type->reg.reset(ptr)) {
@@ -287,6 +288,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	pthread_mutex_init(&type->lock, NULL);
 	D_INIT_LIST_HEAD(&type->free_list);
 	D_INIT_LIST_HEAD(&type->pending_list);
+	type->pool = pool;
 
 	type->count = 0;
 	memcpy(&type->reg, reg, sizeof(*reg));

@@ -1283,7 +1283,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
 
-	ret = iof_pool_init(&fs_handle->pool);
+	ret = iof_pool_init(&fs_handle->pool, fs_handle);
 	if (ret != 0)
 		D_GOTO(err, 0);
 
@@ -1496,52 +1496,44 @@ initialize_projection(struct iof_state *iof_state,
 		 * This is done late on in the registraction as the dh_int()
 		 * and dh_reset() functions require access to fs_handle.
 		 */
-		struct iof_pool_reg pt = { .handle = fs_handle,
-					   .init = dh_init,
-					   .reset = dh_reset,
-					   .release = dh_release,
-					   POOL_TYPE_INIT(iof_dir_handle, list)};
+		struct iof_pool_reg pt = {.init = dh_init,
+					  .reset = dh_reset,
+					  .release = dh_release,
+					  POOL_TYPE_INIT(iof_dir_handle, list)};
 
-		struct iof_pool_reg fh = { .handle = fs_handle,
-					   .init = fh_init,
-					   .reset = fh_reset,
-					   .release = fh_release,
-					   POOL_TYPE_INIT(iof_file_handle, list)};
+		struct iof_pool_reg fh = {.init = fh_init,
+					  .reset = fh_reset,
+					  .release = fh_release,
+					  POOL_TYPE_INIT(iof_file_handle, list)};
 
-		struct iof_pool_reg fgt = { .handle = fs_handle,
-					    .init = gh_init,
-					    .reset = gh_reset,
-					    .release = gh_release,
-					    POOL_TYPE_INIT(getattr_req, list)};
+		struct iof_pool_reg fgt = {.init = gh_init,
+					   .reset = gh_reset,
+					   .release = gh_release,
+					   POOL_TYPE_INIT(getattr_req, list)};
 
-		struct iof_pool_reg ct = { .handle = fs_handle,
-					    .init = close_init,
-					    .reset = close_reset,
-					    .release = close_release,
-					    POOL_TYPE_INIT(close_req, list)};
+		struct iof_pool_reg ct = {.init = close_init,
+					  .reset = close_reset,
+					  .release = close_release,
+					  POOL_TYPE_INIT(close_req, list)};
 
-		struct iof_pool_reg entry_t = { .handle = fs_handle,
-						.reset = entry_reset,
-						.release = entry_release,
-						POOL_TYPE_INIT(entry_req, list)};
+		struct iof_pool_reg entry_t = {.reset = entry_reset,
+					       .release = entry_release,
+					       POOL_TYPE_INIT(entry_req, list)};
 
-		struct iof_pool_reg rb_page = { .handle = fs_handle,
-						.init = rb_page_init,
+		struct iof_pool_reg rb_page = {.init = rb_page_init,
+					       .reset = rb_reset,
+					       .release = rb_release,
+					       POOL_TYPE_INIT(iof_rb, list)};
+
+		struct iof_pool_reg rb_large = {.init = rb_large_init,
 						.reset = rb_reset,
 						.release = rb_release,
 						POOL_TYPE_INIT(iof_rb, list)};
 
-		struct iof_pool_reg rb_large = { .handle = fs_handle,
-						 .init = rb_large_init,
-						 .reset = rb_reset,
-						 .release = rb_release,
-						 POOL_TYPE_INIT(iof_rb, list)};
-
-		struct iof_pool_reg wb = { .handle = fs_handle,
-					   .init = wb_init,
-					   .reset = wb_reset,
-					   .release = wb_release,
-					   POOL_TYPE_INIT(iof_wb, list)};
+		struct iof_pool_reg wb = {.init = wb_init,
+					  .reset = wb_reset,
+					  .release = wb_release,
+					  POOL_TYPE_INIT(iof_wb, list)};
 
 		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
 		if (!fs_handle->dh_pool)
