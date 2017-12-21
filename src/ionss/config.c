@@ -246,7 +246,7 @@ static int set_flag(struct parsed_option_s *option,
 	return parse_boolean(&option->bool_val,
 			     (char *)node->data.scalar.value,
 			     (int)node->data.scalar.length,
-			     (char*[]) { "true", "false" });
+			     (char*[]) { "false", "true" });
 }
 
 static int set_string(struct parsed_option_s *option,
