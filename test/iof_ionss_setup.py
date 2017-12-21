@@ -54,7 +54,6 @@ class IonssExport():
     will be projected/exported to the CNSS.
     Note: all unittest methods start with export_ """
     logger = logging.getLogger("TestRunnerLogger")
-    e_dir = None
     export_dir = None
 
     def export_file_copy_from(self):
@@ -139,7 +138,6 @@ class IonssChecksSetup(unittest.TestCase, IonssExport):
     """
     def setUp(self):
         """Set up the export dir"""
-        self.e_dir = os.environ["ION_TEMPDIR"]
-        self.export_dir = os.path.join(self.e_dir, 'exp')
+        self.export_dir = os.path.join(os.environ["ION_TEMPDIR"], 'exp')
         self.logger.info("*************************************************")
         self.logger.info("Starting for %s", self.id())

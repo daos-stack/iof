@@ -105,7 +105,6 @@ class Testlocal(unittest.TestCase,
     export_dir = None
     shutdown_file = None
     active_file = None
-    e_dir = None
     log_mask = ""
     crt_phy_addr = ""
     ofi_interface = ""
@@ -220,8 +219,8 @@ class Testlocal(unittest.TestCase,
         common_methods.CTRL_DIR = os.path.join(self.cnss_prefix, '.ctrl')
         self.shutdown_file = os.path.join(common_methods.CTRL_DIR, 'shutdown')
         self.active_file = os.path.join(common_methods.CTRL_DIR, 'active')
-        self.e_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
-                                      dir=export_tmp_dir)
+        self.export_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
+                                           dir=export_tmp_dir)
         ompi_bin = os.getenv('IOF_OMPI_BIN', None)
 
         if ompi_bin:
@@ -229,14 +228,15 @@ class Testlocal(unittest.TestCase,
         else:
             orterun = 'orterun'
 
-        self.export_dir = os.path.join(self.e_dir, 'exp')
-        os.mkdir(self.export_dir)
         config = {"projections":
                   [{"full_path": self.export_dir},
                    {"full_path": '/usr'}]}
+        config['projections'][0]['mount_path'] = 'exp'
+
         config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
                                                   prefix="ionss_",
-                                                  dir=self.e_dir, mode='w',
+                                                  dir=export_tmp_dir,
+                                                  mode='w',
                                                   delete=False)
         self.ionss_config_file = config_file.name
         yaml.dump(config, config_file.file, default_flow_style=False)
@@ -441,7 +441,6 @@ class Testlocal(unittest.TestCase,
         os.unlink(self.ionss_config_file)
         os.rmdir(self.cnss_prefix)
         shutil.rmtree(self.export_dir)
-        os.rmdir(self.e_dir)
 
         print("Log dir is %s" % self.log_path)
 
