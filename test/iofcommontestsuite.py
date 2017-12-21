@@ -71,7 +71,7 @@ import logging
 
 def valgrind_suffix(log_path, pmix=True):
     """Return the commands required to launch valgrind"""
-    use_valgrind = os.getenv('TR_USE_VALGRIND', default="")
+    use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
     crt_suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
                                     "etc", "memcheck-cart.supp")
     pid = '%p'
@@ -106,9 +106,9 @@ def valgrind_suffix(log_path, pmix=True):
         return ['valgrind',
                 '--fair-sched=try',
                 '--tool=callgrind',
-                '-callgrind-out-file=%s' %
+                '--callgrind-out-file=%s' %
                 os.path.join(log_path,
-                             "valgrind-%s.xml" % pid)]
+                             "callgrind-%s.in" % pid)]
     elif use_valgrind == "memcheck-native":
         cmd = ['valgrind',
                '--fair-sched=try',

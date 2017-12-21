@@ -125,6 +125,7 @@ class Testlocal(unittest.TestCase,
     internals_tracing = ""
     origin_rpctrace = None
     targets_rpctrace = []
+    ionss_count = 3
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -284,7 +285,7 @@ class Testlocal(unittest.TestCase,
         cmd.extend(valgrind)
         cmd.extend(['cnss', '-p', self.cnss_prefix,
                     ':',
-                    '-n', '3',
+                    '-n', str(self.ionss_count),
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'D_LOG_MASK=%s' % self.log_mask])
@@ -438,6 +439,20 @@ class Testlocal(unittest.TestCase,
         os.rmdir(self.e_dir)
 
         print("Log dir is %s" % self.log_path)
+
+        use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
+        if use_valgrind == 'callgrind':
+            proc_count = 1 + self.ionss_count
+            for c_file_idx in range(0, proc_count):
+                file_in = os.path.join(self.log_path,
+                                       'callgrind-{0}.in'.format(c_file_idx))
+                file_out = os.path.join(self.log_path,
+                                        'callgrind-{0}.out'.format(c_file_idx))
+                cmd = ['callgrind_annotate', '--auto=yes', file_in]
+                with open(file_out, 'w') as f:
+                    procrtn = subprocess.call(cmd, timeout=180,
+                                              stdout=f)
+                print(' '.join(cmd))
 
         for dir_path, _, file_list in os.walk(self.log_path, topdown=False):
             for fname in file_list:
@@ -923,6 +938,8 @@ if __name__ == '__main__':
                         help=test_help, nargs='*')
     parser.add_argument('--valgrind', action='store_true',
                         help='Run the test under valgrind')
+    parser.add_argument('--callgrind', action='store_true',
+                        help='Run the test under callgrind')
     parser.add_argument('--redirect', action='store_true',
                         help='Redirect daemon output to a file')
     parser.add_argument('--launch', action='store_true',
@@ -941,6 +958,8 @@ if __name__ == '__main__':
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
+    if args.callgrind:
+        os.environ['TR_USE_VALGRIND'] = 'callgrind'
     if args.redirect:
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
     if args.logfile:
