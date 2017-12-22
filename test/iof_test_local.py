@@ -248,6 +248,8 @@ class Testlocal(unittest.TestCase,
         yaml.dump(config, config_file.file, default_flow_style=False)
         config_file.close()
 
+        self.export_dirs = [self.export_dir, '/usr']
+
         log_top_dir = os.getenv("IOF_TESTLOG",
                                 os.path.join(os.path.dirname(
                                     os.path.realpath(__file__)), 'output'))

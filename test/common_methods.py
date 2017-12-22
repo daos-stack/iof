@@ -278,9 +278,15 @@ class InternalsPathFramework(ColorizedOutput):
         ionss_node = 'single node' if running on one node, otherwise passes
         ionss node"""
         self.normal_output('\nValidate Projection and FS Data:')
+        if not ionss_dirs:
+            self.error_output('IONSS directories are NULL')
+            return
         for index, idir in enumerate(ionss_dirs):
             if idir == '/usr':
                 break # issues with rsync on '/usr' dir
+            if not mount_dirs:
+                self.error_output('Projection directories are NULL')
+                return
             mount_dir = os.path.join(mount_dirs[index], '')
             cmd = (['rsync', '-nvrc', '--links'])
             if ionss_node == 'single node':
