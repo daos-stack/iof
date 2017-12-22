@@ -69,10 +69,12 @@
  */
 #define COMMON_OPTIONS				\
 	X(readdir_size, set_size)		\
-	X(max_read, set_size)			\
-	X(max_write, set_size)			\
-	X(max_iov_read, set_size)		\
-	X(max_iov_write, set_size)		\
+	X(max_read_size, set_size)		\
+	X(max_write_size, set_size)		\
+	X(max_iov_read_size, set_size)		\
+	X(max_iov_write_size, set_size)		\
+	X(max_read_count, set_decimal)		\
+	X(max_write_count, set_decimal)		\
 	X(cnss_threads, set_flag)		\
 	X(fuse_read_buf, set_flag)		\
 	X(fuse_write_buf, set_flag)		\
@@ -103,10 +105,12 @@ const uint32_t	default_poll_interval		= (1000 * 1000);
 const uint32_t	default_cnss_poll_interval	= (1);
 const bool	default_progress_callback	= true;
 const uint32_t	default_readdir_size		= (64 * 1024);
-const uint32_t	default_max_read		= (1024 * 1024);
-const uint32_t	default_max_write		= (1024 * 1024);
-const uint32_t	default_max_iov_read		= 64;
-const uint32_t	default_max_iov_write		= 64;
+const uint32_t	default_max_read_size		= (1024 * 1024);
+const uint32_t	default_max_write_size		= (1024 * 1024);
+const uint32_t	default_max_iov_read_size	= 64;
+const uint32_t	default_max_iov_write_size	= 64;
+const uint32_t	default_max_read_count		= 3;
+const uint32_t	default_max_write_count		= 3;
 const bool	default_cnss_threads		= true;
 const bool	default_fuse_read_buf		= true;
 const bool	default_fuse_write_buf		= true;

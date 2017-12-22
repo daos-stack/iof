@@ -138,10 +138,12 @@ struct ios_projection {
 	uint32_t		id;
 
 	/* Per-projection tunable options */
-	uint32_t		max_read;
-	uint32_t		max_iov_read;
-	uint32_t		max_write;
-	uint32_t		max_iov_write;
+	uint32_t		max_read_size;
+	uint32_t		max_iov_read_size;
+	uint32_t		max_read_count;
+	uint32_t		max_write_size;
+	uint32_t		max_iov_write_size;
+	uint32_t		max_write_count;
 	uint32_t		readdir_size;
 	char			*mount_path;
 
@@ -156,10 +158,8 @@ struct ios_projection {
 	uint64_t		dev_no;
 	pthread_mutex_t		lock;
 	int			current_read_count;
-	int			max_read_count;
 	d_list_t		read_list;
 	int			current_write_count;
-	int			max_write_count;
 	d_list_t		write_list;
 };
 

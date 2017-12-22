@@ -1244,8 +1244,9 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	int rc;
 
 	count = in->xtvec.xt_len - ard->segment_offset;
-	if (count > projection->max_read) /* Only read max_read at a time */
-		count = projection->max_read;
+	/* Only read max_read_size at a time */
+	if (count > projection->max_read_size)
+		count = projection->max_read_size;
 	ard->req_len = count;
 	offset = in->xtvec.xt_off + ard->segment_offset;
 
@@ -1257,7 +1258,7 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 	if (ard->read_len == -1) {
 		out->rc = errno;
 		goto out;
-	} else if (ard->read_len <= projection->max_iov_read) {
+	} else if (ard->read_len <= projection->max_iov_read_size) {
 		/* Can send last bit in immediate data */
 		out->iov_len = ard->read_len;
 		d_iov_set(&out->data, ard->local_bulk.buf,
@@ -1628,12 +1629,12 @@ out:
 		ios_fh_decref(parent, 1);
 }
 
-#define VALIDATE_WRITEX_IN(in, out, max_iov_write)			\
+#define VALIDATE_WRITEX_IN(in, out, max_iov_write_size)			\
 	do {								\
 		uint64_t xtlen = (in)->xtvec.xt_len;			\
 		size_t bulk_len;					\
 		int rc;							\
-		if ((in)->data.iov_len > max_iov_write) {		\
+		if ((in)->data.iov_len > max_iov_write_size) {		\
 			out->err = IOF_ERR_INTERNAL;			\
 			break;						\
 		}							\
@@ -1751,9 +1752,9 @@ iof_process_write(struct ionss_active_write *awd)
 
 
 	awd->req_len = in->xtvec.xt_len - awd->segment_offset;
-	/* Only write max_write at a time */
-	if (awd->req_len > projection->max_write)
-		awd->req_len = projection->max_write;
+	/* Only write max_write_size at a time */
+	if (awd->req_len > projection->max_write_size)
+		awd->req_len = projection->max_write_size;
 
 	bulk_desc.bd_rpc = awd->rpc;
 	bulk_desc.bd_bulk_op = CRT_BULK_GET;
@@ -1862,7 +1863,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 
 	projection = handle->projection;
 
-	VALIDATE_WRITEX_IN(in, out, projection->max_iov_write);
+	VALIDATE_WRITEX_IN(in, out, projection->max_iov_write_size);
 	if (out->err)
 		D_GOTO(out, 0);
 
@@ -2404,8 +2405,8 @@ static void show_help(const char *prog)
 	"      # Common options overriding global/default values, e.g.\n"
 	"      failover:         disable\n"
 	"      cnss_threads:     false\n"
-	"      max_read:         16M\n"
-	"      max_write:        16M\n"
+	"      max_read_size:         16M\n"
+	"      max_write_size:        16M\n"
 	"\n"
 	"    # Projection 2\n"
 	"    - full_path:        /path/to/directory_2\n"
@@ -2441,15 +2442,18 @@ static void show_help(const char *prog)
 	"# Enable or disable the use of FUSE threads on the CNSS.\n"
 	"cnss_threads:           true\n"
 	"\n"
-	"# Select FUSE API to use on the client while reading and writing:\n"
-	"# If true, use 'fuse_reply_buf'; if false, use 'fuse_reply_data'\n"
+	"# Select FUSE API to use on the client while reading:\n"
+	"# true: 'fuse_reply_buf'; false: 'fuse_reply_data'\n"
 	"fuse_read_buf:          true\n"
+	"\n"
+	"# Select FUSE API to use on the client while writing:\n"
+	"# true: 'ioc_ll_write_buf'; false: 'ioc_ll_write'\n"
 	"fuse_write_buf:         true\n"
 	"\n"
 	"# Controls whether a client fails over to a new primary service\n"
 	"# rank (PSR) in case the current PSR gets evicted. Valid values\n"
-	"# are \"auto\" and \"disable\". If \"auto\" is specified, fail-over is\n"
-	"# enabled only if available for the file system being projected.\n"
+	"# are \"auto\" and \"disable\". If \"auto\" is specified, fail-over\n"
+	"# is enabled only if available for the file system being projected.\n"
 	"failover:               auto\n"
 	"\n"
 	"# Whether the projection is writeable.  Valid values are \"auto\"\n"
@@ -2462,17 +2466,23 @@ static void show_help(const char *prog)
 	"# Size of the buffer to be used for a readdir operation\n"
 	"readdir_size:           64K\n"
 	"\n"
+	"# Maximum number of concurrent read operations on the IONSS\n"
+	"max_read_count:               3\n"
+	"\n"
+	"# Maximum number of concurrent write operations on the IONSS\n"
+	"max_write_count:              3\n"
+	"\n"
 	"# Size of the buffer to be used for a bulk read operation\n"
-	"max_read:               1M\n"
+	"max_read_size:               1M\n"
 	"\n"
 	"# Size of the buffer to be used for a bulk write operation\n"
-	"max_write:              1M\n"
+	"max_write_size:              1M\n"
 	"\n"
 	"# Size of the buffer to be used for a direct read operation\n"
-	"max_iov_read:           64\n"
+	"max_iov_read_size:           64\n"
 	"\n"
 	"# Size of the buffer to be used for a direct write operation\n"
-	"max_iov_write:          64\n"
+	"max_iov_write_size:          64\n"
 	"\n"
 	"# NOTE: The word \"direct\" above means that if the transfer size\n"
 	"# is small enough, the data is transferred within the same request\n"
@@ -2527,7 +2537,7 @@ ar_reset(void *arg)
 		IOF_BULK_ALLOC(ard->projection->base->crt_ctx,
 			       ard,
 			       local_bulk,
-			       ard->projection->max_read,
+			       ard->projection->max_read_size,
 			       true);
 		if (!ard->local_bulk.buf)
 			return false;
@@ -2569,7 +2579,7 @@ aw_reset(void *arg)
 		IOF_BULK_ALLOC(awd->projection->base->crt_ctx,
 			       awd,
 			       local_bulk,
-			       awd->projection->max_write,
+			       awd->projection->max_write_size,
 			       false);
 		if (!awd->local_bulk.buf)
 			return false;
@@ -2710,10 +2720,7 @@ int main(int argc, char **argv)
 		}
 
 		pthread_mutex_init(&projection->lock, NULL);
-
-		projection->max_read_count = 3;
 		D_INIT_LIST_HEAD(&projection->read_list);
-		projection->max_write_count = 3;
 		D_INIT_LIST_HEAD(&projection->write_list);
 
 		errno = 0;
@@ -2841,10 +2848,10 @@ int main(int argc, char **argv)
 		}
 
 		base.fs_list[i].readdir_size = projection->readdir_size;
-		base.fs_list[i].max_read = projection->max_read;
-		base.fs_list[i].max_iov_read = projection->max_iov_read;
-		base.fs_list[i].max_write = projection->max_write;
-		base.fs_list[i].max_iov_write = projection->max_iov_write;
+		base.fs_list[i].max_read = projection->max_read_size;
+		base.fs_list[i].max_iov_read = projection->max_iov_read_size;
+		base.fs_list[i].max_write = projection->max_write_size;
+		base.fs_list[i].max_iov_write = projection->max_iov_write_size;
 
 		base.fs_list[i].flags = IOF_FS_DEFAULT;
 		if (projection->failover)
@@ -2865,9 +2872,8 @@ int main(int argc, char **argv)
 			mnt = basename(projection->mount_path);
 		if (mnt == NULL || mnt[0] == '\0') {
 			mnt = basename(projection->full_path);
-			IOF_LOG_WARNING("No mount point specified for "
-					"projection; Using target directory "
-					"name %s", mnt);
+			IOF_LOG_INFO("No mount point specified for projection;"
+				     "Using target directory name %s", mnt);
 		}
 		strncpy(base.fs_list[i].dir_name.name, mnt, NAME_MAX);
 		if (strlen(mnt) >= NAME_MAX)
