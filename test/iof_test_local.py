@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-#pylint: disable=too-many-lines
 # Copyright (C) 2016-2017 Intel Corporation
 # All rights reserved.
 #
@@ -79,6 +78,7 @@ try:
 except ImportError:
     have_iofmod = False
 
+#pylint: disable=too-many-lines
 #pylint: disable=too-many-public-methods
 #pylint: disable=too-many-statements
 #pylint: disable=too-many-instance-attributes
