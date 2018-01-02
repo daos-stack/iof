@@ -362,7 +362,7 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = crt_context_create(NULL, &crt_ctx);
+	rc = crt_context_create(&crt_ctx);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not create crt context, rc = %d,"
 			      " disabling kernel bypass", rc);

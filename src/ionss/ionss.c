@@ -2802,7 +2802,7 @@ int main(int argc, char **argv)
 	crt_group_rank(base.primary_group, &base.my_rank);
 	crt_group_size(base.primary_group, &base.num_ranks);
 
-	ret = crt_context_create(NULL, &base.crt_ctx);
+	ret = crt_context_create(&base.crt_ctx);
 	if (ret) {
 		IOF_LOG_ERROR("Could not create context");
 		goto cleanup;

@@ -1003,7 +1003,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	IOF_TRACE_UP(&iof_state->iof_ctx, iof_state, "iof_ctx");
 
-	ret = crt_context_create(NULL, &iof_state->iof_ctx.crt_ctx);
+	ret = crt_context_create(&iof_state->iof_ctx.crt_ctx);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Context not created");
 		return 1;
@@ -1427,7 +1427,7 @@ initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.grp = &group->grp;
 	fs_handle->proj.grp_id = group->grp.grp_id;
 
-	ret = crt_context_create(NULL, &fs_handle->ctx.crt_ctx);
+	ret = crt_context_create(&fs_handle->ctx.crt_ctx);
 	if (ret) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create context");
 		D_GOTO(err, 0);
