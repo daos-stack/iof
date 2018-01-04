@@ -1255,6 +1255,45 @@ initialize_projection(struct iof_state *iof_state,
 	int				ret;
 	bool				rcb;
 
+	struct iof_pool_reg pt = {.init = dh_init,
+				  .reset = dh_reset,
+				  .release = dh_release,
+				  POOL_TYPE_INIT(iof_dir_handle, list)};
+
+	struct iof_pool_reg fh = {.init = fh_init,
+				  .reset = fh_reset,
+				  .release = fh_release,
+				  POOL_TYPE_INIT(iof_file_handle, list)};
+
+	struct iof_pool_reg fgt = {.init = gh_init,
+				   .reset = gh_reset,
+				   .release = gh_release,
+				   POOL_TYPE_INIT(getattr_req, list)};
+
+	struct iof_pool_reg ct = {.init = close_init,
+				  .reset = close_reset,
+				  .release = close_release,
+				  POOL_TYPE_INIT(close_req, list)};
+
+	struct iof_pool_reg entry_t = {.reset = entry_reset,
+				       .release = entry_release,
+				       POOL_TYPE_INIT(entry_req, list)};
+
+	struct iof_pool_reg rb_page = {.init = rb_page_init,
+				       .reset = rb_reset,
+				       .release = rb_release,
+				       POOL_TYPE_INIT(iof_rb, list)};
+
+	struct iof_pool_reg rb_large = {.init = rb_large_init,
+					.reset = rb_reset,
+					.release = rb_release,
+					POOL_TYPE_INIT(iof_rb, list)};
+
+	struct iof_pool_reg wb = {.init = wb_init,
+				  .reset = wb_reset,
+				  .release = wb_release,
+				  POOL_TYPE_INIT(iof_wb, list)};
+
 	cb = iof_state->cb;
 
 	/* TODO: This is presumably wrong although it's not
@@ -1483,101 +1522,53 @@ initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle->fuse_ops)
 		D_GOTO(err, 0);
 
-	{
-		/* Register the directory handle type
-		 *
-		 * This is done late on in the registraction as the dh_int()
-		 * and dh_reset() functions require access to fs_handle.
-		 */
-		struct iof_pool_reg pt = {.init = dh_init,
-					  .reset = dh_reset,
-					  .release = dh_release,
-					  POOL_TYPE_INIT(iof_dir_handle, list)};
+	/* Register the directory handle type
+	 *
+	 * This is done late on in the registration as the dh_int() and
+	 * dh_reset() functions require access to fs_handle.
+	 */
+	fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
+	if (!fs_handle->dh_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg fh = {.init = fh_init,
-					  .reset = fh_reset,
-					  .release = fh_release,
-					  POOL_TYPE_INIT(iof_file_handle, list)};
+	fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
+	if (!fs_handle->fgh_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg fgt = {.init = gh_init,
-					   .reset = gh_reset,
-					   .release = gh_release,
-					   POOL_TYPE_INIT(getattr_req, list)};
+	fs_handle->close_pool = iof_pool_register(&fs_handle->pool, &ct);
+	if (!fs_handle->close_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg ct = {.init = close_init,
-					  .reset = close_reset,
-					  .release = close_release,
-					  POOL_TYPE_INIT(close_req, list)};
+	entry_t.init = lookup_entry_init;
+	fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool, &entry_t);
+	if (!fs_handle->lookup_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg entry_t = {.reset = entry_reset,
-					       .release = entry_release,
-					       POOL_TYPE_INIT(entry_req, list)};
+	entry_t.init = mkdir_entry_init;
+	fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool, &entry_t);
+	if (!fs_handle->mkdir_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg rb_page = {.init = rb_page_init,
-					       .reset = rb_reset,
-					       .release = rb_release,
-					       POOL_TYPE_INIT(iof_rb, list)};
+	entry_t.init = symlink_entry_init;
+	fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool, &entry_t);
+	if (!fs_handle->symlink_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg rb_large = {.init = rb_large_init,
-						.reset = rb_reset,
-						.release = rb_release,
-						POOL_TYPE_INIT(iof_rb, list)};
+	fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
+	if (!fs_handle->fh_pool)
+		D_GOTO(err, 0);
 
-		struct iof_pool_reg wb = {.init = wb_init,
-					  .reset = wb_reset,
-					  .release = wb_release,
-					  POOL_TYPE_INIT(iof_wb, list)};
+	fs_handle->rb_pool_page = iof_pool_register(&fs_handle->pool, &rb_page);
+	if (!fs_handle->rb_pool_page)
+		D_GOTO(err, 0);
 
-		fs_handle->dh_pool = iof_pool_register(&fs_handle->pool, &pt);
-		if (!fs_handle->dh_pool)
-			D_GOTO(err, 0);
+	fs_handle->rb_pool_large = iof_pool_register(&fs_handle->pool, &rb_large);
+	if (!fs_handle->rb_pool_large)
+		D_GOTO(err, 0);
 
-		fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
-		if (!fs_handle->fgh_pool)
-			D_GOTO(err, 0);
-
-		fs_handle->close_pool = iof_pool_register(&fs_handle->pool,
-							  &ct);
-		if (!fs_handle->close_pool)
-			D_GOTO(err, 0);
-
-		entry_t.init = lookup_entry_init;
-		fs_handle->lookup_pool = iof_pool_register(&fs_handle->pool,
-							   &entry_t);
-		if (!fs_handle->lookup_pool)
-			D_GOTO(err, 0);
-
-		entry_t.init = mkdir_entry_init;
-		fs_handle->mkdir_pool = iof_pool_register(&fs_handle->pool,
-							  &entry_t);
-		if (!fs_handle->mkdir_pool)
-			D_GOTO(err, 0);
-
-		entry_t.init = symlink_entry_init;
-		fs_handle->symlink_pool = iof_pool_register(&fs_handle->pool,
-							    &entry_t);
-		if (!fs_handle->symlink_pool)
-			D_GOTO(err, 0);
-
-		fs_handle->fh_pool = iof_pool_register(&fs_handle->pool, &fh);
-		if (!fs_handle->fh_pool)
-			D_GOTO(err, 0);
-
-		fs_handle->rb_pool_page = iof_pool_register(&fs_handle->pool,
-							    &rb_page);
-		if (!fs_handle->rb_pool_page)
-			D_GOTO(err, 0);
-
-		fs_handle->rb_pool_large = iof_pool_register(&fs_handle->pool,
-							     &rb_large);
-		if (!fs_handle->rb_pool_large)
-			D_GOTO(err, 0);
-
-		fs_handle->write_pool = iof_pool_register(&fs_handle->pool,
-						&wb);
-		if (!fs_handle->write_pool)
-			D_GOTO(err, 0);
-	}
+	fs_handle->write_pool = iof_pool_register(&fs_handle->pool, &wb);
+	if (!fs_handle->write_pool)
+		D_GOTO(err, 0);
 
 	rcb = cb->register_fuse_fs(cb->handle,
 				   NULL,
