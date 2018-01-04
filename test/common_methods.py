@@ -56,6 +56,7 @@ from decimal import Decimal
 import time
 import iof_ionss_setup
 import iof_ionss_verify
+import iofcommontestsuite
 #pylint: disable=import-error
 #pylint: disable=no-name-in-module
 from distutils.spawn import find_executable
@@ -317,6 +318,7 @@ class InternalsPathFramework(ColorizedOutput):
                                       'fs:{1} differ.'.format(mount_dir, idir))
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
+                 iofcommontestsuite.CommonTestSuite,
                  iof_ionss_setup.IonssExport):
     """A object purely to define test methods.
 
@@ -758,6 +760,39 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
             self.fail("Link target is wrong '%s'" % result)
         else:
             self.logger.info("Verified read on link target with source")
+
+    def run_mdtest(self, count=10, iters=3, timeout=1200):
+        """Run mdtest with specified parameters"""
+
+        mdtest_cmdstr = "/testbin/mdtest/bin/mdtest"
+        if not os.path.exists(mdtest_cmdstr):
+            mdtest_cmdstr = "mdtest"
+        mdtest_cmdstr = find_executable(mdtest_cmdstr)
+        if not mdtest_cmdstr:
+            self.skipTest('mdtest not installed')
+        cmd = [mdtest_cmdstr, '-d', self.import_dir]
+
+        cmd.extend(['-i', str(iters), '-I', str(count)])
+        start_time = time.time()
+        rtn = self.common_launch_cmd(cmd, timeout=timeout)
+        elapsed = time.time() - start_time
+        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
+        return (rtn, elapsed)
+
+    def test_mdtest(self):
+        """Test mdtest"""
+
+        (rtn, elapsed) = self.run_mdtest(count=10, iters=3)
+        if rtn != 0:
+            self.fail("Mdtest test_failed, rc = %d" % rtn)
+        if elapsed > 5:
+            return
+        if 'iof_simple' in self.id():
+            (rtn, elapsed) = self.run_mdtest(count=500, iters=30)
+        else:
+            (rtn, elapsed) = self.run_mdtest(count=500, iters=700)
+        if rtn != 0:
+            self.fail("Mdtest test_failed, rc = %d" % rtn)
 
     def test_self_test(self):
         """Run self-test"""

@@ -135,7 +135,7 @@ class CommonTestSuite():
         """create the log directory name"""
         pass
 
-    def common_launch_cmd(self, cmd):
+    def common_launch_cmd(self, cmd, timeout=180):
         """Launch a test and wait for it to complete"""
 
         cmdarg = cmd
@@ -150,13 +150,16 @@ class CommonTestSuite():
         # else if TR_REDIRECT_OUTPUT = "null"; the ouput goes to devnull
         # else if TR_REDIRECT_OUTPUT = "yes"; the output goes to a file.
         if to_redirect == "no":
-            procrtn = subprocess.call(cmdarg, timeout=180)
+            procrtn = subprocess.call(cmdarg, timeout=timeout)
         elif to_redirect == "null":
-            procrtn = subprocess.call(cmdarg, timeout=180,
+            procrtn = subprocess.call(cmdarg, timeout=timeout,
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL)
         else:
-            log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"), \
+            log_path = os.path.join(os.getenv("IOF_TESTLOG",
+                                              os.path.join(os.path.dirname(
+                                                  os.path.realpath(__file__)),
+                                                           'output')),
                                     self.logdir_name())
             if not os.path.exists(log_path):
                 os.makedirs(log_path)
@@ -166,7 +169,7 @@ class CommonTestSuite():
             try:
                 with open(cmdfileout, mode='a') as outfile, \
                     open(cmdfileerr, mode='a') as errfile:
-                    procrtn = subprocess.call(cmdarg, timeout=180,
+                    procrtn = subprocess.call(cmdarg, timeout=timeout,
                                               stdout=outfile,
                                               stderr=errfile)
             except (FileNotFoundError) as e:
@@ -199,7 +202,10 @@ class CommonTestSuite():
                                     stdout=subprocess.DEVNULL,
                                     stderr=subprocess.DEVNULL)
         else:
-            log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"),
+            log_path = os.path.join(os.getenv("IOF_TESTLOG",
+                                              os.path.join(os.path.dirname(
+                                                  os.path.realpath(__file__)),
+                                                           'output')),
                                     self.logdir_name())
             if not os.path.exists(log_path):
                 os.makedirs(log_path)
