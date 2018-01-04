@@ -246,7 +246,7 @@ class Nfs_Ior_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mount(self):
         """Mount exported NFS filesystem on mount node."""
@@ -279,7 +279,7 @@ class Nfs_Ior_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def read_write(self):
         """Ior test."""
@@ -305,7 +305,7 @@ class Nfs_Ior_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def unmount(self):
         """Unmount NFS mounted filesystem on mount node."""

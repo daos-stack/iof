@@ -245,7 +245,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def export(self):
         """Export NFS filesystem on export node."""
@@ -285,7 +285,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mount(self):
         """Mount exported NFS filesystem on mount node."""
@@ -318,7 +318,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def read(self):
         """IOZone read test."""
@@ -344,7 +344,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def write(self):
         """IOZone write test."""
@@ -365,7 +365,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def random(self):
         """IOZone random (read/write) test."""
@@ -391,7 +391,7 @@ class Nfs_Iozone_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def unmount(self):
         """Unmount NFS mounted filesystem on mount node."""

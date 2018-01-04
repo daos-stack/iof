@@ -70,7 +70,7 @@ class TestSetUpIof():
     def test_iof_started(self):
         """Wait for ctrl fs to start"""
         start_dir = self.test_info.get_defaultENV("CNSS_PREFIX")
-        self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
+        self.logger.info("start_dir: %s", str(os.listdir(start_dir)))
         ctrl_dir = os.path.join(start_dir, ".ctrl")
         assert os.path.isdir(start_dir), \
                "prefix is not a directory %s" % start_dir
@@ -93,7 +93,7 @@ class TestSetUpIof():
             if data.strip() == '1':
                 return 0
 
-        self.logger.info("start_dir: " +  str(os.listdir(start_dir)))
+        self.logger.info("start_dir: %s", str(os.listdir(start_dir)))
         # Log the error message. Fail the test with the same error message
         self.logger.info("Unable to detect file: %s", filename)
         return 1

@@ -255,7 +255,7 @@ class Nfs_Mdtest_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mount(self):
         """Mount exported NFS filesystem on mount node."""
@@ -288,7 +288,7 @@ class Nfs_Mdtest_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mdtest_tasks(self):
         """Mdtest write test."""
@@ -308,7 +308,7 @@ class Nfs_Mdtest_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def unmount(self):
         """Unmount NFS mounted filesystem on mount node."""

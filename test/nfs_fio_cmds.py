@@ -247,7 +247,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mount(self):
         """Mount exported NFS filesystem on mount node."""
@@ -280,7 +280,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def read(self):
         """Fio read test."""
@@ -301,7 +301,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def write(self):
         """Fio write test."""
@@ -322,7 +322,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def random(self):
         """Fio random (read/write) test."""
@@ -344,7 +344,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def mixed(self):
         """Fio random (read/write) test."""
@@ -370,7 +370,7 @@ class Nfs_Fio_Cmds():
 
         if ret == "":
             return 1
-
+        return 0
 
     def unmount(self):
         """Unmount NFS mounted filesystem on mount node."""
