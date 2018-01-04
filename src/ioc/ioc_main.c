@@ -331,11 +331,16 @@ query_cb(const struct crt_cb_info *cb_info)
 	iof_tracker_signal(&reply->tracker);
 }
 
-/*Send RPC to PSR to get information about projected filesystems*/
-static int ioc_get_projection_info(struct iof_state *iof_state,
-				   struct iof_group_info *group,
-				   struct iof_psr_query **query,
-				   crt_rpc_t **query_rpc)
+/*
+ * Send RPC to PSR to get information about projected filesystems
+ *
+ * Retruns true on success.
+ */
+static bool
+ioc_get_projection_info(struct iof_state *iof_state,
+			struct iof_group_info *group,
+			struct iof_psr_query **query,
+			crt_rpc_t **query_rpc)
 {
 	int ret;
 	struct query_cb_r reply = {0};
@@ -349,31 +354,32 @@ static int ioc_get_projection_info(struct iof_state *iof_state,
 	if (ret || (*query_rpc == NULL)) {
 		IOF_TRACE_ERROR(iof_state, "failed to create query rpc request,"
 				" ret = %d", ret);
-		return ret;
+		return false;
 	}
+
 	IOF_TRACE_LINK(*query_rpc, iof_state, "query_rpc");
 
 	ret = crt_req_set_timeout(*query_rpc, 5);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Could not set timeout, ret = %d",
 				ret);
-		return ret;
+		return false;
 	}
 
 	ret = crt_req_send(*query_rpc, query_cb, &reply);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, ret = %d",
 				ret);
-		return ret;
+		return false;
 	}
 
 	/*make on-demand progress*/
 	iof_wait(iof_state->iof_ctx.crt_ctx, &reply.tracker);
 
 	if (reply.err)
-		return reply.err;
+		return false;
 
-	return 0;
+	return true;
 }
 
 static int iof_uint_read(char *buf, size_t buflen, void *arg)
@@ -392,9 +398,13 @@ static int iof_uint64_read(char *buf, size_t buflen, void *arg)
 	return 0;
 }
 
+/* Attach to a CaRT group
+ *
+ * Returns true on success.
+ */
 #define BUFSIZE 64
-static int attach_group(struct iof_state *iof_state,
-			struct iof_group_info *group, int id)
+static bool
+attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 {
 	char buf[BUFSIZE];
 	int ret;
@@ -412,21 +422,21 @@ static int attach_group(struct iof_state *iof_state,
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state,
 				"crt_group_attach failed with ret = %d", ret);
-		return ret;
+		return false;
 	}
 
 	ret = iof_lm_attach(group->grp.dest_grp, NULL);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state,
 				"Could not initialize failover, ret = %d", ret);
-		return ret;
+		return false;
 	}
 
 	ret = crt_group_config_save(group->grp.dest_grp, true);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "crt_group_config_save failed for "
 				"ionss with ret = %d", ret);
-		return ret;
+		return false;
 	}
 
 	/*initialize destination endpoint*/
@@ -438,25 +448,24 @@ static int attach_group(struct iof_state *iof_state,
 	if (ret || !psr_list || !psr_list->rl_ranks || !psr_list->rl_nr.num) {
 		IOF_TRACE_ERROR(group, "Unable to access "
 				"PSR list, ret = %d", ret);
-		return ret;
+		return false;
 	}
 	/* First element in the list is the PSR */
 	atomic_store_release(&group->grp.pri_srv_rank, psr_list->rl_ranks[0]);
 	group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
 	group->grp.psr_ep.ep_tag = 0;
-	group->grp.grp_id = id;
 	d_rank_list_free(psr_list);
 	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
 		       atomic_load_consume(&group->grp.pri_srv_rank));
 
-	sprintf(buf, "%d", id);
+	sprintf(buf, "%d", group->grp.grp_id);
 
 	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
 				     &ionss_dir);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
 				"ionss info (rc = %d)\n", ret);
-		return IOF_ERR_CTRL_FS;
+		return false;
 	}
 	cb->register_ctrl_constant_uint64(ionss_dir, "psr_rank",
 					  group->grp.psr_ep.ep_rank);
@@ -467,7 +476,7 @@ static int attach_group(struct iof_state *iof_state,
 
 	group->grp.enabled = true;
 
-	return 0;
+	return true;
 }
 
 static bool ih_key_cmp(struct d_chash_table *htable, d_list_t *rlink,
@@ -1012,13 +1021,16 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	/* Despite the hard coding above, now we can do attaches in a loop */
 	for (i = 0; i < iof_state->num_groups; i++) {
-		group = &iof_state->groups[i];
+		int rcb;
 
-		ret = attach_group(iof_state, group, i);
-		if (ret != 0) {
-			IOF_TRACE_ERROR(iof_state, "Failed to attach to service"
-					" group %s (ret = %d)",
-					group->grp_name, ret);
+		group = &iof_state->groups[i];
+		group->grp.grp_id = i;
+
+		rcb = attach_group(iof_state, group);
+		if (!rcb) {
+			IOF_TRACE_ERROR(iof_state,
+					"Failed to attach to service group '%s'",
+					group->grp_name);
 			continue;
 		}
 		group->crt_attached = true;
@@ -1602,13 +1614,13 @@ query_projections(struct iof_state *iof_state,
 	int fs_num;
 	int i;
 	int ret;
+	bool rcb;
 
 	*total = *active = 0;
 
 	/*Query PSR*/
-	ret = ioc_get_projection_info(iof_state, group, &query,
-				      &query_rpc);
-	if (ret || (query == NULL)) {
+	rcb = ioc_get_projection_info(iof_state, group, &query, &query_rpc);
+	if (!rcb || !query) {
 		IOF_TRACE_ERROR(iof_state, "Query operation failed");
 		return false;
 	}
