@@ -2436,7 +2436,7 @@ static void show_help(const char *prog)
 	"# The following options can be specified either per projection or\n"
 	"# globally. If both are specified, the value specified for that\n"
 	"# projection takes precedence\n"
-	"# For expressing sizes, short-hand multiplers are permitted:\n"
+	"# For expressing sizes, short-hand multipliers are permitted:\n"
 	"# K=1024, M=1048576 (Case Insensitive)\n"
 	"\n"
 	"# Enable or disable the use of FUSE threads on the CNSS.\n"
