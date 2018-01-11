@@ -43,7 +43,7 @@ execStrategy:
     - name:       "iof_ior_cmd"
       type:       exe
       exe:        "{test_exe}"
-      parameters: "-v -a POSIX -b 512k -t 4k -c -E -B \
+      parameters: "-v -a POSIX -b 1g -t 1m -i 10 -c -E -B -T 12 \
                    -o {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Remove the test directory, i.e. value of "{CNSS_PREFIX}/FS_2/{nodename}".
