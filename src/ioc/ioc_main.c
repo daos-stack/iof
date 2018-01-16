@@ -964,8 +964,133 @@ wb_release(void *arg)
 	IOF_BULK_FREE(wb, lb);
 }
 
-static int iof_thread_start(struct iof_ctx *);
-static void iof_thread_stop(struct iof_ctx *);
+static int
+iof_check_complete(void *arg)
+{
+	struct iof_tracker *tracker = arg;
+
+	return iof_tracker_test(tracker);
+}
+
+/* Call crt_progress() on a context until it returns timeout
+ * or an error.
+ *
+ * Returns -DER_SUCCESS on timeout or passes through any other errors.
+ */
+static int
+iof_progress_drain(struct iof_ctx *iof_ctx)
+{
+	int ctx_rc;
+
+	do {
+		ctx_rc = crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
+
+		if (ctx_rc != -DER_TIMEDOUT && ctx_rc != -DER_SUCCESS) {
+			IOF_TRACE_WARNING(iof_ctx, "progress returned %d",
+					  ctx_rc);
+			return ctx_rc;
+		}
+
+	} while (ctx_rc != -DER_TIMEDOUT);
+	return -DER_SUCCESS;
+}
+
+static void *
+iof_thread(void *arg)
+{
+	struct iof_ctx	*iof_ctx = arg;
+	int		ctx_rc;
+	int		rc;
+
+	iof_tracker_signal(&iof_ctx->thread_start_tracker);
+	do {
+		rc = crt_progress(iof_ctx->crt_ctx,
+				  iof_ctx->poll_interval,
+				  iof_ctx->callback_fn,
+				  &iof_ctx->thread_stop_tracker);
+
+		if (rc == -DER_TIMEDOUT) {
+			rc = 0;
+			sched_yield();
+		}
+
+		if (rc != 0)
+			IOF_TRACE_ERROR(iof_ctx, "crt_progress failed rc: %d",
+					rc);
+
+	} while (!iof_tracker_test(&iof_ctx->thread_stop_tracker));
+
+	if (rc != 0)
+		IOF_TRACE_ERROR(iof_ctx, "crt_progress error on shutdown "
+				"rc: %d", rc);
+
+	do {
+		/* If this context has a pool associated with it then reap
+		 * any descriptors with it so there are no pending RPCs when
+		 * we call context_destroy.
+		 */
+		if (iof_ctx->pool) {
+			bool active;
+
+			do {
+				ctx_rc = iof_progress_drain(iof_ctx);
+
+				active = iof_pool_reclaim(iof_ctx->pool);
+
+				if (!active)
+					break;
+
+				IOF_TRACE_WARNING(iof_ctx,
+						  "Active descriptors, waiting for one second");
+
+			} while (active && ctx_rc == -DER_SUCCESS);
+		} else {
+			ctx_rc = iof_progress_drain(iof_ctx);
+		}
+
+		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
+		if (rc == -DER_BUSY)
+			IOF_TRACE_WARNING(iof_ctx, "RPCs in flight, waiting");
+		else if (rc != DER_SUCCESS)
+			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
+					rc);
+	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
+
+	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
+	return NULL;
+}
+
+static int
+iof_thread_start(struct iof_ctx *iof_ctx)
+{
+	int rc;
+
+	iof_tracker_init(&iof_ctx->thread_start_tracker, 1);
+	iof_tracker_init(&iof_ctx->thread_stop_tracker, 1);
+	iof_tracker_init(&iof_ctx->thread_shutdown_tracker, 1);
+
+	rc = pthread_create(&iof_ctx->thread, NULL,
+			    iof_thread, iof_ctx);
+
+	if (rc != 0) {
+		IOF_TRACE_ERROR(iof_ctx, "Could not start progress thread");
+		return 1;
+	}
+
+	iof_tracker_wait(&iof_ctx->thread_start_tracker);
+	return 0;
+}
+
+/* Stop the progress thread, and destroy the context */
+static void
+iof_thread_stop(struct iof_ctx *iof_ctx)
+{
+	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
+	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
+	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
+	pthread_join(iof_ctx->thread, 0);
+	IOF_TRACE_INFO(iof_ctx, "Stopped CRT thread");
+}
 
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 {
@@ -1098,134 +1223,6 @@ static int online_write_cb(uint64_t value, void *arg)
 		fs_handle->offline_reason = EHOSTDOWN;
 
 	return 0;
-}
-
-static int
-iof_check_complete(void *arg)
-{
-	struct iof_tracker *tracker = arg;
-
-	return iof_tracker_test(tracker);
-}
-
-/* Call crt_progress() on a context until it returns timeout
- * or an error.
- *
- * Returns -DER_SUCCESS on timeout or passes through any other errors.
- */
-static int
-iof_progress_drain(struct iof_ctx *iof_ctx)
-{
-	int ctx_rc;
-
-	do {
-		ctx_rc = crt_progress(iof_ctx->crt_ctx, 1000000, NULL, NULL);
-
-		if (ctx_rc != -DER_TIMEDOUT && ctx_rc != -DER_SUCCESS) {
-			IOF_TRACE_WARNING(iof_ctx, "progress returned %d",
-					  ctx_rc);
-			return ctx_rc;
-		}
-
-	} while (ctx_rc != -DER_TIMEDOUT);
-	return -DER_SUCCESS;
-}
-
-static void *
-iof_thread(void *arg)
-{
-	struct iof_ctx	*iof_ctx = arg;
-	int		ctx_rc;
-	int		rc;
-
-	iof_tracker_signal(&iof_ctx->thread_start_tracker);
-	do {
-		rc = crt_progress(iof_ctx->crt_ctx,
-				  iof_ctx->poll_interval,
-				  iof_ctx->callback_fn,
-				  &iof_ctx->thread_stop_tracker);
-
-		if (rc == -DER_TIMEDOUT) {
-			rc = 0;
-			sched_yield();
-		}
-
-		if (rc != 0)
-			IOF_TRACE_ERROR(iof_ctx, "crt_progress failed rc: %d",
-					rc);
-
-	} while (!iof_tracker_test(&iof_ctx->thread_stop_tracker));
-
-	if (rc != 0)
-		IOF_TRACE_ERROR(iof_ctx, "crt_progress error on shutdown "
-				"rc: %d", rc);
-
-	do {
-		/* If this context has a pool associated with it then reap
-		 * any descriptors with it so there are no pending RPCs when
-		 * we call context_destroy.
-		 */
-		if (iof_ctx->pool) {
-			bool active;
-
-			do {
-				ctx_rc = iof_progress_drain(iof_ctx);
-
-				active = iof_pool_reclaim(iof_ctx->pool);
-
-				if (!active)
-					break;
-
-				IOF_TRACE_WARNING(iof_ctx,
-						  "Active descriptors, waiting for one second");
-
-			} while (active && ctx_rc == -DER_SUCCESS);
-		} else {
-			ctx_rc = iof_progress_drain(iof_ctx);
-		}
-
-		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
-		if (rc == -DER_BUSY)
-			IOF_TRACE_WARNING(iof_ctx, "RPCs in flight, waiting");
-		else if (rc != DER_SUCCESS)
-			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
-					rc);
-	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
-
-	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
-	return NULL;
-}
-
-static int
-iof_thread_start(struct iof_ctx *iof_ctx)
-{
-	int rc;
-
-	iof_tracker_init(&iof_ctx->thread_start_tracker, 1);
-	iof_tracker_init(&iof_ctx->thread_stop_tracker, 1);
-	iof_tracker_init(&iof_ctx->thread_shutdown_tracker, 1);
-
-	rc = pthread_create(&iof_ctx->thread, NULL,
-			    iof_thread, iof_ctx);
-
-	if (rc != 0) {
-		IOF_TRACE_ERROR(iof_ctx, "Could not start progress thread");
-		return 1;
-	}
-
-	iof_tracker_wait(&iof_ctx->thread_start_tracker);
-	return 0;
-}
-
-/* Stop the progress thread, and destroy the context */
-static void
-iof_thread_stop(struct iof_ctx *iof_ctx)
-{
-	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
-	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
-	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
-	pthread_join(iof_ctx->thread, 0);
-	IOF_TRACE_INFO(iof_ctx, "Stopped CRT thread");
 }
 
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
