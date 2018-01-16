@@ -210,7 +210,7 @@ class Nfs_Iozone_Cmds():
         self.logger.info("mount_dir       = %s", self.mount_dir)
         self.logger.info("mount_fs        = %s", self.mount_fs)
         self.logger.info("\n")
-
+        return 0
 
     def test_file_create(self):
         """Create test file in export node."""
@@ -414,7 +414,7 @@ class Nfs_Iozone_Cmds():
                                                   self.user)
 
         self.log_cmd_ret_remote(cmd, s)
-
+        return 0
 
     def unexport(self):
         """ Unexport NFS filesystem on export node."""
@@ -443,7 +443,7 @@ class Nfs_Iozone_Cmds():
         cmd = "sudo systemctl stop nfs"
 
         self.log_cmd_ret_local(cmd, s)
-
+        return 0
 
 # pylint: enable=protected-access
 # pylint: enable=too-many-instance-attributes
