@@ -36,18 +36,18 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <sys/ioctl.h>
+
 #include <gurt/common.h>
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"
 #include "iof_ioctl.h"
 
-static bool handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
-			     struct iof_gah_info *gah_info, void *trace)
+static void
+handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
+		 struct iof_gah_info *gah_info, void *trace)
 {
-	if (cmd != IOF_IOCTL_GAH)
-		return false;
-
 	STAT_ADD(handle->fs_handle->stats, il_ioctl);
 
 	/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
@@ -62,8 +62,6 @@ static bool handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
 	gah_info->gah = handle->common.gah;
 	gah_info->cnss_id = getpid();
 	gah_info->cli_fs_id = handle->fs_handle->proj.cli_fs_id;
-
-	return true;
 }
 
 void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
@@ -88,10 +86,17 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 	if (!handle->common.gah_valid)
 		D_GOTO(out_err, 0);
 
-	if (!handle_gah_ioctl(cmd, handle, &gah_info, req)) {
+	if (cmd == TCGETS) {
+		IOF_TRACE_DEBUG(handle, "Ignoring TCGETS ioctl");
+		D_GOTO(out_err, ret = ENOTTY);
+	}
+
+	if (cmd != IOF_IOCTL_GAH) {
 		IOF_TRACE_INFO(handle, "Real ioctl support is not implemented");
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
+
+	handle_gah_ioctl(cmd, handle, &gah_info, req);
 
 	IOF_FUSE_REPLY_IOCTL(req, gah_info, sizeof(gah_info));
 	return;
