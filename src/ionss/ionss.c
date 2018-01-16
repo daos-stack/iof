@@ -416,7 +416,7 @@ out:
 	if (rc)
 		IOF_LOG_ERROR("response not sent, ret = %u", rc);
 
-	rc = crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
+	crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
 
 	return 0;
 }
@@ -540,11 +540,7 @@ out:
 	IOF_LOG_INFO("Sending %d replies", reply_idx);
 
 	if (reply_idx > IONSS_READDIR_ENTRIES_PER_RPC) {
-		rc = crt_req_addref(rpc);
-		if (rc) {
-			out->err = IOF_ERR_CART;
-			goto out;
-		}
+		crt_req_addref(rpc);
 
 		iov.iov_len = sizeof(struct iof_readdir_reply) * reply_idx;
 		iov.iov_buf = replies;
@@ -1307,9 +1303,7 @@ out:
 	if (rc)
 		IOF_TRACE_ERROR(ard, "response not sent, ret = %d", rc);
 
-	rc = crt_req_decref(ard->rpc);
-	if (rc)
-		IOF_TRACE_ERROR(ard, "decref failed, ret = %d", rc);
+	crt_req_decref(ard->rpc);
 
 	iof_pool_release(projection->ar_pool, ard);
 
@@ -1351,9 +1345,7 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	if (rc)
 		IOF_TRACE_ERROR(ard, "response not sent, ret = %d", rc);
 
-	rc = crt_req_decref(ard->rpc);
-	if (rc)
-		IOF_TRACE_ERROR(ard, "decref failed, ret = %d", rc);
+	crt_req_decref(ard->rpc);
 
 	iof_pool_release(projection->ar_pool, ard);
 
@@ -1392,11 +1384,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = crt_req_addref(rpc);
-	if (rc) {
-		out->err = IOF_ERR_CART;
-		goto out;
-	}
+	crt_req_addref(rpc);
 
 	projection = handle->projection;
 
@@ -1875,9 +1863,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
-	rc = crt_req_addref(rpc);
-	if (rc)
-		D_GOTO(out, out->err = IOF_ERR_CART);
+	crt_req_addref(rpc);
 
 	pthread_mutex_lock(&projection->lock);
 

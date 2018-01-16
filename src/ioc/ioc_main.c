@@ -279,9 +279,7 @@ int iof_fs_send(struct ioc_request *request)
 	request->ep.ep_grp = fs_handle->proj.grp->dest_grp;
 
 	/* Defer clean up until the output is copied. */
-	rc = crt_req_addref(request->rpc);
-	if (rc)
-		D_GOTO(err, rc);
+	crt_req_addref(request->rpc);
 	rc = crt_req_set_endpoint(request->rpc, &request->ep);
 	if (rc)
 		D_GOTO(err, rc);
@@ -303,7 +301,6 @@ query_cb(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply = cb_info->cci_arg;
 	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
-	int ret;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -318,13 +315,7 @@ query_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	ret = crt_req_addref(cb_info->cci_rpc);
-	if (ret) {
-		IOF_TRACE_ERROR(reply, "could not take reference on query RPC, "
-				"ret = %d", ret);
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
+	crt_req_addref(cb_info->cci_rpc);
 
 	*reply->query = query;
 
@@ -1601,7 +1592,6 @@ query_projections(struct iof_state *iof_state,
 	struct iof_psr_query *query = NULL;
 	int fs_num;
 	int i;
-	int ret;
 	bool rcb;
 
 	*total = *active = 0;
@@ -1642,10 +1632,8 @@ query_projections(struct iof_state *iof_state,
 		(*active)++;
 	}
 
-	ret = crt_req_decref(query_rpc);
-	if (ret)
-		IOF_TRACE_ERROR(iof_state, "Could not decrement ref count on "
-				"query rpc");
+	crt_req_decref(query_rpc);
+
 	return true;
 }
 

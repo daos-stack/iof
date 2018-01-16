@@ -56,7 +56,6 @@ static void
 readdir_cb(const struct crt_cb_info *cb_info)
 {
 	struct readdir_cb_r *reply = cb_info->cci_arg;
-	int ret;
 
 	if (cb_info->cci_rc != 0) {
 		/* Error handling, as directory handles are stateful if there
@@ -69,14 +68,7 @@ readdir_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	ret = crt_req_addref(cb_info->cci_rpc);
-	if (ret) {
-		reply->err = EIO;
-		IOF_LOG_ERROR("could not take reference on query RPC, ret = %d",
-			      ret);
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
+	crt_req_addref(cb_info->cci_rpc);
 
 	reply->out = crt_reply_get(cb_info->cci_rpc);
 	reply->rpc = cb_info->cci_rpc;

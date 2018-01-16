@@ -75,7 +75,6 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 {
 	struct read_bulk_cb_r *reply = cb_info->cci_arg;
 	struct iof_readx_out *out = crt_reply_get(cb_info->cci_rpc);
-	int rc;
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -113,15 +112,10 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	rc = crt_req_addref(cb_info->cci_rpc);
-	if (rc) {
-		IOF_LOG_ERROR("could not take reference on query RPC, rc = %d",
-			      rc);
-		reply->err = EIO;
-	} else {
-		reply->out = out;
-		reply->rpc = cb_info->cci_rpc;
-	}
+	crt_req_addref(cb_info->cci_rpc);
+
+	reply->out = out;
+	reply->rpc = cb_info->cci_rpc;
 
 	iof_tracker_signal(&reply->tracker);
 }
@@ -212,9 +206,7 @@ static ssize_t read_bulk(char *buff, size_t len, off_t position,
 		read_len += out->bulk_len;
 	}
 
-	rc = crt_req_decref(reply.rpc);
-	if (rc)
-		IOF_LOG_ERROR("decref returned %d", rc);
+	crt_req_decref(reply.rpc);
 
 	rc = crt_bulk_free(bulk);
 	if (rc) {
