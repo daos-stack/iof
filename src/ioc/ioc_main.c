@@ -1049,10 +1049,11 @@ iof_thread(void *arg)
 	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
 
 	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
-	return NULL;
+	return (void *)(uintptr_t)rc;
 }
 
-static int
+/* Start a progress thread, return true on success */
+static bool
 iof_thread_start(struct iof_ctx *iof_ctx)
 {
 	int rc;
@@ -1066,22 +1067,31 @@ iof_thread_start(struct iof_ctx *iof_ctx)
 
 	if (rc != 0) {
 		IOF_TRACE_ERROR(iof_ctx, "Could not start progress thread");
-		return 1;
+		return false;
 	}
 
 	iof_tracker_wait(&iof_ctx->thread_start_tracker);
-	return 0;
+	return true;
 }
 
-/* Stop the progress thread, and destroy the context */
-static void
+/* Stop the progress thread, and destroy the cart context
+ *
+ * Returns the return code of crt_context_destroy()
+ */
+static int
 iof_thread_stop(struct iof_ctx *iof_ctx)
 {
+	void *rtn;
+
 	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
 	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
 	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
-	pthread_join(iof_ctx->thread, 0);
-	IOF_TRACE_INFO(iof_ctx, "Stopped CRT thread");
+	pthread_join(iof_ctx->thread, &rtn);
+	IOF_TRACE_INFO(iof_ctx,
+		       "CRT thread stopped with %d",
+		       (int)(uintptr_t)rtn);
+
+	return (int)(uintptr_t)rtn;
 }
 
 static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
@@ -1130,21 +1140,17 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return 1;
 	}
 
-	ret = iof_thread_start(&iof_state->iof_ctx);
-	if (ret != 0) {
+	if (!iof_thread_start(&iof_state->iof_ctx)) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create progress thread");
 		return 1;
 	}
 
 	/* Despite the hard coding above, now we can do attaches in a loop */
 	for (i = 0; i < iof_state->num_groups; i++) {
-		int rcb;
-
 		group = &iof_state->groups[i];
 		group->grp.grp_id = i;
 
-		rcb = attach_group(iof_state, group);
-		if (!rcb) {
+		if (!attach_group(iof_state, group)) {
 			IOF_TRACE_ERROR(iof_state,
 					"Failed to attach to service group '%s'",
 					group->grp_name);
@@ -1242,7 +1248,6 @@ initialize_projection(struct iof_state *iof_state,
 	struct fuse_args		args = {0};
 	bool				writeable = false;
 	int				ret;
-	bool				rcb;
 
 	struct iof_pool_reg pt = {.init = dh_init,
 				  .reset = dh_reset,
@@ -1470,8 +1475,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
 	fs_handle->ctx.pool = &fs_handle->pool;
-	ret = iof_thread_start(&fs_handle->ctx);
-	if (ret) {
+	if (!iof_thread_start(&fs_handle->ctx)) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
 		D_GOTO(err, 0);
 	}
@@ -1559,14 +1563,13 @@ initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle->write_pool)
 		D_GOTO(err, 0);
 
-	rcb = cb->register_fuse_fs(cb->handle,
-				   NULL,
-				   fs_handle->fuse_ops,
-				   &args,
-				   fs_handle->mnt_dir.name,
-				  (fs_handle->flags & IOF_CNSS_MT) != 0,
-				   fs_handle);
-	if (!rcb) {
+	if (!cb->register_fuse_fs(cb->handle,
+				  NULL,
+				  fs_handle->fuse_ops,
+				  &args,
+				  fs_handle->mnt_dir.name,
+				 (fs_handle->flags & IOF_CNSS_MT) != 0,
+				  fs_handle)) {
 		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
 		D_GOTO(err, 0);
 	}
@@ -1617,12 +1620,9 @@ query_projections(struct iof_state *iof_state,
 	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
 
 	for (i = 0; i < fs_num; i++) {
-		bool rcb;
+		if (!initialize_projection(iof_state, group, &tmp[i], query,
+					   (*total)++)) {
 
-		rcb = initialize_projection(iof_state, group, &tmp[i], query,
-					    (*total)++);
-
-		if (!rcb) {
 			IOF_TRACE_ERROR(iof_state,
 					"Could not initialize projection %s from %s",
 					tmp[i].dir_name.name,
@@ -1646,7 +1646,6 @@ static int iof_post_start(void *arg)
 	int			active_projections = 0;
 	int			total_projections = 0;
 	int grp_num;
-	bool rcb;
 	int ret;
 
 	cb = iof_state->cb;
@@ -1666,10 +1665,8 @@ static int iof_post_start(void *arg)
 		if (!group->crt_attached)
 			continue;
 
-		rcb = query_projections(iof_state, group, &total_projections,
-					&active);
-
-		if (!rcb) {
+		if (!query_projections(iof_state, group, &total_projections,
+				       &active)) {
 			IOF_TRACE_ERROR(iof_state, "Couldn't mount projections "
 					"from %s", group->grp_name);
 			continue;
