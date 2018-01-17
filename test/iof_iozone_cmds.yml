@@ -44,7 +44,7 @@ execStrategy:
     - name:       "iof_iozone_dd_read"
       exe:        "/usr/bin/dd"
       type:       exe
-      parameters: "status=none bs=512K count=1 if=/dev/zero | \
+      parameters: "status=none bs=512K count=4000 if=/dev/zero | \
                    tr \'\\0\' \'\\72\' > {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Generate test.bin for iozone random (read/write) test.
@@ -60,24 +60,15 @@ execStrategy:
     - name:       "iof_iozone_read"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 1 -t 1 -c -e -w -r 4k -s 512k -+n -F \
+      parameters: "-i 1 -t 1 -c -e -w -r 1m -s 2g -+n -F \
                    {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Iozone write test.
     - name:       "iof_iozone_write"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 0 -t 1 -c -e -w -r 4k -s 512k -+n -F \
+      parameters: "-i 0 -t 1 -c -e -w -r 1m -s 2g -+n -F \
                    {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
-
-    # Generate test.bin for iozone random (read/write) test.
-    # NOTE: test.bin contains 0x3a (supported by older version of iozone) or
-    #       0xdb (supported by newer version of iozone).
-    - name:       "iof_iozone_dd_random"
-      exe:        "/usr/bin/dd"
-      type:       exe
-      parameters: "status=none bs=512K count=1 if=/dev/zero | \
-                   tr \'\\0\' \'\\72\' > {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
 
     # Generate test.bin for iozone random (read/write) test.
     # NOTE: YAML parser does not allow escaped octal chars in the cmd or
@@ -92,5 +83,5 @@ execStrategy:
     - name:       "iof_iozone_random"
       exe:        "{iozone_path}/iozone"
       type:       exe
-      parameters: "-i 2 -t 1 -c -e -w -r 4k -s 512k -+n -F \
+      parameters: "-i 2 -t 1 -c -e -w -r 1m -s 2g -+n -F \
                    {CNSS_PREFIX}/FS_2/{nodename}/test.bin"
