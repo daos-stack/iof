@@ -137,19 +137,12 @@ void shutdown_impl(void)
 static void
 shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 {
-	int rc;
 
 	if (cb_info->cci_rc == 0) {
 		shutdown_impl();
 		return;
 	}
 	IOF_LOG_ERROR("Broadcast failed, rc = %d", cb_info->cci_rc);
-
-	/* Retry in case of failure */
-	/* TODO: This doesn't look right */
-	rc = crt_req_send(cb_info->cci_rpc, shutdown_bcast_cb, NULL);
-	if (rc)
-		IOF_LOG_ERROR("Broadcast shutdown RPC not sent");
 }
 
 /*
