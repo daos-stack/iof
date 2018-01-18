@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -154,9 +154,8 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	crt_req_addref(handle->open_rpc);
 	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
 	if (rc) {
-		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+		crt_req_decref(handle->open_rpc);
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);

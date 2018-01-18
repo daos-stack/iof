@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -120,12 +120,12 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 
 	in->xtvec.xt_off = position;
 
+	crt_req_addref(wb->rpc);
 	rc = crt_req_send(wb->rpc, write_cb, wb);
 	if (rc) {
-		IOF_TRACE_ERROR(wb->req, "Could not send rpc, rc = %u", rc);
+		crt_req_decref(wb->rpc);
 		D_GOTO(err, rc = EIO);
 	}
-	crt_req_addref(wb->rpc);
 
 	return;
 

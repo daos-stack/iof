@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -200,7 +200,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	crt_req_addref(handle->creat_rpc);
 	rc = crt_req_send(handle->creat_rpc, ioc_create_ll_cb, handle);
 	if (rc) {
-		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
+		crt_req_decref(handle->creat_rpc);
 		drop_ino_ref(fs_handle, parent);
 		D_GOTO(out_err, ret = EIO);
 	}

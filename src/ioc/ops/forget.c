@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,9 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 		return;
 	}
 
-	IOF_TRACE_INFO(fs_handle, "%p %lu %lu", rlink, ino, nlookup);
+	IOF_TRACE_INFO(fs_handle,
+		       "rlink %p ino %lu count %lu",
+		       rlink, ino, nlookup);
 
 	d_chash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
 }

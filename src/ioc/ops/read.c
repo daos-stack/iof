@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -132,11 +132,13 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 	in->data_bulk = rb->lb.handle;
 	IOF_TRACE_LINK(rb->rpc, req, "read_bulk_rpc");
 
-	rc = crt_req_send(rb->rpc, read_bulk_cb, rb);
-	if (rc)
-		D_GOTO(out_err, rc = EIO);
-
 	crt_req_addref(rb->rpc);
+	rc = crt_req_send(rb->rpc, read_bulk_cb, rb);
+	if (rc) {
+		crt_req_decref(rb->rpc);
+		D_GOTO(out_err, rc = EIO);
+	}
+
 	iof_pool_restock(rb->pt);
 	return;
 

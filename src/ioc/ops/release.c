@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -56,10 +56,8 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	 * This means a resource leak on the IONSS should the projection
 	 * be offline for reasons other than IONSS failure.
 	 */
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
-	}
+	if (FS_IS_OFFLINE(fs_handle))
+		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
 	IOF_TRACE_UP(req, handle, "release_fuse_req");
 
@@ -72,8 +70,7 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it.
 		 */
-		ret = EIO;
-		goto out_err;
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	in = crt_req_get(handle->release_rpc);
@@ -83,9 +80,8 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	crt_req_addref(handle->release_rpc);
 	rc = crt_req_send(handle->release_rpc, ioc_ll_gen_cb, req);
 	if (rc) {
-		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %u", rc);
-		ret = EIO;
-		goto out_err;
+		crt_req_decref(handle->release_rpc);
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	iof_pool_release(fs_handle->fh_pool, handle);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -282,17 +282,18 @@ int iof_fs_send(struct ioc_request *request)
 	crt_req_addref(request->rpc);
 	rc = crt_req_set_endpoint(request->rpc, &request->ep);
 	if (rc)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",
 		      request->rpc->cr_ep.ep_rank);
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 	if (request->cb->on_send)
 		request->cb->on_send(request);
 	return 0;
 err:
 	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
+	crt_req_decref(request->rpc);
 	return -EIO;
 }
 
