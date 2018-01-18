@@ -68,7 +68,7 @@
 #define SHUTDOWN_BCAST_OP (0xFFF0)
 
 static int shutdown;
-static uint32_t	cnss_count;
+static ATOMIC unsigned int cnss_count;
 
 static struct ios_base base;
 
@@ -168,19 +168,19 @@ static void
 cnss_detach_handler(crt_rpc_t *rpc)
 {
 	int rc;
+	unsigned int old_count;
 	crt_rpc_t *rpc_bcast = NULL;
 	d_rank_list_t exclude_me = {  .rl_nr = { 1, 1 },
 				      .rl_ranks = &base.my_rank };
 
-	IOF_LOG_DEBUG("CNSS detach received (attached: %d)", cnss_count);
+	old_count = atomic_fetch_sub(&cnss_count, 1);
+
+	IOF_LOG_DEBUG("CNSS detach received: decref from %d", old_count);
 	rc = crt_reply_send(rpc);
 	if (rc)
 		IOF_LOG_ERROR("response not sent, rc = %u", rc);
 
-	/* Do nothing if there are more CNSS attached */
-	cnss_count--;
-
-	if (cnss_count > 0)
+	if (old_count > 1)
 		return;
 
 	IOF_LOG_DEBUG("Last CNSS detached from Rank %d",
@@ -2156,7 +2156,7 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	if (ret)
 		IOF_LOG_ERROR("query rpc response not sent, ret = %d", ret);
 
-	cnss_count++;
+	atomic_fetch_add(&cnss_count, 1);
 }
 
 int ionss_register(void)
