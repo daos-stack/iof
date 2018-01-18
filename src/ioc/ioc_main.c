@@ -36,17 +36,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <errno.h>
-#include <string.h>
-#include <dirent.h>
-#include <libgen.h>
-
 #include "iof_common.h"
 #include "ioc.h"
 #include "log.h"
-#include "ios_gah.h"
 #include "iof_ioctl.h"
 #include "iof_pool.h"
 

@@ -36,9 +36,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <string.h>
-
 #include <fuse3/fuse_lowlevel.h>
 
 #include "iof_common.h"

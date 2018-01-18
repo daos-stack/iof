@@ -36,11 +36,8 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h>
-#include <unistd.h>
 #include <ctype.h>
 #include <errno.h>
-#include <string.h>
 #include <yaml.h>
 
 #include "log.h"

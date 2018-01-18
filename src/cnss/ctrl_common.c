@@ -37,7 +37,6 @@
  */
 
 #include <stdlib.h>
-#include <inttypes.h>
 #include <string.h>
 #include <pthread.h>
 #include <gurt/dlog.h>
