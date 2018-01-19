@@ -97,8 +97,8 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	rc = crt_req_create(fs_handle->proj.crt_ctx, &dir_handle->ep,
 			    FS_TO_OP(fs_handle, readdir), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %d",
-			      rc);
+		IOF_TRACE_ERROR(dir_handle,
+				"Could not create request, rc = %d", rc);
 		return EIO;
 	}
 
@@ -118,8 +118,9 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
 				     &in->bulk);
 		if (rc) {
-			IOF_LOG_ERROR("Failed to make local bulk handle %d",
-				      rc);
+			IOF_TRACE_ERROR(dir_handle,
+					"Failed to make local bulk handle %d",
+					rc);
 			D_FREE(iov.iov_buf);
 			crt_req_decref(rpc);
 			D_GOTO(out, ret = EIO);
@@ -130,7 +131,8 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	iof_tracker_init(&reply.tracker, 1);
 	rc = crt_req_send(rpc, readdir_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
+		IOF_TRACE_ERROR(dir_handle,
+				"Could not send rpc, rc = %d", rc);
 		return EIO;
 	}
 
@@ -142,19 +144,21 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	if (reply.out->err != 0) {
 		if (reply.out->err == IOF_GAH_INVALID)
 			dir_handle->gah_valid = 0;
-		IOF_LOG_ERROR("Error from target %d", reply.out->err);
+		IOF_TRACE_ERROR(dir_handle,
+				"Error from target %d", reply.out->err);
 		D_GOTO(out, ret = EIO);
 	}
 
-	IOF_LOG_DEBUG("Reply received iov: %d bulk: %d", reply.out->iov_count,
-		      reply.out->bulk_count);
+	IOF_TRACE_DEBUG(dir_handle,
+			"Reply received iov: %d bulk: %d", reply.out->iov_count,
+			reply.out->bulk_count);
 
 	if (reply.out->iov_count > 0) {
 		dir_handle->reply_count = reply.out->iov_count;
 
 		if (reply.out->replies.iov_len != reply.out->iov_count *
 			sizeof(struct iof_readdir_reply)) {
-			IOF_LOG_ERROR("Incorrect iov reply");
+			IOF_TRACE_ERROR(dir_handle, "Incorrect iov reply");
 			D_GOTO(out, ret = EIO);
 		}
 		dir_handle->replies = reply.out->replies.iov_buf;
@@ -238,7 +242,7 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 
 	/* Check for available data and fetch more if none */
 	if (dir_handle->reply_count == 0) {
-		IOF_LOG_DEBUG("Fetching more data");
+		IOF_TRACE_DEBUG(dir_handle, "Fetching more data");
 		if (dir_handle->rpc) {
 			crt_req_decref(dir_handle->rpc);
 			dir_handle->rpc = NULL;
@@ -251,7 +255,7 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 	}
 
 	if (dir_handle->reply_count == 0) {
-		IOF_LOG_DEBUG("No more replies");
+		IOF_TRACE_DEBUG(dir_handle, "No more replies");
 		if (dir_handle->rpc) {
 			crt_req_decref(dir_handle->rpc);
 			dir_handle->rpc = NULL;
@@ -261,8 +265,11 @@ static int readdir_next_reply(struct iof_dir_handle *dir_handle,
 
 	*reply = dir_handle->replies;
 
-	IOF_LOG_INFO("Count %d last_replies %d", dir_handle->reply_count,
-		     dir_handle->last_replies);
+	IOF_TRACE_INFO(dir_handle,
+		       "Next offset %zi count %d %s",
+		       (*reply)->nextoff,
+		       dir_handle->reply_count,
+		       dir_handle->last_replies ? "EOF" : "More");
 
 	return 0;
 }
@@ -283,35 +290,27 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 
 	IOF_TRACE_UP(req, dir_handle, "readdir_fuse_req");
 
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
-	}
+	if (FS_IS_OFFLINE(fs_handle))
+		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
 	IOF_TRACE_INFO(req, GAH_PRINT_STR " offset %zi",
 		       GAH_PRINT_VAL(dir_handle->gah), offset);
 
-	if (!dir_handle->gah_valid) {
+	if (!dir_handle->gah_valid)
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
-		ret = EIO;
-		goto out_err;
-	}
+		D_GOTO(out_err, ret = EIO);
 
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.
 	 */
-	if (!dir_handle->handle_valid) {
-		ret = EIO;
-		goto out_err;
-	}
+	if (!dir_handle->handle_valid)
+		D_GOTO(out_err, ret = EIO);
 
 	D_ALLOC(buf, size);
-	if (!buf) {
-		ret = ENOMEM;
-		goto out_err;
-	}
+	if (!buf)
+		D_GOTO(out_err, ret = ENOMEM);
 
 	do {
 		struct iof_readdir_reply *dir_reply;
@@ -320,12 +319,10 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 			(dir_handle, next_offset,
 					 &dir_reply);
 
-		IOF_LOG_DEBUG("err %d buf %p", rc, dir_reply);
+		IOF_TRACE_DEBUG(dir_handle, "err %d buf %p", rc, dir_reply);
 
-		if (rc != 0) {
-			ret = rc;
-			goto out_err;
-		}
+		if (rc != 0)
+			D_GOTO(out_err, ret = rc);
 
 		/* Check for end of directory.  This is the code-path taken
 		 * where a RPC contains 0 replies, either because a directory
@@ -334,13 +331,14 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 		 * In this case there is no next entry to consume.
 		 */
 		if (!dir_reply) {
-			IOF_LOG_INFO("No more directory contents");
+			IOF_TRACE_INFO(dir_handle,
+				       "No more directory contents");
 			goto out;
 		}
 
-		IOF_LOG_DEBUG("reply rc %d stat_rc %d",
-			      dir_reply->read_rc,
-			      dir_reply->stat_rc);
+		IOF_TRACE_DEBUG(dir_handle, "reply rc %d stat_rc %d",
+				dir_reply->read_rc,
+				dir_reply->stat_rc);
 
 		/* Check for error.  Error on the remote readdir() call exits
 		 * here
@@ -362,8 +360,7 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 
 		if (dir_reply->stat_rc != 0) {
 			IOF_TRACE_ERROR(req, "Stat rc is non-zero");
-			ret = EIO;
-			goto out_err;
+			D_GOTO(out_err, ret = EIO);
 		}
 
 		ret = fuse_add_direntry(req, buf + b_offset, size - b_offset,
@@ -371,8 +368,11 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 					&dir_reply->stat,
 					dir_reply->nextoff);
 
-		IOF_LOG_DEBUG("New file '%s' %d next off %zi",
-			      dir_reply->d_name, ret, dir_reply->nextoff);
+		IOF_TRACE_DEBUG(dir_handle,
+				"New file '%s' %d next off %zi size %d (%lu)",
+				dir_reply->d_name, ret, dir_reply->nextoff,
+				ret,
+				size - b_offset);
 
 		/* Check for this being the last entry in a directory, this is
 		 * the typical end-of-directory case where readdir() returned
@@ -380,25 +380,15 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 		 */
 
 		if (ret > size - b_offset) {
-			int last;
+			IOF_TRACE_DEBUG(req,
+					"Output buffer is full");
+			goto out;
 
-			next_offset = dir_reply->nextoff;
-			last = readdir_next_reply_consume(dir_handle);
-
-			if (last) {
-				IOF_LOG_INFO("Returning no more data");
-				goto out;
-			}
-		} else {
-			next_offset = dir_reply->nextoff;
-			readdir_next_reply_consume(dir_handle);
-			b_offset += ret;
 		}
 
-		/* Check for filler() returning full.  The filler function
-		 * returns 1 once the internal FUSE buffer is full so check
-		 * for that case and exit the loop here.
-		 */
+		next_offset = dir_reply->nextoff;
+		readdir_next_reply_consume(dir_handle);
+		b_offset += ret;
 
 	} while (1);
 
