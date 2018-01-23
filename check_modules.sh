@@ -46,6 +46,10 @@ do
   FLIST+=" -P3 $FNAME"
 done
 
+if [ -n "$*" ]; then
+  FLIST=$*
+fi
+
 ./scons_local/check_python.sh $FLIST
 if [ $? -ne 0 ]; then
   exit 1
