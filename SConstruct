@@ -70,62 +70,32 @@ def save_build_info(env, prereqs, platform):
     env.InstallAs('$PREFIX/TESTING/.build_vars.json',
                   json_build_vars)
 
-def check_flag(context, flag):
-    """Helper function to allow checking for compiler flags"""
-
-    cc_name = context.env.get('CC')
-    context.Message("Checking %s %s " % (cc_name, flag))
-    context.env.Replace(CFLAGS=['-Werror', flag])
-    ret = context.TryCompile("""
-int main() {
-    return 0;
-}
-""", ".c")
-    context.Result(ret)
-    return ret
-
-def run_checks(env, platform, check_flags):
+def run_checks(env, platform):
     """Run all configure time checks"""
 
     cenv = env.Clone()
     cenv.Append(CFLAGS='-Werror')
-    config = Configure(cenv, custom_tests={'CheckFlag' : check_flag})
+    config = Configure(cenv)
     try:
         cmd = 'setfattr'
         if platform == 'Darwin':
             cmd = 'xattr'
 
         if not config.CheckProg(cmd):
-            print '%s command not installed, extended attribute test ' \
-               'will not work' % cmd
+            print('%s command not installed, extended attribute test ' \
+               'will not work' % cmd)
 
     except AttributeError:
-        print 'CheckProg not present'
+        print('CheckProg not present')
 
     if config.CheckHeader('stdatomic.h'):
         env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
-
-    # Check for configure flags.
-    # Some configure flags are always enabled (-g etc) however check in the
-    # compiler supports other ones before using them.  Additional flags
-    # might have been specified by the user in ~/.scons_localrc so check
-    # those as well as DESIRED_FLAGS, and do it in such a way as user
-    # flags come last so they can be used to disable locally defined flags.
-
-    # Any flag that doesn't start with -W gets passed through unmodified.
-
-    checked = []
-    for flag in check_flags:
-        if flag in checked:
-            continue
-        if not flag.startswith('-W') or config.CheckFlag(flag):
-            env.Append(CFLAGS=[flag])
-        checked.append(flag)
     config.Finish()
 
-    print 'Compiler options: %s %s' % (env.get('CC'),
-                                       ' '.join(env.get('CFLAGS')))
+    env.AppendIfSupported(CFLAGS=DESIRED_FLAGS)
 
+    print('Compiler options: %s %s' % (env.get('CC'),
+                                       ' '.join(env.get('CFLAGS'))))
 
 def scons():
     """Scons function"""
@@ -141,7 +111,7 @@ def scons():
     VariantDir(arch_dir, '.', duplicate=0)
 
     if os.path.exists('iof.conf') and not os.path.exists(opts_file):
-        print 'Renaming legacy conf file'
+        print('Renaming legacy conf file')
         os.rename('iof.conf', opts_file)
 
     opts = Variables(opts_file)
@@ -155,10 +125,6 @@ def scons():
 
     Export('env prereqs IOF_VERSION')
 
-    # Pull out the defined CFLAGS to use them later on for checking.
-    check_flags = list(DESIRED_FLAGS)
-    check_flags.extend(env.get('CFLAGS'))
-    env.Replace(CFLAGS='')
     env.Append(CFLAGS=['-g', '-Wall', '-std=gnu99'])
 
     opts.Add(EnumVariable('client_libs',
@@ -169,12 +135,12 @@ def scons():
     opts.Update(env)
 
     if not env.GetOption('clean'):
-        run_checks(env, platform, check_flags)
+        run_checks(env, platform)
     opts.Save(opts_file, env)
 
     unknown = opts.UnknownVariables()
     if unknown:
-        print "Unknown variables: %s" % unknown.keys()
+        print("Unknown variables: %s" % unknown.keys())
         SetOption("help", True)
 
     env.Alias('install', "$PREFIX")

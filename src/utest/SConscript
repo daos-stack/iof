@@ -110,9 +110,9 @@ def scons():
     Import('env prereqs')
 
     if not prereqs.check_component('cunit'):
-        print "\n*****************************************************"
-        print "CUnit packages must be installed to enable unit tests"
-        print "*****************************************************\n"
+        print("\n*****************************************************")
+        print("CUnit packages must be installed to enable unit tests")
+        print("*****************************************************\n")
         # Just returning is the desired behavior here.  The utest target
         # has yet to be defined so the build will just fail.
         return

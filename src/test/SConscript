@@ -52,7 +52,6 @@ def build_static_tests(env):
             return []
 
         ilenv = env.Clone()
-        print ilenv.subst("CPPPATH = $CPPPATH")
 
         ioil_opt = '-Wl,--whole-archive -lioil -Wl,--no-whole-archive'
         ioil_script = "%s/../il/ioil-ld-opts" % Dir('.').abspath
@@ -94,9 +93,9 @@ def scons():
     Import('env prereqs')
 
     if not prereqs.check_component('cunit'):
-        print "\n************************************************"
-        print "CUnit packages must be installed to enable tests"
-        print "************************************************\n"
+        print("\n************************************************")
+        print("CUnit packages must be installed to enable tests")
+        print("************************************************\n")
         # Just returning is the desired behavior here.  The utest target
         # has yet to be defined so the build will just fail.
         return
@@ -111,8 +110,6 @@ def scons():
     tenv.AppendUnique(RPATH='$PREFIX/lib')
 
     prereqs.require(tenv, 'cart', 'cunit')
-
-    print tenv.subst("CPPPATH = $CPPPATH")
 
     il_test = []
 
@@ -139,9 +136,9 @@ def scons():
     tenv.Install('$PREFIX/TESTING/tests', il_test)
 
     if not prereqs.check_component('python34_devel'):
-        print "\n********************************************************"
-        print "Python/C Shim not enabled - needs python34-devel package"
-        print "********************************************************\n"
+        print("\n********************************************************")
+        print("Python/C Shim not enabled - needs python34-devel package")
+        print("********************************************************\n")
         return
 
     menv = env.Clone()
