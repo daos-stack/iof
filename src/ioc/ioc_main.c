@@ -1322,7 +1322,8 @@ initialize_projection(struct iof_state *iof_state,
 
 	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK |
 					   D_HASH_FT_EPHEMERAL,
-					   4, fs_handle, &hops,
+					   fs_info->htable_size,
+					   fs_handle, &hops,
 					   &fs_handle->inode_ht);
 	if (ret != 0)
 		D_GOTO(err, 0);

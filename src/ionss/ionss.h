@@ -144,6 +144,7 @@ struct ios_projection {
 	uint32_t		max_write_size;
 	uint32_t		max_iov_write_size;
 	uint32_t		max_write_count;
+	uint32_t		inode_htable_size;
 	uint32_t		readdir_size;
 	char			*mount_path;
 

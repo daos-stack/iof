@@ -56,9 +56,9 @@ CNSS_SRC = ['cnss.c',
 IOC_SRC = ['ioc_main.c',
            'ioc_fuseops.c',
            'inode.c']
-IONSS_SRC = ['ionss.c',
+IONSS_SRC = ['config.c',
              'fh.c',
-             'config.c']
+             'ionss.c']
 RPC_SRC = ['closedir',
            'create',
            'fgetattr',

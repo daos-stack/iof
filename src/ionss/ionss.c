@@ -2449,6 +2449,9 @@ static void show_help(const char *prog)
 	"# Size of the buffer to be used for a bulk read operation\n"
 	"max_read_size:               1M\n"
 	"\n"
+	"# Size of the inode hash table, in powers of 2\n"
+	"inode_htable_size:            5 (32)\n"
+	"\n"
 	"# Size of the buffer to be used for a bulk write operation\n"
 	"max_write_size:              1M\n"
 	"\n"
@@ -2696,7 +2699,8 @@ int main(int argc, char **argv)
 		projection->active = 0;
 		projection->base = &base;
 		rc = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
-						  5, NULL, &hops,
+						  projection->inode_htable_size,
+						  NULL, &hops,
 						  &projection->file_ht);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not create hash table");
@@ -2836,6 +2840,7 @@ int main(int argc, char **argv)
 		base.fs_list[i].max_iov_read = projection->max_iov_read_size;
 		base.fs_list[i].max_write = projection->max_write_size;
 		base.fs_list[i].max_iov_write = projection->max_iov_write_size;
+		base.fs_list[i].htable_size = projection->inode_htable_size;
 
 		base.fs_list[i].flags = IOF_FS_DEFAULT;
 		if (projection->failover)

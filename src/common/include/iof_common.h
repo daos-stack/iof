@@ -143,6 +143,7 @@ struct iof_fs_info {
 	uint32_t readdir_size;
 	uint32_t max_iov_read;
 	uint32_t max_iov_write;
+	uint32_t htable_size;
 };
 
 /* The response to the initial query RPC.
