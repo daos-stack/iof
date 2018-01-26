@@ -2354,9 +2354,10 @@ static void show_help(const char *prog)
 {
 	printf("I/O Forwarding I/O Node System Services\n");
 	printf("\n");
-	printf("Usage: %s [OPTION] ...\n", prog);
+	printf("Usage: %s [OPTION] -c <config_file>\n", prog);
 	printf("\n");
 	printf("\t-h, --help\tThis help text\n");
+	printf("\t-v, --version\tShow version\n");
 	printf(
 	"\t-c, --config\tYAML configuration file with following structure:\n"
 	"\n"
@@ -2588,11 +2589,12 @@ int main(int argc, char **argv)
 	while (1) {
 		static struct option long_options[] = {
 			{"help", no_argument, 0, 'h'},
+			{"version", no_argument, 0, 'v'},
 			{"config", required_argument, 0, 'c'},
 			{0, 0, 0, 0}
 		};
 
-		c = getopt_long(argc, argv, "hc:", long_options, NULL);
+		c = getopt_long(argc, argv, "hvc:", long_options, NULL);
 
 		if (c == -1)
 			break;
@@ -2600,6 +2602,10 @@ int main(int argc, char **argv)
 		switch (c) {
 		case 'h':
 			show_help(argv[0]);
+			exit(0);
+			break;
+		case 'v':
+			printf("%s: %s\n", argv[0], version);
 			exit(0);
 			break;
 		case 'c':
@@ -2611,8 +2617,13 @@ int main(int argc, char **argv)
 		}
 	}
 
+	if (!config_file) {
+		show_help(argv[0]);
+		exit(1);
+	}
+
 	if (parse_config(config_file, &base))
-		return IOF_BAD_DATA;
+		exit(1);
 
 	base.callback_fn = base.progress_callback ? check_shutdown : NULL;
 

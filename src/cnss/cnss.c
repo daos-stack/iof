@@ -632,6 +632,7 @@ static void show_help(const char *prog)
 	printf("Usage: %s [OPTION] ...\n", prog);
 	printf("\n");
 	printf("\t-h, --help\tThis help text\n");
+	printf("\t-v, --version\tShow version\n");
 	printf("\t-p, --prefix\tPath to the CNSS Working directory.\n"
 		"\t\t\tThis may also be set via the CNSS_PREFIX"
 		" environment variable.\n"
@@ -662,10 +663,11 @@ int main(int argc, char **argv)
 	while (1) {
 		static struct option long_options[] = {
 			{"help", no_argument, 0, 'h'},
+			{"version", no_argument, 0, 'v'},
 			{"prefix", required_argument, 0, 'p'},
 			{0, 0, 0, 0}
 		};
-		char c = getopt_long(argc, argv, "hp:", long_options, NULL);
+		char c = getopt_long(argc, argv, "hvp:", long_options, NULL);
 
 		if (c == -1)
 			break;
@@ -675,6 +677,11 @@ int main(int argc, char **argv)
 			show_help(argv[0]);
 			exit(0);
 			break;
+		case 'v':
+			printf("%s: %s\n", argv[0], version);
+			exit(0);
+			break;
+
 		case 'p':
 			prefix = optarg;
 			break;

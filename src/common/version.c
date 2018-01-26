@@ -40,5 +40,5 @@
 
 char *iof_get_version(void)
 {
-	return "0.1";
+	return "0.7";
 }
