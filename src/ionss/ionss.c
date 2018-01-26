@@ -1208,7 +1208,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 
 /* Process a read request
  *
- * This function processes a single rrd and either submits a bulk write with
+ * This function processes a single rrd and either submits a bulk read with
  * the result of completes and frees the request
  */
 static void
@@ -1300,7 +1300,7 @@ out:
 /* Completion callback for bulk read request
  *
  * This function is called when a put to the client has completed for a bulk
- * write.
+ * read.
  */
 static int
 iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)

@@ -80,11 +80,13 @@ ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
 			D_GOTO(out_err, ret = out->rc);
 	}
 
-	IOF_FUSE_REPLY_ZERO(req);
+	if (req)
+		IOF_FUSE_REPLY_ZERO(req);
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+	if (req)
+		IOF_FUSE_REPLY_ERR(req, ret);
 }
 
 int ioc_simple_resend(struct ioc_request *request)
@@ -1301,19 +1303,21 @@ initialize_projection(struct iof_state *iof_state,
 	if (ret != 0)
 		D_GOTO(err, 0);
 
-	/* Keep a list of open directory handles
+	/* Keep a list of open file and directory handles
 	 *
-	 * Directory handles are added to this list as the open call succeeds,
+	 * Handles are added to these lists as the open call succeeds,
 	 * and removed from the list when a release request is received,
-	 * therefore this is a list of directory handles held locally by the
+	 * therefore this is a list of handles held locally by the
 	 * kernel, not a list of handles the CNSS holds on the IONSS.
 	 *
 	 * Used during shutdown so that we can iterate over the list after
-	 * terminating the FUSE thread to send closedir RPCs for any handles
+	 * terminating the FUSE thread to send close RPCs for any handles
 	 * the server didn't close.
 	 */
 	D_INIT_LIST_HEAD(&fs_handle->opendir_list);
 	pthread_mutex_init(&fs_handle->od_lock, NULL);
+	D_INIT_LIST_HEAD(&fs_handle->openfile_list);
+	pthread_mutex_init(&fs_handle->of_lock, NULL);
 
 	fs_handle->max_read = fs_info->max_read;
 	fs_handle->max_iov_read = fs_info->max_iov_read;
@@ -1749,6 +1753,7 @@ static void iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 	d_list_t *rlink = NULL;
+	struct iof_file_handle *fh, *fh2;
 	struct iof_dir_handle *dh, *dh2;
 	uint64_t refs = 0;
 	int handles = 0;
@@ -1778,9 +1783,9 @@ static void iof_deregister_fuse(void *arg)
 	if (rc)
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
 
-	/* This code does not need to hold the od_lock as the fuse progression
-	 * thread is no longer running so no more calls to opendir() or
-	 * releasedir() can race with this code.
+	/* This code does not need to hold the locks as the fuse progression
+	 * thread is no longer running so no more calls to open()/opendir()
+	 * or close()/releasedir() can race with this code.
 	 */
 	handles = 0;
 	d_list_for_each_entry_safe(dh, dh2, &fs_handle->opendir_list, list) {
@@ -1789,8 +1794,16 @@ static void iof_deregister_fuse(void *arg)
 		ioc_int_releasedir(dh);
 		handles++;
 	}
-
 	IOF_TRACE_INFO(fs_handle, "Closed %d directory handles", handles);
+
+	handles = 0;
+	d_list_for_each_entry_safe(fh, fh2, &fs_handle->openfile_list, list) {
+		IOF_TRACE_INFO(fs_handle, "Closing file " GAH_PRINT_STR
+			       " %p", GAH_PRINT_VAL(fh->common.gah), fh);
+		ioc_int_release(fh);
+		handles++;
+	}
+	IOF_TRACE_INFO(fs_handle, "Closed %d file handles", handles);
 
 	/* Stop the progress thread for this projection and delete the context
 	 */

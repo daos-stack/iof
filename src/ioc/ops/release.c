@@ -41,15 +41,18 @@
 #include "log.h"
 #include "ios_gah.h"
 
-void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 {
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
 	struct iof_projection_info *fs_handle = handle->fs_handle;
 	struct iof_gah_in *in;
 	int ret = EIO;
 	int rc;
 
 	STAT_ADD(fs_handle->stats, release);
+
+	pthread_mutex_lock(&handle->fs_handle->of_lock);
+	d_list_del(&handle->list);
+	pthread_mutex_unlock(&handle->fs_handle->of_lock);
 
 	/* If the projection is off-line then drop the local handle.
 	 *
@@ -88,7 +91,20 @@ void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
-
 	iof_pool_release(fs_handle->fh_pool, handle);
+	if (req)
+		IOF_FUSE_REPLY_ERR(req, ret);
+
+}
+
+void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+	struct iof_file_handle *fh = (struct iof_file_handle *)fi->fh;
+
+	ioc_release_priv(req, fh);
+}
+
+void ioc_int_release(struct iof_file_handle *fh)
+{
+	ioc_release_priv(NULL, fh);
 }

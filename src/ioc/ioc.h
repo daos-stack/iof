@@ -181,6 +181,10 @@ struct iof_projection_info {
 	/* List of directory handles owned by FUSE */
 	pthread_mutex_t			od_lock;
 	d_list_t			opendir_list;
+
+	/* List of open file handles owned by FUSE */
+	pthread_mutex_t			of_lock;
+	d_list_t			openfile_list;
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
@@ -509,6 +513,8 @@ void ioc_ll_read(fuse_req_t, fuse_ino_t, size_t, off_t,
 		 struct fuse_file_info *);
 
 void ioc_ll_release(fuse_req_t, fuse_ino_t, struct fuse_file_info *);
+
+void ioc_int_release(struct iof_file_handle *);
 
 void ioc_ll_unlink(fuse_req_t, fuse_ino_t, const char *);
 
