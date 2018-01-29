@@ -220,11 +220,13 @@ static void *ll_loop_fn(void *args)
 	sigaction(SIGUSR1, &act, NULL);
 
 	/*Blocking*/
-	if (info->mt)
-		ret = fuse_session_loop_mt(info->session, 0);
-	else
-		ret = fuse_session_loop(info->session);
+	if (info->mt) {
+		struct fuse_loop_config config = {.max_idle_threads = 10};
 
+		ret = fuse_session_loop_mt(info->session, &config);
+	} else {
+		ret = fuse_session_loop(info->session);
+	}
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
@@ -247,7 +249,9 @@ static void *loop_fn(void *args)
 
 	/*Blocking*/
 	if (info->mt) {
-		ret = fuse_loop_mt(info->fuse, 0);
+		struct fuse_loop_config config = {.max_idle_threads = 10};
+
+		ret = fuse_loop_mt(info->fuse, &config);
 	} else
 		ret = fuse_loop(info->fuse);
 
