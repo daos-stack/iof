@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -68,7 +68,7 @@ opendir_ll_cb(struct ioc_request *request)
 		pthread_mutex_lock(&dh->fs_handle->od_lock);
 		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
 		pthread_mutex_unlock(&dh->fs_handle->od_lock);
-		fi.fh = (uint64_t) dh;
+		fi.fh = (uint64_t)dh;
 		IOF_FUSE_REPLY_OPEN(f_req, fi);
 	} else {
 		IOC_REQ_RELEASE(dh);

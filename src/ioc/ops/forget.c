@@ -94,5 +94,4 @@ ioc_ll_forget_multi(fuse_req_t req, size_t count,
 	for (i = 0; i < count; i++)
 		ioc_ll_forget_one(fs_handle,
 				  forgets[i].ino, forgets[i].nlookup);
-
 }

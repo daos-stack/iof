@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -131,7 +131,6 @@ void shutdown_impl(void)
 static void
 shutdown_bcast_cb(const struct crt_cb_info *cb_info)
 {
-
 	if (cb_info->cci_rc == 0) {
 		shutdown_impl();
 		return;
@@ -178,7 +177,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 		return;
 
 	IOF_LOG_DEBUG("Last CNSS detached from Rank %d",
-			base.my_rank);
+		      base.my_rank);
 
 	/* Call shutdown directly if this is the only IONSS running */
 	if (base.num_ranks == 1) {
@@ -187,7 +186,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 	}
 
 	IOF_LOG_DEBUG("Broadcasting shutdown to %d IONSS",
-			(base.num_ranks - 1));
+		      (base.num_ranks - 1));
 	rc = crt_corpc_req_create(rpc->cr_ctx,
 				  base.primary_group,
 				  &exclude_me, SHUTDOWN_BCAST_OP,
@@ -1006,7 +1005,6 @@ iof_create_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
-
 	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o",
 			in->common.name.name, in->flags, in->mode);
 
@@ -1188,7 +1186,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 	}
 
 	rrd = d_list_entry(projection->read_list.next,
-			     struct ionss_io_req_desc, list);
+			   struct ionss_io_req_desc, list);
 
 	d_list_del(&rrd->list);
 
@@ -1725,7 +1723,6 @@ iof_process_write(struct ionss_active_write *awd)
 		D_GOTO(out, 0);
 	}
 
-
 	awd->req_len = in->xtvec.xt_len - awd->segment_offset;
 	/* Only write max_write_size at a time */
 	if (awd->req_len > projection->max_write_size)
@@ -2105,7 +2102,7 @@ out:
 
 static int iof_register_handlers(void)
 {
-#define DECL_RPC_HANDLER(NAME, FN) [DEF_RPC_TYPE(DEFAULT, NAME)] = FN
+#define DECL_RPC_HANDLER(NAME, FN)[DEF_RPC_TYPE(DEFAULT, NAME)] = FN
 
 	crt_rpc_cb_t handlers[] = {
 		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
@@ -2873,7 +2870,6 @@ int main(int argc, char **argv)
 	ret = ionss_register();
 	if (ret)
 		D_GOTO(cleanup, ret);
-
 
 	shutdown = 0;
 

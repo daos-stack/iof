@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -175,7 +175,6 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		dir_handle->reply_count = 0;
 		dir_handle->replies = NULL;
 		dir_handle->rpc = NULL;
-
 	}
 
 out:
@@ -383,7 +382,6 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 			IOF_TRACE_DEBUG(req,
 					"Output buffer is full");
 			goto out;
-
 		}
 
 		next_offset = dir_reply->nextoff;

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -98,7 +98,6 @@ union ctrl_data {
 	struct ctrl_constant con;
 	struct ctrl_tracker  tckr;
 };
-
 
 TAILQ_HEAD(ctrl_node_queue, ctrl_node);
 
@@ -388,7 +387,6 @@ out:
 	pthread_rwlock_unlock(&parent->lock);
 
 	return rc;
-
 }
 
 static int add_ctrl_dir(const char *name, struct ctrl_node **node)
@@ -471,7 +469,6 @@ static int add_ctrl_file(const char *name, struct ctrl_node **node,
 	*node = newnode;
 
 	return 0;
-
 }
 
 int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
@@ -975,7 +972,6 @@ static int ctrl_getattr3(const char *fname, struct stat *stat,
 		stat->st_size = handle->st_size;
 
 	return 0;
-
 }
 
 static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
@@ -998,7 +994,7 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 
 	if ((finfo->flags & O_RDWR) == O_RDWR)
 		read_access = write_access = true;
-	else if ((finfo->flags & (O_WRONLY|O_CREAT|O_TRUNC)) != 0)
+	else if ((finfo->flags & (O_WRONLY | O_CREAT | O_TRUNC)) != 0)
 		write_access = true;
 	else
 		read_access = true;
@@ -1257,7 +1253,6 @@ static struct fuse_operations fuse_ops = {
 	.readdir = ctrl_readdir,
 	.releasedir = ctrl_releasedir,
 };
-
 
 int ctrl_fs_start(const char *prefix)
 {

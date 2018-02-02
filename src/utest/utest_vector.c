@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -301,7 +301,6 @@ static void test_iof_vector_threaded(void)
 	CU_ASSERT(vector_destroy(&vector) == 0);
 }
 
-
 static void test_iof_vector_invalid(void)
 {
 	int rc;
@@ -397,7 +396,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!CU_add_test(pSuite, "iof_vector test",
-		    test_iof_vector) ||
+			 test_iof_vector) ||
 	    !CU_add_test(pSuite, "iof_vector threaded test",
 		    test_iof_vector_threaded) ||
 	    !CU_add_test(pSuite, "iof_vector invalid test",

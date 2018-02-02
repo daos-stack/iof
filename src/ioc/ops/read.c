@@ -81,7 +81,6 @@ out:
 	if (rc) {
 		IOF_FUSE_REPLY_ERR(rb->req, rc);
 	} else {
-
 		STAT_ADD_COUNT(rb->fs_handle->stats, read_bytes, rc);
 
 		/* It's not clear without benchmarking which approach is better
@@ -115,7 +114,7 @@ out:
 
 static void
 ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
-	struct iof_file_handle *handle)
+	      struct iof_file_handle *handle)
 {
 	struct iof_readx_in *in = NULL;
 	fuse_req_t req = rb->req;

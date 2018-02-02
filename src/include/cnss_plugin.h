@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,6 @@ extern "C" {
 #define CNSS_BAD_DATA		6 /*bad data*/
 #define CNSS_ERR_CTRL_FS	7 /*ctrl fs did not start or shutdown*/
 #define CNSS_ERR_PTHREAD	8 /*failed to create or destroy CNSS threads*/
-
 
 struct fuse_operations;
 struct fuse_lowlevel_ops;
@@ -160,7 +159,6 @@ struct cnss_plugin_cb {
 	 * then access the struct fs_ops structure to be able to write to it
 	 */
 };
-
 
 /* Function lookup table provided by plugin to CNSS. */
 struct cnss_plugin {

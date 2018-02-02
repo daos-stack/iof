@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -103,7 +103,5 @@ int iof_lm_attach(crt_group_t *group, crt_context_t crt_ctx)
 			      attach_info.rc);
 
 	return attach_info.rc;
-
 }
-
 

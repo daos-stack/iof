@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -92,7 +92,7 @@
 #include <dlfcn.h>
 
 #define IOIL_FORWARD_DECL(type, name, params)  \
-	static type (*__real_##name) params;
+	static type(*__real_##name) params;
 
 #define IOIL_DECL(name) name
 
@@ -131,7 +131,6 @@
 #define IOIL_DECLARE_ALIAS64(type, name, params)                \
 	IOF_PUBLIC type __wrap_##name##64 params                \
 		__attribute__((weak, alias("__wrap_" #name)));
-
 
 #endif /* IOIL_PRELOAD */
 

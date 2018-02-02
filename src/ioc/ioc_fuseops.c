@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,7 +80,6 @@ static void ioc_show_flags(unsigned in)
 		IOF_LOG_ERROR("Unknown flags %#x", in);
 }
 
-
 /* Called on filesystem init.  It has the ability to both observe configuration
  * options, but also to modify them.  As we do not use the FUSE command line
  * parsing this is where we apply tunables.
@@ -92,7 +91,6 @@ static void ioc_show_flags(unsigned in)
 static void *ioc_init_core(struct iof_projection_info *fs_handle,
 			   struct fuse_conn_info *conn)
 {
-
 	IOF_TRACE_INFO(fs_handle, "Fuse configuration for projection srv:%d cli:%d",
 		       fs_handle->fs_id, fs_handle->proj.cli_fs_id);
 
@@ -199,8 +197,7 @@ int iof_is_mode_supported(uint8_t flags)
 	int i, count, mode = FLAGS_TO_MODE_INDEX(flags);
 
 	IOF_LOG_INFO("Filesystem Access: %s",
-		(flags & IOF_WRITEABLE ?
-		"Read-Write" : "Read-Only"));
+		     (flags & IOF_WRITEABLE ? "Read-Write" : "Read-Only"));
 
 	count = sizeof(supported_impl) / sizeof(*supported_impl);
 	for (i = 0; i < count; i++) {

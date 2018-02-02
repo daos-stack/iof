@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -393,7 +393,6 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		plugin->fns->flush_fuse(info->session, info->private_data);
 
 	if (info->running) {
-
 		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
 
 		/*
@@ -485,7 +484,7 @@ void shutdown_fs(struct cnss_info *cnss_info)
 
 	d_list_for_each_entry(plugin, &cnss_info->plugins, list) {
 		d_list_for_each_entry_safe(info, i2, &plugin->fuse_list,
-					     entries) {
+					   entries) {
 			rc = deregister_fuse(plugin, info);
 			if (rc)
 				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
@@ -641,7 +640,6 @@ static void show_help(const char *prog)
 		"\t\t\tThis may also be set via the CNSS_PREFIX"
 		" environment variable.\n"
 		"\n");
-
 }
 
 int main(int argc, char **argv)
@@ -842,7 +840,7 @@ int main(int argc, char **argv)
 		}
 		if (list_iter->fns->destroy_plugin_data) {
 			IOF_LOG_INFO("Plugin %s(%p) calling destroy_plugin_data at %p",
-				list_iter->fns->name,
+				     list_iter->fns->name,
 				list_iter->fns->handle,
 				FN_TO_PVOID(list_iter->fns->destroy_plugin_data));
 			list_iter->fns->destroy_plugin_data(list_iter->fns->handle);
@@ -888,7 +886,7 @@ shutdown_cart:
 		struct plugin_entry *entry;
 
 		entry = d_list_entry(cnss_info->plugins.next,
-				       struct plugin_entry, list);
+				     struct plugin_entry, list);
 		d_list_del(&entry->list);
 
 		if (entry->dl_handle != NULL)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,8 +50,8 @@ bool iof_bulk_alloc(crt_context_t ctx, void *ptr, off_t bulk_offset, size_t len,
 	int flags = CRT_BULK_RW;
 	int rc;
 
-	bulk->buf = mmap(NULL, len, PROT_READ|PROT_WRITE,
-			 MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+	bulk->buf = mmap(NULL, len, PROT_READ | PROT_WRITE,
+			 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (bulk->buf == MAP_FAILED) {
 		bulk->buf = NULL;
 		IOF_TRACE_ERROR(ptr, "mmap failed: %s", strerror(errno));
@@ -102,7 +102,7 @@ static void bulk_free_helper(void *ptr, struct iof_local_bulk *bulk)
 		IOF_TRACE_DEBUG(ptr, "Bulk free failed, remapping: %p, rc = %d",
 				bulk->buf, rc);
 		addr = mmap(bulk->buf, bulk->len, PROT_NONE,
-			    MAP_FIXED|MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+			    MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (addr == MAP_FAILED)
 			IOF_TRACE_ERROR(ptr, "remap failed: %p: %s", bulk->buf,
 					strerror(errno));

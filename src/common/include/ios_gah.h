@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,11 +64,12 @@ struct ios_gah {
 	uint64_t reserved:24;	/**< Reserved for future use */
 	uint8_t crc;		/**< CRC of the rest of the structure */
 };
+
 #pragma GCC diagnostic pop
 
 /** metadata associated with the file */
 struct ios_gah_ent {
-	void *internal;
+	void *arg;
 	d_list_t list;
 	uint64_t in_use;
 	uint64_t revision;
@@ -113,11 +114,13 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store);
  * \param self_rank	[IN]		Rank of the calling process.
  * \param base		[IN]		Rank of the process which serves the
  *					first byte of the file.
+ * \param arg		[IN]		User pointer.
  *
  * \return				On success, returns IOS_SUCCESS.
  */
 enum ios_return ios_gah_allocate(struct ios_gah_store *ios_gah_store,
-		struct ios_gah *gah, int self_rank, int base, void *internal);
+				 struct ios_gah *gah, int self_rank, int base,
+				 void *arg);
 
 /**
  * Deallocates a global access handle.
@@ -130,7 +133,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *ios_gah_store,
  * \return				On success, returns IOS_SUCCESS.
  */
 enum ios_return ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
-		struct ios_gah *gah);
+				   struct ios_gah *gah);
 
 /**
  * Retrieve opaque data structure corresponding to a given global access handle.
@@ -140,11 +143,12 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
  * \param info [OUT]			On success, *info contains the opaque
  *					data struture associated with gah. On
  *					failure, equals NULL
+ * \param arg		[IN]		User pointer.
  *
  * \return				On success returns IOS_SUCCESS
  */
 enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
-		struct ios_gah *gah, void **internal);
+				 struct ios_gah *gah, void **arg);
 /**
  * Validates if the crc in *gah is correct.
  *

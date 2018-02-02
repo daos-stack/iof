@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -152,7 +152,6 @@ int iof_ctrl_read_str(char *str, int len, const char *path)
 			last--;
 		}
 
-
 	}
 
 	ret = 0;
@@ -295,7 +294,7 @@ static int check_mnt(struct mntent *entry, void *priv)
 
 	saved_ctrl_fd = ctrl_fd;
 
-	ctrl_fd = open(entry->mnt_dir, O_RDONLY|O_DIRECTORY);
+	ctrl_fd = open(entry->mnt_dir, O_RDONLY | O_DIRECTORY);
 	if (ctrl_fd == -1) {
 		IOF_LOG_INFO("Could not open %s to find CNSS: %s",
 			     entry->mnt_dir, strerror(errno));
@@ -408,7 +407,7 @@ int iof_ctrl_util_finalize(void)
 
 int iof_ctrl_util_test_init(const char *ctrl_path)
 {
-	ctrl_fd = open(ctrl_path, O_RDONLY|O_DIRECTORY);
+	ctrl_fd = open(ctrl_path, O_RDONLY | O_DIRECTORY);
 	if (ctrl_fd == -1) {
 		IOF_LOG_ERROR("Could not open %s for ctrl fs",
 			      ctrl_path);

@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -278,7 +278,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!CU_add_test(pSuite, "iof_obj_pool test",
-		    test_iof_obj_pool) ||
+			 test_iof_obj_pool) ||
 	    !CU_add_test(pSuite, "iof_obj_pool threaded test",
 		    test_iof_obj_pool_threaded) ||
 	    !CU_add_test(pSuite, "iof_obj_pool invalid test",

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ int clean_suite(void)
 /** test the size of the GAH struct is indeed 128 bits */
 static void test_ios_gah_size(void)
 {
-	CU_ASSERT(sizeof(struct ios_gah)*8 == 128);
+	CU_ASSERT(sizeof(struct ios_gah) * 8 == 128);
 }
 
 /** test ios_gah_init() */
@@ -87,12 +87,12 @@ static void test_ios_gah_allocate(void)
 	struct ios_gah *ios_gah;
 	struct ios_gah_store *ios_gah_store;
 	int ii;
-	int num_handles = 1024*20;
+	int num_handles = 1024 * 20;
 
-	CU_ASSERT(sizeof(struct ios_gah)*8 == 128);
+	CU_ASSERT(sizeof(struct ios_gah) * 8 == 128);
 	ios_gah_store = ios_gah_init();
 	CU_ASSERT_FATAL(ios_gah_store != NULL);
-	ios_gah = (struct ios_gah *) calloc(num_handles, sizeof(struct
+	ios_gah = (struct ios_gah *)calloc(num_handles, sizeof(struct
 					      ios_gah));
 	CU_ASSERT_FATAL(ios_gah != NULL);
 
@@ -132,23 +132,23 @@ static void test_ios_gah_misc(void)
 	struct ios_gah *ios_gah;
 	struct ios_gah_store *ios_gah_store;
 	int ii;
-	int num_handles = 1024*20;
+	int num_handles = 1024 * 20;
 	void *internal = NULL;
 
-	CU_ASSERT(sizeof(struct ios_gah)*8 == 128);
+	CU_ASSERT(sizeof(struct ios_gah) * 8 == 128);
 	ios_gah_store = ios_gah_init();
 	CU_ASSERT_FATAL(ios_gah_store != NULL);
-	ios_gah = (struct ios_gah *) calloc(num_handles, sizeof(struct
+	ios_gah = (struct ios_gah *)calloc(num_handles, sizeof(struct
 					      ios_gah));
 	CU_ASSERT_FATAL(ios_gah != NULL);
 
 	for (ii = 0; ii < num_handles; ii++) {
 		void *data = malloc(512);
+
 		CU_ASSERT_FATAL(data != NULL);
 		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
 	}
 	CU_ASSERT(rc == IOS_SUCCESS);
-
 
 	/** test ios_gah_check_crc() */
 	rc = ios_gah_check_crc(NULL);
@@ -214,7 +214,7 @@ int main(int argc, char **argv)
 	}
 
 	if (!CU_add_test(pSuite, "sizeof(struct ios_gah) test",
-		    test_ios_gah_size) ||
+			 test_ios_gah_size) ||
 	    !CU_add_test(pSuite, "ios_gah_init() test", test_ios_gah_init) ||
 	    !CU_add_test(pSuite, "ios_gah_allocate() test",
 		    test_ios_gah_allocate) ||

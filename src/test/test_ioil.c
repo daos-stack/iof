@@ -1,5 +1,4 @@
-
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +56,6 @@ static const char *cnss_prefix;
 static char *mount_dir;
 static uint64_t max_read_size;
 static uint64_t max_iov_read_size;
-
 
 #define WRITE_LOG_VERBOSE(fmt2, fmt1, ...) \
 	iof_ctrl_write_strf("write_log", fmt1 fmt2, __VA_ARGS__)
@@ -339,7 +337,7 @@ static bool do_large_write(const char *fname, const char *buf, size_t len)
 	int fd;
 
 	WRITE_LOG("Running large write test (%zd bytes)", len);
-	fd = open(fname, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+	fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 	CU_ASSERT_GOTO(fd != -1, done_err);
 	bytes = write(fd, buf, len);
 	CU_ASSERT_EQUAL(bytes, len);
@@ -393,6 +391,7 @@ static void do_misc_tests(const char *fname, size_t len)
 	int fd;
 	int new_fd;
 	int status;
+
 	WRITE_LOG("starting misc test");
 
 	memset(buf, 0, sizeof(buf));
@@ -583,7 +582,7 @@ void sanity(void)
 
 	unlink(buf);
 	len = strlen(buf);
-	fd = open(buf, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+	fd = open(buf, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	CU_ASSERT_NOT_EQUAL_FATAL(fd, -1);
 
 	do_write_tests(fd, buf, len);

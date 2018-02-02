@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -240,7 +240,7 @@ ssize_t ioil_do_preadv(const struct iovec *iov, int count, off_t position,
 
 	for (i = 0; i < count; i++) {
 		bytes_read = read_bulk(iov[i].iov_base, iov[i].iov_len,
-					 position, f_info, errcode);
+				       position, f_info, errcode);
 
 		if (bytes_read == -1)
 			return (ssize_t)-1;

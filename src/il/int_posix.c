@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -444,7 +444,7 @@ static bool check_ioctl_on_open(int fd, struct fd_entry *entry, int flags,
 	}
 
 	IOF_LOG_INFO("IOF file opened fd=%d." GAH_PRINT_STR ", bypass=%s",
-		      fd, GAH_PRINT_VAL(gah_info.gah), bypass_status[status]);
+		     fd, GAH_PRINT_VAL(gah_info.gah), bypass_status[status]);
 	entry->common.gah = gah_info.gah;
 	entry->common.projection = &projections[gah_info.cli_fs_id];
 	entry->common.gah_valid = true;
@@ -499,7 +499,7 @@ IOF_PUBLIC int iof_open(const char *pathname, int flags, ...)
 
 	status = IOF_IO_BYPASS;
 	/* Disable bypass for O_APPEND|O_PATH */
-	if ((flags & (O_PATH|O_APPEND)) != 0)
+	if ((flags & (O_PATH | O_APPEND)) != 0)
 		status = IOF_IO_DIS_FLAG;
 
 	if (!check_ioctl_on_open(fd, &entry, flags, status))
@@ -527,12 +527,12 @@ IOF_PUBLIC int iof_creat(const char *pathname, mode_t mode)
 	int fd;
 
 	/* Same as open with O_CREAT|O_WRONLY|O_TRUNC */
-	fd = __real_open(pathname, O_CREAT|O_WRONLY|O_TRUNC, mode);
+	fd = __real_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 
 	if (!ioil_initialized || (fd == -1))
 		return fd;
 
-	if (!check_ioctl_on_open(fd, &entry, O_CREAT|O_WRONLY|O_TRUNC,
+	if (!check_ioctl_on_open(fd, &entry, O_CREAT | O_WRONLY | O_TRUNC,
 				 IOF_IO_BYPASS))
 		goto finish;
 
@@ -1073,7 +1073,7 @@ IOF_PUBLIC FILE * iof_fopen(const char *path, const char *mode)
 	if (fd == -1)
 		goto finish;
 
-	if (!check_ioctl_on_open(fd, &entry, O_CREAT|O_WRONLY|O_TRUNC,
+	if (!check_ioctl_on_open(fd, &entry, O_CREAT | O_WRONLY | O_TRUNC,
 				 IOF_IO_DIS_STREAM))
 		goto finish;
 

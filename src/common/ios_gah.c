@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,8 +46,8 @@
 
 #include "include/ios_gah.h"
 
-#define IOS_GAH_STORE_INIT_CAPACITY (1024*8)
-#define IOS_GAH_STORE_DELTA (1024*8)
+#define IOS_GAH_STORE_INIT_CAPACITY (1024 * 8)
+#define IOS_GAH_STORE_DELTA (1024 * 8)
 #define IOS_GAH_VERSION 1
 
 /**
@@ -70,7 +70,7 @@ static enum ios_return ios_gah_store_increase_capacity(
 		return IOS_ERR_NOMEM;
 	gah_store->ptr_array = (struct ios_gah_ent **)
 		realloc(gah_store->ptr_array,
-			new_cap*sizeof(struct ios_gah_ent));
+			new_cap * sizeof(struct ios_gah_ent));
 	if (gah_store->ptr_array == NULL) {
 		D_FREE(new_data);
 		return IOS_ERR_NOMEM;
@@ -192,7 +192,8 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 }
 
 enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
-		struct ios_gah *gah, int self_rank, int base, void *data)
+				 struct ios_gah *gah, int self_rank, int base,
+				 void *arg)
 {
 	struct ios_gah_ent *ent;
 	enum ios_return rc = IOS_SUCCESS;
@@ -203,7 +204,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 		return IOS_ERR_INVALID_PARAM;
 	if (d_list_empty(&gah_store->free_list)) {
 		rc = ios_gah_store_increase_capacity(gah_store,
-				IOS_GAH_STORE_DELTA);
+						     IOS_GAH_STORE_DELTA);
 		if (rc != IOS_SUCCESS)
 			return rc;
 	}
@@ -213,7 +214,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 	d_list_del(&ent->list);
 
 	ent->in_use = 1;
-	ent->internal = data;
+	ent->arg = arg;
 
 	gah->fid = ent->fid;
 	gah->revision = ++ent->revision;
@@ -222,7 +223,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 	gah->version = IOS_GAH_VERSION;
 	gah->root = self_rank;
 	gah->base = base;
-	gah->crc = my_crc8((uint8_t *) gah, 120/8);
+	gah->crc = my_crc8((uint8_t *)gah, 120 / 8);
 
 	gah_store->size++;
 
@@ -230,7 +231,7 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 }
 
 enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
-		struct ios_gah *gah)
+				   struct ios_gah *gah)
 {
 	int ret;
 
@@ -263,13 +264,13 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 }
 
 enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
-		struct ios_gah *gah, void **info)
+				 struct ios_gah *gah, void **arg)
 {
 	enum ios_return ret = IOS_SUCCESS;
 
-	if (!info)
+	if (!arg)
 		return IOS_ERR_INVALID_PARAM;
-	*info = NULL;
+	*arg = NULL;
 	if (!gah_store)
 		return IOS_ERR_INVALID_PARAM;
 	if (!gah)
@@ -286,7 +287,7 @@ enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
 		return IOS_ERR_EXPIRED;
 	if (gah_store->ptr_array[gah->fid]->revision != gah->revision)
 		return IOS_ERR_EXPIRED;
-	*info = (void *) (gah_store->ptr_array[gah->fid]->internal);
+	*arg = (void *)(gah_store->ptr_array[gah->fid]->arg);
 
 	return IOS_SUCCESS;
 }
@@ -297,7 +298,7 @@ enum ios_return ios_gah_check_crc(struct ios_gah *gah)
 
 	if (gah == NULL)
 		return IOS_ERR_INVALID_PARAM;
-	tmp_crc = my_crc8((uint8_t *) gah, 120/8);
+	tmp_crc = my_crc8((uint8_t *)gah, 120 / 8);
 
 	return (tmp_crc == gah->crc) ? IOS_SUCCESS : IOS_ERR_CRC_MISMATCH;
 }

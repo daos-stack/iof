@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -109,7 +109,6 @@ static int check_file_read(const char *fname, const char *expected,
 		printf("Error reading %s at %s:%d.  (rc = %d, errno = %s)\n",
 		       fname, source, line, rc, strerror(errno));
 		return 1;
-
 	}
 
 	if (strncmp(buf, expected, 100) != 0) {
@@ -136,7 +135,6 @@ static int check_file_write(const char *fname, const char *value,
 		printf("Error writing %s at %s:%d.  (rc = %d, errno = %s)\n",
 		       fname, source, line, rc, strerror(errno));
 		return 1;
-
 	}
 
 	return 0;
@@ -377,7 +375,6 @@ shutdown:
 		printf("%d ctrl_fs tests failed\n", num_failures);
 	else
 		printf("All ctrl_fs tests passed\n");
-
 
 	iof_log_close();
 

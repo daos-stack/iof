@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -124,7 +124,6 @@ int IOF_PUBLIC iof_ctrl_trigger(const char *path);
  * \retval -errcode on error
  */
 int IOF_PUBLIC iof_ctrl_get_tracker_id(int *value, const char *path);
-
 
 /* Write a string to a ctrl file
  * \param str[in] value to write

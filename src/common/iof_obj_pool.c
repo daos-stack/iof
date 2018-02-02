@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -74,7 +74,6 @@ struct obj_pool {
 _Static_assert(sizeof(obj_pool_t) >= sizeof(struct obj_pool),
 	       "obj_pool_t must be large enough to contain struct obj_pool");
 
-
 #define MAGIC 0x345342aa
 
 /* On thread death, save the free entries globally */
@@ -93,7 +92,6 @@ static void save_free_entries(void *tpv_data)
 	pthread_setspecific(pool->key, NULL);
 	D_FREE(tpv);
 	pthread_mutex_unlock(&pool->lock);
-
 }
 
 #define BLOCK_SIZE 16384
@@ -112,7 +110,6 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 
 	if (obj_size > MAX_POOL_OBJ_SIZE)
 		return PERR_TOOBIG;
-
 
 	rc = pthread_key_create(&real_pool->key, save_free_entries);
 	if (rc != 0)

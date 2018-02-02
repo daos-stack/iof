@@ -141,8 +141,8 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	for (i = 0; i < iof_state->num_groups; i++) {
 		g = iof_state->groups + i;
 		if (!strncmp(group->cg_grpid,
-			    g->grp.dest_grp->cg_grpid,
-			    CRT_GROUP_ID_MAX_LEN))
+			     g->grp.dest_grp->cg_grpid,
+			     CRT_GROUP_ID_MAX_LEN))
 			break;
 		g = NULL;
 	}
@@ -276,7 +276,7 @@ int iof_fs_send(struct ioc_request *request)
 	if (rc)
 		D_GOTO(err, 0);
 	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",
-		      request->rpc->cr_ep.ep_rank);
+		       request->rpc->cr_ep.ep_rank);
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc)
 		D_GOTO(err, 0);
@@ -1607,15 +1607,14 @@ query_projections(struct iof_state *iof_state,
 				  "Progress Callback: %s", query->poll_interval,
 		       query->progress_callback ? "Enabled" : "Disabled");
 	/*calculate number of projections*/
-	fs_num = (query->query_list.iov_len)/sizeof(struct iof_fs_info);
+	fs_num = (query->query_list.iov_len) / sizeof(struct iof_fs_info);
 	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",
 			group->grp_name, fs_num);
-	tmp = (struct iof_fs_info *) query->query_list.iov_buf;
+	tmp = (struct iof_fs_info *)query->query_list.iov_buf;
 
 	for (i = 0; i < fs_num; i++) {
 		if (!initialize_projection(iof_state, group, &tmp[i], query,
 					   (*total)++)) {
-
 			IOF_TRACE_ERROR(iof_state,
 					"Could not initialize projection %s from %s",
 					tmp[i].dir_name.name,
@@ -1630,7 +1629,6 @@ query_projections(struct iof_state *iof_state,
 
 	return true;
 }
-
 
 static int iof_post_start(void *arg)
 {

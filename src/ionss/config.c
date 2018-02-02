@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,7 +60,6 @@
  * while disregarding the remainder using "...".
  */
 
-
 /* Options that can be specified either per projection or globally.
  * If specified at both places, the per projection value takes precedence.
  */
@@ -85,7 +84,6 @@
 	X(cnss_poll_interval, set_decimal)	\
 	X(thread_count, set_decimal)		\
 	X(progress_callback, set_flag)
-
 
 #define PROJ_OPTIONS				\
 	X(full_path, set_string, false)		\
@@ -364,7 +362,6 @@ static int parse_projections(struct parsed_option_s *option,
 }
 
 
-
 int parse_config(char *path, struct ios_base *base)
 {
 	int i, ret = 0;
@@ -432,7 +429,7 @@ int parse_config(char *path, struct ios_base *base)
 					 strlen(key_##name));		\
 		assert(sel_option != NULL);				\
 		memcpy(&base->name, sel_option->is_set ?		\
-		       &sel_option->buf : (void *) &default_##name,	\
+		       &sel_option->buf : (void *)&default_##name,	\
 		       sizeof(base->name));				\
 	}
 	GLOBAL_OPTIONS
@@ -454,7 +451,7 @@ int parse_config(char *path, struct ios_base *base)
 		}							\
 		memcpy(&base->projection_array[i].name,			\
 		       sel_option->is_set ? &sel_option->buf		\
-				: (void *) &default_##name,		\
+				: (void *)&default_##name,		\
 		       sizeof(base->projection_array[i].name));		\
 	}
 		COMMON_OPTIONS

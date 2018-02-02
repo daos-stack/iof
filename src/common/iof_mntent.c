@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,6 @@ int iof_mntent_foreach(iof_mntent_func_t func, void *priv)
 	struct mntent	entry;
 	char		*filename;
 	char		text[IOF_MAX_MNTENT_LEN];
-
 
 	D_ASPRINTF(filename, "/proc/%d/mounts", getpid());
 	if (!filename)

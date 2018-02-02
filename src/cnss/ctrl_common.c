@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -99,7 +99,6 @@ static int shutdown_write_cb(uint64_t value, void *arg)
 }
 
 
-
 static int write_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/
@@ -162,10 +161,8 @@ int register_cnss_controls(struct ctrl_info *ctrl_info)
 	char *crt_protocol;
 	int ret = 0;
 
-	ret = ctrl_register_variable(NULL, "active",
-			       iof_uint_read,
-			       NULL, NULL,
-			       &ctrl_info->active);
+	ret = ctrl_register_variable(NULL, "active", iof_uint_read,
+				     NULL, NULL, &ctrl_info->active);
 	CHECK_RET(ret, exit, "Could not register 'active' ctrl");
 
 	ret = ctrl_register_uint64_variable(NULL, "shutdown",
@@ -175,23 +172,23 @@ int register_cnss_controls(struct ctrl_info *ctrl_info)
 	CHECK_RET(ret, exit, "Could not register shutdown ctrl");
 
 	ret = ctrl_register_variable(NULL, "dump_log",
-				NULL /* read_cb */,
-				dump_log_write_cb, /* write_cb */
-				NULL, /* destroy_cb */
-				(void *)ctrl_info);
+				     NULL /* read_cb */,
+				     dump_log_write_cb, /* write_cb */
+				     NULL, /* destroy_cb */
+				     (void *)ctrl_info);
 	CHECK_RET(ret, exit, "Could not register dump_log ctrl");
 
 	ret = ctrl_register_variable(NULL, "write_log",
-				NULL /* read_cb */,
-				write_log_write_cb, /* write_cb */
-				NULL, /* destroy_cb */
-				NULL);
+				     NULL /* read_cb */,
+				     write_log_write_cb, /* write_cb */
+				     NULL, /* destroy_cb */
+				     NULL);
 	CHECK_RET(ret, exit, "Could not register write_log ctrl");
 
 	ret = ctrl_register_variable(NULL, "log_mask",
-				  NULL /* read_cb */,
-				  log_mask_cb /* write_cb */,
-				  NULL /* destroy_cb */, NULL);
+				     NULL /* read_cb */,
+				     log_mask_cb /* write_cb */,
+				     NULL /* destroy_cb */, NULL);
 	CHECK_RET(ret, exit, "Could not register log_mask ctrl");
 
 	ret = ctrl_register_constant_int64(NULL, "cnss_id", getpid());
@@ -200,7 +197,7 @@ int register_cnss_controls(struct ctrl_info *ctrl_info)
 	crt_protocol = getenv("CRT_PHY_ADDR_STR");
 	if (crt_protocol) { /* Only register if set */
 		ret = ctrl_register_constant(NULL, "crt_protocol",
-					crt_protocol);
+					     crt_protocol);
 		CHECK_RET(ret, exit, "Could not register crt_protocol");
 	}
 
