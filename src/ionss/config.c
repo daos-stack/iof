@@ -212,11 +212,11 @@ static int set_size(struct parsed_option_s *option,
 static int parse_boolean(bool *value, char *str, int len, char *list[2])
 
 {
-	if (!strncasecmp(str, list[0], strlen(list[0])))
+	if (!strncasecmp(str, list[0], strlen(list[0]))) {
 		*value = false;
-	else if (!strncasecmp(str, list[1], strlen(list[1])))
+	} else if (!strncasecmp(str, list[1], strlen(list[1]))) {
 		*value = true;
-	else {
+	} else {
 		IOF_LOG_ERROR("Invalid Feature Option: %.*s", len, str);
 		return -1;
 	}
@@ -361,7 +361,6 @@ static int parse_projections(struct parsed_option_s *option,
 	return 0;
 }
 
-
 int parse_config(char *path, struct ios_base *base)
 {
 	int i, ret = 0;
@@ -464,7 +463,7 @@ int parse_config(char *path, struct ios_base *base)
 					 key_##name,			\
 					 strlen(key_##name));		\
 		assert(sel_option != NULL);				\
-		if (!optional && sel_option->is_set == false) {		\
+		if (!optional && !sel_option->is_set) {			\
 			IOF_LOG_ERROR("%s must be set", key_##name);	\
 			D_GOTO(cleanup, ret = -1);			\
 		}							\

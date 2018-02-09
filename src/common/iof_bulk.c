@@ -43,7 +43,8 @@
 #include "log.h"
 
 bool iof_bulk_alloc(crt_context_t ctx, void *ptr, off_t bulk_offset, size_t len,
-		    bool read_only) {
+		    bool read_only)
+{
 	struct iof_local_bulk *bulk = (ptr + bulk_offset);
 	d_sg_list_t sgl = {0};
 	d_iov_t iov = {0};

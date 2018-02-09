@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -547,7 +547,7 @@ void ioc_ll_write_buf(fuse_req_t, fuse_ino_t, struct fuse_bufvec *,
 		      off_t, struct fuse_file_info *);
 
 void ioc_ll_ioctl(fuse_req_t, fuse_ino_t, int, void *, struct fuse_file_info *,
-		  unsigned, const void *, size_t, size_t);
+		  unsigned int, const void *, size_t, size_t);
 
 void ioc_ll_setattr(fuse_req_t, fuse_ino_t, struct stat *, int,
 		    struct fuse_file_info *);

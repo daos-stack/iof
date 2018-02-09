@@ -2059,7 +2059,7 @@ out:
 	if (handle)
 		ios_fh_decref(handle, 1);
 
-	if ((handle->mf.type == inode_handle) && (fd != -1))
+	if (handle->mf.type == inode_handle && fd != -1)
 		close(fd);
 }
 
@@ -2269,7 +2269,8 @@ static void release_projection_resources(struct ios_projection *projection)
 		fh = container_of(rlink, struct ionss_file_handle, clist);
 
 		if (fh->ref != 1)
-			IOF_TRACE_WARNING(fh, "Open refs (%d), will not be closed",
+			IOF_TRACE_WARNING(fh,
+					  "Open refs (%d), will not be closed",
 					  fh->ref);
 
 		d_chash_rec_decref(&projection->file_ht, rlink);
@@ -2320,9 +2321,8 @@ int filesystem_lookup(void)
 	int i, rc = 0, *path_lengths;
 
 	D_ALLOC_ARRAY(path_lengths, base.projection_count);
-	if (path_lengths == NULL) {
+	if (path_lengths == NULL)
 		return -ENOMEM;
-	}
 
 	rc = iof_mntent_foreach(fslookup_entry, path_lengths);
 	if (rc) {

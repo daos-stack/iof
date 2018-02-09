@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,17 +49,17 @@ enum iof_bypass_status {
 	IOF_IO_EXTERNAL = 0,	/** File is not forwarded by IOF */
 	IOF_IO_BYPASS,		/** Kernel bypass is enabled */
 	IOF_IO_DIS_MMAP,	/** Bypass disabled for mmap'd file */
-	IOF_IO_DIS_FLAG,	/** Bypass is disabled for file because
+	IOF_IO_DIS_FLAG,	/* Bypass is disabled for file because
 				 *  O_APPEND or O_PATH was used
 				 */
-	IOF_IO_DIS_FCNTL,	/** Bypass is disabled for file because
-				 *  bypass doesn't support an fcntl
+	IOF_IO_DIS_FCNTL,	/* Bypass is disabled for file because
+				 * bypass doesn't support an fcntl
 				 */
-	IOF_IO_DIS_STREAM,	/** Bypass is disabled for file opened as a
-				 *  stream.
+	IOF_IO_DIS_STREAM,	/* Bypass is disabled for file opened as a
+				 * stream.
 				 */
-	IOF_IO_DIS_RSRC,	/** Bypass is disabled due to lack of
-				 *  resources in interception library
+	IOF_IO_DIS_RSRC,	/* Bypass is disabled due to lack of
+				 * resources in interception library
 				 */
 };
 

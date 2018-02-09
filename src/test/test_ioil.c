@@ -337,7 +337,7 @@ static bool do_large_write(const char *fname, const char *buf, size_t len)
 	int fd;
 
 	WRITE_LOG("Running large write test (%zd bytes)", len);
-	fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+	fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0600);
 	CU_ASSERT_GOTO(fd != -1, done_err);
 	bytes = write(fd, buf, len);
 	CU_ASSERT_EQUAL(bytes, len);

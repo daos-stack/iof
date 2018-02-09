@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,11 +51,9 @@
 #endif
 
 #define IOF_LOG_FAC(fac, type, fmt, ...)				\
-	do {								\
-		d_log(fac | DLOG_##type, "%s:%d %s() " fmt "\n",	\
-		      __FILE__,  __LINE__, __func__,			\
-		      ## __VA_ARGS__);					\
-	} while (0)
+	d_log(fac | DLOG_##type, "%s:%d %s() " fmt "\n",		\
+		__FILE__,  __LINE__, __func__,				\
+		## __VA_ARGS__)
 
 #define IOF_LOG_WARNING(...)	\
 	IOF_LOG_FAC(DEF_LOG_HANDLE, WARN, __VA_ARGS__)

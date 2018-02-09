@@ -98,7 +98,6 @@ static int shutdown_write_cb(uint64_t value, void *arg)
 	return 0;
 }
 
-
 static int write_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/

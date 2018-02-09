@@ -188,7 +188,7 @@ static void init_root_node(void)
 
 	iof_log_init("CTRL", "CTRLFS", &ctrl_log_handle);
 
-	rc = init_node(&ctrl_fs.root, "", S_IFDIR | S_IRWXU, 0);
+	rc = init_node(&ctrl_fs.root, "", S_IFDIR | 0700, 0);
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not init control file system (rc = %d)",
@@ -413,8 +413,7 @@ static int add_ctrl_dir(const char *name, struct ctrl_node **node)
 		return 0;
 	}
 
-	rc = allocate_node(&newnode, name, S_IFDIR | S_IRUSR | S_IXUSR,
-			   CTRL_DIR);
+	rc = allocate_node(&newnode, name, S_IFDIR | 0500, CTRL_DIR);
 	if (rc != 0) {
 		IOF_LOG_ERROR("Could not allocate ctrl node %s", name);
 		return rc;
@@ -545,9 +544,9 @@ int ctrl_register_variable(struct ctrl_dir *dir, const char *name,
 	node = (struct ctrl_node *)dir;
 
 	if (read_cb != NULL)
-		mode |= S_IRUSR;
+		mode |= 0400;
 	if (write_cb != NULL)
-		mode |= S_IWUSR;
+		mode |= 0200;
 
 	rc = add_ctrl_file(name, &node, mode, CTRL_VARIABLE);
 
@@ -575,7 +574,7 @@ int ctrl_register_event(struct ctrl_dir *dir, const char *name,
 {
 	struct ctrl_node *node;
 	int rc = 0;
-	int mode = S_IFREG | S_IWUSR;
+	int mode = S_IFREG | 0200;
 
 	pthread_once(&once_init, init_root_node);
 
@@ -656,7 +655,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 
 	node = (struct ctrl_node *)dir;
 
-	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_CONSTANT);
+	rc = add_ctrl_file(name, &node, S_IFREG | 0400, CTRL_CONSTANT);
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Bad file %s specified", name);
@@ -726,7 +725,7 @@ int ctrl_register_tracker(struct ctrl_dir *dir, const char *name,
 
 	node = (struct ctrl_node *)dir;
 
-	rc = add_ctrl_file(name, &node, S_IFREG | S_IRUSR, CTRL_TRACKER);
+	rc = add_ctrl_file(name, &node, S_IFREG | 0400, CTRL_TRACKER);
 
 	if (rc != 0) {
 		IOF_LOG_ERROR("Bad ctrl file %s", name);
@@ -999,13 +998,13 @@ static int ctrl_open(const char *fname, struct fuse_file_info *finfo)
 	else
 		read_access = true;
 
-	if (read_access && ((node->stat_info.st_mode & S_IRUSR) == 0)) {
+	if (read_access && ((node->stat_info.st_mode & 0400) == 0)) {
 		IOF_LOG_DEBUG("Could not open %s due to read permissions",
 			      fname);
 		return -EPERM;
 	}
 
-	if (write_access && ((node->stat_info.st_mode & S_IWUSR) == 0)) {
+	if (write_access && ((node->stat_info.st_mode & 0200) == 0)) {
 		IOF_LOG_DEBUG("Could not open %s due to write permissions",
 			      fname);
 		return -EPERM;
@@ -1084,9 +1083,9 @@ static int ctrl_read(const char *fname,
 		return -EINVAL;
 	}
 
-	if (node->ctrl_type == CTRL_CONSTANT)
+	if (node->ctrl_type == CTRL_CONSTANT) {
 		payload = GET_DATA(node, con, buf);
-	else if (node->ctrl_type == CTRL_VARIABLE) {
+	} else if (node->ctrl_type == CTRL_VARIABLE) {
 		ctrl_fs_read_cb_t read_cb;
 		void *cb_arg = GET_DATA(node, var, cb_arg);
 

@@ -50,7 +50,7 @@
 		FLAGS &= ~FLAG;						\
 	} while (0)
 
-static void ioc_show_flags(unsigned in)
+static void ioc_show_flags(unsigned int in)
 {
 	IOF_LOG_INFO("Flags are %#x", in);
 	SHOW_FLAG(in, FUSE_CAP_ASYNC_READ);
@@ -91,7 +91,8 @@ static void ioc_show_flags(unsigned in)
 static void *ioc_init_core(struct iof_projection_info *fs_handle,
 			   struct fuse_conn_info *conn)
 {
-	IOF_TRACE_INFO(fs_handle, "Fuse configuration for projection srv:%d cli:%d",
+	IOF_TRACE_INFO(fs_handle,
+		       "Fuse configuration for projection srv:%d cli:%d",
 		       fs_handle->fs_id, fs_handle->proj.cli_fs_id);
 
 	IOF_TRACE_INFO(fs_handle, "Proto %d %d",
@@ -121,7 +122,8 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	ioc_show_flags(conn->want);
 
 	IOF_TRACE_INFO(fs_handle, "max_background %d", conn->max_background);
-	IOF_TRACE_INFO(fs_handle, "congestion_threshold %d", conn->congestion_threshold);
+	IOF_TRACE_INFO(fs_handle,
+		       "congestion_threshold %d", conn->congestion_threshold);
 
 	return fs_handle;
 }
@@ -184,7 +186,7 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
  * We can also define and check for invalid modes, e.g. if striped data
  * always requires striped metadata to be turned on (but not vice versa),
  * we define 0010 as an unsupported combination of flags.
-*/
+ */
 
 /* Ignore the first two bits (writeable and failover) */
 #define FLAGS_TO_MODE_INDEX(X) (((X) & 0x3F) >> 2)

@@ -175,9 +175,9 @@ static void *thread_func(void *arg)
 	for (i = 0; i < NUM_THREADS; i++) {
 		othertpd = &tpd->global_info[i];
 
-		if (i & 1)
+		if (i & 1) {
 			COUNT_FAILS(count, d_list_empty(&othertpd->entries));
-		else {
+		} else {
 			COUNT_FAILS(count,
 				    !d_list_empty(&othertpd->entries));
 			d_list_for_each_entry(entry, &othertpd->entries, link) {

@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -242,7 +242,7 @@ static PyObject *test_dir_mode(PyObject *self, PyObject *args)
 	}
 
 	errno = 0;
-	rc = mkdir(filename, S_IXUSR);
+	rc = mkdir(filename, 0100);
 	err = errno;
 
 	printf("mkdir returned %d errno = %s\n", rc, strerror(err));
@@ -253,7 +253,7 @@ static PyObject *test_dir_mode(PyObject *self, PyObject *args)
 	}
 
 	errno = 0;
-	rc = chmod(filename, S_IRUSR | S_IXUSR);
+	rc = chmod(filename, 0500);
 	err = errno;
 	printf("chmod returned %d errno = %s\n", rc, strerror(err));
 

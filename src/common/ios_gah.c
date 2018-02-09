@@ -56,8 +56,8 @@
  * \param gah_store	[IN/OUT]	pointer to the gah_store
  * \param delta		[IN]		number of entries to add
  */
-static enum ios_return ios_gah_store_increase_capacity(
-		struct ios_gah_store *gah_store, int delta)
+static enum ios_return
+ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 {
 	int ii;
 
@@ -76,9 +76,9 @@ static enum ios_return ios_gah_store_increase_capacity(
 		return IOS_ERR_NOMEM;
 	}
 	/** setup the pointer array */
-	for (ii = 0; ii < delta; ii++) {
+	for (ii = 0; ii < delta; ii++)
 		gah_store->ptr_array[gah_store->capacity + ii] = &new_data[ii];
-	}
+
 	for (ii = gah_store->capacity; ii < gah_store->capacity + delta; ii++) {
 		gah_store->ptr_array[ii]->fid = ii;
 
@@ -168,15 +168,12 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 	if (ios_gah_store == NULL)
 		return IOS_ERR_INVALID_PARAM;
 	/** check for active handles */
-	if (ios_gah_store->size != 0) {
+	if (ios_gah_store->size != 0)
 		return IOS_ERR_OTHER;
-	}
 
-	for (ii = 0; ii < ios_gah_store->capacity; ii++) {
-		if (ios_gah_store->ptr_array[ii]->in_use == 1) {
+	for (ii = 0; ii < ios_gah_store->capacity; ii++)
+		if (ios_gah_store->ptr_array[ii]->in_use == 1)
 			return IOS_ERR_OTHER;
-		}
-	}
 
 	/** free the chunck allocated on init */
 	D_FREE(ios_gah_store->ptr_array[0]);

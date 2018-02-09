@@ -163,8 +163,8 @@ struct cnss_plugin_cb {
 /* Function lookup table provided by plugin to CNSS. */
 struct cnss_plugin {
 	int version; /** Set to CNSS_PLUGIN_VERSION for startup checks */
-	int require_service; /** Does the plugin need CNSS to be a service
-			      *  process set
+	int require_service; /* Does the plugin need CNSS to be a service
+			      * process set
 			      */
 	char *name;    /** Short string used to prefix log information */
 	void *handle;  /** Handle passed back to all callback functions */

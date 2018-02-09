@@ -166,8 +166,9 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		/* No more ranks remaining. */
 		IOF_TRACE_ERROR(arg, "No PSRs left to failover.");
 		rc = -EHOSTDOWN;
-	} else
+	} else {
 		new_psr = psr_list->rl_ranks[0];
+	}
 
 	if (psr_list != NULL)
 		d_rank_list_free(psr_list);

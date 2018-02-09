@@ -711,11 +711,11 @@ IOF_PUBLIC off_t iof_lseek(int fd, off_t offset, int whence)
 	if (drop_reference_if_disabled(entry))
 		goto do_real_lseek;
 
-	if (whence == SEEK_SET)
+	if (whence == SEEK_SET) {
 		new_offset = offset;
-	else if (whence == SEEK_CUR)
+	} else if (whence == SEEK_CUR) {
 		new_offset = entry->pos + offset;
-	else {
+	} else {
 		/* Let the system handle SEEK_END as well as non-standard
 		 * values such as SEEK_DATA and SEEK_HOLE
 		 */
@@ -728,8 +728,9 @@ IOF_PUBLIC off_t iof_lseek(int fd, off_t offset, int whence)
 	if (new_offset < 0) {
 		new_offset = (off_t)-1;
 		errno = EINVAL;
-	} else
+	} else {
 		entry->pos = new_offset;
+	}
 
 cleanup:
 
@@ -1065,7 +1066,7 @@ IOF_PUBLIC FILE * iof_fopen(const char *path, const char *mode)
 
 	fp = __real_fopen(path, mode);
 
-	if (!ioil_initialized || (fp == NULL))
+	if (!ioil_initialized || fp == NULL)
 		return fp;
 
 	fd = fileno(fp);

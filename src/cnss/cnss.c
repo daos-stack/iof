@@ -252,8 +252,9 @@ static void *loop_fn(void *args)
 		struct fuse_loop_config config = {.max_idle_threads = 10};
 
 		ret = fuse_loop_mt(info->fuse, &config);
-	} else
+	} else {
 		ret = fuse_loop(info->fuse);
+	}
 
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
@@ -425,7 +426,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		IOF_TRACE_INFO(info, "Join returned %d:'%s'", rc, strerror(rc));
 
 		if (rc == ETIMEDOUT) {
-			if ((info->session) &&
+			if (info->session &&
 			    !fuse_session_exited(info->session))
 				IOF_TRACE_WARNING(info,
 						  "Session still running");
@@ -693,9 +694,9 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (prefix == NULL)
+	if (prefix == NULL) {
 		prefix = getenv("CNSS_PREFIX");
-	else {
+	} else {
 		ret = setenv("CNSS_PREFIX", prefix, 1);
 		if (ret) {
 			IOF_LOG_ERROR("setenv failed for "
@@ -839,10 +840,11 @@ int main(int argc, char **argv)
 			continue;
 		}
 		if (list_iter->fns->destroy_plugin_data) {
-			IOF_LOG_INFO("Plugin %s(%p) calling destroy_plugin_data at %p",
-				     list_iter->fns->name,
-				list_iter->fns->handle,
-				FN_TO_PVOID(list_iter->fns->destroy_plugin_data));
+			IOF_TRACE_INFO(cnss_info,
+				       "Plugin %s(%p) calling destroy_plugin_data at %p",
+				       list_iter->fns->name,
+				       list_iter->fns->handle,
+				       FN_TO_PVOID(list_iter->fns->destroy_plugin_data));
 			list_iter->fns->destroy_plugin_data(list_iter->fns->handle);
 		}
 		d_list_del(&list_iter->list);

@@ -299,7 +299,7 @@ int main(int argc, char **argv)
 			printf("Could not allocate memory for CNSS_PREFIX\n");
 			return -1;
 		}
-	 }
+	}
 
 	prefix = mkdtemp(buf);
 

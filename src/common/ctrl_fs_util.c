@@ -151,7 +151,6 @@ int iof_ctrl_read_str(char *str, int len, const char *path)
 				break;
 			last--;
 		}
-
 	}
 
 	ret = 0;

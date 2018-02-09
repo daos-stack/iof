@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -252,8 +252,9 @@ int vector_get_(vector_t *vector, unsigned int index, void **ptr)
 	if (entry != NULL) {
 		atomic_fetch_add(&entry->refcount, 1);
 		*ptr = &entry->data[0];
-	} else
+	} else {
 		rc = VERR_NOENT;
+	}
 
 	release_ptr_lock(&realv->data[index]);
 
@@ -423,10 +424,12 @@ int vector_remove_(vector_t *vector, unsigned int index, void **ptr)
 		if (ptr == NULL) {
 			if (atomic_fetch_sub(&entry->refcount, 1) == 1)
 				obj_pool_put(&realv->pool, entry);
-		} else
+		} else {
 			*ptr = &entry->data[0];
-	} else
+		}
+	} else {
 		rc = VERR_NOENT;
+	}
 
 	/* releases ptr lock */
 	set_ptr_value(&realv->data[index], NULL);

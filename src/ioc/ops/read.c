@@ -158,9 +158,8 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
-	if (FS_IS_OFFLINE(fs_handle)) {
+	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out_err, rc = fs_handle->offline_reason);
-	}
 
 	if (len <= 4096)
 		pt = fs_handle->rb_pool_page;
