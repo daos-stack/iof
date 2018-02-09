@@ -90,6 +90,10 @@ def run_checks(env, platform):
 
     if config.CheckHeader('stdatomic.h'):
         env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
+
+    if not config.CheckHeader('yaml.h'):
+        print('libyaml-dev package required')
+        Exit(2)
     config.Finish()
 
     env.AppendIfSupported(CFLAGS=DESIRED_FLAGS)
