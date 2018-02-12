@@ -81,7 +81,7 @@ out:
 	if (rc) {
 		IOF_FUSE_REPLY_ERR(rb->req, rc);
 	} else {
-		STAT_ADD_COUNT(rb->fs_handle->stats, read_bytes, rc);
+		STAT_ADD_COUNT(rb->fs_handle->stats, read_bytes, bytes_read);
 
 		/* It's not clear without benchmarking which approach is better
 		 * here, fuse_reply_buf() is a small wrapper around writev()
