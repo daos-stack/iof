@@ -812,8 +812,11 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
                '--group-name', 'IONSS', '-e' '0:0',
                '-r', '1000', '-s' '0 0,0 128,128 0']
 
-        log_path = os.path.join(os.getenv("IOF_TESTLOG", "output"), \
-                                self.logdir_name())
+        log_top_dir = os.getenv("IOF_TESTLOG",
+                                os.path.join(os.path.dirname(
+                                    os.path.realpath(__file__)), 'output'))
+        log_path = os.path.join(log_top_dir, self.logdir_name())
+
         if not os.path.exists(log_path):
             os.makedirs(log_path)
         cmdfileout = os.path.join(log_path, "self_test.out")
