@@ -1258,8 +1258,6 @@ int ctrl_fs_start(const char *prefix)
 	static char const *opts[] = {"", "-o", "fsname=CNSS",
 				     "-o", "subtype=ctrl"};
 	struct fuse_args args = {0};
-
-	struct stat stat_info;
 	int rc;
 
 	args.argc = sizeof(opts) / sizeof(*opts);
@@ -1269,21 +1267,24 @@ int ctrl_fs_start(const char *prefix)
 	if (ctrl_fs.startup_rc != 0)
 		return ctrl_fs.startup_rc;
 
+	errno = 0;
 	rc = mkdir(prefix, 0700);
 
-	if (rc != 0 && errno != EEXIST) {
-		ctrl_fs.startup_rc = -errno;
-		IOF_LOG_ERROR("Could not create %s for ctrl fs: %s",
-			      prefix, strerror(errno));
-		return ctrl_fs.startup_rc;
-	}
+	if (rc != 0) {
+		struct stat stat_info;
 
-	if (rc == EEXIST) {
+		if (errno != EEXIST) {
+			ctrl_fs.startup_rc = -errno;
+			IOF_LOG_ERROR("Could not create %s for ctrl fs: %s",
+				      prefix, strerror(errno));
+			return ctrl_fs.startup_rc;
+		}
+
 		/* Make sure it's a directory */
 		rc = stat(prefix, &stat_info);
 		if (rc != 0 || !S_ISDIR(stat_info.st_mode)) {
-			IOF_LOG_ERROR("Could not create %s for ctrl fs: %s",
-				      prefix, strerror(errno));
+			IOF_LOG_ERROR("Could not create %s for ctrl fs, not a directory",
+				      prefix);
 			ctrl_fs.startup_rc = -EEXIST;
 			return -EEXIST;
 		}
@@ -1317,9 +1318,9 @@ int ctrl_fs_start(const char *prefix)
 			    ctrl_thread_func, NULL);
 
 	if (rc != 0) {
+		ctrl_fs.startup_rc = -rc;
 		IOF_LOG_ERROR("Couldn't start thread for ctrl fs (rc = %d)",
 			      rc);
-		ctrl_fs.startup_rc = -errno;
 		goto out;
 	}
 
@@ -1368,7 +1369,6 @@ int ctrl_fs_shutdown(void)
 	rc = pthread_join(ctrl_fs.thread, NULL);
 
 	if (rc != 0) {
-		rc = errno;
 		IOF_LOG_ERROR("Error joining ctrl_fs thread %d", rc);
 		return -rc;
 	}
