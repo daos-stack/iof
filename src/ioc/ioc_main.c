@@ -147,14 +147,14 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	rc = crt_lm_group_psr(group, &psr_list);
 	IOF_TRACE_INFO(arg, "ListPtr: %p, List: %p, Ranks: %d",
 		       psr_list, psr_list ? psr_list->rl_ranks : 0,
-		       psr_list ? psr_list->rl_nr.num : -1);
+		       psr_list ? psr_list->rl_nr : -1);
 	/* Sanity Check */
 	if (rc || !psr_list || !psr_list->rl_ranks) {
 		IOF_TRACE_ERROR(arg, "Invalid rank list, ret = %d", rc);
 		if (!rc)
 			rc = -EINVAL;
 	}
-	if (!rc && psr_list->rl_nr.num == 0) {
+	if (!rc && psr_list->rl_nr == 0) {
 		/* No more ranks remaining. */
 		IOF_TRACE_ERROR(arg, "No PSRs left to failover.");
 		rc = -EHOSTDOWN;
@@ -419,8 +419,8 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	ret = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
 	IOF_TRACE_INFO(group, "ListPtr: %p, List: %p, Ranks: %d",
 		       psr_list, psr_list ? psr_list->rl_ranks : 0,
-		       psr_list ? psr_list->rl_nr.num : 0);
-	if (ret || !psr_list || !psr_list->rl_ranks || !psr_list->rl_nr.num) {
+		       psr_list ? psr_list->rl_nr : 0);
+	if (ret || !psr_list || !psr_list->rl_ranks || !psr_list->rl_nr) {
 		IOF_TRACE_ERROR(group, "Unable to access "
 				"PSR list, ret = %d", ret);
 		return false;
@@ -454,7 +454,7 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	return true;
 }
 
-static bool ih_key_cmp(struct d_chash_table *htable, d_list_t *rlink,
+static bool ih_key_cmp(struct d_hash_table *htable, d_list_t *rlink,
 		       const void *key, unsigned int ksize)
 {
 	const struct ioc_inode_entry *ie;
@@ -465,7 +465,7 @@ static bool ih_key_cmp(struct d_chash_table *htable, d_list_t *rlink,
 	return *ino == ie->ino;
 }
 
-static void ih_addref(struct d_chash_table *htable, d_list_t *rlink)
+static void ih_addref(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct ioc_inode_entry *ie;
 	int oldref;
@@ -475,7 +475,7 @@ static void ih_addref(struct d_chash_table *htable, d_list_t *rlink)
 	IOF_TRACE_DEBUG(ie, "addref to %u", oldref + 1);
 }
 
-static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
+static bool ih_decref(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct ioc_inode_entry *ie;
 	int oldref;
@@ -486,7 +486,7 @@ static bool ih_decref(struct d_chash_table *htable, d_list_t *rlink)
 	return oldref == 1;
 }
 
-static void ih_free(struct d_chash_table *htable, d_list_t *rlink)
+static void ih_free(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct iof_projection_info *fs_handle = htable->ht_priv;
 	struct ioc_inode_entry *ie;
@@ -500,10 +500,10 @@ static void ih_free(struct d_chash_table *htable, d_list_t *rlink)
 	D_FREE(ie);
 }
 
-d_chash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,
-			    .hop_rec_addref = ih_addref,
-			    .hop_rec_decref = ih_decref,
-			    .hop_rec_free = ih_free,
+d_hash_table_ops_t hops = {.hop_key_cmp = ih_key_cmp,
+			   .hop_rec_addref = ih_addref,
+			   .hop_rec_decref = ih_decref,
+			   .hop_rec_free = ih_free,
 };
 
 static void
@@ -1293,11 +1293,11 @@ initialize_projection(struct iof_state *iof_state,
 			fs_handle->flags & IOF_FUSE_WRITE_BUF ? "_buf" : "",
 			fs_handle->flags & IOF_FUSE_READ_BUF ? "buf" : "data");
 
-	ret = d_chash_table_create_inplace(D_HASH_FT_RWLOCK |
-					   D_HASH_FT_EPHEMERAL,
-					   fs_info->htable_size,
-					   fs_handle, &hops,
-					   &fs_handle->inode_ht);
+	ret = d_hash_table_create_inplace(D_HASH_FT_RWLOCK |
+					  D_HASH_FT_EPHEMERAL,
+					  fs_info->htable_size,
+					  fs_handle, &hops,
+					  &fs_handle->inode_ht);
 	if (ret != 0)
 		D_GOTO(err, 0);
 
@@ -1581,7 +1581,7 @@ query_projections(struct iof_state *iof_state,
 			rc = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
 			if (rc != -DER_SUCCESS || !psr_list)
 				return false;
-			if (psr_list->rl_nr.num < 1) {
+			if (psr_list->rl_nr < 1) {
 				IOF_TRACE_WARNING(iof_state,
 						  "No more ranks to try, giving up");
 				d_rank_list_free(psr_list);
@@ -1739,7 +1739,7 @@ static void iof_flush_fuse(void *arg1, void *arg2)
 
 	IOF_TRACE_INFO(fs_handle, "Flushing inode table");
 
-	rc = d_chash_table_traverse(&fs_handle->inode_ht, ino_flush, session);
+	rc = d_hash_table_traverse(&fs_handle->inode_ht, ino_flush, session);
 
 	IOF_TRACE_INFO(fs_handle, "Flush complete: %d", rc);
 }
@@ -1758,7 +1758,7 @@ static void iof_deregister_fuse(void *arg)
 	do {
 		struct ioc_inode_entry *ie;
 
-		rlink = d_chash_rec_first(&fs_handle->inode_ht);
+		rlink = d_hash_rec_first(&fs_handle->inode_ht);
 		IOF_TRACE_DEBUG(fs_handle, "rlink is %p", rlink);
 		if (!rlink)
 			break;
@@ -1767,14 +1767,14 @@ static void iof_deregister_fuse(void *arg)
 
 		refs += ie->ref;
 		ie->parent = 0;
-		d_chash_rec_ndecref(&fs_handle->inode_ht, ie->ref, rlink);
+		d_hash_rec_ndecref(&fs_handle->inode_ht, ie->ref, rlink);
 		handles++;
 	} while (rlink);
 
 	IOF_TRACE_INFO(fs_handle, "dropped %lu refs on %u handles",
 		       refs, handles);
 
-	rc = d_chash_table_destroy_inplace(&fs_handle->inode_ht, false);
+	rc = d_hash_table_destroy_inplace(&fs_handle->inode_ht, false);
 	if (rc)
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
 

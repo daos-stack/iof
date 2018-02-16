@@ -52,7 +52,7 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 	 */
 	nlookup++;
 
-	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 	if (!rlink) {
 		IOF_TRACE_WARNING(fs_handle, "Unable to find ref for %lu %lu",
 				  ino, nlookup);
@@ -63,7 +63,7 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 		       "rlink %p ino %lu count %lu",
 		       rlink, ino, nlookup);
 
-	d_chash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
+	d_hash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
 }
 
 void

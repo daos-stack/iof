@@ -176,7 +176,7 @@ struct iof_projection_info {
 	uint32_t			readdir_size;
 	/* set to error code if projection is off-line */
 	int				offline_reason;
-	struct d_chash_table		inode_ht;
+	struct d_hash_table		inode_ht;
 
 	/* List of directory handles owned by FUSE */
 	pthread_mutex_t			od_lock;

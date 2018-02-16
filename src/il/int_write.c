@@ -159,7 +159,7 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 		iov.iov_buf_len = imm_offset;
 		iov.iov_buf = (void *)buff;
 		sgl.sg_iovs = &iov;
-		sgl.sg_nr.num = 1;
+		sgl.sg_nr = 1;
 
 		rc = crt_bulk_create(fs_handle->crt_ctx, &sgl, CRT_BULK_RO,
 				     &in->data_bulk);

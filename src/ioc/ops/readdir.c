@@ -114,7 +114,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		d_sg_list_t sgl = {0};
 
 		sgl.sg_iovs = &iov;
-		sgl.sg_nr.num = 1;
+		sgl.sg_nr = 1;
 		rc = crt_bulk_create(fs_handle->proj.crt_ctx, &sgl, CRT_BULK_RW,
 				     &in->bulk);
 		if (rc) {

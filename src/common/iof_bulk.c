@@ -63,7 +63,7 @@ bool iof_bulk_alloc(crt_context_t ctx, void *ptr, off_t bulk_offset, size_t len,
 	iov.iov_buf = bulk->buf;
 	iov.iov_buf_len = len;
 	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
+	sgl.sg_nr = 1;
 
 	if (read_only)
 		flags = CRT_BULK_RO;

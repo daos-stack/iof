@@ -163,7 +163,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 	int rc;
 	unsigned int old_count;
 	crt_rpc_t *rpc_bcast = NULL;
-	d_rank_list_t exclude_me = {  .rl_nr = { 1, 1 },
+	d_rank_list_t exclude_me = {  .rl_nr = 1,
 				      .rl_ranks = &base.my_rank };
 
 	old_count = atomic_fetch_sub(&cnss_count, 1);
@@ -204,7 +204,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 }
 
 static bool
-fh_compare(struct d_chash_table *htable, d_list_t *rlink,
+fh_compare(struct d_hash_table *htable, d_list_t *rlink,
 	   const void *key, unsigned int ksize)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
@@ -222,14 +222,14 @@ fh_compare(struct d_chash_table *htable, d_list_t *rlink,
 }
 
 static	uint32_t
-fh_hash(struct d_chash_table *htable, const void *key, unsigned int ksize)
+fh_hash(struct d_hash_table *htable, const void *key, unsigned int ksize)
 {
 	const struct ionss_mini_file *mf = key;
 
 	return mf->inode_no;
 }
 
-static void fh_addref(struct d_chash_table *htable, d_list_t *rlink)
+static void fh_addref(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
 						    struct ionss_file_handle,
@@ -239,7 +239,7 @@ static void fh_addref(struct d_chash_table *htable, d_list_t *rlink)
 	IOF_TRACE_DEBUG(fh, "addref to %d", oldref + 1);
 };
 
-static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
+static bool fh_decref(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
 						struct ionss_file_handle,
@@ -253,7 +253,7 @@ static bool fh_decref(struct d_chash_table *htable, d_list_t *rlink)
 	return (oldref == 1);
 }
 
-static void fh_free(struct d_chash_table *htable, d_list_t *rlink)
+static void fh_free(struct d_hash_table *htable, d_list_t *rlink)
 {
 	struct ionss_file_handle *fh = container_of(rlink,
 						    struct ionss_file_handle,
@@ -263,11 +263,11 @@ static void fh_free(struct d_chash_table *htable, d_list_t *rlink)
 	ios_fh_decref(fh, 1);
 }
 
-static d_chash_table_ops_t hops = {.hop_key_cmp = fh_compare,
-				   .hop_rec_addref = fh_addref,
-				   .hop_rec_decref = fh_decref,
-				   .hop_rec_free = fh_free,
-				   .hop_key_hash = fh_hash,
+static d_hash_table_ops_t hops = {.hop_key_cmp = fh_compare,
+				  .hop_rec_addref = fh_addref,
+				  .hop_rec_decref = fh_decref,
+				  .hop_rec_free = fh_free,
+				  .hop_key_hash = fh_hash,
 };
 
 /*
@@ -381,7 +381,7 @@ int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	}
 
 	sgl.sg_iovs = &iov;
-	sgl.sg_nr.num = 1;
+	sgl.sg_nr = 1;
 
 	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
 	if (rc) {
@@ -532,7 +532,7 @@ out:
 		iov.iov_buf = replies;
 		iov.iov_buf_len = sizeof(struct iof_readdir_reply) * reply_idx;
 		sgl.sg_iovs = &iov;
-		sgl.sg_nr.num = 1;
+		sgl.sg_nr = 1;
 
 		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
 				     &local_bulk_hdl);
@@ -661,7 +661,7 @@ htable_mf_find(struct ios_projection *projection,
 	struct ionss_file_handle *handle = NULL;
 	d_list_t *rlink;
 
-	rlink = d_chash_rec_find(&projection->file_ht, mf, sizeof(*mf));
+	rlink = d_hash_rec_find(&projection->file_ht, mf, sizeof(*mf));
 
 	if (rlink)
 		handle = container_of(rlink, struct ionss_file_handle, clist);
@@ -696,8 +696,8 @@ htable_mf_insert(struct ios_projection *projection,
 	snprintf(handle->proc_fd_name, 64, "/proc/self/fd/%d", handle->fd);
 	atomic_fetch_add(&handle->ht_ref, 1);
 
-	rlink = d_chash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
-					&handle->clist);
+	rlink = d_hash_rec_find_insert(&projection->file_ht, mf, sizeof(*mf),
+				       &handle->clist);
 	if (rlink != &handle->clist) {
 		struct ionss_file_handle *existing;
 
@@ -1082,7 +1082,7 @@ iof_close_handler(crt_rpc_t *rpc)
 		return;
 
 	ios_fh_decref(handle, 1);
-	d_chash_rec_decref(&handle->projection->file_ht, &handle->clist);
+	d_hash_rec_decref(&handle->projection->file_ht, &handle->clist);
 }
 
 static void
@@ -2252,7 +2252,7 @@ static void release_projection_resources(struct ios_projection *projection)
 	do {
 		struct ionss_file_handle *fh;
 
-		rlink = d_chash_rec_first(&projection->file_ht);
+		rlink = d_hash_rec_first(&projection->file_ht);
 		if (!rlink)
 			break;
 
@@ -2274,11 +2274,11 @@ static void release_projection_resources(struct ios_projection *projection)
 					  "Open refs (%d), will not be closed",
 					  fh->ref);
 
-		d_chash_rec_decref(&projection->file_ht, rlink);
+		d_hash_rec_decref(&projection->file_ht, rlink);
 
 	} while (rlink);
 
-	rc = d_chash_table_destroy_inplace(&projection->file_ht, false);
+	rc = d_hash_table_destroy_inplace(&projection->file_ht, false);
 	if (rc)
 		IOF_LOG_ERROR("Failed to destroy file HT rc = %d", rc);
 }
@@ -2696,10 +2696,11 @@ int main(int argc, char **argv)
 
 		projection->active = 0;
 		projection->base = &base;
-		rc = d_chash_table_create_inplace(D_HASH_FT_RWLOCK | D_HASH_FT_EPHEMERAL,
-						  projection->inode_htable_size,
-						  NULL, &hops,
-						  &projection->file_ht);
+		rc = d_hash_table_create_inplace(D_HASH_FT_RWLOCK |
+						 D_HASH_FT_EPHEMERAL,
+						 projection->inode_htable_size,
+						 NULL, &hops,
+						 &projection->file_ht);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not create hash table");
 			continue;
@@ -2744,10 +2745,10 @@ int main(int argc, char **argv)
 			 projection->root->fd);
 		atomic_fetch_add(&projection->root->ht_ref, 1);
 
-		rc = d_chash_rec_insert(&projection->file_ht,
-					&projection->root->mf,
-					sizeof(projection->root->mf),
-					&projection->root->clist, 0);
+		rc = d_hash_rec_insert(&projection->file_ht,
+				       &projection->root->mf,
+				       sizeof(projection->root->mf),
+				       &projection->root->clist, 0);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not insert into hash table");
 			continue;

@@ -60,7 +60,7 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 		return 0;
 	}
 
-	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 	if (!rlink)
 		return -1;
 
@@ -74,7 +74,7 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 	/* Once the GAH has been copied drop the reference on the parent inode
 	 */
 	if (drop_ref)
-		d_chash_rec_decref(&fs_handle->inode_ht, rlink);
+		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
 	return 0;
 }
 
@@ -103,13 +103,13 @@ drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
 	if (ino == 1)
 		return;
 
-	rlink = d_chash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 
 	if (!rlink) {
 		IOF_TRACE_WARNING(fs_handle, "Could not find entry %lu", ino);
 		return;
 	}
-	d_chash_rec_ndecref(&fs_handle->inode_ht, 2, rlink);
+	d_hash_rec_ndecref(&fs_handle->inode_ht, 2, rlink);
 }
 
 static void ie_close_cb(struct ioc_request *request)

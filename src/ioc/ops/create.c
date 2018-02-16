@@ -83,10 +83,10 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	 */
 	handle->ie->ino = entry.attr.st_ino;
 	handle->ie->gah = out->igah;
-	rlink = d_chash_rec_find_insert(&handle->fs_handle->inode_ht,
-					&entry.ino,
-					sizeof(entry.ino),
-					&handle->ie->list);
+	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
+				       &entry.ino,
+				       sizeof(entry.ino),
+				       &handle->ie->list);
 
 	if (rlink == &handle->ie->list) {
 		handle->ie = NULL;

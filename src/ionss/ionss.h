@@ -134,7 +134,7 @@ struct ios_projection {
 	struct iof_pool_type	*ar_pool;
 	struct iof_pool_type	*aw_pool;
 	struct ionss_file_handle	*root;
-	struct d_chash_table	file_ht;
+	struct d_hash_table	file_ht;
 	uint32_t		id;
 
 	/* Per-projection tunable options */

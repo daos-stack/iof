@@ -74,10 +74,10 @@ void iof_entry_cb(struct ioc_request *request)
 
 	desc->ie->ino = entry.attr.st_ino;
 	desc->ie->gah = out->gah;
-	rlink = d_chash_rec_find_insert(&desc->fs_handle->inode_ht,
-					&entry.ino,
-					sizeof(entry.ino),
-					&desc->ie->list);
+	rlink = d_hash_rec_find_insert(&desc->fs_handle->inode_ht,
+				       &entry.ino,
+				       sizeof(entry.ino),
+				       &desc->ie->list);
 
 	if (rlink == &desc->ie->list) {
 		desc->ie = NULL;
