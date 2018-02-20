@@ -762,36 +762,6 @@ class Testlocal(unittest.TestCase,
             self.fail("IO interception library failed to attach," + \
                 " il_ioctl: %s" % final_il_ioctl)
 
-    def test_mdtest(self):
-        """Run mdtest"""
-        topdir = self.import_dir
-
-        mdtest_cmdstr = "/testbin/mdtest/bin/mdtest"
-        if not os.path.exists(mdtest_cmdstr):
-            mdtest_cmdstr = "mdtest"
-        mdtest_cmdstr = find_executable(mdtest_cmdstr)
-        if not mdtest_cmdstr:
-            self.skipTest('mdtest not installed')
-        mdtest = [mdtest_cmdstr, '-d', topdir]
-        short_run = list(mdtest)
-        short_run.extend(['-i', '3', '-I', '10'])
-        start_time = time.time()
-        rtn = self.common_launch_cmd(short_run)
-        elapsed = time.time() - start_time
-        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
-        if rtn != 0:
-            self.fail("Mdtest test_failed, rc = %d" % rtn)
-        if elapsed > 5 or self.test_valgrind:
-            return
-        long_run = list(mdtest)
-        long_run.extend(['-i', '5', '-I', '500'])
-        start_time = time.time()
-        rtn = self.common_launch_cmd(long_run)
-        elapsed = time.time() - start_time
-        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
-        if rtn != 0:
-            self.fail("Mdtest test_failed, rc = %d" % rtn)
-
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_iofmod(self):
         """Calls all C tests present in C/Python shim"""

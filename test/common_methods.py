@@ -790,7 +790,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         if 'iof_simple' in self.id():
             (rtn, elapsed) = self.run_mdtest(count=500, iters=30)
         else:
-            (rtn, elapsed) = self.run_mdtest(count=500, iters=700)
+            (rtn, elapsed) = self.run_mdtest(count=5, iters=500)
         if rtn != 0:
             self.fail("Mdtest test_failed, rc = %d" % rtn)
 
