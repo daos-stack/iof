@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 
 #define REQ_NAME request
 #define POOL_NAME fgh_pool
-#define TYPE_NAME getattr_req
+#define TYPE_NAME common_req
 #define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 

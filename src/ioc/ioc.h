@@ -411,21 +411,7 @@ struct iof_file_handle {
 	fuse_req_t			open_req;
 };
 
-struct iof_projection_info *ioc_get_handle(void);
-
-struct status_cb_r {
-	int err; /** errno of any internal error */
-	int rc;  /** errno reported by remote POSIX operation */
-	struct iof_tracker tracker; /** Completion event tracker */
-};
-
-struct getattr_req {
-	struct ioc_request		request;
-	struct iof_projection_info	*fs_handle;
-	d_list_t			list;
-};
-
-struct close_req {
+struct common_req {
 	struct ioc_request		request;
 	struct iof_projection_info	*fs_handle;
 	d_list_t			list;

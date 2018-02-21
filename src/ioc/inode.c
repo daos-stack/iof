@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@
 #include "log.h"
 
 #define POOL_NAME close_pool
-#define TYPE_NAME close_req
+#define TYPE_NAME common_req
 #define REQ_NAME request
 #define STAT_KEY release
 #define RESTOCK_ON_SEND

@@ -47,13 +47,6 @@ struct query_cb_r {
 	int err;
 };
 
-struct iof_projection_info *ioc_get_handle(void)
-{
-	struct fuse_context *context = fuse_get_context();
-
-	return context->private_data;
-}
-
 /* A generic callback for handling RPC replies from low-level FUSE RPCs.
  *
  * This can be used with RPCs where the reply type is either status_out
@@ -660,9 +653,9 @@ fh_release(void *arg)
 }
 
 static void
-gh_init(void *arg, void *handle)
+common_init(void *arg, void *handle)
 {
-	struct getattr_req *req = arg;
+	struct common_req *req = arg;
 
 	req->fs_handle = handle;
 }
@@ -671,7 +664,7 @@ gh_init(void *arg, void *handle)
 static bool
 gh_reset(void *arg)
 {
-	struct getattr_req *req = arg;
+	struct common_req *req = arg;
 	int rc;
 
 	req->request.req = NULL;
@@ -694,29 +687,11 @@ gh_reset(void *arg)
 	return true;
 }
 
-/* Destroy a descriptor which could be either getattr or getfattr */
-static void
-gh_release(void *arg)
-{
-	struct getattr_req *req = arg;
-
-	crt_req_decref(req->request.rpc);
-	crt_req_decref(req->request.rpc);
-}
-
-static void
-close_init(void *arg, void *handle)
-{
-	struct close_req *req = arg;
-
-	req->fs_handle = handle;
-}
-
 /* Reset and prepare for use a getfattr descriptor */
 static bool
 close_reset(void *arg)
 {
-	struct close_req *req = arg;
+	struct common_req *req = arg;
 	int rc;
 
 	if (req->request.rpc) {
@@ -737,11 +712,11 @@ close_reset(void *arg)
 	return true;
 }
 
-/* Destroy a descriptor which could be either getattr or getfattr */
+/* Destroy a descriptor which could be either getattr or close */
 static void
-close_release(void *arg)
+common_release(void *arg)
 {
-	struct close_req *req = arg;
+	struct common_req *req = arg;
 
 	crt_req_decref(req->request.rpc);
 	crt_req_decref(req->request.rpc);
@@ -1250,15 +1225,15 @@ initialize_projection(struct iof_state *iof_state,
 				  .release = fh_release,
 				  POOL_TYPE_INIT(iof_file_handle, list)};
 
-	struct iof_pool_reg fgt = {.init = gh_init,
+	struct iof_pool_reg fgt = {.init = common_init,
 				   .reset = gh_reset,
-				   .release = gh_release,
-				   POOL_TYPE_INIT(getattr_req, list)};
+				   .release = common_release,
+				   POOL_TYPE_INIT(common_req, list)};
 
-	struct iof_pool_reg ct = {.init = close_init,
+	struct iof_pool_reg ct = {.init = common_init,
 				  .reset = close_reset,
-				  .release = close_release,
-				  POOL_TYPE_INIT(close_req, list)};
+				  .release = common_release,
+				  POOL_TYPE_INIT(common_req, list)};
 
 	struct iof_pool_reg entry_t = {.reset = entry_reset,
 				       .release = entry_release,
