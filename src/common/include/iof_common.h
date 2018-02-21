@@ -147,11 +147,10 @@ struct iof_fs_info {
 };
 
 /* The response to the initial query RPC.
- * Note that readdir_size comes after the IOV in order to avoid
- * the compiler automatically padding the struct.
  */
 struct iof_psr_query {
 	d_iov_t		query_list;
+	uint32_t	count;
 	uint32_t	poll_interval;
 	bool		progress_callback;
 };

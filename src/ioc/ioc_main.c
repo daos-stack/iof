@@ -44,7 +44,6 @@
 
 struct query_cb_r {
 	struct iof_tracker tracker;
-	struct iof_psr_query **query;
 	int err;
 };
 
@@ -294,7 +293,6 @@ static void
 query_cb(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply = cb_info->cci_arg;
-	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
 
 	if (cb_info->cci_rc != 0) {
 		/*
@@ -303,15 +301,10 @@ query_cb(const struct crt_cb_info *cb_info)
 		 *
 		 * TODO: Handle target eviction here
 		 */
-		IOF_TRACE_INFO(reply, "Bad RPC reply %d", cb_info->cci_rc);
 		reply->err = cb_info->cci_rc;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}
-
-	crt_req_addref(cb_info->cci_rpc);
-
-	*reply->query = query;
 
 	iof_tracker_signal(&reply->tracker);
 }
@@ -324,15 +317,12 @@ query_cb(const struct crt_cb_info *cb_info)
 static bool
 ioc_get_projection_info(struct iof_state *iof_state,
 			struct iof_group_info *group,
-			struct iof_psr_query **query,
 			crt_rpc_t **query_rpc)
 {
 	int ret;
 	struct query_cb_r reply = {0};
 
 	iof_tracker_init(&reply.tracker, 1);
-
-	reply.query = query;
 
 	ret = crt_req_create(iof_state->iof_ctx.crt_ctx, &group->grp.psr_ep,
 			     QUERY_PSR_OP, query_rpc);
@@ -348,21 +338,29 @@ ioc_get_projection_info(struct iof_state *iof_state,
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Could not set timeout, ret = %d",
 				ret);
+		crt_req_decref(*query_rpc);
 		return false;
 	}
+
+	crt_req_addref(*query_rpc);
 
 	ret = crt_req_send(*query_rpc, query_cb, &reply);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, ret = %d",
 				ret);
+		crt_req_decref(*query_rpc);
 		return false;
 	}
 
 	/*make on-demand progress*/
 	iof_wait(iof_state->iof_ctx.crt_ctx, &reply.tracker);
 
-	if (reply.err)
+	if (reply.err) {
+		IOF_TRACE_INFO(iof_state, "Bad RPC reply %d", reply.err);
+		crt_req_decref(*query_rpc);
+		*query_rpc = NULL;
 		return false;
+	}
 
 	return true;
 }
@@ -1587,19 +1585,20 @@ query_projections(struct iof_state *iof_state,
 {
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
-	struct iof_psr_query *query = NULL;
-	int fs_num;
+	struct iof_psr_query *query;
 	int i;
 	bool rcb;
 
 	*total = *active = 0;
 
 	/*Query PSR*/
-	rcb = ioc_get_projection_info(iof_state, group, &query, &query_rpc);
-	if (!rcb || !query) {
+	rcb = ioc_get_projection_info(iof_state, group, &query_rpc);
+	if (!rcb || !query_rpc) {
 		IOF_TRACE_ERROR(iof_state, "Query operation failed");
 		return false;
 	}
+
+	query = crt_reply_get(query_rpc);
 
 	iof_state->iof_ctx.poll_interval = query->poll_interval;
 	iof_state->iof_ctx.callback_fn = query->progress_callback ?
@@ -1607,13 +1606,19 @@ query_projections(struct iof_state *iof_state,
 	IOF_TRACE_INFO(iof_state, "Poll Interval: %u microseconds; "
 				  "Progress Callback: %s", query->poll_interval,
 		       query->progress_callback ? "Enabled" : "Disabled");
-	/*calculate number of projections*/
-	fs_num = (query->query_list.iov_len) / sizeof(struct iof_fs_info);
-	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",
-			group->grp_name, fs_num);
-	tmp = (struct iof_fs_info *)query->query_list.iov_buf;
 
-	for (i = 0; i < fs_num; i++) {
+	if (query->count != query->query_list.iov_len / sizeof(struct iof_fs_info)) {
+		IOF_TRACE_ERROR(iof_state,
+				"Invalid response from IONSS %d",
+				query->count);
+		return false;
+	}
+	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",
+			group->grp_name, query->count);
+
+	tmp = query->query_list.iov_buf;
+
+	for (i = 0; i < query->count; i++) {
 		if (!initialize_projection(iof_state, group, &tmp[i], query,
 					   (*total)++)) {
 			IOF_TRACE_ERROR(iof_state,

@@ -2140,6 +2140,7 @@ iof_query_handler(crt_rpc_t *query_rpc)
 
 	query->poll_interval = base.cnss_poll_interval;
 	query->progress_callback = base.progress_callback;
+	query->count = base.projection_count;
 	d_iov_set(&query->query_list, base.fs_list,
 		  base.projection_count * sizeof(struct iof_fs_info));
 
