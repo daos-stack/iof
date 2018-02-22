@@ -45,18 +45,11 @@
 #include "ios_gah.h"
 #include "iof_ext.h"
 
-#define IOF_SUCCESS		0
-#define IOF_ERR_MOUNT		1
 #define IOF_ERR_NOMEM		2
-#define IOF_ERR_PROJECTION	3
-#define IOF_ERR_OVERFLOW	4
 #define IOF_ERR_CART		5
 #define IOF_BAD_DATA		6
-#define IOF_NOT_SUPP		7 /*Not supported*/
 #define	IOF_ERR_INTERNAL	8
-#define IOF_ERR_PTHREAD		9
 #define IOF_GAH_INVALID        10
-#define IOF_ERR_CTRL_FS        11
 
 /* IOF Registration op codes for RPC's*/
 
