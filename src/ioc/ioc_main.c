@@ -287,75 +287,74 @@ query_cb(const struct crt_cb_info *cb_info)
 {
 	struct query_cb_r *reply = cb_info->cci_arg;
 
-	if (cb_info->cci_rc != 0) {
-		/*
-		 * Error handling.  On timeout return EAGAIN, all other errors
-		 * return EIO.
-		 *
-		 * TODO: Handle target eviction here
-		 */
-		reply->err = cb_info->cci_rc;
-		iof_tracker_signal(&reply->tracker);
-		return;
-	}
-
+	reply->err = cb_info->cci_rc;
 	iof_tracker_signal(&reply->tracker);
 }
 
 /*
  * Send RPC to PSR to get information about projected filesystems
  *
- * Retruns true on success.
+ * Returns CaRT error code.
  */
-static bool
-ioc_get_projection_info(struct iof_state *iof_state,
-			struct iof_group_info *group,
-			crt_rpc_t **query_rpc)
+static int
+get_info(struct iof_state *iof_state, struct iof_group_info *group,
+	 crt_rpc_t **query_rpc)
 {
-	int ret;
 	struct query_cb_r reply = {0};
+	crt_rpc_t *rpc = NULL;
+	int rc;
+
+	*query_rpc = NULL;
 
 	iof_tracker_init(&reply.tracker, 1);
 
-	ret = crt_req_create(iof_state->iof_ctx.crt_ctx, &group->grp.psr_ep,
-			     QUERY_PSR_OP, query_rpc);
-	if (ret || (*query_rpc == NULL)) {
-		IOF_TRACE_ERROR(iof_state, "failed to create query rpc request,"
-				" ret = %d", ret);
-		return false;
+	rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &group->grp.psr_ep,
+			    QUERY_PSR_OP, &rpc);
+	if (rc != -DER_SUCCESS || !rpc) {
+		IOF_TRACE_ERROR(iof_state,
+				"failed to create query rpc request, rc = %d",
+				rc);
+		return rc;
 	}
 
-	IOF_TRACE_LINK(*query_rpc, iof_state, "query_rpc");
+	IOF_TRACE_LINK(rpc, iof_state, "query_rpc");
 
-	ret = crt_req_set_timeout(*query_rpc, 5);
-	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "Could not set timeout, ret = %d",
-				ret);
-		crt_req_decref(*query_rpc);
-		return false;
+	rc = crt_req_set_timeout(rpc, 5);
+	if (rc != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(iof_state, "Could not set timeout, rc = %d",
+				rc);
+		crt_req_decref(rpc);
+		return rc;
 	}
 
-	crt_req_addref(*query_rpc);
+	/* decref in query_projections */
+	crt_req_addref(rpc);
 
-	ret = crt_req_send(*query_rpc, query_cb, &reply);
-	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, ret = %d",
-				ret);
-		crt_req_decref(*query_rpc);
-		return false;
+	rc = crt_req_send(rpc, query_cb, &reply);
+	if (rc != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(iof_state, "Could not send query RPC, rc = %d",
+				rc);
+		crt_req_decref(rpc);
+		return rc;
 	}
 
 	/*make on-demand progress*/
 	iof_wait(iof_state->iof_ctx.crt_ctx, &reply.tracker);
 
 	if (reply.err) {
-		IOF_TRACE_INFO(iof_state, "Bad RPC reply %d", reply.err);
-		crt_req_decref(*query_rpc);
-		*query_rpc = NULL;
-		return false;
+		IOF_TRACE_INFO(iof_state,
+			       "Bad RPC reply %d %s",
+			       reply.err,
+			       d_errstr(reply.err));
+		/* Matches decref in this function */
+		crt_req_decref(rpc);
+
+		return reply.err;
 	}
 
-	return true;
+	*query_rpc = rpc;
+
+	return -DER_SUCCESS;
 }
 
 static int iof_uint_read(char *buf, size_t buflen, void *arg)
@@ -1561,14 +1560,54 @@ query_projections(struct iof_state *iof_state,
 	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
 	struct iof_psr_query *query;
+	int rc;
 	int i;
-	bool rcb;
 
 	*total = *active = 0;
 
-	/*Query PSR*/
-	rcb = ioc_get_projection_info(iof_state, group, &query_rpc);
-	if (!rcb || !query_rpc) {
+	/* Query the IONSS for initial information, including projection list
+	 *
+	 * Do this in a loop, until success, if there is a eviction then select
+	 * a new endpoint and try again.  As this is the first RPC that IOF
+	 * sends there is no cleanup to perform if this fails, as there is no
+	 * server side-state or RPCs created at this point.
+	 */
+	do {
+		rc = get_info(iof_state, group, &query_rpc);
+
+		if (rc == -DER_OOG || rc == -DER_EVICTED) {
+			d_rank_list_t *psr_list = NULL;
+
+			rc = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
+			if (rc != -DER_SUCCESS || !psr_list)
+				return false;
+			if (psr_list->rl_nr.num < 1) {
+				IOF_TRACE_WARNING(iof_state,
+						  "No more ranks to try, giving up");
+				d_rank_list_free(psr_list);
+				return false;
+			}
+
+			IOF_TRACE_WARNING(iof_state,
+					  "Changing IONNS rank from %d to %d",
+					  group->grp.psr_ep.ep_rank,
+					  psr_list->rl_ranks[0]);
+
+			atomic_store_release(&group->grp.pri_srv_rank,
+					     psr_list->rl_ranks[0]);
+			group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
+			d_rank_list_free(psr_list);
+
+		} else if (rc != -DER_SUCCESS) {
+			IOF_TRACE_ERROR(iof_state,
+					"Query operation failed: %d",
+					rc);
+			return false;
+		}
+
+	} while (rc != -DER_SUCCESS);
+
+	if (!query_rpc) {
 		IOF_TRACE_ERROR(iof_state, "Query operation failed");
 		return false;
 	}
