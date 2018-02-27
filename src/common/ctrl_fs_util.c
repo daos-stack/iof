@@ -176,9 +176,9 @@ int iof_ctrl_read_str(char *str, int len, const char *path)
 		if (ret != 0)                          \
 			return ret;                    \
 		ret = fscanf(fp, format, val);         \
+		fclose(fp);                            \
 		if (ret <= 0)                          \
 			return -IOF_CTRL_IO_FAILED;    \
-		fclose(fp);                            \
 		return 0;                              \
 	}
 
