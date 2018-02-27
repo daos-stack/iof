@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -200,7 +200,7 @@ struct ionss_active_read {
 	struct ionss_file_handle	*handle;
 	struct iof_local_bulk		local_bulk;
 	d_list_t			list;
-	size_t				read_len;
+	ssize_t				read_len;
 	uint64_t			data_offset;
 	uint64_t			req_len;
 	uint64_t			segment_offset;

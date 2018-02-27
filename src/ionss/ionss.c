@@ -1702,7 +1702,7 @@ iof_process_write(struct ionss_active_write *awd)
 	struct iof_writex_out *out = crt_reply_get(awd->rpc);
 	struct ios_projection *projection = awd->handle->projection;
 	struct crt_bulk_desc bulk_desc = {0};
-	size_t bytes_written;
+	ssize_t bytes_written;
 	off_t offset;
 	int rc;
 
@@ -1710,10 +1710,10 @@ iof_process_write(struct ionss_active_write *awd)
 		D_GOTO(out, 0);
 
 	if (in->bulk_len == 0 || awd->segment_offset == in->bulk_len) {
-		errno = 0;
 		offset = in->xtvec.xt_off + awd->segment_offset;
 		IOF_TRACE_DEBUG(awd, "Writing to fd=%d %#zx-%#zx", handle->fd,
 				offset, offset + in->data.iov_len - 1);
+		errno = 0;
 		bytes_written = pwrite(handle->fd, in->data.iov_buf,
 				       in->data.iov_len, offset);
 		if (bytes_written == -1)
@@ -1772,17 +1772,17 @@ static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 	struct ios_projection *projection = handle->projection;
 	struct iof_writex_out *out = crt_reply_get(awd->rpc);
 	struct iof_writex_in *in = crt_req_get(awd->rpc);
-	size_t bytes_written;
+	ssize_t bytes_written;
 	off_t offset;
 	int rc;
 
 	if (cb_info->bci_rc)
 		D_GOTO(out, out->err = IOF_ERR_CART);
 
-	errno = 0;
 	offset = in->xtvec.xt_off + awd->segment_offset;
 	IOF_TRACE_DEBUG(awd, "Writing to fd=%d %#zx-%#zx", handle->fd,
 			offset, offset + awd->req_len - 1);
+	errno = 0;
 	bytes_written = pwrite(handle->fd, awd->local_bulk.buf,
 			       awd->req_len, offset);
 	if (bytes_written == -1) {
