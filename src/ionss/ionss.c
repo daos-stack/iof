@@ -1050,11 +1050,12 @@ out:
 	if (rc)
 		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
 
-	if (parent->projection)
-		iof_pool_restock(parent->projection->fh_pool);
+	if (parent) {
+		if (parent->projection)
+			iof_pool_restock(parent->projection->fh_pool);
 
-	if (parent)
 		ios_fh_decref(parent, 1);
+	}
 
 	D_FREE(path);
 
@@ -2056,11 +2057,12 @@ out:
 	if (rc)
 		IOF_TRACE_ERROR(handle, "response not sent, ret = %d", rc);
 
-	if (handle)
-		ios_fh_decref(handle, 1);
+	if (handle) {
+		if (handle->mf.type == inode_handle && fd != -1)
+			close(fd);
 
-	if (handle->mf.type == inode_handle && fd != -1)
-		close(fd);
+		ios_fh_decref(handle, 1);
+	}
 }
 
 static void iof_statfs_handler(crt_rpc_t *rpc)
