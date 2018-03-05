@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -114,7 +114,8 @@ struct iof_pool {
 };
 
 /* Create a new pool, called once at startup */
-int iof_pool_init(struct iof_pool *, void *arg);
+int iof_pool_init(struct iof_pool *, void *arg)
+	__attribute((warn_unused_result, nonnull(1)));
 
 /* Destroy a pool, called once at shutdown */
 void iof_pool_destroy(struct iof_pool *);
@@ -140,6 +141,7 @@ void iof_pool_restock(struct iof_pool_type *);
  *
  * Returns true of there are any descriptors in use.
  */
-bool iof_pool_reclaim(struct iof_pool *);
+bool iof_pool_reclaim(struct iof_pool *)
+	__attribute((warn_unused_result, nonnull));
 
 #endif /*  __IOF_POOL_H__ */

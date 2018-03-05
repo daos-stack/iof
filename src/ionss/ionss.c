@@ -2830,6 +2830,10 @@ int main(int argc, char **argv)
 		char *mnt = NULL;
 		struct ios_projection *projection = &base.projection_array[i];
 
+		/* TODO: This needs to be handled better as currently it
+		 * causes the IONSS to send a invalid reply and crash
+		 * the CNSS at startup
+		 */
 		if (!projection->active) {
 			IOF_LOG_WARNING("Not projecting %s",
 					projection->full_path);

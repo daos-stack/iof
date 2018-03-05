@@ -1331,7 +1331,7 @@ initialize_projection(struct iof_state *iof_state,
 	IOF_TRACE_DEBUG(fs_handle,
 			"Projected Mount %s", fs_handle->mnt_dir.name);
 
-	IOF_TRACE_INFO(fs_handle, "Mountpoint for this projection: %s",
+	IOF_TRACE_INFO(fs_handle, "Mountpoint for this projection: '%s'",
 		       fs_handle->mnt_dir.name);
 
 	fs_handle->fs_id = fs_info->id;
@@ -1445,6 +1445,11 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
 	fs_handle->ctx.pool = &fs_handle->pool;
+
+	/* TODO: Much better error checking is required here, not least
+	 * terminating the thread if there are any failures in the rest of
+	 * this function
+	 */
 	if (!iof_thread_start(&fs_handle->ctx)) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
 		D_GOTO(err, 0);
@@ -1544,7 +1549,7 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
-	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: %s",
+	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: '%s'",
 			fs_handle->mnt_dir.name);
 
 	d_list_add_tail(&fs_handle->link, &iof_state->fs_list);
@@ -1640,7 +1645,7 @@ query_projections(struct iof_state *iof_state,
 		if (!initialize_projection(iof_state, group, &tmp[i], query,
 					   (*total)++)) {
 			IOF_TRACE_ERROR(iof_state,
-					"Could not initialize projection %s from %s",
+					"Could not initialize projection '%s' from %s",
 					tmp[i].dir_name.name,
 					group->grp_name);
 			return false;
@@ -1682,8 +1687,9 @@ static int iof_post_start(void *arg)
 
 		if (!query_projections(iof_state, group, &total_projections,
 				       &active)) {
-			IOF_TRACE_ERROR(iof_state, "Couldn't mount projections "
-					"from %s", group->grp_name);
+			IOF_TRACE_ERROR(iof_state,
+					"Couldn't mount projections from %s",
+					group->grp_name);
 			continue;
 		}
 		active_projections += active;

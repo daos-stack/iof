@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,24 +63,30 @@ debug_dump(struct iof_pool_type *type)
 			type->no_restock_hwm);
 }
 
-/* Create a object pool */
+/* Create an object pool */
 int
 iof_pool_init(struct iof_pool *pool, void *arg)
 {
-	IOF_TRACE_DEBUG(pool, "Created a pool");
+	int rc;
+
+	IOF_TRACE_DEBUG(pool, "Creating a pool");
 	D_INIT_LIST_HEAD(&pool->list);
 
-	pthread_mutex_init(&pool->lock, NULL);
+	rc = pthread_mutex_init(&pool->lock, NULL);
+	if (rc != 0)
+		return rc;
+
 	pool->init = true;
 	pool->arg = arg;
 	return 0;
 }
 
-/* Destroy a object pool */
+/* Destroy an object pool */
 void
 iof_pool_destroy(struct iof_pool *pool)
 {
 	struct iof_pool_type *type, *tnext;
+	bool in_use;
 
 	if (!pool->init)
 		return;
@@ -89,13 +95,17 @@ iof_pool_destroy(struct iof_pool *pool)
 		debug_dump(type);
 	}
 
-	iof_pool_reclaim(pool);
+	in_use = iof_pool_reclaim(pool);
+	if (in_use)
+		IOF_TRACE_WARNING(pool, "Pool has active objects");
+
 	d_list_for_each_entry_safe(type, tnext, &pool->list, type_list) {
 		if (type->count != 0)
-			IOF_TRACE_WARNING(type, "Freeing type with active "
-					  "objects");
+			IOF_TRACE_WARNING(type,
+					  "Freeing type with active objects");
 		pthread_mutex_destroy(&type->lock);
 		IOF_TRACE_DOWN(type);
+		d_list_del(&type->type_list);
 		D_FREE(type);
 	}
 	pthread_mutex_destroy(&pool->lock);
@@ -273,6 +283,7 @@ struct iof_pool_type *
 iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 {
 	struct iof_pool_type *type;
+	int rc;
 
 	if (!reg->name)
 		return NULL;
@@ -281,9 +292,12 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	if (!type)
 		return NULL;
 
+	rc = pthread_mutex_init(&type->lock, NULL);
+	if (rc != 0)
+		return NULL;
+
 	IOF_TRACE_UP(type, pool, reg->name);
 
-	pthread_mutex_init(&type->lock, NULL);
 	D_INIT_LIST_HEAD(&type->free_list);
 	D_INIT_LIST_HEAD(&type->pending_list);
 	type->pool = pool;
@@ -368,7 +382,7 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 	pthread_mutex_unlock(&type->lock);
 }
 
-/* Re-stock a object type.
+/* Re-stock an object type.
  *
  * This is a function called off the critical path to pre-alloc and recycle
  * objects to be ready for re-use.  In an ideal world this function does
