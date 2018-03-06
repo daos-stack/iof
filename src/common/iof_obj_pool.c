@@ -155,14 +155,17 @@ int obj_pool_destroy(obj_pool_t *pool)
 
 	d_list_for_each_entry_safe(block, tmpblock,
 				   &real_pool->allocated_blocks, link) {
+		d_list_del(&block->link);
 		D_FREE(block);
 	}
 	d_list_for_each_entry_safe(tpv, tmptpv,
 				   &real_pool->tpv_list, link) {
 		d_list_for_each_entry_safe(block, tmpblock,
 					   &tpv->allocated_blocks, link) {
+			d_list_del(&block->link);
 			D_FREE(block);
 		}
+		d_list_del(&tpv->link);
 		D_FREE(tpv);
 	}
 
