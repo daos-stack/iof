@@ -188,6 +188,9 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	}
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		struct iof_file_handle *fh;
+		struct iof_dir_handle *dh;
+
 		if (fs_handle->proj.grp != &g->grp)
 			continue;
 
@@ -202,7 +205,25 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 				fs_handle->offline_reason = EHOSTDOWN;
 			continue;
 		}
-		/* TODO: Migrate Open Handles */
+
+		/* Mark all local GAH entries as invalid */
+		pthread_mutex_lock(&fs_handle->of_lock);
+		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
+			IOF_TRACE_INFO(fs_handle,
+				       "Invalidating file " GAH_PRINT_STR " %p",
+				       GAH_PRINT_VAL(fh->common.gah), fh);
+			H_GAH_SET_INVALID(fh);
+		}
+		pthread_mutex_unlock(&fs_handle->of_lock);
+		pthread_mutex_lock(&fs_handle->od_lock);
+		d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
+			IOF_TRACE_INFO(fs_handle,
+				       "Invalidating dir " GAH_PRINT_STR " %p",
+				       GAH_PRINT_VAL(dh->gah), fh);
+			H_GAH_SET_INVALID(dh);
+		}
+		pthread_mutex_unlock(&fs_handle->od_lock);
+
 	}
 }
 
