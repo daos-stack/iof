@@ -2666,6 +2666,9 @@ int main(int argc, char **argv)
 	 * Exports are identified by the absolute path, without allowing for
 	 * symbolic links.
 	 * The maximum path length of exports is checked.
+	 *
+	 * TODO: The error handling here needs an overhaul, and this code
+	 * probably wants to be in a helper function.
 	 */
 	err = 0;
 
@@ -2708,7 +2711,10 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		pthread_mutex_init(&projection->lock, NULL);
+		rc = pthread_mutex_init(&projection->lock, NULL);
+		if (rc != 0)
+			continue;
+
 		D_INIT_LIST_HEAD(&projection->read_list);
 		D_INIT_LIST_HEAD(&projection->write_list);
 
@@ -2929,6 +2935,7 @@ cleanup:
 	 */
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
+		int rc;
 
 		if (!projection->active)
 			continue;
@@ -2939,11 +2946,14 @@ cleanup:
 		 * threads have already been terminated
 		 */
 
-		IOF_LOG_DEBUG("Stopping %p", projection);
+		IOF_TRACE_DEBUG(projection, "Stopping projection");
 
 		release_projection_resources(projection);
 
-		pthread_mutex_destroy(&projection->lock);
+		rc = pthread_mutex_destroy(&projection->lock);
+		if (rc != 0)
+			IOF_TRACE_WARNING(projection,
+					  "Problem closing lock");
 
 		D_FREE(projection->full_path);
 		D_FREE(projection->mount_path);
