@@ -42,42 +42,40 @@
 #include "ioc.h"
 #include "log.h"
 
-#define SHOW_FLAG(FLAGS, FLAG) do {					\
-		if (FLAGS & FLAG)					\
-			IOF_LOG_INFO("Flag " #FLAG " enabled");		\
-		else							\
-			IOF_LOG_INFO("Flag " #FLAG " disable");		\
+#define SHOW_FLAG(HANDLE, FLAGS, FLAG)					\
+	do {								\
+		IOF_TRACE_INFO(HANDLE, "Flag " #FLAG " %s",		\
+			FLAGS & FLAG ? "enabled" : "disabled");		\
 		FLAGS &= ~FLAG;						\
 	} while (0)
 
-static void ioc_show_flags(unsigned int in)
+static void ioc_show_flags(void *handle, unsigned int in)
 {
-	IOF_LOG_INFO("Flags are %#x", in);
-	SHOW_FLAG(in, FUSE_CAP_ASYNC_READ);
-	SHOW_FLAG(in, FUSE_CAP_POSIX_LOCKS);
-	SHOW_FLAG(in, FUSE_CAP_ATOMIC_O_TRUNC);
-	SHOW_FLAG(in, FUSE_CAP_EXPORT_SUPPORT);
-	SHOW_FLAG(in, FUSE_CAP_DONT_MASK);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_WRITE);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_MOVE);
-	SHOW_FLAG(in, FUSE_CAP_SPLICE_READ);
-	SHOW_FLAG(in, FUSE_CAP_FLOCK_LOCKS);
-	SHOW_FLAG(in, FUSE_CAP_IOCTL_DIR);
-	SHOW_FLAG(in, FUSE_CAP_AUTO_INVAL_DATA);
-	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS);
-	SHOW_FLAG(in, FUSE_CAP_READDIRPLUS_AUTO);
-	SHOW_FLAG(in, FUSE_CAP_ASYNC_DIO);
-	SHOW_FLAG(in, FUSE_CAP_WRITEBACK_CACHE);
-	SHOW_FLAG(in, FUSE_CAP_NO_OPEN_SUPPORT);
-	SHOW_FLAG(in, FUSE_CAP_PARALLEL_DIROPS);
-	SHOW_FLAG(in, FUSE_CAP_POSIX_ACL);
-	SHOW_FLAG(in, FUSE_CAP_HANDLE_KILLPRIV);
+	SHOW_FLAG(handle, in, FUSE_CAP_ASYNC_READ);
+	SHOW_FLAG(handle, in, FUSE_CAP_POSIX_LOCKS);
+	SHOW_FLAG(handle, in, FUSE_CAP_ATOMIC_O_TRUNC);
+	SHOW_FLAG(handle, in, FUSE_CAP_EXPORT_SUPPORT);
+	SHOW_FLAG(handle, in, FUSE_CAP_DONT_MASK);
+	SHOW_FLAG(handle, in, FUSE_CAP_SPLICE_WRITE);
+	SHOW_FLAG(handle, in, FUSE_CAP_SPLICE_MOVE);
+	SHOW_FLAG(handle, in, FUSE_CAP_SPLICE_READ);
+	SHOW_FLAG(handle, in, FUSE_CAP_FLOCK_LOCKS);
+	SHOW_FLAG(handle, in, FUSE_CAP_IOCTL_DIR);
+	SHOW_FLAG(handle, in, FUSE_CAP_AUTO_INVAL_DATA);
+	SHOW_FLAG(handle, in, FUSE_CAP_READDIRPLUS);
+	SHOW_FLAG(handle, in, FUSE_CAP_READDIRPLUS_AUTO);
+	SHOW_FLAG(handle, in, FUSE_CAP_ASYNC_DIO);
+	SHOW_FLAG(handle, in, FUSE_CAP_WRITEBACK_CACHE);
+	SHOW_FLAG(handle, in, FUSE_CAP_NO_OPEN_SUPPORT);
+	SHOW_FLAG(handle, in, FUSE_CAP_PARALLEL_DIROPS);
+	SHOW_FLAG(handle, in, FUSE_CAP_POSIX_ACL);
+	SHOW_FLAG(handle, in, FUSE_CAP_HANDLE_KILLPRIV);
 #ifdef FUSE_CAP_BIG_WRITES
-	SHOW_FLAG(in, FUSE_CAP_BIG_WRITES);
+	SHOW_FLAG(handle, in, FUSE_CAP_BIG_WRITES);
 #endif
 
 	if (in)
-		IOF_LOG_ERROR("Unknown flags %#x", in);
+		IOF_TRACE_ERROR(handle, "Unknown flags %#x", in);
 }
 
 /* Called on filesystem init.  It has the ability to both observe configuration
@@ -111,7 +109,7 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 
 	IOF_TRACE_INFO(fs_handle, "Capability supported %#x ", conn->capable);
 
-	ioc_show_flags(conn->capable);
+	ioc_show_flags(fs_handle, conn->capable);
 
 #ifdef FUSE_CAP_BIG_WRITES
 	conn->want |= FUSE_CAP_BIG_WRITES;
@@ -119,7 +117,7 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 
 	IOF_TRACE_INFO(fs_handle, "Capability requested %#x", conn->want);
 
-	ioc_show_flags(conn->want);
+	ioc_show_flags(fs_handle, conn->want);
 
 	IOF_TRACE_INFO(fs_handle, "max_background %d", conn->max_background);
 	IOF_TRACE_INFO(fs_handle,
@@ -197,9 +195,6 @@ static uint8_t supported_impl[] = { 0x0 };
 int iof_is_mode_supported(uint8_t flags)
 {
 	int i, count, mode = FLAGS_TO_MODE_INDEX(flags);
-
-	IOF_LOG_INFO("Filesystem Access: %s",
-		     (flags & IOF_WRITEABLE ? "Read-Write" : "Read-Only"));
 
 	count = sizeof(supported_impl) / sizeof(*supported_impl);
 	for (i = 0; i < count; i++) {
