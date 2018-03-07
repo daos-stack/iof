@@ -12,6 +12,7 @@ symbols.txt
 /.sconf-temp-*/
 *.tar.gz
 /install/
+autodocs/
 iof-*.conf
 __pycache__
 *~

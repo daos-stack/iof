@@ -61,7 +61,7 @@ ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 {
 	int ii;
 
-	/** allocate more space and copy old data over */
+	/* allocate more space and copy old data over */
 	struct ios_gah_ent *new_data;
 	int new_cap = gah_store->capacity + delta;
 
@@ -75,14 +75,14 @@ ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 		D_FREE(new_data);
 		return IOS_ERR_NOMEM;
 	}
-	/** setup the pointer array */
+	/* setup the pointer array */
 	for (ii = 0; ii < delta; ii++)
 		gah_store->ptr_array[gah_store->capacity + ii] = &new_data[ii];
 
 	for (ii = gah_store->capacity; ii < gah_store->capacity + delta; ii++) {
 		gah_store->ptr_array[ii]->fid = ii;
 
-		/** point tail to the new tail */
+		/* point tail to the new tail */
 		d_list_add_tail(&gah_store->ptr_array[ii]->list,
 				&gah_store->free_list);
 	}
@@ -118,7 +118,7 @@ static uint8_t my_crc8(uint8_t *data, size_t len)
 	return my_crc;
 }
 
-/**
+/*
  * Initialize the gah store. Allocate storage, initialize the pointer array, and
  * setup the linked-lists.
  *
@@ -148,12 +148,12 @@ struct ios_gah_store *ios_gah_init(void)
 
 	D_INIT_LIST_HEAD(&gah_store->free_list);
 
-	/** setup the pointer array */
+	/* setup the pointer array */
 	for (ii = 0; ii < IOS_GAH_STORE_INIT_CAPACITY; ii++) {
 		gah_store->ptr_array[ii] = &gah_store->data[ii];
 		gah_store->ptr_array[ii]->fid = ii;
 
-		/** setup the linked list */
+		/* setup the linked list */
 		d_list_add_tail(&gah_store->ptr_array[ii]->list,
 				&gah_store->free_list);
 	}
@@ -167,17 +167,17 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 
 	if (ios_gah_store == NULL)
 		return IOS_ERR_INVALID_PARAM;
-	/** check for active handles */
+	/* check for active handles */
 	if (ios_gah_store->size != 0)
 		return IOS_ERR_OTHER;
 
 	for (ii = 0; ii < ios_gah_store->capacity; ii++)
-		if (ios_gah_store->ptr_array[ii]->in_use == 1)
+		if (ios_gah_store->ptr_array[ii]->in_use)
 			return IOS_ERR_OTHER;
 
-	/** free the chunck allocated on init */
+	/* free the chunck allocated on init */
 	D_FREE(ios_gah_store->ptr_array[0]);
-	/** walk down the pointer array, free all memory chuncks */
+	/* walk down the pointer array, free all memory chuncks */
 	for (ii = IOS_GAH_STORE_INIT_CAPACITY; ii < ios_gah_store->capacity;
 	    ii += IOS_GAH_STORE_DELTA) {
 		D_FREE(ios_gah_store->ptr_array[ii]);
@@ -206,17 +206,17 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 			return rc;
 	}
 
-	/** take one gah from the head of the list */
+	/* take one gah from the head of the list */
 	ent = d_list_entry(gah_store->free_list.next, struct ios_gah_ent, list);
 	d_list_del(&ent->list);
 
-	ent->in_use = 1;
+	ent->in_use = true;
 	ent->arg = arg;
 
 	gah->fid = ent->fid;
 	gah->revision = ++ent->revision;
 	gah->reserved = 0;
-	/** setup the gah */
+	/* setup the gah */
 	gah->version = IOS_GAH_VERSION;
 	gah->root = self_rank;
 	gah->base = base;
@@ -249,9 +249,9 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 	if (gah_store->ptr_array[gah->fid]->revision != gah->revision)
 		return IOS_ERR_EXPIRED;
 
-	gah_store->ptr_array[gah->fid]->in_use = 0;
+	gah_store->ptr_array[gah->fid]->in_use = false;
 
-	/** append the reclaimed entry to the list of available entires */
+	/* append the reclaimed entry to the list of available entires */
 	d_list_add(&gah_store->ptr_array[gah->fid]->list,
 		   &gah_store->free_list);
 
@@ -306,11 +306,4 @@ enum ios_return ios_gah_check_version(struct ios_gah *gah)
 		return IOS_ERR_INVALID_PARAM;
 	return (gah->version == IOS_GAH_VERSION)
 		? IOS_SUCCESS : IOS_ERR_VERSION_MISMATCH;
-}
-
-enum ios_return ios_gah_is_self_root(struct ios_gah *gah, int self_rank)
-{
-	if (gah == NULL)
-		return IOS_ERR_INVALID_PARAM;
-	return gah->root == self_rank ? IOS_SUCCESS : IOS_ERR_OTHER;
 }

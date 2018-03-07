@@ -170,14 +170,6 @@ static void test_ios_gah_misc(void)
 	CU_ASSERT(rc == IOS_ERR_VERSION_MISMATCH);
 	ios_gah->version--;
 
-	/** test ios_gah_is_self_root() */
-	rc = ios_gah_is_self_root(NULL, 0);
-	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
-	rc = ios_gah_is_self_root(ios_gah, 0);
-	CU_ASSERT(rc == IOS_SUCCESS);
-	rc = ios_gah_is_self_root(ios_gah, 2);
-	CU_ASSERT(rc == IOS_ERR_OTHER);
-
 	/** test ios_gah_get_info() */
 	CU_ASSERT(ios_gah_get_info(NULL, ios_gah, &internal) != IOS_SUCCESS);
 	CU_ASSERT(ios_gah_get_info(ios_gah_store, NULL, &internal) !=
