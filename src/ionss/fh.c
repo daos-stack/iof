@@ -107,15 +107,6 @@ out:
 	pthread_rwlock_unlock(&base->gah_rwlock);
 }
 
-/* Try to ensure that there is at least one pre-allocated file_handle
- * available on the free list.
- * Called without the projection lock held.
- */
-void ios_fh_prealloc(struct ios_projection *projection)
-{
-	iof_pool_restock(projection->fh_pool);
-}
-
 struct ionss_file_handle *
 ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 {

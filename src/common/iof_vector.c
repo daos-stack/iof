@@ -134,11 +134,12 @@ static int expand_vector(struct vector *vector, unsigned int new_index)
 	if (num_entries > vector->max_entries)
 		num_entries = vector->max_entries;
 
-	vector->data = (union ptr_lock *)realloc(vector->data,
-				num_entries * sizeof(union ptr_lock));
-
-	if (vector->data == NULL)
+	D_REALLOC(data,
+		  vector->data,
+		  num_entries * sizeof(union ptr_lock));
+	if (!data)
 		return -DER_NOMEM;
+	vector->data = data;
 
 	/* Now fill in the data from the old size onward */
 	data = &vector->data[vector->num_entries];

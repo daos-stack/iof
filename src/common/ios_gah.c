@@ -59,6 +59,7 @@
 static int
 ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 {
+	void *new_array;
 	int ii;
 
 	/* allocate more space and copy old data over */
@@ -68,13 +69,16 @@ ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 	D_ALLOC_ARRAY(new_data, delta);
 	if (new_data == NULL)
 		return -DER_NOMEM;
-	gah_store->ptr_array = (struct ios_gah_ent **)
-		realloc(gah_store->ptr_array,
-			new_cap * sizeof(struct ios_gah_ent));
-	if (gah_store->ptr_array == NULL) {
+
+	D_REALLOC(new_array,
+		  gah_store->ptr_array,
+		  new_cap * sizeof(struct ios_gah_ent));
+	if (!new_array) {
 		D_FREE(new_data);
 		return -DER_NOMEM;
 	}
+
+	gah_store->ptr_array = new_array;
 	/* setup the pointer array */
 	for (ii = 0; ii < delta; ii++)
 		gah_store->ptr_array[gah_store->capacity + ii] = &new_data[ii];
