@@ -49,6 +49,7 @@ IOF_VERSION = "0.0.1"
 # Desired compiler flags that will be used if the compiler supports them.
 DESIRED_FLAGS = ['-Wdeclaration-after-statement',
                  '-Wno-missing-braces',
+                 '-Wno-ignored-attributes',
                  '-Wunknown-warning-option',
                  '-Wno-gnu-designator',
                  '-Wno-gnu-zero-variadic-macro-arguments']
