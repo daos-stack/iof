@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -95,9 +95,6 @@ write_cb(const struct crt_cb_info *cb_info)
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
 		reply->err = EIO;
-
-		if (out->err == IOF_GAH_INVALID)
-			reply->f_info->gah_valid = 0;
 
 		if (out->err == IOF_ERR_NOMEM)
 			reply->err = EAGAIN;

@@ -88,7 +88,7 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	if (rc)
 		D_GOTO(err, rc);
 
-	if (!dh->gah_valid) {
+	if (!H_GAH_IS_VALID(dh)) {
 		IOF_TRACE_INFO(req, "Release with bad dh");
 
 		/* If the server has reported that the GAH is invalid

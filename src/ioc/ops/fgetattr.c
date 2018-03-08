@@ -86,7 +86,7 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		D_GOTO(err, rc);
 
 	if (handle) {
-		if (!handle->common.gah_valid)
+		if (!H_GAH_IS_VALID(handle))
 			D_GOTO(err, rc = EIO);
 
 		in->gah = handle->common.gah;

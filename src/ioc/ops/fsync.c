@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,7 +61,7 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 	IOF_TRACE_INFO(handle);
 
-	if (!handle->common.gah_valid)
+	if (!H_GAH_IS_VALID(handle))
 		/* If the server has reported that the GAH is invalid
 		 * then do not try to do anything with it.
 		 */

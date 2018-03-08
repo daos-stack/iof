@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -103,7 +103,7 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	in = crt_req_get(rpc);
 
 	if (handle) {
-		if (!handle->common.gah_valid)
+		if (!H_GAH_IS_VALID(handle))
 			D_GOTO(err, rc = EIO);
 
 		in->gah = handle->common.gah;

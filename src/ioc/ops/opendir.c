@@ -62,7 +62,7 @@ opendir_ll_cb(struct ioc_request *request)
 	rc = IOC_STATUS_TO_RC_LL(request);
 	if (rc == 0) {
 		dh->gah = out->gah;
-		dh->gah_valid = 1;
+		H_GAH_SET_VALID(dh);
 		dh->handle_valid = 1;
 		dh->ep = dh->fs_handle->proj.grp->psr_ep;
 		pthread_mutex_lock(&dh->fs_handle->od_lock);

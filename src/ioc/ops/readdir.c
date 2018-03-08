@@ -143,7 +143,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 
 	if (reply.out->err != 0) {
 		if (reply.out->err == IOF_GAH_INVALID)
-			dir_handle->gah_valid = 0;
+			H_GAH_SET_INVALID(dir_handle);
 		IOF_TRACE_ERROR(dir_handle,
 				"Error from target %d", reply.out->err);
 		D_GOTO(out, ret = EIO);
@@ -295,7 +295,7 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 	IOF_TRACE_INFO(req, GAH_PRINT_STR " offset %zi",
 		       GAH_PRINT_VAL(dir_handle->gah), offset);
 
-	if (!dir_handle->gah_valid)
+	if (!H_GAH_IS_VALID(dir_handle))
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */

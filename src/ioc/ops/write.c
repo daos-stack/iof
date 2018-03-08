@@ -62,7 +62,7 @@ write_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_ERROR(req, "Error from target %d", out->err);
 
 		if (out->err == IOF_GAH_INVALID)
-			wb->handle->common.gah_valid = 0;
+			H_GAH_SET_INVALID(wb->handle);
 
 		D_GOTO(hard_err, rc = EIO);
 		return;
@@ -146,7 +146,7 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		D_GOTO(err, rc = handle->fs_handle->offline_reason);
 
-	if (!handle->common.gah_valid)
+	if (!H_GAH_IS_VALID(handle))
 		/* If the server has reported that the GAH is invalid
 		 * then do not try and use it.
 		 */
@@ -196,7 +196,7 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		D_GOTO(err, rc = handle->fs_handle->offline_reason);
 
-	if (!handle->common.gah_valid)
+	if (!H_GAH_IS_VALID(handle))
 		/* If the server has reported that the GAH is invalid
 		 * then do not try and use it.
 		 */

@@ -60,7 +60,7 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_ERROR(rb->req, "Error from target %d", out->err);
 		rb->failure = true;
 		if (out->err == IOF_GAH_INVALID)
-			rb->handle->common.gah_valid = 0;
+			H_GAH_SET_INVALID(rb->handle);
 		D_GOTO(out, rc = EIO);
 	}
 

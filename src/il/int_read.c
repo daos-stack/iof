@@ -95,9 +95,6 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	if (out->err) {
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
-		if (out->err == IOF_GAH_INVALID)
-			reply->f_info->gah_valid = 0;
-
 		if (out->err == IOF_ERR_NOMEM)
 			reply->err = ENOMEM;
 		else

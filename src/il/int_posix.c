@@ -447,7 +447,6 @@ static bool check_ioctl_on_open(int fd, struct fd_entry *entry, int flags,
 		     fd, GAH_PRINT_VAL(gah_info.gah), bypass_status[status]);
 	entry->common.gah = gah_info.gah;
 	entry->common.projection = &projections[gah_info.cli_fs_id];
-	entry->common.gah_valid = true;
 	entry->common.ep = entry->common.projection->grp->psr_ep;
 	entry->pos = 0;
 	entry->flags = flags;

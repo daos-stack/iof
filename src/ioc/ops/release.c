@@ -67,7 +67,7 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	IOF_TRACE_INFO(req, GAH_PRINT_STR,
 		       GAH_PRINT_VAL(handle->common.gah));
 
-	if (!handle->common.gah_valid) {
+	if (!H_GAH_IS_VALID(handle)) {
 		IOF_TRACE_INFO(req, "Release with bad handle");
 
 		/* If the server has reported that the GAH is invalid

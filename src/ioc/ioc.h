@@ -393,7 +393,7 @@ struct iof_dir_handle {
 	/* Set to 1 initially, but 0 if there is a unrecoverable error */
 	int				handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
-	int				gah_valid;
+	ATOMIC int			gah_ok;
 	crt_endpoint_t			ep;
 	d_list_t			list;
 };
@@ -402,6 +402,7 @@ struct iof_dir_handle {
 struct iof_file_handle {
 	struct iof_projection_info	*fs_handle;
 	struct iof_file_common		common;
+	ATOMIC int			gah_ok;
 	crt_rpc_t			*open_rpc;
 	crt_rpc_t			*creat_rpc;
 	crt_rpc_t			*release_rpc;
@@ -414,6 +415,22 @@ struct iof_file_handle {
 	/* Fuse req for open/create command */
 	fuse_req_t			open_req;
 };
+
+/* GAH ok manipulation macros. gah_ok is defined as a int but we're
+ * using it as a bool and accessing it though the use of atomics.
+ *
+ * These macros work on both file and directory handles.
+ */
+
+/* Set the GAH so that it's valid */
+#define H_GAH_SET_VALID(OH) atomic_store_release(&OH->gah_ok, 1)
+
+/* Set the GAH so that it's invalid.  Assumes it currently valid */
+#define H_GAH_SET_INVALID(OH) atomic_store_release(&OH->gah_ok, 0)
+
+/* Check if the handle is valid by reading the gah_ok bit.
+ */
+#define H_GAH_IS_VALID(OH) atomic_load_consume(&OH->gah_ok)
 
 struct common_req {
 	struct ioc_request		request;
