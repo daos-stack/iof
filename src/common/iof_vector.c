@@ -187,7 +187,10 @@ int vector_init(vector_t *vector, int sizeof_entry, int max_entries)
 	realv->entry_size = sizeof_entry;
 	realv->data = NULL;
 	realv->num_entries = 0;
-	pthread_rwlock_init(&realv->lock, NULL);
+	/* TODO: Improve cleanup of the error paths in this function */
+	rc = pthread_rwlock_init(&realv->lock, NULL);
+	if (rc != 0)
+		return -DER_INVAL;
 	rc = obj_pool_initialize(&realv->pool,
 				 sizeof(struct entry) + sizeof_entry);
 	if (rc != -DER_SUCCESS)
@@ -205,6 +208,7 @@ int vector_init(vector_t *vector, int sizeof_entry, int max_entries)
 int vector_destroy(vector_t *vector)
 {
 	struct vector *realv = (struct vector *)vector;
+	int rc;
 
 	if (vector == NULL)
 		return -DER_INVAL;
@@ -214,11 +218,14 @@ int vector_destroy(vector_t *vector)
 
 	realv->magic = 0;
 
-	pthread_rwlock_destroy(&realv->lock);
+	rc = pthread_rwlock_destroy(&realv->lock);
 	obj_pool_destroy(&realv->pool);
 	D_FREE(realv->data);
 
-	return -DER_SUCCESS;
+	if (rc == 0)
+		return -DER_SUCCESS;
+	else
+		return -DER_INVAL;
 }
 
 int vector_get_(vector_t *vector, unsigned int index, void **ptr)

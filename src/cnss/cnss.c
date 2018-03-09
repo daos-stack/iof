@@ -83,8 +83,8 @@ struct fs_info {
 	pthread_mutex_t	lock;
 	void		*private_data;
 	d_list_t	entries;
-	int		running:1,
-			mt:1;
+	bool		running;
+	bool		mt;
 };
 
 #define FN_TO_PVOID(fn) (*((void **)&(fn)))
@@ -214,7 +214,7 @@ static void *ll_loop_fn(void *args)
 	const struct sigaction act = {.sa_handler = iof_signal_poke};
 
 	pthread_mutex_lock(&info->lock);
-	info->running = 1;
+	info->running = true;
 	pthread_mutex_unlock(&info->lock);
 
 	sigaction(SIGUSR1, &act, NULL);
@@ -233,7 +233,7 @@ static void *ll_loop_fn(void *args)
 	IOF_TRACE_DEBUG(info, "fuse loop completed %d", ret);
 
 	pthread_mutex_lock(&info->lock);
-	info->running = 0;
+	info->running = false;
 	pthread_mutex_unlock(&info->lock);
 	return (void *)(uintptr_t)ret;
 }
@@ -244,7 +244,7 @@ static void *loop_fn(void *args)
 	struct fs_info *info = (struct fs_info *)args;
 
 	pthread_mutex_lock(&info->lock);
-	info->running = 1;
+	info->running = true;
 	pthread_mutex_unlock(&info->lock);
 
 	/*Blocking*/
@@ -262,7 +262,7 @@ static void *loop_fn(void *args)
 	pthread_mutex_lock(&info->lock);
 	fuse_destroy(info->fuse);
 	info->fuse = NULL;
-	info->running = 0;
+	info->running = false;
 	pthread_mutex_unlock(&info->lock);
 
 	return (void *)(uintptr_t)ret;
@@ -346,8 +346,10 @@ register_fuse(void *arg,
 			goto cleanup;
 	}
 
-	IOF_LOG_DEBUG("Registered a fuse mount point at : %s", info->mnt);
-	IOF_LOG_DEBUG("Private data %p threaded %u", private_data, info->mt);
+	IOF_TRACE_DEBUG(arg,
+			"Registered a fuse mount point at : %s", info->mnt);
+	IOF_TRACE_DEBUG(arg,
+			"Private data %p threaded %u", private_data, info->mt);
 
 	fuse_opt_free_args(args);
 
@@ -359,8 +361,9 @@ register_fuse(void *arg,
 				    loop_fn, info);
 
 	if (rc) {
-		IOF_LOG_ERROR("Could not start FUSE filesysten at %s",
-			      info->mnt);
+		IOF_TRACE_ERROR(arg,
+				"Could not start FUSE filesysten at '%s'",
+				info->mnt);
 		iof_fuse_umount(info);
 		goto cleanup;
 	}
@@ -369,7 +372,11 @@ register_fuse(void *arg,
 
 	return true;
 cleanup:
-	pthread_mutex_destroy(&info->lock);
+	rc = pthread_mutex_destroy(&info->lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(arg,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
 cleanup_no_mutex:
 	D_FREE(info->mnt);
 	D_FREE(info);
@@ -394,7 +401,8 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		plugin->fns->flush_fuse(info->session, info->private_data);
 
 	if (info->running) {
-		IOF_LOG_DEBUG("Sending termination signal %s", info->mnt);
+		IOF_TRACE_DEBUG(info,
+				"Sending termination signal %s", info->mnt);
 
 		/*
 		 * If the FUSE thread is in the filesystem servicing requests
@@ -445,9 +453,13 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	d_list_del(&info->entries);
 
-	rc = (uintptr_t)rcp;
+	rc = pthread_mutex_destroy(&info->lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(info,
+				"Failed to destroy lock %d:'%s'",
+				rc, strerror(rc));
 
-	pthread_mutex_destroy(&info->lock);
+	rc = (uintptr_t)rcp;
 
 	if (plugin->active && plugin->fns->deregister_fuse)
 		plugin->fns->deregister_fuse(info->private_data);
@@ -488,8 +500,9 @@ void shutdown_fs(struct cnss_info *cnss_info)
 					   entries) {
 			rc = deregister_fuse(plugin, info);
 			if (rc)
-				IOF_LOG_ERROR("Shutdown mount %s failed", info->mnt);
-
+				IOF_TRACE_ERROR(cnss_info,
+						"Shutdown mount '%s' failed",
+						info->mnt);
 			D_FREE(info->mnt);
 			D_FREE(info);
 		}
@@ -542,8 +555,6 @@ add_plugin(struct cnss_info *info,
 {
 	struct plugin_entry *entry;
 	int rc;
-
-	IOF_LOG_INFO("Loading plugin at entry point %p", FN_TO_PVOID(fn));
 
 	D_ALLOC_PTR(entry);
 	if (!entry)
@@ -738,7 +749,7 @@ int main(int argc, char **argv)
 
 	ret = ctrl_fs_start(ctrl_prefix);
 	if (ret != 0) {
-		IOF_LOG_ERROR("Could not start ctrl fs");
+		IOF_TRACE_ERROR(cnss_info, "Could not start ctrl fs");
 		return CNSS_ERR_CTRL_FS;
 	}
 
@@ -747,9 +758,14 @@ int main(int argc, char **argv)
 	D_INIT_LIST_HEAD(&cnss_info->plugins);
 
 	if (getenv("CNSS_DISABLE_IOF") != NULL) {
-		IOF_LOG_INFO("Skipping IOF plugin");
+		IOF_TRACE_INFO(cnss_info, "Skipping IOF plugin");
 	} else {
-		/* Load the build-in iof "plugin" */
+		/* Load the built-in iof "plugin" */
+
+		IOF_TRACE_INFO(cnss_info,
+			       "Loading plugin at entry point %p",
+			       FN_TO_PVOID(iof_plugin_init));
+
 		rcb = add_plugin(cnss_info, iof_plugin_init, NULL);
 		if (!rcb)
 			D_GOTO(shutdown_ctrl_fs, ret = CNSS_ERR_PLUGIN);
@@ -772,10 +788,11 @@ int main(int argc, char **argv)
 
 #pragma GCC diagnostic pop
 
-		IOF_LOG_INFO("Loading plugin file %s %p %p",
-			     plugin_file,
-			     dl_handle,
-			     FN_TO_PVOID(fn));
+		IOF_TRACE_INFO(cnss_info,
+			       "Loading plugin file %s %p %p",
+			       plugin_file,
+			       dl_handle,
+			       FN_TO_PVOID(fn));
 		if (fn) {
 			rcb = add_plugin(cnss_info, fn, dl_handle);
 			if (!rcb)
@@ -793,13 +810,15 @@ int main(int argc, char **argv)
 		}
 	}
 
-	IOF_LOG_INFO("Forming %s process set",
-		     service_process_set ? "service" : "client");
+	IOF_TRACE_INFO(cnss_info,
+		       "Forming %s process set",
+		       service_process_set ? "service" : "client");
 
 	/*initialize CaRT*/
 	ret = crt_init(cnss, service_process_set ? CRT_FLAG_BIT_SERVER : 0);
 	if (ret) {
-		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
+		IOF_TRACE_ERROR(cnss_info,
+				"crt_init failed with ret = %d", ret);
 		ret = CNSS_ERR_CART;
 		goto shutdown_ctrl_fs;
 	}
@@ -810,7 +829,8 @@ int main(int argc, char **argv)
 		 */
 		ret = crt_group_config_save(NULL, false);
 		if (ret != 0) {
-			IOF_LOG_ERROR("Could not save attach info for CNSS");
+			IOF_TRACE_ERROR(cnss_info,
+					"Could not save attach info for CNSS");
 			ret = CNSS_ERR_CART;
 			goto shutdown_ctrl_fs;
 		}
@@ -856,7 +876,7 @@ int main(int argc, char **argv)
 
 	/* TODO: How to handle this case? */
 	if (!active_plugins) {
-		IOF_LOG_ERROR("No active plugins");
+		IOF_TRACE_ERROR(cnss_info, "No active plugins");
 		ret = 1;
 		goto shutdown_cart;
 	}
@@ -899,9 +919,10 @@ shutdown_cart:
 
 	IOF_TRACE_DOWN(cnss_info);
 	D_FREE(ctrl_prefix);
-	D_FREE(cnss_info);
 
-	IOF_LOG_INFO("Exiting with status %d", ret);
+	IOF_TRACE_INFO(cnss_info, "Exiting with status %d", ret);
+
+	D_FREE(cnss_info);
 
 	iof_log_close();
 

@@ -456,7 +456,7 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
 		       atomic_load_consume(&group->grp.pri_srv_rank));
 
-	sprintf(buf, "%d", group->grp.grp_id);
+	snprintf(buf, BUFSIZE, "%d", group->grp.grp_id);
 
 	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
 				     &ionss_dir);
@@ -1838,13 +1838,17 @@ static void iof_deregister_fuse(void *arg)
 
 	iof_pool_destroy(&fs_handle->pool);
 
+	rc = pthread_mutex_destroy(&fs_handle->od_lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(fs_handle,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
+
 	IOF_TRACE_DOWN(fs_handle);
 	d_list_del(&fs_handle->link);
 
 	D_FREE(fs_handle->mount_point);
 	D_FREE(fs_handle->fuse_ops);
-
-	pthread_mutex_destroy(&fs_handle->od_lock);
 
 	D_FREE(fs_handle->stats);
 	D_FREE(fs_handle);

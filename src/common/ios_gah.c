@@ -278,7 +278,7 @@ enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
 	ret = ios_gah_check_version(gah);
 	if (ret != IOS_SUCCESS)
 		return ret;
-	if (gah->fid >= gah_store->capacity || gah->fid < 0)
+	if (gah->fid >= gah_store->capacity)
 		return IOS_ERR_OUT_OF_RANGE;
 	if (!(gah_store->ptr_array[gah->fid]->in_use))
 		return IOS_ERR_EXPIRED;

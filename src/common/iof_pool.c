@@ -86,6 +86,7 @@ void
 iof_pool_destroy(struct iof_pool *pool)
 {
 	struct iof_pool_type *type, *tnext;
+	int rc;
 	bool in_use;
 
 	if (!pool->init)
@@ -103,12 +104,20 @@ iof_pool_destroy(struct iof_pool *pool)
 		if (type->count != 0)
 			IOF_TRACE_WARNING(type,
 					  "Freeing type with active objects");
-		pthread_mutex_destroy(&type->lock);
+		rc = pthread_mutex_destroy(&type->lock);
+		if (rc != 0)
+			IOF_TRACE_ERROR(type,
+					"Failed to destroy lock %d %s",
+					rc, strerror(rc));
 		IOF_TRACE_DOWN(type);
 		d_list_del(&type->type_list);
 		D_FREE(type);
 	}
-	pthread_mutex_destroy(&pool->lock);
+	rc = pthread_mutex_destroy(&pool->lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(pool,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
 	IOF_TRACE_DOWN(pool);
 }
 
