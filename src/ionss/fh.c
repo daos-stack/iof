@@ -60,7 +60,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
 		pthread_rwlock_unlock(&base->gah_rwlock);
-		return IOS_ERR_NOMEM;
+		return IOF_ERR_NOMEM;
 	}
 
 	*fhp = fh;
