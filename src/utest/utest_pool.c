@@ -244,25 +244,25 @@ static void test_iof_obj_pool_invalid(void)
 	double *p;
 
 	rc = obj_pool_initialize(NULL, 10);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = obj_pool_initialize(&pool, 0);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = obj_pool_get(NULL, &x);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = obj_pool_put(NULL, &x);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = obj_pool_put(NULL, x);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = obj_pool_initialize(&pool, sizeof(int));
 	CU_ASSERT(rc == 0);
 
 	rc = obj_pool_get(&pool, &p);
-	CU_ASSERT(rc == PERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 }
 
 int main(int argc, char **argv)

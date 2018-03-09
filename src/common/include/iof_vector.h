@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,14 +45,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-/* Error codes */
-enum {
-	VSUCCESS = 0,
-	VERR_NOENT,
-	VERR_INVAL,
-	VERR_UNINIT,
-	VERR_NOMEM,
-};
+#include <gurt/errno.h>
 
 /* An opaque 64-bit structure allocated by the user */
 typedef struct {
@@ -64,7 +57,7 @@ typedef struct {
  * \param sizeof_entry[in] size of each entry.
  * \param max_entries[in] The maximum number of entries in the vector,
  *                        0 for no maximum
- * \return 0 on success
+ * \retval -DER_SUCCESS on success
  */
 int vector_init(vector_t *vector, int sizeof_entry, int max_entries);
 
@@ -79,11 +72,11 @@ int vector_destroy(vector_t *vector);
  * \param vector[in] The vector
  * \param index[in] The index of the entry to get
  * \param entry[out] Pointer to the object
- * \retval VSUCCESS Entry was retrieved
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_NOMEM Out of memory
- * \retval VERR_UNINIT Vector not initialized
- * \retval VERR_NOENT No entry at index
+ * \retval -DER_SUCCESS Entry was retrieved
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_NOMEM Out of memory
+ * \retval -DER_UNINIT Vector not initialized
+ * \retval -DER_NONEXIST No entry at index
  */
 #define vector_get(vector, index, entrypp) \
 	vector_get_(vector, index, (void **)(entrypp))
@@ -97,11 +90,11 @@ int vector_get_(vector_t *vector, unsigned int index, void **entry);
  * \param src_idx[in] Source index in vector
  * \param dst_idx[in] Destination index in vector
  * \param entry[out] Pointer to the object
- * \retval VSUCCESS Entry was duplicated
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_NOMEM Out of memory
- * \retval VERR_UNINIT Vector not initialized
- * \retval VERR_NOENT No entry at src_idx
+ * \retval -DER_SUCCESS Entry was duplicated
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_NOMEM Out of memory
+ * \retval -DER_UNINIT Vector not initialized
+ * \retval -DER_NONEXIST No entry at src_idx
  */
 #define vector_dup(vector, dst_idx, src_idx, entrypp) \
 	vector_dup_(vector, dst_idx, src_idx, (void **)(entrypp))
@@ -114,11 +107,10 @@ int vector_dup_(vector_t *vector, unsigned int src_idx, unsigned int dst_idx,
  * \param vector[in] The vector
  * \param index[in] The index of the entry to set
  * \param typep[in] A pointer data to put into table
- * \return 0 on success.  Only errors are for invalid parameters, type
- *                        size mismatches and index out of bounds.
- * \retval VSUCCESS refcount decremented
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_UNINIT Vector not initialized
+ * \retval -DER_SUCCESS on success.
+ * \retval -DER_SUCCESS refcount decremented
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_UNINIT Vector not initialized
  */
 int vector_decref(vector_t *vector, void *entry);
 
@@ -127,10 +119,10 @@ int vector_decref(vector_t *vector, void *entry);
  * \param vector[in] The vector
  * \param index[in] The index of the entry to allocate
  * \param entry[in] Pointer to the object
- * \retval VSUCCESS Entry was allocated
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_NOMEM Out of memory
- * \retval VERR_UNINIT Vector not initialized
+ * \retval -DER_SUCCESS Entry was allocated
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_NOMEM Out of memory
+ * \retval -DER_UNINIT Vector not initialized
  */
 #define vector_set(vector, index, entryp) \
 	vector_set_(vector, index, entryp, sizeof(*entryp))
@@ -143,10 +135,10 @@ int vector_decref(vector_t *vector, void *entry);
  * \param index[in] The index of the entry to allocate
  * \param entry[in] Pointer to the object
  * \param size[in] size of object
- * \retval VSUCCESS Entry was allocated and initialized
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_NOMEM Out of memory
- * \retval VERR_UNINIT Vector not initialized
+ * \retval -DER_SUCCESS Entry was allocated and initialized
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_NOMEM Out of memory
+ * \retval -DER_UNINIT Vector not initialized
  */
 int vector_set_(vector_t *vector, unsigned int index, void *entry, size_t size);
 
@@ -155,10 +147,10 @@ int vector_set_(vector_t *vector, unsigned int index, void *entry, size_t size);
  * \param vector[in] The vector
  * \param index[in] The index of the item to remove
  * \param entrypp[out] Optionally, return a pointer to the entry
- * \retval VSUCCESS Entry was removed
- * \retval VERR_INVAL Bad arguments
- * \retval VERR_UNINIT Vector not initialized
- * \retval VERR_NOENT No entry at index
+ * \retval -DER_SUCCESS Entry was removed
+ * \retval -DER_INVAL Bad arguments
+ * \retval -DER_UNINIT Vector not initialized
+ * \retval -DER_NONEXIST No entry at index
  */
 #define vector_remove(vector, index, entrypp) \
 	vector_remove_(vector, index, (void **)entrypp)

@@ -138,7 +138,7 @@ static int expand_vector(struct vector *vector, unsigned int new_index)
 				num_entries * sizeof(union ptr_lock));
 
 	if (vector->data == NULL)
-		return VERR_NOMEM;
+		return -DER_NOMEM;
 
 	/* Now fill in the data from the old size onward */
 	data = &vector->data[vector->num_entries];
@@ -146,13 +146,13 @@ static int expand_vector(struct vector *vector, unsigned int new_index)
 	memset(data, 0, new_entries * sizeof(union ptr_lock));
 	vector->num_entries = num_entries;
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 /* Assumes caller holds pthread_rwlock.   Same lock will be held on exit */
 static int expand_if_needed(struct vector *vector, unsigned int index)
 {
-	int rc = 0;
+	int rc = -DER_SUCCESS;
 
 	if (index >= vector->num_entries) {
 		/* Entry "present" but not allocated. */
@@ -179,7 +179,7 @@ int vector_init(vector_t *vector, int sizeof_entry, int max_entries)
 	if (vector == NULL || max_entries <= 0 || sizeof_entry <= 0) {
 		if (vector != NULL)
 			realv->magic = 0;
-		return VERR_INVAL;
+		return -DER_INVAL;
 	}
 
 	realv->magic = 0;
@@ -190,16 +190,16 @@ int vector_init(vector_t *vector, int sizeof_entry, int max_entries)
 	pthread_rwlock_init(&realv->lock, NULL);
 	rc = obj_pool_initialize(&realv->pool,
 				 sizeof(struct entry) + sizeof_entry);
-	if (rc != 0)
-		return VERR_NOMEM;
+	if (rc != -DER_SUCCESS)
+		return -DER_NOMEM;
 	rc = expand_vector(realv, 0);
 
-	if (rc != 0)
+	if (rc != -DER_SUCCESS)
 		return rc; /* error logged in expand_vector */
 
 	realv->magic = MAGIC;
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 int vector_destroy(vector_t *vector)
@@ -207,10 +207,10 @@ int vector_destroy(vector_t *vector)
 	struct vector *realv = (struct vector *)vector;
 
 	if (vector == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	realv->magic = 0;
 
@@ -218,34 +218,34 @@ int vector_destroy(vector_t *vector)
 	obj_pool_destroy(&realv->pool);
 	D_FREE(realv->data);
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 int vector_get_(vector_t *vector, unsigned int index, void **ptr)
 {
 	struct vector *realv = (struct vector *)vector;
 	struct entry *entry;
-	int rc = 0;
+	int rc = -DER_SUCCESS;
 
 	if (ptr == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	*ptr = NULL;
 
 	if (vector == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	if (index >= realv->max_entries)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	pthread_rwlock_rdlock(&realv->lock);
 	if (index >= realv->num_entries) {
 		/* Entry "present" but not allocated. */
 		pthread_rwlock_unlock(&realv->lock);
-		return VERR_NOENT;
+		return -DER_NONEXIST;
 	}
 
 	entry = (struct entry *)acquire_ptr_lock(&realv->data[index]);
@@ -253,7 +253,7 @@ int vector_get_(vector_t *vector, unsigned int index, void **ptr)
 		atomic_fetch_add(&entry->refcount, 1);
 		*ptr = &entry->data[0];
 	} else {
-		rc = VERR_NOENT;
+		rc = -DER_NONEXIST;
 	}
 
 	release_ptr_lock(&realv->data[index]);
@@ -269,31 +269,30 @@ int vector_dup_(vector_t *vector, unsigned int src_idx, unsigned int dst_idx,
 	struct vector *realv = (struct vector *)vector;
 	struct entry *entry;
 	struct entry *tmp;
-	int rc = 0;
+	int rc = -DER_SUCCESS;
 
 	if (ptr == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	*ptr = NULL;
 
 	if (vector == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	if (src_idx >= realv->max_entries || dst_idx >= realv->max_entries)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	pthread_rwlock_rdlock(&realv->lock);
 	if (src_idx >= realv->num_entries) {
 		/* source entry "present" but not allocated. */
 		pthread_rwlock_unlock(&realv->lock);
-		return VERR_NOENT;
+		return -DER_NONEXIST;
 	}
 	rc = expand_if_needed(realv, dst_idx);
-
-	if (rc != 0) {
+	if (rc != -DER_SUCCESS) {
 		pthread_rwlock_unlock(&realv->lock);
 		return rc;
 	}
@@ -328,10 +327,10 @@ int vector_decref(vector_t *vector, void *ptr)
 	int old_value;
 
 	if (vector == NULL || ptr == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	entry = container_of(ptr, struct entry, data);
 
@@ -340,28 +339,28 @@ int vector_decref(vector_t *vector, void *ptr)
 	if (old_value == 1)
 		obj_pool_put(&realv->pool, entry);
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 int vector_set_(vector_t *vector, unsigned int index, void *ptr, size_t size)
 {
 	struct vector *realv = (struct vector *)vector;
 	struct entry *entry;
-	int rc = 0;
+	int rc = -DER_SUCCESS;
 
 	if (vector == NULL || ptr == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	if (size != realv->entry_size || index >= realv->max_entries)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	pthread_rwlock_rdlock(&realv->lock);
 	rc = expand_if_needed(realv, index);
 
-	if (rc != 0) {
+	if (rc != -DER_SUCCESS) {
 		pthread_rwlock_unlock(&realv->lock);
 		return rc;
 	}
@@ -376,8 +375,8 @@ int vector_set_(vector_t *vector, unsigned int index, void *ptr, size_t size)
 
 	rc = obj_pool_get_(&realv->pool, (void **)&entry,
 			   sizeof(*entry) + realv->entry_size);
-	if (rc != 0) {
-		rc = VERR_NOMEM;
+	if (rc != -DER_SUCCESS) {
+		rc = -DER_NOMEM;
 		entry = NULL;
 		goto release;
 	}
@@ -398,24 +397,24 @@ int vector_remove_(vector_t *vector, unsigned int index, void **ptr)
 {
 	struct vector *realv = (struct vector *)vector;
 	struct entry *entry;
-	int rc = 0;
+	int rc = -DER_SUCCESS;
 
 	if (ptr != NULL)
 		*ptr = NULL;
 
 	if (vector == NULL)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	if (realv->magic != MAGIC)
-		return VERR_UNINIT;
+		return -DER_UNINIT;
 
 	if (index >= realv->max_entries)
-		return VERR_INVAL;
+		return -DER_INVAL;
 
 	pthread_rwlock_rdlock(&realv->lock);
 	if (index >= realv->num_entries) {
 		pthread_rwlock_unlock(&realv->lock);
-		return VERR_NOENT;
+		return -DER_NONEXIST;
 	}
 
 	entry = (struct entry *)acquire_ptr_lock(&realv->data[index]);
@@ -428,7 +427,7 @@ int vector_remove_(vector_t *vector, unsigned int index, void **ptr)
 			*ptr = &entry->data[0];
 		}
 	} else {
-		rc = VERR_NOENT;
+		rc = -DER_NONEXIST;
 	}
 
 	/* releases ptr lock */

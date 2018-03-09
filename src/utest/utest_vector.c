@@ -75,10 +75,10 @@ static void test_iof_vector(void)
 	/* Retrieve every other entry */
 	for (i = 0; i < ENTRIES; i++) {
 		rc = vector_get(&vector, i, &valuep);
-		CU_ASSERT((i & 1) ? (rc == VERR_NOENT) :
+		CU_ASSERT((i & 1) ? (rc == -DER_NONEXIST) :
 			  (rc == 0));
 		if (i & 1) {
-			CU_ASSERT(rc == VERR_NOENT);
+			CU_ASSERT(rc == -DER_NONEXIST);
 			CU_ASSERT(valuep == NULL);
 		} else {
 			CU_ASSERT(rc == 0);
@@ -147,7 +147,7 @@ static void *thread_func(void *arg)
 				printf("rc = %d\n", rc);
 		} else {
 			rc = vector_get(vector, i, &info);
-			if (rc != VERR_NOENT)
+			if (rc != -DER_NONEXIST)
 				COUNT_FAILS(fail, rc == 0);
 			if (rc == 0) {
 				tid = (i % NUM_THREADS) + 1;
@@ -175,7 +175,7 @@ static void *thread_func(void *arg)
 	/* should be empty now */
 	for (i = 0; i < ENTRIES; i++) {
 		rc = vector_get(vector, i, &info);
-		COUNT_FAILS(fail, rc == VERR_NOENT);
+		COUNT_FAILS(fail, rc == -DER_NONEXIST);
 	}
 
 	LOCKED_ASSERT(fail == 0);
@@ -309,54 +309,54 @@ static void test_iof_vector_invalid(void)
 	vector_t vector;
 
 	rc = vector_init(NULL, sizeof(int), 10);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	memset(&vector, 0xff, sizeof(vector));
 
 	rc = vector_get(&vector, 4, &x);
-	CU_ASSERT(rc == VERR_UNINIT);
+	CU_ASSERT(rc == -DER_UNINIT);
 
 	rc = vector_destroy(&vector);
-	CU_ASSERT(rc == VERR_UNINIT);
+	CU_ASSERT(rc == -DER_UNINIT);
 
 	rc = vector_init(&vector, sizeof(int), 10);
 	CU_ASSERT(rc == 0);
 
 	rc = vector_get(&vector, -1, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_get(NULL, -1, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_set(&vector, -1, &value);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_set(&vector, 30, &value);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_set(NULL, 4, &value);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_set(&vector, 4, NULL);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(&vector, -1, 0, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(&vector, 30, 0, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(&vector, 0, -1, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(&vector, 0, 30, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(&vector, 0, 1, NULL);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_dup(NULL, 0, 1, &x);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	rc = vector_set(&vector, 4, &value);
 	CU_ASSERT(rc == 0);
@@ -370,17 +370,17 @@ static void test_iof_vector_invalid(void)
 	CU_ASSERT(rc == 0);
 
 	rc = vector_remove(&vector, 4, &x);
-	CU_ASSERT(rc == VERR_NOENT);
+	CU_ASSERT(rc == -DER_NONEXIST);
 	CU_ASSERT_PTR_NULL(x);
 
 	rc = vector_destroy(&vector);
 	CU_ASSERT(rc == 0);
 
 	rc = vector_destroy(&vector);
-	CU_ASSERT(rc == VERR_UNINIT);
+	CU_ASSERT(rc == -DER_UNINIT);
 
 	rc = vector_destroy(NULL);
-	CU_ASSERT(rc == VERR_INVAL);
+	CU_ASSERT(rc == -DER_INVAL);
 }
 
 int main(int argc, char **argv)

@@ -106,18 +106,18 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 	int rc;
 
 	if (pool == NULL || obj_size == 0)
-		return PERR_INVAL;
+		return -DER_INVAL;
 
 	if (obj_size > MAX_POOL_OBJ_SIZE)
-		return PERR_TOOBIG;
+		return -DER_OVERFLOW;
 
 	rc = pthread_key_create(&real_pool->key, save_free_entries);
 	if (rc != 0)
-		return PERR_NOMEM;
+		return -DER_NOMEM;
 
 	rc = pthread_mutex_init(&real_pool->lock, NULL);
 	if (rc != 0)
-		return PERR_NOMEM;
+		return -DER_NOMEM;
 
 	D_INIT_LIST_HEAD(&real_pool->free_entries);
 	D_INIT_LIST_HEAD(&real_pool->allocated_blocks);
@@ -131,7 +131,7 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 				real_pool->padded_size;
 	real_pool->magic = MAGIC;
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 /* Destroy a pool and all objects in pool */
@@ -144,10 +144,10 @@ int obj_pool_destroy(obj_pool_t *pool)
 	struct obj_pool *real_pool = (struct obj_pool *)pool;
 
 	if (pool == NULL)
-		return PERR_INVAL;
+		return -DER_INVAL;
 
 	if (real_pool->magic != MAGIC)
-		return PERR_UNINIT;
+		return -DER_UNINIT;
 
 	real_pool->magic = 0;
 
@@ -171,7 +171,7 @@ int obj_pool_destroy(obj_pool_t *pool)
 
 	pthread_mutex_destroy(&real_pool->lock);
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
@@ -181,7 +181,7 @@ static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
 	if (tpv_data == NULL) {
 		D_ALLOC_PTR(tpv_data);
 		if (tpv_data == NULL)
-			return PERR_NOMEM;
+			return -DER_NOMEM;
 
 		D_INIT_LIST_HEAD(&tpv_data->free_entries);
 		D_INIT_LIST_HEAD(&tpv_data->allocated_blocks);
@@ -200,7 +200,7 @@ static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
 
 	*tpv = tpv_data;
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
@@ -212,7 +212,7 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 
 	rc = get_tpv(pool, &tpv_data);
 
-	if (rc != 0) {
+	if (rc != -DER_SUCCESS) {
 		*entry = NULL;
 		return rc;
 	}
@@ -228,7 +228,7 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 	D_ALLOC(block, pool->block_size);
 	if (block == NULL) {
 		*entry = NULL;
-		return PERR_NOMEM;
+		return -DER_NOMEM;
 	}
 
 	/* First entry is reserved for the allocation list */
@@ -245,7 +245,7 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 zero:
 	memset(*entry, 0, pool->padded_size);
 
-	return 0;
+	return -DER_SUCCESS;
 }
 
 int obj_pool_get_(obj_pool_t *pool, void **item, size_t size)
@@ -255,17 +255,17 @@ int obj_pool_get_(obj_pool_t *pool, void **item, size_t size)
 	int rc;
 
 	if (pool == NULL || item == NULL)
-		return PERR_INVAL;
+		return -DER_INVAL;
 
 	*item = NULL;
 	if (real_pool->magic != MAGIC)
-		return PERR_UNINIT;
+		return -DER_UNINIT;
 
 	if (real_pool->obj_size != size)
-		return PERR_INVAL;
+		return -DER_INVAL;
 
 	rc = get_new_entry(&entry, real_pool);
-	if (rc == 0)
+	if (rc == -DER_SUCCESS)
 		*item = &entry->data[0];
 
 	return rc;
@@ -279,16 +279,16 @@ int obj_pool_put(obj_pool_t *pool, void *item)
 	int rc;
 
 	if (pool == NULL || item == NULL)
-		return PERR_INVAL;
+		return -DER_INVAL;
 
 	if (real_pool->magic != MAGIC)
-		return PERR_UNINIT;
+		return -DER_UNINIT;
 
 	entry = container_of(item, struct pool_entry, data);
 
 	rc = get_tpv(real_pool, &tpv_data);
 
-	if (rc != 0) {
+	if (rc != -DER_SUCCESS) {
 		pthread_mutex_lock(&real_pool->lock);
 		d_list_add(&entry->link, &real_pool->free_entries);
 		pthread_mutex_unlock(&real_pool->lock);
@@ -297,5 +297,5 @@ int obj_pool_put(obj_pool_t *pool, void *item)
 
 	d_list_add(&entry->link, &tpv_data->free_entries);
 
-	return 0;
+	return -DER_SUCCESS;
 }

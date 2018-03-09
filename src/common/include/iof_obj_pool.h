@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,17 +44,10 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#include <gurt/errno.h>
+
 /* This data structure is intended for small objects */
 #define MAX_POOL_OBJ_SIZE 256
-
-/* Error codes */
-enum {
-	PSUCCESS = 0, /* Success */
-	PERR_NOMEM,   /* No memory */
-	PERR_INVAL,   /* Invalid arguments */
-	PERR_UNINIT,  /* Pool isn't initialized */
-	PERR_TOOBIG,  /* Objects larger than MAX_POOL_OBJ_SIZE not supported */
-};
 
 typedef struct {
 	char data[128];
