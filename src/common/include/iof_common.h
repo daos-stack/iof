@@ -45,12 +45,6 @@
 #include "ios_gah.h"
 #include "iof_ext.h"
 
-#define IOF_ERR_NOMEM		2
-#define IOF_ERR_CART		5
-#define IOF_BAD_DATA		6
-#define	IOF_ERR_INTERNAL	8
-#define IOF_GAH_INVALID        10
-
 /* IOF Registration op codes for RPC's*/
 
 #define QUERY_PSR_OP	(0x201)

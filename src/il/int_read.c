@@ -95,7 +95,7 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	if (out->err) {
 		IOF_LOG_ERROR("Error from target %d", out->err);
 
-		if (out->err == IOF_ERR_NOMEM)
+		if (out->err == -DER_NOMEM)
 			reply->err = ENOMEM;
 		else
 			reply->err = EIO;

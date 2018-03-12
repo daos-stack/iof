@@ -1945,11 +1945,11 @@ int iof_plugin_init(struct cnss_plugin **fns, size_t *size)
 
 	D_ALLOC_PTR(state);
 	if (!state)
-		return IOF_ERR_NOMEM;
+		return CNSS_ERR_NOMEM;
 
 	*size = sizeof(struct cnss_plugin);
 
 	self.handle = state;
 	*fns = &self;
-	return 0;
+	return CNSS_SUCCESS;
 }

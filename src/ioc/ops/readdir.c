@@ -142,7 +142,7 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 		D_GOTO(out, ret = reply.err);
 
 	if (reply.out->err != 0) {
-		if (reply.out->err == IOF_GAH_INVALID)
+		if (reply.out->err == -DER_NONEXIST)
 			H_GAH_SET_INVALID(dir_handle);
 		IOF_TRACE_ERROR(dir_handle,
 				"Error from target %d", reply.out->err);

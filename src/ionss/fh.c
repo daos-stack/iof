@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 	fh = iof_pool_acquire(projection->fh_pool);
 	if (!fh)
-		return IOF_ERR_NOMEM;
+		return -DER_NOMEM;
 
 	pthread_rwlock_wrlock(&base->gah_rwlock);
 
@@ -60,7 +60,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
 		pthread_rwlock_unlock(&base->gah_rwlock);
-		return IOF_ERR_NOMEM;
+		return -DER_NOMEM;
 	}
 
 	*fhp = fh;

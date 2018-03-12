@@ -96,8 +96,8 @@ write_cb(const struct crt_cb_info *cb_info)
 
 		reply->err = EIO;
 
-		if (out->err == IOF_ERR_NOMEM)
-			reply->err = EAGAIN;
+		if (out->err == -DER_NOMEM)
+			reply->err = ENOMEM;
 
 		iof_tracker_signal(&reply->tracker);
 		return;

@@ -72,7 +72,7 @@ static struct ios_base base;
 			break;						\
 		out->rc = 0;						\
 		if (!(fs_handle)) {					\
-			out->err = IOF_BAD_DATA;			\
+			out->err = -DER_MISC;				\
 			break;						\
 		}							\
 		if (!(fs_handle)->writeable) {				\
@@ -91,7 +91,7 @@ static struct ios_base base;
 					GAH_PRINT_VAL((in).gah));	\
 			break;						\
 		}							\
-		out->err = IOF_GAH_INVALID;				\
+		out->err = -DER_NONEXIST;				\
 		IOF_TRACE_INFO(rpc, "Failed to find handle from "	\
 			GAH_PRINT_STR, GAH_PRINT_VAL((in).gah));	\
 	} while (0)
@@ -114,7 +114,7 @@ static struct ios_base base;
 					 parent);			\
 		if (!(in)->oldpath) {					\
 			IOF_TRACE_ERROR(rpc, "Missing inputs.");	\
-			out->err = IOF_ERR_CART;			\
+			out->err = -DER_NOMEM;				\
 		}							\
 	} while (0)
 
@@ -336,7 +336,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	D_ALLOC_PTR(local_handle);
 	if (!local_handle) {
 		close(fd);
-		D_GOTO(out, out->err = IOF_ERR_NOMEM);
+		D_GOTO(out, out->err = -DER_NOMEM);
 	}
 
 	local_handle->projection = parent->projection;
@@ -351,7 +351,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	if (rc != -DER_SUCCESS) {
 		closedir(local_handle->h_dir);
 		D_FREE(local_handle);
-		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+		D_GOTO(out, out->err = rc);
 	}
 
 	IOF_TRACE_INFO(local_handle, GAH_PRINT_FULL_STR,
@@ -376,7 +376,7 @@ int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	int rc;
 
 	if (cb_info->bci_rc) {
-		out->err = IOF_ERR_CART;
+		out->err = cb_info->bci_rc;
 		goto out;
 	}
 
@@ -385,7 +385,7 @@ int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 
 	rc = crt_bulk_access(cb_info->bci_bulk_desc->bd_local_hdl, &sgl);
 	if (rc) {
-		out->err = IOF_ERR_CART;
+		out->err = rc;
 		goto out;
 	}
 
@@ -394,7 +394,7 @@ int iof_readdir_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 
 	rc = crt_bulk_free(cb_info->bci_bulk_desc->bd_local_hdl);
 	if (rc)
-		out->err = IOF_ERR_CART;
+		out->err = rc;
 
 out:
 	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
@@ -444,7 +444,7 @@ iof_readdir_handler(crt_rpc_t *rpc)
 	if (in->bulk) {
 		rc = crt_bulk_get_len(in->bulk, &len);
 		if (rc || !len) {
-			out->err = IOF_ERR_CART;
+			out->err = rc;
 			goto out;
 		}
 
@@ -465,7 +465,7 @@ iof_readdir_handler(crt_rpc_t *rpc)
 
 	D_ALLOC_ARRAY(replies, max_reply_count);
 	if (!replies) {
-		out->err = IOF_ERR_NOMEM;
+		out->err = -DER_NOMEM;
 		goto out;
 	}
 
@@ -537,7 +537,7 @@ out:
 		rc = crt_bulk_create(rpc->cr_ctx, &sgl, CRT_BULK_RO,
 				     &local_bulk_hdl);
 		if (rc) {
-			out->err = IOF_ERR_CART;
+			out->err = rc;
 			goto out;
 		}
 
@@ -552,7 +552,7 @@ out:
 		rc = crt_bulk_transfer(&bulk_desc, iof_readdir_bulk_cb,
 				       NULL, NULL);
 		if (rc) {
-			out->err = IOF_ERR_CART;
+			out->err = rc;
 			goto out;
 		}
 
@@ -754,7 +754,7 @@ static void find_and_insert(struct ios_projection *projection,
 	 */
 	handle = htable_mf_insert(projection, mf, fd);
 	if (!handle) {
-		out->err = IOF_ERR_NOMEM;
+		out->err = -DER_NOMEM;
 		close(fd);
 		return;
 	}
@@ -802,7 +802,7 @@ static void find_and_insert_lookup(struct ios_projection *projection,
 	 */
 	handle = htable_mf_insert(projection, mf, fd);
 	if (!handle) {
-		out->err = IOF_ERR_NOMEM;
+		out->err = -DER_NOMEM;
 		close(fd);
 		return;
 	}
@@ -852,7 +852,7 @@ static void find_and_insert_create(struct ios_projection *projection,
 		ihandle = htable_mf_insert(projection, imf, ifd);
 		if (!ihandle) {
 			IOF_TRACE_DEBUG(projection, "Could not insert imf");
-			out->err = IOF_ERR_NOMEM;
+			out->err = -DER_NOMEM;
 			close(fd);
 			close(ifd);
 			return;
@@ -862,7 +862,7 @@ static void find_and_insert_create(struct ios_projection *projection,
 	handle = htable_mf_insert(projection, mf, fd);
 	if (!handle) {
 		IOF_TRACE_DEBUG(projection, "Could not insert mf");
-		out->err = IOF_ERR_NOMEM;
+		out->err = -DER_NOMEM;
 		close(fd);
 		if (ihandle)
 			ios_fh_decref(ihandle, 1);
@@ -893,7 +893,7 @@ lookup_common(crt_rpc_t *rpc, struct iof_gah_string_in *in,
 	if (fd == -1) {
 		out->rc = errno;
 		if (!out->rc)
-			out->err = IOF_ERR_INTERNAL;
+			out->err = -DER_MISC;
 		goto out;
 	}
 
@@ -1028,7 +1028,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	if (ifd == -1) {
 		out->rc = errno;
 		if (!out->rc)
-			out->err = IOF_ERR_INTERNAL;
+			out->err = -DER_MISC;
 		close(fd);
 		goto out;
 	}
@@ -1266,8 +1266,8 @@ iof_process_read_bulk(struct ionss_active_read *ard)
 		more_to_do = true;
 
 	rc = crt_bulk_transfer(&bulk_desc, iof_read_bulk_cb, ard, NULL);
-	if (rc) {
-		out->err = IOF_ERR_CART;
+	if (rc != -DER_SUCCESS) {
+		out->err = rc;
 		ard->failed = true;
 		goto out;
 	}
@@ -1313,7 +1313,7 @@ iof_read_bulk_cb(const struct crt_bulk_cb_info *cb_info)
 	int rc;
 
 	if (cb_info->bci_rc) {
-		out->err = IOF_ERR_CART;
+		out->err = cb_info->bci_rc;
 		ard->failed = true;
 	} else {
 		out->bulk_len += ard->read_len;
@@ -1366,7 +1366,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 	/* TODO: Only immediate xtvec supported for now */
 	if (in->xtvec_len > 0) {
 		IOF_LOG_WARNING("xtvec not yet supported for read");
-		out->err = IOF_ERR_INTERNAL;
+		out->err = -DER_NOSYS;
 		goto out;
 	}
 
@@ -1427,11 +1427,11 @@ iof_rename_handler(crt_rpc_t *rpc)
 
 	old_parent = ios_fh_find(&base, &in->old_gah);
 	if (!old_parent)
-		D_GOTO(out, out->err = IOF_GAH_INVALID);
+		D_GOTO(out, out->err = -DER_NOSYS);
 
 	new_parent = ios_fh_find(&base, &in->new_gah);
 	if (!new_parent)
-		D_GOTO(out, out->err = IOF_GAH_INVALID);
+		D_GOTO(out, out->err = -DER_NOSYS);
 
 	VALIDATE_WRITE(old_parent->projection, out);
 	if (out->err || out->rc)
@@ -1609,22 +1609,22 @@ out:
 		size_t bulk_len;					\
 		int rc;							\
 		if ((in)->data.iov_len > max_iov_write_size) {		\
-			out->err = IOF_ERR_INTERNAL;			\
+			out->err = -DER_MISC;				\
 			break;						\
 		}							\
 		if (xtlen != ((in)->bulk_len + (in)->data.iov_len)) {	\
-			out->err = IOF_ERR_INTERNAL;			\
+			out->err = -DER_MISC;				\
 			break;						\
 		}							\
 		if ((in)->bulk_len == 0) /*no bulk */			\
 			break;						\
 		rc = crt_bulk_get_len((in)->data_bulk, &bulk_len);	\
 		if (rc != 0) {						\
-			out->err = IOF_ERR_CART;			\
+			out->err = rc;					\
 			break;						\
 		}							\
 		if ((in)->bulk_len > bulk_len) {			\
-			out->err = IOF_ERR_INTERNAL;			\
+			out->err = -DER_MISC;				\
 			break;						\
 		}							\
 	} while (0)
@@ -1686,7 +1686,7 @@ void iof_write_check_and_send(struct ios_projection *projection)
 	memset(wrd, 0, sizeof(*wrd));
 
 	if (in->xtvec.xt_len == 0)
-		out->err = IOF_ERR_CART;
+		out->err = -DER_NOSYS;
 
 	iof_process_write(awd);
 }
@@ -1742,7 +1742,7 @@ iof_process_write(struct ionss_active_write *awd)
 	rc = crt_bulk_transfer(&bulk_desc, iof_write_bulk, awd, NULL);
 	if (rc) {
 		awd->failed = true;
-		D_GOTO(out, out->err = IOF_ERR_CART);
+		D_GOTO(out, out->err = rc);
 	}
 
 	/* Do not call crt_reply_send() in this case as it'll be done in the
@@ -1778,7 +1778,7 @@ static int iof_write_bulk(const struct crt_bulk_cb_info *cb_info)
 	int rc;
 
 	if (cb_info->bci_rc)
-		D_GOTO(out, out->err = IOF_ERR_CART);
+		D_GOTO(out, out->err = cb_info->bci_rc);
 
 	offset = in->xtvec.xt_off + awd->segment_offset;
 	IOF_TRACE_DEBUG(awd, "Writing to fd=%d %#zx-%#zx", handle->fd,
@@ -1844,7 +1844,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 	if (in->xtvec_len > 0) {
 		IOF_TRACE_WARNING(projection,
 				  "xtvec not yet supported for write");
-		out->err = IOF_ERR_INTERNAL;
+		out->err = -DER_NOSYS;
 		goto out;
 	}
 
@@ -1918,7 +1918,7 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		if (fd == -1) {
 			IOF_TRACE_INFO(handle, "Failed to re-open %d", e);
 			if (e != EACCES && (in->to_set & FUSE_SET_ATTR_MODE))
-				D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+				D_GOTO(out, out->err = -DER_MISC);
 		}
 		IOF_TRACE_DEBUG(handle, "Re-opened %d as %d", handle->fd, fd);
 	} else {
@@ -1944,7 +1944,7 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		errno = 0;
 		rc = fstat(fd, &st_pre);
 		if (rc)
-			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+			D_GOTO(out, out->rc = errno);
 
 		/* atime */
 		if (in->to_set & FUSE_SET_ATTR_ATIME)
@@ -2007,12 +2007,12 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 
 		rc = clock_gettime(CLOCK_REALTIME, &now);
 		if (rc)
-			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+			D_GOTO(out, out->err = -DER_MISC);
 
 		errno = 0;
 		rc = fstat(fd, &st_pre);
 		if (rc)
-			D_GOTO(out, out->err = IOF_ERR_INTERNAL);
+			D_GOTO(out, out->rc = errno);
 
 		/* atime */
 		if (in->to_set & FUSE_SET_ATTR_ATIME_NOW)
@@ -2636,7 +2636,7 @@ int main(int argc, char **argv)
 	 */
 	ret = getrlimit(RLIMIT_NOFILE, &rlim);
 	if (ret)
-		D_GOTO(cleanup, ret = IOF_ERR_INTERNAL);
+		D_GOTO(cleanup, ret = -DER_MISC);
 
 	if (rlim.rlim_cur != rlim.rlim_max) {
 		IOF_LOG_INFO("Set rlimit from %lu to %lu",
@@ -2646,12 +2646,12 @@ int main(int argc, char **argv)
 
 		ret = setrlimit(RLIMIT_NOFILE, &rlim);
 		if (ret)
-			D_GOTO(cleanup, ret = IOF_ERR_INTERNAL);
+			D_GOTO(cleanup, ret = -DER_MISC);
 	}
 
 	D_ALLOC_ARRAY(base.fs_list, base.projection_count);
 	if (!base.fs_list) {
-		ret = IOF_ERR_NOMEM;
+		ret = -DER_NOMEM;
 		goto cleanup;
 	}
 
@@ -2684,7 +2684,7 @@ int main(int argc, char **argv)
 
 		ret = iof_pool_init(&projection->pool, projection);
 		if (ret != 0) {
-			ret = IOF_ERR_NOMEM;
+			ret = -DER_NOMEM;
 			err = 1;
 			goto cleanup;
 		}

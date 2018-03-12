@@ -61,7 +61,7 @@ write_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_TRACE_ERROR(req, "Error from target %d", out->err);
 
-		if (out->err == IOF_GAH_INVALID)
+		if (out->err == -DER_NONEXIST)
 			H_GAH_SET_INVALID(wb->handle);
 
 		D_GOTO(hard_err, rc = EIO);
