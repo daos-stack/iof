@@ -64,7 +64,7 @@ static void test_ios_gah_init(void)
 
 	ios_gah_store = ios_gah_init();
 	CU_ASSERT(ios_gah_store != NULL);
-	CU_ASSERT_FATAL(ios_gah_destroy(ios_gah_store) == IOS_SUCCESS);
+	CU_ASSERT_FATAL(ios_gah_destroy(ios_gah_store) == -DER_SUCCESS);
 }
 
 /** test ios_gah_destroy() */
@@ -76,14 +76,14 @@ static void test_ios_gah_destroy(void)
 	CU_ASSERT(ios_gah_store != NULL);
 	if (ios_gah_store == NULL)
 		return;
-	CU_ASSERT(ios_gah_destroy(ios_gah_store) == IOS_SUCCESS);
-	CU_ASSERT(ios_gah_destroy(NULL) == IOS_ERR_INVALID_PARAM);
+	CU_ASSERT(ios_gah_destroy(ios_gah_store) == -DER_SUCCESS);
+	CU_ASSERT(ios_gah_destroy(NULL) == -DER_INVAL);
 }
 
 /** test ios_gah_allocate() */
 static void test_ios_gah_allocate(void)
 {
-	int rc = IOS_SUCCESS;
+	int rc = -DER_SUCCESS;
 	struct ios_gah *ios_gah;
 	struct ios_gah_store *ios_gah_store;
 	int ii;
@@ -102,23 +102,25 @@ static void test_ios_gah_allocate(void)
 
 		CU_ASSERT_FATAL(data != NULL);
 		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
-		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &info) == IOS_SUCCESS);
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &info)
+			  == -DER_SUCCESS);
 		CU_ASSERT(info == data);
 	}
-	CU_ASSERT(rc == IOS_SUCCESS);
+	CU_ASSERT(rc == -DER_SUCCESS);
 	rc = ios_gah_allocate(NULL, ios_gah, 0, 0, NULL);
-	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
+	CU_ASSERT(rc == -DER_INVAL);
 	rc = ios_gah_allocate(ios_gah_store, NULL, 0, 0, NULL);
-	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
+	CU_ASSERT(rc == -DER_INVAL);
 
 	for (ii = 0; ii < num_handles; ii++) {
 		void *data = NULL;
 
-		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data) == IOS_SUCCESS);
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data)
+			  == -DER_SUCCESS);
 		CU_ASSERT(data != NULL);
 		free(data);
 		CU_ASSERT_FATAL(ios_gah_deallocate(ios_gah_store, ios_gah + ii)
-				== IOS_SUCCESS);
+				== -DER_SUCCESS);
 	}
 
 	ios_gah_destroy(ios_gah_store);
@@ -128,7 +130,7 @@ static void test_ios_gah_allocate(void)
 /** test utility routines  */
 static void test_ios_gah_misc(void)
 {
-	int rc = IOS_SUCCESS;
+	int rc = -DER_SUCCESS;
 	struct ios_gah *ios_gah;
 	struct ios_gah_store *ios_gah_store;
 	int ii;
@@ -148,46 +150,47 @@ static void test_ios_gah_misc(void)
 		CU_ASSERT_FATAL(data != NULL);
 		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
 	}
-	CU_ASSERT(rc == IOS_SUCCESS);
+	CU_ASSERT(rc == -DER_SUCCESS);
 
 	/** test ios_gah_check_crc() */
 	rc = ios_gah_check_crc(NULL);
-	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
+	CU_ASSERT(rc == -DER_INVAL);
 	rc = ios_gah_check_crc(ios_gah);
-	CU_ASSERT(rc == IOS_SUCCESS);
+	CU_ASSERT(rc == -DER_SUCCESS);
 	ios_gah->root++;
 	rc = ios_gah_check_crc(ios_gah);
-	CU_ASSERT(rc == IOS_ERR_CRC_MISMATCH);
+	CU_ASSERT(rc == -DER_NO_HDL);
 	ios_gah->root--;
 
 	/** test ios_gah_check_version() */
 	rc = ios_gah_check_version(NULL);
-	CU_ASSERT(rc == IOS_ERR_INVALID_PARAM);
+	CU_ASSERT(rc == -DER_INVAL);
 	rc = ios_gah_check_version(ios_gah);
-	CU_ASSERT(rc == IOS_SUCCESS);
+	CU_ASSERT(rc == -DER_SUCCESS);
 	ios_gah->version++;
 	rc = ios_gah_check_version(ios_gah);
-	CU_ASSERT(rc == IOS_ERR_VERSION_MISMATCH);
+	CU_ASSERT(rc == -DER_MISMATCH);
 	ios_gah->version--;
 
 	/** test ios_gah_get_info() */
-	CU_ASSERT(ios_gah_get_info(NULL, ios_gah, &internal) != IOS_SUCCESS);
+	CU_ASSERT(ios_gah_get_info(NULL, ios_gah, &internal) != -DER_SUCCESS);
 	CU_ASSERT(ios_gah_get_info(ios_gah_store, NULL, &internal) !=
-			IOS_SUCCESS);
+			-DER_SUCCESS);
 	CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah, NULL) !=
-			IOS_SUCCESS);
+			-DER_SUCCESS);
 
 	for (ii = 0; ii < num_handles; ii++) {
 		void *data = NULL;
 
-		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data) == IOS_SUCCESS);
+		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &data)
+			  == -DER_SUCCESS);
 		CU_ASSERT(data != NULL);
 		free(data);
 		CU_ASSERT_FATAL(ios_gah_deallocate(ios_gah_store, ios_gah + ii)
-				== IOS_SUCCESS);
+				== -DER_SUCCESS);
 	}
 	CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah, &internal) !=
-			IOS_SUCCESS);
+			-DER_SUCCESS);
 
 	ios_gah_destroy(ios_gah_store);
 	free(ios_gah);

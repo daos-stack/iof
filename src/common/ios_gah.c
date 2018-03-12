@@ -56,7 +56,7 @@
  * \param gah_store	[IN/OUT]	pointer to the gah_store
  * \param delta		[IN]		number of entries to add
  */
-static enum ios_return
+static int
 ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 {
 	int ii;
@@ -67,13 +67,13 @@ ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 
 	D_ALLOC_ARRAY(new_data, delta);
 	if (new_data == NULL)
-		return IOS_ERR_NOMEM;
+		return -DER_NOMEM;
 	gah_store->ptr_array = (struct ios_gah_ent **)
 		realloc(gah_store->ptr_array,
 			new_cap * sizeof(struct ios_gah_ent));
 	if (gah_store->ptr_array == NULL) {
 		D_FREE(new_data);
-		return IOS_ERR_NOMEM;
+		return -DER_NOMEM;
 	}
 	/* setup the pointer array */
 	for (ii = 0; ii < delta; ii++)
@@ -88,7 +88,7 @@ ios_gah_store_increase_capacity(struct ios_gah_store *gah_store, int delta)
 	}
 	gah_store->capacity = new_cap;
 
-	return IOS_SUCCESS;
+	return -DER_SUCCESS;
 }
 
 /**
@@ -161,19 +161,19 @@ struct ios_gah_store *ios_gah_init(void)
 	return gah_store;
 }
 
-enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
+int ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 {
 	int ii = 0;
 
 	if (ios_gah_store == NULL)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	/* check for active handles */
 	if (ios_gah_store->size != 0)
-		return IOS_ERR_OTHER;
+		return -DER_BUSY;
 
 	for (ii = 0; ii < ios_gah_store->capacity; ii++)
 		if (ios_gah_store->ptr_array[ii]->in_use)
-			return IOS_ERR_OTHER;
+			return -DER_BUSY;
 
 	/* free the chunck allocated on init */
 	D_FREE(ios_gah_store->ptr_array[0]);
@@ -185,24 +185,24 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 	D_FREE(ios_gah_store->ptr_array);
 	D_FREE(ios_gah_store);
 
-	return IOS_SUCCESS;
+	return -DER_SUCCESS;
 }
 
-enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
-				 struct ios_gah *gah, int self_rank, int base,
-				 void *arg)
+int ios_gah_allocate(struct ios_gah_store *gah_store,
+		     struct ios_gah *gah, int self_rank, int base,
+		     void *arg)
 {
 	struct ios_gah_ent *ent;
-	enum ios_return rc = IOS_SUCCESS;
+	int rc = -DER_SUCCESS;
 
 	if (gah_store == NULL)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	if (gah == NULL)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	if (d_list_empty(&gah_store->free_list)) {
 		rc = ios_gah_store_increase_capacity(gah_store,
 						     IOS_GAH_STORE_DELTA);
-		if (rc != IOS_SUCCESS)
+		if (rc != -DER_SUCCESS)
 			return rc;
 	}
 
@@ -224,30 +224,30 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *gah_store,
 
 	gah_store->size++;
 
-	return IOS_SUCCESS;
+	return -DER_SUCCESS;
 }
 
-enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
-				   struct ios_gah *gah)
+int ios_gah_deallocate(struct ios_gah_store *gah_store,
+		       struct ios_gah *gah)
 {
 	int ret;
 
 	if (!gah_store)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	if (!gah)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	ret = ios_gah_check_crc(gah);
-	if (ret != IOS_SUCCESS)
+	if (ret != -DER_SUCCESS)
 		return ret;
 	ret = ios_gah_check_version(gah);
-	if (ret != IOS_SUCCESS)
+	if (ret != -DER_SUCCESS)
 		return ret;
 	if (gah->fid >= gah_store->capacity)
-		return IOS_ERR_OUT_OF_RANGE;
+		return -DER_OVERFLOW;
 	if (!(gah_store->ptr_array[gah->fid]->in_use))
-		return IOS_ERR_EXPIRED;
+		return -DER_NONEXIST;
 	if (gah_store->ptr_array[gah->fid]->revision != gah->revision)
-		return IOS_ERR_EXPIRED;
+		return -DER_NONEXIST;
 
 	gah_store->ptr_array[gah->fid]->in_use = false;
 
@@ -257,53 +257,53 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *gah_store,
 
 	gah_store->size--;
 
-	return IOS_SUCCESS;
+	return -DER_SUCCESS;
 }
 
-enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
-				 struct ios_gah *gah, void **arg)
+int ios_gah_get_info(struct ios_gah_store *gah_store,
+		     struct ios_gah *gah, void **arg)
 {
-	enum ios_return ret = IOS_SUCCESS;
+	int ret;
 
 	if (!arg)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	*arg = NULL;
 	if (!gah_store)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	if (!gah)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	ret = ios_gah_check_crc(gah);
-	if (ret != IOS_SUCCESS)
+	if (ret != -DER_SUCCESS)
 		return ret;
 	ret = ios_gah_check_version(gah);
-	if (ret != IOS_SUCCESS)
+	if (ret != -DER_SUCCESS)
 		return ret;
 	if (gah->fid >= gah_store->capacity)
-		return IOS_ERR_OUT_OF_RANGE;
+		return -DER_OVERFLOW;
 	if (!(gah_store->ptr_array[gah->fid]->in_use))
-		return IOS_ERR_EXPIRED;
+		return -DER_NONEXIST;
 	if (gah_store->ptr_array[gah->fid]->revision != gah->revision)
-		return IOS_ERR_EXPIRED;
+		return -DER_NONEXIST;
 	*arg = (void *)(gah_store->ptr_array[gah->fid]->arg);
 
-	return IOS_SUCCESS;
+	return -DER_SUCCESS;
 }
 
-enum ios_return ios_gah_check_crc(struct ios_gah *gah)
+int ios_gah_check_crc(struct ios_gah *gah)
 {
 	uint8_t tmp_crc;
 
 	if (gah == NULL)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	tmp_crc = my_crc8((uint8_t *)gah, 120 / 8);
 
-	return (tmp_crc == gah->crc) ? IOS_SUCCESS : IOS_ERR_CRC_MISMATCH;
+	return (tmp_crc == gah->crc) ? -DER_SUCCESS : -DER_NO_HDL;
 }
 
-enum ios_return ios_gah_check_version(struct ios_gah *gah)
+int ios_gah_check_version(struct ios_gah *gah)
 {
 	if (gah == NULL)
-		return IOS_ERR_INVALID_PARAM;
+		return -DER_INVAL;
 	return (gah->version == IOS_GAH_VERSION)
-		? IOS_SUCCESS : IOS_ERR_VERSION_MISMATCH;
+		? -DER_SUCCESS : -DER_MISMATCH;
 }

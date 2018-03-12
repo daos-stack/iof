@@ -52,22 +52,7 @@
 #include <stdbool.h>
 
 #include <gurt/list.h>
-
-/**
- * GAH error numbers.
- *
- * Return codes used for GAH only
- */
-enum ios_return {
-	IOS_SUCCESS = 0,		/**< No error */
-	IOS_ERR_INVALID_PARAM,		/**< Invalid parameter */
-	IOS_ERR_CRC_MISMATCH,		/**< CRC mismatch */
-	IOS_ERR_VERSION_MISMATCH,	/**< version mismatch */
-	IOS_ERR_NOMEM,			/**< Memory not available */
-	IOS_ERR_OUT_OF_RANGE,		/**< Handle ID out of range */
-	IOS_ERR_EXPIRED,		/**< Handle has expired */
-	IOS_ERR_OTHER			/**< All other errors */
-};
+#include <gurt/errno.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -138,9 +123,9 @@ struct ios_gah_store *ios_gah_init(void);
 /**
  * \param[in] ios_gah_store	Global access handle data structure.
  *
- * \retval IOS_SUCCESS		success
+ * \retval -DER_SUCCESS		success
  */
-enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store);
+int ios_gah_destroy(struct ios_gah_store *ios_gah_store);
 
 /**
  * Allocates a new Global Access Handle
@@ -153,11 +138,11 @@ enum ios_return ios_gah_destroy(struct ios_gah_store *ios_gah_store);
  * \param[in] arg		User pointer.  This an be retrieved by
  *				ios_get_get_info() later on.
  *
- * \retval IOS_SUCCESS		success
+ * \retval -DER_SUCCESS		success
  */
-enum ios_return ios_gah_allocate(struct ios_gah_store *ios_gah_store,
-				 struct ios_gah *gah, int self_rank, int base,
-				 void *arg);
+int ios_gah_allocate(struct ios_gah_store *ios_gah_store,
+		     struct ios_gah *gah, int self_rank, int base,
+		     void *arg);
 
 /**
  * Deallocates a global access handle.
@@ -166,10 +151,10 @@ enum ios_return ios_gah_allocate(struct ios_gah_store *ios_gah_store,
  * \param[in,out] gah		On exit, the fid contained in GAH is marked
  *				available again
  *
- * \retval IOS_SUCCESS		success
+ * \retval -DER_SUCCESS		success
  */
-enum ios_return ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
-				   struct ios_gah *gah);
+int ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
+		       struct ios_gah *gah);
 
 /**
  * Retrieve opaque data structure corresponding to a given global access handle.
@@ -180,35 +165,33 @@ enum ios_return ios_gah_deallocate(struct ios_gah_store *ios_gah_store,
  *				data struture associated with gah. On
  *				failure, equals NULL
  *
- * \retval IOS_SUCCESS		success
+ * \retval -DER_SUCCESS		success
  */
-enum ios_return ios_gah_get_info(struct ios_gah_store *gah_store,
-				 struct ios_gah *gah, void **arg);
+int ios_gah_get_info(struct ios_gah_store *gah_store,
+		     struct ios_gah *gah, void **arg);
+
 /**
  * Validates if the crc in *gah is correct.
  *
- * \param[in] gah			On entry, *gah contains a global access
- *					handle.
- * \retval IOS_SUCCESS			success
- * \retval IOS_ERR_CRC_MISMATCH		CRC is incorrect
- * \retval IOS_ERR_INVALID_PARAM	Null input
+ * \param[in] gah		On entry, *gah contains a global access handle.
+ * \retval -DER_SUCCESS		success
+ * \retval -DER_NO_HDL		CRC is incorrect
+ * \retval -DER_INVAL		Null input
  */
-enum ios_return ios_gah_check_crc(struct ios_gah *gah);
+int ios_gah_check_crc(struct ios_gah *gah);
 
 /**
  * Validates if the version in *gah and the and the version of the protocol in
  * use match.
  *
- * \param[in] gah			On entry, *gah contains a global access
- *					handle.
+ * \param[in] gah		On entry, *gah contains a global access handle
  *
- * \return				status
- * \retval IOS_SUCCESS			version match
- * \retval IOS_ERR_VERSION_MISMATCH	version mistatch
- * \retval IOS_ERR_INVALID_PARAM	NULL input
+ * \retval -DER_SUCCESS		version match
+ * \retval -DER_MISMATCH	version mistatch
+ * \retval -DER_INVAL		NULL input
 
  */
-enum ios_return ios_gah_check_version(struct ios_gah *gah);
+int ios_gah_check_version(struct ios_gah *gah);
 
 #define GAH_PRINT_STR "Gah(%" PRIu8 ".%" PRIu32 ".%" PRIu64 ")"
 #define GAH_PRINT_VAL(P) (P).root, (P).fid, (uint64_t)(P).revision

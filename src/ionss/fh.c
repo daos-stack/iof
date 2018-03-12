@@ -69,7 +69,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 	IOF_TRACE_INFO(fh, GAH_PRINT_FULL_STR, GAH_PRINT_FULL_VAL(fh->gah));
 
-	return IOS_SUCCESS;
+	return 0;
 }
 
 void ios_fh_decref(struct ionss_file_handle *fh, int count)

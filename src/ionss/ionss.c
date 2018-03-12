@@ -348,7 +348,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
 	pthread_rwlock_unlock(&base.gah_rwlock);
 
-	if (rc != IOS_SUCCESS) {
+	if (rc != -DER_SUCCESS) {
 		closedir(local_handle->h_dir);
 		D_FREE(local_handle);
 		D_GOTO(out, out->err = IOF_ERR_INTERNAL);
@@ -580,7 +580,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 	IOF_LOG_INFO(GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
 
 	rc = ios_gah_get_info(base.gs, &in->gah, (void **)&handle);
-	if (rc != IOS_SUCCESS)
+	if (rc != -DER_SUCCESS)
 		IOF_LOG_DEBUG("Failed to load DIR* from gah %p %d",
 			      &in->gah, rc);
 
