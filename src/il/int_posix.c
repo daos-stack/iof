@@ -151,6 +151,9 @@ static int find_projections(void)
 	}
 
 	ionss_grps = calloc(ionss_count, sizeof(*ionss_grps));
+	if (!ionss_grps)
+		return 1;
+
 	for (i = 0; i < ionss_count; i++) {
 		struct iof_service_group *grp_info = &ionss_grps[i];
 
