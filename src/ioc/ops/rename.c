@@ -68,7 +68,7 @@ ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, rename), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);
 		D_GOTO(err, ret = ENOMEM);
 	}

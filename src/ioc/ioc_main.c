@@ -701,7 +701,7 @@ gh_reset(void *arg)
 			    FS_TO_OP(req->fs_handle, getattr),
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
 		return false;
 	}
 	crt_req_addref(req->request.rpc);
@@ -726,7 +726,7 @@ close_reset(void *arg)
 			    FS_TO_OP(req->fs_handle, close),
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(req, "Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
 		return false;
 	}
 	crt_req_addref(req->request.rpc);
@@ -867,7 +867,7 @@ rb_reset(void *arg)
 	rc = crt_req_create(rb->fs_handle->proj.crt_ctx, NULL,
 			    FS_TO_OP(fs_handle, readx), &rb->rpc);
 	if (rc || !rb->rpc) {
-		IOF_TRACE_ERROR(rb, "Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(rb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(rb, lb);
 		return false;
 	}
@@ -924,7 +924,7 @@ wb_reset(void *arg)
 	rc = crt_req_create(wb->fs_handle->proj.crt_ctx, NULL,
 			    FS_TO_OP(fs_handle, writex), &wb->rpc);
 	if (rc || !wb->rpc) {
-		IOF_TRACE_ERROR(wb, "Could not create request, rc = %u", rc);
+		IOF_TRACE_ERROR(wb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(wb, lb);
 		return false;
 	}
@@ -1888,8 +1888,9 @@ static void iof_finish(void *arg)
 				     &group->grp.psr_ep,
 				     DETACH_OP, &rpc);
 		if (ret || !rpc) {
-			IOF_TRACE_ERROR(iof_state, "Could not create detach req"
-					" ret = %d", ret);
+			IOF_TRACE_ERROR(iof_state,
+					"Could not create detach req rc = %d",
+					ret);
 			iof_tracker_signal(&tracker);
 			continue;
 		}

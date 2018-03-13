@@ -132,7 +132,7 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
 			    FS_TO_OP(fs_handle, writex), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);
 		*errcode = EIO;
 		return -1;
@@ -177,7 +177,7 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 
 	rc = crt_req_send(rpc, write_cb, &reply);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
 		*errcode = EIO;
 		return -1;
 	}

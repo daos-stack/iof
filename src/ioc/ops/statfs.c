@@ -86,7 +86,7 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 			    &fs_handle->proj.grp->psr_ep,
 			    FS_TO_OP(fs_handle, statfs), &rpc);
 	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %u",
+		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);
 		ret = EIO;
 		goto out_err;
@@ -97,7 +97,7 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 
 	rc = crt_req_send(rpc, statfs_ll_cb, req);
 	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %u", rc);
+		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
 		ret = EIO;
 		goto out_err;
 	}

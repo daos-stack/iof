@@ -148,7 +148,7 @@ shutdown_handler(crt_rpc_t *rpc)
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 	shutdown_impl();
 }
 
@@ -171,7 +171,7 @@ cnss_detach_handler(crt_rpc_t *rpc)
 	IOF_LOG_DEBUG("CNSS detach received: decref from %d", old_count);
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 
 	if (old_count > 1)
 		return;
@@ -305,7 +305,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -362,7 +362,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 
 	if (parent)
 		ios_fh_decref(parent, 1);
@@ -400,7 +400,7 @@ out:
 	rc = crt_reply_send(cb_info->bci_bulk_desc->bd_rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	crt_req_decref(cb_info->bci_bulk_desc->bd_rpc);
 
@@ -565,7 +565,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR(" response not sent, rc = %u", rc);
+		IOF_LOG_ERROR(" response not sent, rc = %d", rc);
 
 	D_FREE(replies);
 }
@@ -599,7 +599,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 }
 
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
@@ -974,7 +974,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (projection)
 		iof_pool_restock(projection->fh_pool);
@@ -1075,7 +1075,7 @@ iof_close_handler(crt_rpc_t *rpc)
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	handle = ios_fh_find(&base, &in->gah);
 
@@ -1113,7 +1113,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -1147,7 +1147,7 @@ out:
 	rc = crt_reply_send(rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -1410,7 +1410,7 @@ out:
 	rc = crt_reply_send(rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, rc = %u", rc);
+		IOF_LOG_ERROR("response not sent, rc = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -1468,7 +1468,7 @@ out:
 
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (old_parent)
 		ios_fh_decref(old_parent, 1);
@@ -1565,7 +1565,7 @@ iof_readlink_handler(crt_rpc_t *rpc)
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (file)
 		ios_fh_decref(file, 1);
@@ -1802,7 +1802,7 @@ out:
 	rc = crt_reply_send(awd->rpc);
 
 	if (rc)
-		IOF_TRACE_ERROR(awd, "response not sent, ret = %u", rc);
+		IOF_TRACE_ERROR(awd, "response not sent, ret = %d", rc);
 
 	crt_req_decref(awd->rpc);
 
@@ -1886,7 +1886,7 @@ out:
 	rc = crt_reply_send(rpc);
 
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);
@@ -2096,7 +2096,7 @@ static void iof_statfs_handler(crt_rpc_t *rpc)
 out:
 	rc = crt_reply_send(rpc);
 	if (rc)
-		IOF_LOG_ERROR("response not sent, ret = %u", rc);
+		IOF_LOG_ERROR("response not sent, ret = %d", rc);
 
 	if (handle)
 		ios_fh_decref(handle, 1);

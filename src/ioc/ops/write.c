@@ -103,7 +103,7 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 
 	rc = crt_req_set_endpoint(wb->rpc, &handle->common.ep);
 	if (rc) {
-		IOF_TRACE_ERROR(wb->req, "Could not set endpoint, rc = %u",
+		IOF_TRACE_ERROR(wb->req, "Could not set endpoint, rc = %d",
 				rc);
 		D_GOTO(err, rc = EIO);
 	}
