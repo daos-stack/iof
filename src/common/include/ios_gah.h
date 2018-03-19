@@ -53,6 +53,7 @@
 
 #include <gurt/list.h>
 #include <gurt/errno.h>
+#include <gurt/common.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpedantic"
@@ -107,6 +108,8 @@ struct ios_gah_store {
 	int size;
 	/** total number of fids, whether used and unused */
 	int capacity;
+	/** local rank */
+	d_rank_t rank;
 	/** storage for the actual file entries */
 	struct ios_gah_ent *data;
 	/** array of pointers to file entries */
@@ -117,8 +120,11 @@ struct ios_gah_store {
 
 /**
  * Allocate new GAH store to creating GAHs
+ *
+ * \param[in] rank		Rank of the calling process.
+ * \returns			Pointer to ios_gah_store struct.
  */
-struct ios_gah_store *ios_gah_init(void);
+struct ios_gah_store *ios_gah_init(d_rank_t rank);
 
 /**
  * \param[in] ios_gah_store	Global access handle data structure.
@@ -132,7 +138,19 @@ int ios_gah_destroy(struct ios_gah_store *ios_gah_store);
  *
  * \param[in] ios_gah_store	Global access handle data structure.
  * \param[out] gah		On return, *gah contains a global access handle.
- * \param[in] self_rank		Rank of the calling process.
+ * \param[in] arg		User pointer.  This an be retrieved by
+ *				ios_get_get_info() later on.
+ *
+ * \retval -DER_SUCCESS		success
+ */
+int ios_gah_allocate(struct ios_gah_store *ios_gah_store,
+		     struct ios_gah *gah, void *arg);
+
+/**
+ * Allocates a new Global Access Handle with custom base.
+ *
+ * \param[in] ios_gah_store	Global access handle data structure.
+ * \param[out] gah		On return, *gah contains a global access handle.
  * \param[in] base		Rank of the process which serves the first byte
  *				of the file.
  * \param[in] arg		User pointer.  This an be retrieved by
@@ -140,9 +158,9 @@ int ios_gah_destroy(struct ios_gah_store *ios_gah_store);
  *
  * \retval -DER_SUCCESS		success
  */
-int ios_gah_allocate(struct ios_gah_store *ios_gah_store,
-		     struct ios_gah *gah, int self_rank, int base,
-		     void *arg);
+int ios_gah_allocate_base(struct ios_gah_store *ios_gah_store,
+			  struct ios_gah *gah, d_rank_t base, void *arg);
+
 
 /**
  * Deallocates a global access handle.

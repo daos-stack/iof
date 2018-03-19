@@ -127,7 +127,7 @@ static uint8_t my_crc8(uint8_t *data, size_t len)
  * setup the linked-lists.
  *
  */
-struct ios_gah_store *ios_gah_init(void)
+struct ios_gah_store *ios_gah_init(d_rank_t rank)
 {
 	struct ios_gah_store *gah_store;
 	int ii;
@@ -137,6 +137,7 @@ struct ios_gah_store *ios_gah_init(void)
 		return NULL;
 
 	gah_store->size = 0;
+	gah_store->rank = rank;
 	gah_store->capacity = IOS_GAH_STORE_INIT_CAPACITY;
 	D_ALLOC_ARRAY(gah_store->data, IOS_GAH_STORE_INIT_CAPACITY);
 	if (gah_store->data == NULL) {
@@ -192,15 +193,13 @@ int ios_gah_destroy(struct ios_gah_store *ios_gah_store)
 	return -DER_SUCCESS;
 }
 
-int ios_gah_allocate(struct ios_gah_store *gah_store,
-		     struct ios_gah *gah, int self_rank, int base,
-		     void *arg)
+int ios_gah_allocate_base(struct ios_gah_store *gah_store,
+			  struct ios_gah *gah, d_rank_t base,
+			  void *arg)
 {
 	struct ios_gah_ent *ent;
 	int rc = -DER_SUCCESS;
 
-	if (gah_store == NULL)
-		return -DER_INVAL;
 	if (gah == NULL)
 		return -DER_INVAL;
 	if (d_list_empty(&gah_store->free_list)) {
@@ -222,13 +221,19 @@ int ios_gah_allocate(struct ios_gah_store *gah_store,
 	gah->reserved = 0;
 	/* setup the gah */
 	gah->version = IOS_GAH_VERSION;
-	gah->root = self_rank;
+	gah->root = gah_store->rank;
 	gah->base = base;
 	gah->crc = my_crc8((uint8_t *)gah, 120 / 8);
 
 	gah_store->size++;
 
 	return -DER_SUCCESS;
+}
+
+int ios_gah_allocate(struct ios_gah_store *gah_store,
+		     struct ios_gah *gah, void *arg)
+{
+	return ios_gah_allocate_base(gah_store, gah, gah_store->rank, arg);
 }
 
 int ios_gah_deallocate(struct ios_gah_store *gah_store,
@@ -282,6 +287,8 @@ int ios_gah_get_info(struct ios_gah_store *gah_store,
 	ret = ios_gah_check_version(gah);
 	if (ret != -DER_SUCCESS)
 		return ret;
+	if (gah_store->rank != gah->root)
+		return -DER_INVAL;
 	if (gah->fid >= gah_store->capacity)
 		return -DER_OVERFLOW;
 	if (!(gah_store->ptr_array[gah->fid]->in_use))

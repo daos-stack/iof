@@ -62,7 +62,7 @@ static void test_ios_gah_init(void)
 {
 	struct ios_gah_store *ios_gah_store = NULL;
 
-	ios_gah_store = ios_gah_init();
+	ios_gah_store = ios_gah_init(4);
 	CU_ASSERT(ios_gah_store != NULL);
 	CU_ASSERT_FATAL(ios_gah_destroy(ios_gah_store) == -DER_SUCCESS);
 }
@@ -72,7 +72,7 @@ static void test_ios_gah_destroy(void)
 {
 	struct ios_gah_store *ios_gah_store = NULL;
 
-	ios_gah_store = ios_gah_init();
+	ios_gah_store = ios_gah_init(4);
 	CU_ASSERT(ios_gah_store != NULL);
 	if (ios_gah_store == NULL)
 		return;
@@ -90,8 +90,9 @@ static void test_ios_gah_allocate(void)
 	int num_handles = 1024 * 20;
 
 	CU_ASSERT(sizeof(struct ios_gah) * 8 == 128);
-	ios_gah_store = ios_gah_init();
+	ios_gah_store = ios_gah_init(4);
 	CU_ASSERT_FATAL(ios_gah_store != NULL);
+	CU_ASSERT(ios_gah_store->rank == 4)
 	ios_gah = (struct ios_gah *)calloc(num_handles, sizeof(struct
 					      ios_gah));
 	CU_ASSERT_FATAL(ios_gah != NULL);
@@ -101,15 +102,13 @@ static void test_ios_gah_allocate(void)
 		void *info = NULL;
 
 		CU_ASSERT_FATAL(data != NULL);
-		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
+		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, data);
 		CU_ASSERT(ios_gah_get_info(ios_gah_store, ios_gah + ii, &info)
 			  == -DER_SUCCESS);
 		CU_ASSERT(info == data);
 	}
 	CU_ASSERT(rc == -DER_SUCCESS);
-	rc = ios_gah_allocate(NULL, ios_gah, 0, 0, NULL);
-	CU_ASSERT(rc == -DER_INVAL);
-	rc = ios_gah_allocate(ios_gah_store, NULL, 0, 0, NULL);
+	rc = ios_gah_allocate(ios_gah_store, NULL, NULL);
 	CU_ASSERT(rc == -DER_INVAL);
 
 	for (ii = 0; ii < num_handles; ii++) {
@@ -138,7 +137,7 @@ static void test_ios_gah_misc(void)
 	void *internal = NULL;
 
 	CU_ASSERT(sizeof(struct ios_gah) * 8 == 128);
-	ios_gah_store = ios_gah_init();
+	ios_gah_store = ios_gah_init(4);
 	CU_ASSERT_FATAL(ios_gah_store != NULL);
 	ios_gah = (struct ios_gah *)calloc(num_handles, sizeof(struct
 					      ios_gah));
@@ -148,7 +147,7 @@ static void test_ios_gah_misc(void)
 		void *data = malloc(512);
 
 		CU_ASSERT_FATAL(data != NULL);
-		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, 0, 0, data);
+		rc |= ios_gah_allocate(ios_gah_store, ios_gah + ii, data);
 	}
 	CU_ASSERT(rc == -DER_SUCCESS);
 

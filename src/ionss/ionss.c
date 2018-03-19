@@ -345,7 +345,7 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	local_handle->offset = 0;
 
 	pthread_rwlock_wrlock(&base.gah_rwlock);
-	rc = ios_gah_allocate(base.gs, &out->gah, 0, 0, local_handle);
+	rc = ios_gah_allocate(base.gs, &out->gah, local_handle);
 	pthread_rwlock_unlock(&base.gah_rwlock);
 
 	if (rc != -DER_SUCCESS) {
@@ -2657,7 +2657,24 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
 
-	base.gs = ios_gah_init();
+	/*initialize CaRT*/
+	ret = crt_init(base.group_name, CRT_FLAG_BIT_SERVER);
+	if (ret) {
+		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
+		goto cleanup;
+	}
+
+	base.primary_group = crt_group_lookup(base.group_name);
+	if (base.primary_group == NULL) {
+		IOF_LOG_ERROR("Failed to look up primary group");
+		ret = 1;
+		goto cleanup;
+	}
+	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
+	crt_group_rank(base.primary_group, &base.my_rank);
+	crt_group_size(base.primary_group, &base.num_ranks);
+
+	base.gs = ios_gah_init(base.my_rank);
 
 	/*
 	 * Populate the projection_array with every projection.
@@ -2779,23 +2796,6 @@ int main(int argc, char **argv)
 		IOF_LOG_ERROR("File System look up failed with ret = %d", ret);
 		goto cleanup;
 	}
-
-	/*initialize CaRT*/
-	ret = crt_init(base.group_name, CRT_FLAG_BIT_SERVER);
-	if (ret) {
-		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
-		goto cleanup;
-	}
-
-	base.primary_group = crt_group_lookup(base.group_name);
-	if (base.primary_group == NULL) {
-		IOF_LOG_ERROR("Failed to look up primary group");
-		ret = 1;
-		goto cleanup;
-	}
-	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
-	crt_group_rank(base.primary_group, &base.my_rank);
-	crt_group_size(base.primary_group, &base.num_ranks);
 
 	ret = crt_context_create(&base.crt_ctx);
 	if (ret) {

@@ -55,7 +55,7 @@ int ios_fh_alloc(struct ios_projection *projection,
 
 	pthread_rwlock_wrlock(&base->gah_rwlock);
 
-	rc = ios_gah_allocate(base->gs, &fh->gah, 0, 0, fh);
+	rc = ios_gah_allocate(base->gs, &fh->gah, fh);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
@@ -118,8 +118,9 @@ ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 
 	rc = ios_gah_get_info(base->gs, gah, (void **)&fh);
 	if (rc || !fh) {
-		IOF_LOG_ERROR("Failed to load fh from " GAH_PRINT_FULL_STR,
-			      GAH_PRINT_FULL_VAL(*gah));
+		IOF_TRACE_ERROR(&base,
+				"Failed to load fh from " GAH_PRINT_FULL_STR " %d %s",
+				GAH_PRINT_FULL_VAL(*gah), rc, d_errstr(rc));
 		D_GOTO(out, fh = NULL);
 	}
 
@@ -144,8 +145,9 @@ ios_dirh_find(struct ios_base *base, struct ios_gah *gah)
 
 	rc = ios_gah_get_info(base->gs, gah, (void **)&dirh);
 	if (rc || !dirh) {
-		IOF_LOG_ERROR("Failed to load dirh from " GAH_PRINT_FULL_STR,
-			      GAH_PRINT_FULL_VAL(*gah));
+		IOF_TRACE_ERROR(&base,
+				"Failed to load dirh from " GAH_PRINT_FULL_STR " %d %s",
+				GAH_PRINT_FULL_VAL(*gah), rc, d_errstr(rc));
 		D_GOTO(out, dirh = NULL);
 	}
 
