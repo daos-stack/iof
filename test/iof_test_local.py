@@ -54,6 +54,7 @@ import stat
 import time
 import shutil
 import getpass
+import signal
 import subprocess
 import tempfile
 import yaml
@@ -238,6 +239,7 @@ class Testlocal(unittest.TestCase,
                   [{"full_path": self.export_dir},
                    {"full_path": '/usr'}]}
         config['projections'][0]['mount_path'] = 'exp'
+        config['projections'][0]['failover'] = 'disable'
 
         config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
                                                   prefix="ionss_",
@@ -286,9 +288,11 @@ class Testlocal(unittest.TestCase,
 
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
+        cmd.append('--continuous')
         cmd.extend(['-n', '1',
                     '-x', 'D_LOG_MASK=%s' % self.log_mask,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
+                    '-x', 'CRT_TIMEOUT=11',
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface])
         if log_to_file:
             cnss_file = os.path.join(self.log_path, 'cnss.log')
@@ -810,6 +814,54 @@ class Testlocal(unittest.TestCase,
 
         return subtest_count
 
+    @unittest.skip("Does not work under CI")
+    def test_failover_stat(self):
+        """Basic failover test
+
+        Launch IOF as normal, kill one IONSS process and then call
+        stat on each projection.  This should see EHOSTDOWN if
+        failover is disabled and EINVAL if it is enabled (but not
+        implemented)
+        """
+
+        procs = os.listdir('/proc')
+        iprocs = []
+        for proc in procs:
+            ppath = '/proc/%s/exe' % proc
+            if not os.path.exists(ppath):
+                continue
+
+            dest = os.readlink(ppath)
+            exe = os.path.basename(dest)
+            if exe != 'ionss':
+                continue
+
+            iprocs.append(int(proc))
+
+        self.logger.info('pids are %s', iprocs)
+        if len(iprocs) != self.ionss_count:
+            self.fail("Could not find correct number of processes")
+
+        for ipid in range(1, self.ionss_count):
+            if iprocs[0] + ipid != iprocs[ipid]:
+                self.fail("Non-contigous pids")
+
+        os.kill(iprocs[0], signal.SIGINT)
+        while os.path.exists('/proc/%d' % iprocs[0]):
+            time.sleep(1)
+
+        fail = None
+        for test_dir in self.mount_dirs:
+            self.logger.info(test_dir)
+            try:
+                r = os.stat(test_dir)
+                self.logger.info(r)
+            except OSError as e:
+                self.logger.info('stat returned errno %d', e.errno)
+                fail = e.errno
+        if fail is not None:
+            self.fail('Failed with errno %d' % fail)
+
     def clean_export_dir(self):
         """Clean up files created in backend fs"""
         idir = os.path.join(self.export_dir)
@@ -852,6 +904,9 @@ class Testlocal(unittest.TestCase,
 
             # Skip the iofmod methods as these are called directly later.
             if 'iofmod' in possible:
+                continue
+
+            if possible.startswith('test_failover'):
                 continue
 
             obj = getattr(self, possible)

@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,7 +61,7 @@ statfs_ll_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	fuse_reply_statfs(req, out->data.iov_buf);
+	IOF_FUSE_REPLY_STATFS(req, out->data.iov_buf);
 }
 
 void
@@ -80,7 +80,7 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 		goto out_err;
 	}
 
-	IOF_LOG_INFO("statfs");
+	IOF_TRACE_INFO(fs_handle, "statfs %lu", ino);
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
 			    &fs_handle->proj.grp->psr_ep,

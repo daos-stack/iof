@@ -122,14 +122,15 @@ int ioc_simple_resend(struct ioc_request *request)
  */
 static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 {
-	int i, rc;
-	d_rank_t evicted_psr, updated_psr, new_psr;
+	d_rank_t updated_psr;
 	d_rank_list_t *psr_list = NULL;
 	struct iof_group_info *g = NULL;
 	struct iof_state *iof_state = arg;
 	struct iof_projection_info *fs_handle;
+	int i, crc, rc;
 
-	IOF_TRACE_INFO(arg, "Eviction handler, Group: %s; Rank: %u",
+	IOF_TRACE_INFO(iof_state,
+		       "Eviction handler, Group: %s; Rank: %u",
 		       group->cg_grpid, rank);
 
 	for (i = 0; i < iof_state->num_groups; i++) {
@@ -142,37 +143,30 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	}
 
 	if (g == NULL) {
-		IOF_TRACE_INFO(arg, "Not an ionss group: %s", group->cg_grpid);
+		IOF_TRACE_INFO(iof_state,
+			       "Not an ionss group: %s", group->cg_grpid);
 		return;
 	}
 
-	rc = crt_lm_group_psr(group, &psr_list);
-	IOF_TRACE_INFO(arg, "ListPtr: %p, List: %p, Ranks: %d",
-		       psr_list, psr_list ? psr_list->rl_ranks : 0,
-		       psr_list ? psr_list->rl_nr : -1);
-	/* Sanity Check */
-	if (rc || !psr_list || !psr_list->rl_ranks) {
-		IOF_TRACE_ERROR(arg, "Invalid rank list, ret = %d", rc);
-		if (!rc)
-			rc = -EINVAL;
-	}
-	if (!rc && psr_list->rl_nr == 0) {
-		/* No more ranks remaining. */
-		IOF_TRACE_ERROR(arg, "No PSRs left to failover.");
-		rc = -EHOSTDOWN;
-	} else {
-		new_psr = psr_list->rl_ranks[0];
-	}
+	crc = crt_lm_group_psr(group, &psr_list);
+	if (crc != -DER_SUCCESS) {
+		IOF_TRACE_WARNING(iof_state,
+				  "Invalid rank list, ret = %d", crc);
+		g->grp.enabled = false;
+		if (crc == -DER_NONEXIST)
+			rc = EHOSTDOWN;
+		else
+			rc = EINVAL;
 
-	if (psr_list != NULL)
+		IOF_TRACE_WARNING(iof_state,
+				  "Group %s disabled, rc=%d",
+				  group->cg_grpid, rc);
+	} else {
+		d_rank_t new_psr = psr_list->rl_ranks[0];
+		d_rank_t evicted_psr = rank;
+
 		d_rank_list_free(psr_list);
 
-	if (rc) {
-		IOF_TRACE_WARNING(g, "Group %s disabled, rc=%d",
-				  group->cg_grpid, rc);
-		g->grp.enabled = false;
-	} else {
-		evicted_psr = rank;
 		atomic_compare_exchange(&g->grp.pri_srv_rank,
 					evicted_psr, new_psr);
 		updated_psr = atomic_load_consume(&g->grp.pri_srv_rank);
@@ -194,21 +188,25 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		if (fs_handle->proj.grp != &g->grp)
 			continue;
 
+		if (fs_handle->offline_reason)
+			continue;
+
 		if (!g->grp.enabled || !IOF_HAS_FAILOVER(fs_handle->flags)) {
 			IOF_TRACE_WARNING(fs_handle,
 					  "Marking projection %d offline: %s",
 					  fs_handle->fs_id,
 					  fs_handle->mnt_dir.name);
 			if (!g->grp.enabled)
-				fs_handle->offline_reason = -rc;
+				fs_handle->offline_reason = rc;
 			else
 				fs_handle->offline_reason = EHOSTDOWN;
-			continue;
 		}
 
 		/* Mark all local GAH entries as invalid */
 		pthread_mutex_lock(&fs_handle->of_lock);
 		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
+			if (fh->common.gah.root != rank)
+				continue;
 			IOF_TRACE_INFO(fs_handle,
 				       "Invalidating file " GAH_PRINT_STR " %p",
 				       GAH_PRINT_VAL(fh->common.gah), fh);
@@ -217,6 +215,8 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		pthread_mutex_unlock(&fs_handle->of_lock);
 		pthread_mutex_lock(&fs_handle->od_lock);
 		d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
+			if (dh->gah.root != rank)
+				continue;
 			IOF_TRACE_INFO(fs_handle,
 				       "Invalidating dir " GAH_PRINT_STR " %p",
 				       GAH_PRINT_VAL(dh->gah), fh);
@@ -342,14 +342,6 @@ get_info(struct iof_state *iof_state, struct iof_group_info *group,
 
 	IOF_TRACE_LINK(rpc, iof_state, "query_rpc");
 
-	rc = crt_req_set_timeout(rpc, 5);
-	if (rc != -DER_SUCCESS) {
-		IOF_TRACE_ERROR(iof_state, "Could not set timeout, rc = %d",
-				rc);
-		crt_req_decref(rpc);
-		return rc;
-	}
-
 	/* decref in query_projections */
 	crt_req_addref(rpc);
 
@@ -440,14 +432,12 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	/*initialize destination endpoint*/
 	group->grp.psr_ep.ep_grp = group->grp.dest_grp;
 	ret = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
-	IOF_TRACE_INFO(group, "ListPtr: %p, List: %p, Ranks: %d",
-		       psr_list, psr_list ? psr_list->rl_ranks : 0,
-		       psr_list ? psr_list->rl_nr : 0);
-	if (ret || !psr_list || !psr_list->rl_ranks || !psr_list->rl_nr) {
+	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(group, "Unable to access "
 				"PSR list, ret = %d", ret);
 		return false;
 	}
+
 	/* First element in the list is the PSR */
 	atomic_store_release(&group->grp.pri_srv_rank, psr_list->rl_ranks[0]);
 	group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
@@ -1123,8 +1113,14 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	IOF_TRACE_UP(&iof_state->iof_ctx, iof_state, "iof_ctx");
 
 	ret = crt_context_create(&iof_state->iof_ctx.crt_ctx);
-	if (ret) {
+	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(iof_state, "Context not created");
+		return 1;
+	}
+
+	ret = crt_context_set_timeout(iof_state->iof_ctx.crt_ctx, 7);
+	if (ret != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(iof_state, "Context timeout not set");
 		return 1;
 	}
 
@@ -1464,6 +1460,12 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
+	ret = crt_context_set_timeout(fs_handle->ctx.crt_ctx, 5);
+	if (ret != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(iof_state, "Context timeout not set");
+		D_GOTO(err, 0);
+	}
+
 	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
 	fs_handle->ctx.pool = &fs_handle->pool;
 
@@ -1609,14 +1611,8 @@ query_projections(struct iof_state *iof_state,
 			d_rank_list_t *psr_list = NULL;
 
 			rc = crt_lm_group_psr(group->grp.dest_grp, &psr_list);
-			if (rc != -DER_SUCCESS || !psr_list)
+			if (rc != -DER_SUCCESS)
 				return false;
-			if (psr_list->rl_nr < 1) {
-				IOF_TRACE_WARNING(iof_state,
-						  "No more ranks to try, giving up");
-				d_rank_list_free(psr_list);
-				return false;
-			}
 
 			IOF_TRACE_WARNING(iof_state,
 					  "Changing IONNS rank from %d to %d",

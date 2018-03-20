@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016-2017 Intel Corporation
+# Copyright (C) 2016-2018 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -839,14 +839,19 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         if procrtn != 0:
             self.fail("cart self test failed: %s" % procrtn)
 
-    @staticmethod
-    def test_statfs():
+    def test_statfs(self):
         """Invoke statfs"""
 
-        #for test_dir in common_methods.import_list():
+        fail = None
         for test_dir in import_list():
-            cmd = ['df', test_dir]
-            os.system(' '.join(cmd))
+            try:
+                r = os.statvfs(test_dir)
+                print(r)
+            except OSError as e:
+                print('Failed with errno %d' % e.errno)
+                fail = e.errno
+        if fail is not None:
+            self.fail('Failed with errno %d' % fail)
 
     def test_use_ino(self):
         """Test that stat returns correct information"""
