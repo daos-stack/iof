@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +46,7 @@ static int iof_log_allocfacility(const char *shortname, const char *longname)
 	int handle;
 
 	handle = d_log_allocfacility(shortname, longname);
-	d_log_sync_mask();
+	d_log_sync_mask(0, false);
 
 	return handle;
 }
