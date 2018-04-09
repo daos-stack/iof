@@ -2434,7 +2434,7 @@ static void show_help(const char *prog)
 	"# and \"disable\". If \"disable\" is specified, the projection\n"
 	"# is treated as read-only even if the directory being projected\n"
 	"# is writeable by the user. Otherwise it is set according to the\n"
-	"# availabile permissions\n"
+	"# available permissions\n"
 	"writeable:              auto\n"
 	"\n"
 	"# Size of the buffer to be used for a readdir operation\n"
