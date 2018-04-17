@@ -53,6 +53,7 @@ import sys
 import stat
 import time
 import shutil
+import errno
 import getpass
 import signal
 import subprocess
@@ -814,14 +815,10 @@ class Testlocal(unittest.TestCase,
 
         return subtest_count
 
-    @unittest.skip("Does not work under CI")
-    def test_failover_stat(self):
-        """Basic failover test
+    def kill_ionss_proc(self):
+        """ Kill a ionss process.
 
-        Launch IOF as normal, kill one IONSS process and then call
-        stat on each projection.  This should see EHOSTDOWN if
-        failover is disabled and EINVAL if it is enabled (but not
-        implemented)
+        Kill the ionss process which is PSR for the first client.
         """
 
         procs = os.listdir('/proc')
@@ -850,17 +847,62 @@ class Testlocal(unittest.TestCase,
         while os.path.exists('/proc/%d' % iprocs[0]):
             time.sleep(1)
 
-        fail = None
-        for test_dir in self.mount_dirs:
+
+    def ft_stat_helper(self):
+        """Helper function for the failover_stat test"""
+
+        failed = False
+        for test_dir in reversed(self.mount_dirs):
+            if test_dir.endswith('/exp'):
+                expected = errno.EHOSTDOWN
+            else:
+                expected = errno.EIO
             self.logger.info(test_dir)
             try:
                 r = os.stat(test_dir)
                 self.logger.info(r)
+                failed = True
             except OSError as e:
-                self.logger.info('stat returned errno %d', e.errno)
-                fail = e.errno
-        if fail is not None:
-            self.fail('Failed with errno %d' % fail)
+                self.logger.info('stat returned errno %d %s expected %d',
+                                 e.errno, e.strerror, expected)
+                if e.errno != expected:
+                    failed = True
+        return failed
+
+    @unittest.skip("Does not work under CI")
+    def test_failover_stat(self):
+        """Basic failover test
+
+        Launch IOF as normal, kill one IONSS process and then call
+        stat on each projection.  This should see EHOSTDOWN if
+        failover is disabled and EIO if it is enabled (but not
+        implemented)
+
+        Failover is disabled for ../exp so it should fail with EHOSTDOWN.
+        """
+
+        self.kill_ionss_proc()
+
+        # Now that the process is dead try performing I/O.  No wait is
+        # required here, what should happen is the IONSS process set
+        # is notified of the failure and performs a local eviction,
+        # however no client notification happens until I/O is attempted
+        # and tries out, so simply try some I/O at this point.
+
+        # Iterate through the projection list to ensure that they fail with
+        # the expected error codes.
+        failed = self.ft_stat_helper()
+
+        if failed:
+            self.fail('Failed with unexpected errno')
+
+        # Run the test a second time, however this time eviction should already
+        # have happened so although the result is expected to be the same the
+        # code-path internally is different.
+        failed = self.ft_stat_helper()
+
+        if failed:
+            self.fail('Failed 2nd pass with unexpected errno')
 
     def clean_export_dir(self):
         """Clean up files created in backend fs"""

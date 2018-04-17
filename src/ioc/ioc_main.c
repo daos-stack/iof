@@ -112,6 +112,45 @@ int ioc_simple_resend(struct ioc_request *request)
 	return iof_fs_send(request);
 }
 
+/* Helper function to set all projections off-line.
+ *
+ * This is to be called when something catastrophic happens that means the
+ * client cannot continue in any form.
+ */
+static void
+set_all_offline(struct iof_state *iof_state, int reason)
+{
+	struct iof_projection_info *fs_handle;
+
+	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		IOF_TRACE_INFO(fs_handle,
+			       "Changing offline reason from %d to %d",
+			       fs_handle->offline_reason, reason);
+		fs_handle->offline_reason = reason;
+	}
+}
+
+/* Callback function for re-register RPC.
+ *
+ * This is called after failover when the re-register RPC completes.
+ *
+ * TODO: Pause all on-going filesystem activity after failover until
+ * this function is called.  This would require generic_cb() and iof_fs_send()
+ * putting requests on pending lists rather than immediately sending them onto
+ * the network, however it will be required to handle the multiple-failure
+ * case.
+ */
+static void
+rereg_cb(const struct crt_cb_info *cb_info)
+{
+	struct iof_state *iof_state = cb_info->cci_arg;
+
+	IOF_TRACE_INFO(iof_state, "rc %d", cb_info->cci_rc);
+
+	if (cb_info->cci_rc != -DER_SUCCESS)
+		set_all_offline(iof_state, EHOSTDOWN);
+}
+
 /* The eviction handler atomically updates the PSR of the group for which
  * this eviction occurred; or disables the group if no more PSRs remain.
  * It then locates all the projections corresponding to the group; if the
@@ -149,19 +188,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	}
 
 	crc = crt_lm_group_psr(group, &psr_list);
-	if (crc != -DER_SUCCESS) {
-		IOF_TRACE_WARNING(iof_state,
-				  "Invalid rank list, ret = %d", crc);
-		g->grp.enabled = false;
-		if (crc == -DER_NONEXIST)
-			rc = EHOSTDOWN;
-		else
-			rc = EINVAL;
-
-		IOF_TRACE_WARNING(iof_state,
-				  "Group %s disabled, rc=%d",
-				  group->cg_grpid, rc);
-	} else {
+	if (crc == -DER_SUCCESS) {
 		d_rank_t new_psr = psr_list->rl_ranks[0];
 		d_rank_t evicted_psr = rank;
 
@@ -179,6 +206,18 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		 * when this is being updated will cause a race condition.
 		 */
 		g->grp.psr_ep.ep_rank = new_psr;
+	} else {
+		IOF_TRACE_WARNING(iof_state,
+				  "Invalid rank list, ret = %d", crc);
+		g->grp.enabled = false;
+		if (crc == -DER_NONEXIST)
+			rc = EHOSTDOWN;
+		else
+			rc = EINVAL;
+
+		IOF_TRACE_WARNING(iof_state,
+				  "Group %s disabled, rc=%d",
+				  group->cg_grpid, rc);
 	}
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
@@ -223,7 +262,26 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 			H_GAH_SET_INVALID(dh);
 		}
 		pthread_mutex_unlock(&fs_handle->od_lock);
+	}
 
+	/* Send a RPC to register with the new server.
+	 *
+	 * Currently this doesn't do much other than help with the shutdown
+	 * process, however re-sending of failed RPCs should really be blocked
+	 * until the re-register succeeds.
+	 *
+	 */
+	{
+		crt_rpc_t *rpc = NULL;
+
+		rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &g->grp.psr_ep,
+				    QUERY_PSR_OP, &rpc);
+		if (rc != -DER_SUCCESS)
+			set_all_offline(iof_state, EHOSTDOWN);
+
+		rc = crt_req_send(rpc, rereg_cb, iof_state);
+		if (rc != -DER_SUCCESS)
+			set_all_offline(iof_state, EHOSTDOWN);
 	}
 }
 
@@ -244,6 +302,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	struct iof_projection_info *fs_handle =
 			request->cb->get_fsh(request);
 
+	IOF_TRACE_DEBUG(request, "cci_rc %d", cb_info->cci_rc);
 	/* No Error */
 	if (!cb_info->cci_rc)
 		D_GOTO(done, 0);
@@ -253,7 +312,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 		D_GOTO(done, request->err = EIO);
 	} else if (fs_handle->offline_reason) {
 		IOF_TRACE_ERROR(request, "Projection Offline");
-		D_GOTO(done, request->err = fs_handle->offline_reason);
+		D_GOTO(done, request->rc = fs_handle->offline_reason);
 	}
 
 	if (request->cb->on_evict &&
