@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016-2017 Intel Corporation
+# Copyright (C) 2016-2018 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -87,6 +87,7 @@ except ImportError:
 #pylint: disable=too-many-ancestors
 
 log_to_file = False
+valgrind_cnss_only = False
 
 def unlink_file(file_name):
     """Unlink a file without failing if it doesn't exist"""
@@ -128,6 +129,13 @@ class Testlocal(unittest.TestCase,
     origin_rpctrace = None
     targets_rpctrace = []
     ionss_count = 3
+    cnss_valgrind = False
+    ionss_valgrind = False
+
+    def using_valgrind(self):
+        """Check if any part of the test is running under valgrind"""
+
+        return self.cnss_valgrind or self.ionss_valgrind
 
     def is_running(self):
         """Check if the cnss is running"""
@@ -265,9 +273,13 @@ class Testlocal(unittest.TestCase,
         self.log_path = os.path.join(log_top_dir, self.logdir_name())
 
         valgrind = iofcommontestsuite.valgrind_suffix(self.log_path)
+        if valgrind:
+            if not valgrind_cnss_only:
+                self.ionss_valgrind = True
+            self.cnss_valgrind = True
 
         default_log_mask = "INFO,CTRL=WARN"
-        if valgrind:
+        if self.using_valgrind():
             default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
         self.internals_tracing = os.getenv("INTERNALS_TRACING", "no")
         if self.internals_tracing == "yes":
@@ -280,9 +292,6 @@ class Testlocal(unittest.TestCase,
             #turn off debugging for mdtest
             self.log_mask = "WARN"
             self.internals_tracing = "no"
-
-        self.test_valgrind = iofcommontestsuite.valgrind_suffix(self.log_path,
-                                                                pmix=False)
 
         cmd = [orterun,
                '--output-filename', self.log_path]
@@ -300,7 +309,8 @@ class Testlocal(unittest.TestCase,
             unlink_file(cnss_file)
             cmd.extend(['-x', 'D_LOG_FILE=%s' % cnss_file])
 
-        cmd.extend(valgrind)
+        if self.cnss_valgrind:
+            cmd.extend(valgrind)
         cmd.extend(['cnss', '-p', self.cnss_prefix,
                     ':',
                     '-n', str(self.ionss_count),
@@ -312,12 +322,13 @@ class Testlocal(unittest.TestCase,
             unlink_file(ionss_file)
             cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
 
-        cmd.extend(valgrind)
+        if self.ionss_valgrind:
+            cmd.extend(valgrind)
         cmd.extend(['ionss', '-c', config_file.name])
 
         self.proc = self.common_launch_process(cmd)
 
-        if valgrind:
+        if self.using_valgrind():
             waittime = 120
         else:
             waittime = 30
@@ -450,6 +461,23 @@ class Testlocal(unittest.TestCase,
 
         self.normal_output("Ending {0}".format(self.id()))
 
+    def _tidy_callgrind_files(self):
+        if self.cnss_valgrind:
+            range_start = 0
+        else:
+            range_start = 1
+        proc_count = 1
+        if self.ionss_valgrind:
+            proc_count += self.ionss_count
+        for c_file_idx in range(range_start, proc_count):
+            file_in = os.path.join(self.log_path,
+                                   'callgrind-{0}.in'.format(c_file_idx))
+            file_out = os.path.join(self.log_path,
+                                    'callgrind-{0}.out'.format(c_file_idx))
+            cmd = ['callgrind_annotate', '--auto=yes', file_in]
+            with open(file_out, 'w') as f:
+                subprocess.call(cmd, timeout=180, stdout=f)
+
     def cleanup(self, procrtn):
         """Delete any temporary files or directories created"""
 
@@ -473,17 +501,7 @@ class Testlocal(unittest.TestCase,
 
         use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
         if use_valgrind == 'callgrind':
-            proc_count = 1 + self.ionss_count
-            for c_file_idx in range(0, proc_count):
-                file_in = os.path.join(self.log_path,
-                                       'callgrind-{0}.in'.format(c_file_idx))
-                file_out = os.path.join(self.log_path,
-                                        'callgrind-{0}.out'.format(c_file_idx))
-                cmd = ['callgrind_annotate', '--auto=yes', file_in]
-                with open(file_out, 'w') as f:
-                    procrtn = subprocess.call(cmd, timeout=180,
-                                              stdout=f)
-                print(' '.join(cmd))
+            self._tidy_callgrind_files()
 
         for dir_path, _, file_list in os.walk(self.log_path, topdown=False):
             for fname in file_list:
@@ -735,6 +753,9 @@ class Testlocal(unittest.TestCase,
             test_path = os.path.join(dirname, '..', 'install', os.uname()[0],
                                      'TESTING', 'tests')
 
+        test_valgrind = iofcommontestsuite.valgrind_suffix(self.log_path,
+                                                           pmix=False)
+
         environ = os.environ
         environ['D_LOG_MASK'] = self.log_mask
         environ['CRT_PHY_ADDR_STR'] = self.crt_phy_addr
@@ -747,7 +768,7 @@ class Testlocal(unittest.TestCase,
             self.logger.info("libioil test - input string:\n %s\n", testname)
             # set this to match value used by this job
             cmd = []
-            cmd.extend(self.test_valgrind)
+            cmd.extend(test_valgrind)
             cmd.extend([testname])
             procrtn = subprocess.call(cmd, timeout=180,
                                       env=environ)
@@ -821,6 +842,12 @@ class Testlocal(unittest.TestCase,
         Kill the ionss process which is PSR for the first client.
         """
 
+        # Check if the ionss processes are running under valgrind, and if so
+        # skip this test, the /proc parsing does not work in this case.
+        # The --cnss-valgrind option should continue to work however.
+        if self.ionss_valgrind:
+            self.skipTest('Does not support IONSS processes under valgrind')
+
         procs = os.listdir('/proc')
         iprocs = []
         for proc in procs:
@@ -838,10 +865,6 @@ class Testlocal(unittest.TestCase,
         self.logger.info('pids are %s', iprocs)
         if len(iprocs) != self.ionss_count:
             self.fail("Could not find correct number of processes")
-
-        for ipid in range(1, self.ionss_count):
-            if iprocs[0] + ipid != iprocs[ipid]:
-                self.fail("Non-contigous pids")
 
         os.kill(iprocs[0], signal.SIGINT)
         while os.path.exists('/proc/%d' % iprocs[0]):
@@ -869,7 +892,6 @@ class Testlocal(unittest.TestCase,
                     failed = True
         return failed
 
-    @unittest.skip("Does not work under CI")
     def test_failover_stat(self):
         """Basic failover test
 
@@ -1031,6 +1053,8 @@ if __name__ == '__main__':
                         help=test_help, nargs='*')
     parser.add_argument('--valgrind', action='store_true',
                         help='Run the test under valgrind')
+    parser.add_argument('--cnss-valgrind', action='store_true',
+                        help='Run the cnss process under valgrind')
     parser.add_argument('--callgrind', action='store_true',
                         help='Run the test under callgrind')
     parser.add_argument('--redirect', action='store_true',
@@ -1051,6 +1075,9 @@ if __name__ == '__main__':
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
+    if args.cnss_valgrind:
+        os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
+        valgrind_cnss_only = True
     if args.callgrind:
         os.environ['TR_USE_VALGRIND'] = 'callgrind'
     if args.redirect:
