@@ -427,6 +427,8 @@ struct iof_dir_handle {
 	int				handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
 	ATOMIC int			gah_ok;
+	/* The inode number of the directory */
+	ino_t				inode_no;
 	crt_endpoint_t			ep;
 	d_list_t			list;
 };
@@ -494,6 +496,7 @@ struct ioc_inode_entry {
 	fuse_ino_t	ino;
 	fuse_ino_t	parent;
 	ATOMIC uint	ref;
+	bool		failover;
 };
 
 struct entry_req {

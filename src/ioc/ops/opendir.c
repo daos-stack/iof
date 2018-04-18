@@ -99,6 +99,9 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	rc = find_gah(fs_handle, ino, &in->gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
+
+	dh->inode_no = ino;
+
 	IOC_REQ_SEND_LL(dh, fs_handle, rc);
 	if (rc != 0)
 		D_GOTO(err, rc);

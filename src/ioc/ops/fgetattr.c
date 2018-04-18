@@ -86,10 +86,13 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		D_GOTO(err, rc);
 
 	if (handle) {
-		if (!H_GAH_IS_VALID(handle))
-			D_GOTO(err, rc = EIO);
-
 		D_MUTEX_LOCK(&fs_handle->gah_lock);
+
+		if (!H_GAH_IS_VALID(handle)) {
+			D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+			D_GOTO(err, rc = EIO);
+		}
+
 		in->gah = handle->common.gah;
 		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 		IOF_TRACE_ALIAS(req, handle, "getattr_fh_fuse_req");
@@ -97,6 +100,11 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		rc = find_gah(fs_handle, ino, &in->gah);
 		if (rc != 0)
 			D_GOTO(err, rc = ENOENT);
+		if (in->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
+			IOF_TRACE_WARNING(fs_handle,
+					  "Gah with old root %lu", ino);
+			D_GOTO(err, rc = EHOSTDOWN);
+		}
 	}
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);
 	if (rc != 0)

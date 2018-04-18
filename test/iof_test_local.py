@@ -899,6 +899,61 @@ class Testlocal(unittest.TestCase,
         while os.path.exists('/proc/%d' % iprocs[0]):
             time.sleep(1)
 
+    def test_failover_fstat(self):
+        """Test open file migration during failover
+
+        This test performs some I/O activity on the 'usr' projection
+        to load entries into the inode table, then it finds and opens
+        a file, triggers failover and verifies that it can still access
+        the file.
+        """
+
+        # Check that /usr files are consistent.
+        u_stat = os.stat('/usr')
+        bin_files = sorted(os.listdir('/usr/bin'))
+        for bfile in bin_files:
+            fname = os.path.join('/usr/bin/', bfile)
+            s = os.lstat(fname)
+            if s.st_dev != u_stat.st_dev:
+                self.skipTest("Inconsistent device for /usr files")
+
+        dirname = os.path.join(self.cnss_prefix, 'usr', 'share')
+        subdirs = os.listdir(dirname)
+        cdir = sorted(subdirs)[0]
+        subdir = os.path.join(dirname, cdir)
+        print('Looking at %s' % subdir)
+        subfiles = os.listdir(subdir)
+        sfile = sorted(subfiles)[0]
+        ffile = os.path.join(subdir, sfile)
+        print('Looking at %s' % ffile)
+        file_info = os.stat(ffile)
+        print(file_info)
+
+        for mf in os.listdir(subdir):
+            f = os.stat(os.path.join(subdir, mf))
+            print(f)
+
+        fd = os.open(ffile, os.O_RDONLY)
+
+        s = os.fstat(fd)
+        print(s)
+
+        self.kill_ionss_proc()
+        for _ in range(0, 2):
+            try:
+                fs = os.fstat(fd)
+                print(fs)
+                self.fail("Should have failed")
+            except OSError as e:
+                self.logger.info('stat returned errno %d %s',
+                                 e.errno, e.strerror)
+                if e.errno != errno.EIO and e.errno != errno.EPERM:
+                    self.fail("Should have returned EIO")
+
+        # This isn't required but helps to seperate items in the logs whilst
+        # the features are developed.
+        time.sleep(2)
+
     def ft_stat_helper(self):
         """Helper function for the failover_stat test"""
 
@@ -1151,7 +1206,7 @@ if __name__ == '__main__':
         # This allows reduced speed for most tests, however a full test run
         # to also include the failover tests.
         tests_to_run.append('Testlocal.go')
-        for ptest in dir(Testlocal):
+        for ptest in sorted(dir(Testlocal)):
             if not ptest.startswith('test_failover'):
                 continue
             tests_to_run.append('Testlocal.%s' % ptest)

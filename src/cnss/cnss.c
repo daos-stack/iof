@@ -403,8 +403,11 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
 
+#if 0
+	/* This will have already been called once */
 	if (plugin->active && plugin->fns->flush_fuse)
 		plugin->fns->flush_fuse(info->private_data);
+#endif
 
 	if (info->running) {
 		IOF_TRACE_DEBUG(info,

@@ -136,6 +136,14 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(err, rc = fs_handle->offline_reason);
 
+	if (ie->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
+		IOF_TRACE_WARNING(fs_handle,
+				  "Gah with old root %lu " GAH_PRINT_STR,
+				  ie->ino, GAH_PRINT_VAL(ie->gah));
+		D_GOTO(out, 0);
+		return;
+	}
+
 	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));
 
 	IOC_REQ_INIT(desc, fs_handle, api, in, rc);
@@ -148,11 +156,13 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);
 	if (rc != 0)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 
 	return;
 
 err:
 	IOF_TRACE_ERROR(ie, "Failed to close " GAH_PRINT_STR " %d",
 			GAH_PRINT_VAL(ie->gah), rc);
+out:
+	IOC_REQ_RELEASE_POOL(desc, fs_handle->close_pool);
 }

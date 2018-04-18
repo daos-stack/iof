@@ -91,8 +91,9 @@ out_err:
 
 int ioc_simple_resend(struct ioc_request *request)
 {
-	int rc;
+	struct iof_projection_info *fs_handle =	request->cb->get_fsh(request);
 	crt_rpc_t *resend_rpc;
+	int rc;
 
 	rc = crt_req_create(request->rpc->cr_ctx, NULL,
 			    request->rpc->cr_opc, &resend_rpc);
@@ -109,7 +110,107 @@ int ioc_simple_resend(struct ioc_request *request)
 	request->rpc = resend_rpc;
 	/* Second addref is called in iof_fs_send */
 	crt_req_addref(request->rpc);
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	return iof_fs_send(request);
+}
+
+/*
+ * inode_check() callback.  Called for every open inode as part of failover.
+ */
+static int
+inode_check_cb(d_list_t *rlink, void *arg)
+{
+	struct iof_projection_info *fs_handle = arg;
+	struct ioc_inode_entry *ie = container_of(rlink,
+						  struct ioc_inode_entry,
+						  list);
+
+	IOF_TRACE_INFO(fs_handle,
+		       "check inode %lu parent %lu failover %s",
+		       ie->ino, ie->parent, ie->failover ? "yes" : "no");
+
+	if (!ie->failover) {
+		int rc;
+
+		rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
+						      ie->parent,
+						      ie->name,
+						      strlen(ie->name));
+		IOF_TRACE_INFO(fs_handle,
+			       "inval returned %d", rc);
+	}
+
+	return -DER_SUCCESS;
+}
+
+static void mark_inode_tree(struct iof_projection_info *fs_handle,
+			    fuse_ino_t ino)
+{
+	struct ioc_inode_entry *ie;
+	d_list_t *rlink;
+
+	while (ino != 1) {
+		IOF_TRACE_DEBUG(fs_handle,
+				"Looking up %lu", ino);
+		rlink = d_hash_rec_find(&fs_handle->inode_ht,
+					&ino, sizeof(ino));
+		if (!rlink) {
+			IOF_TRACE_WARNING(fs_handle,
+					  "Unable to find inode %lu", ino);
+			return;
+		}
+		ie = container_of(rlink, struct ioc_inode_entry, list);
+
+		IOF_TRACE_DEBUG(fs_handle,
+				"Found %p for %lu %d",
+				ie, ino, ie->failover);
+
+		if (ie->failover) {
+			d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+			return;
+		}
+
+		ie->failover = true;
+		ino = ie->parent;
+		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+	}
+}
+
+/* Update projection to identify inodes which relate to open files.
+ *
+ */
+static void inode_check(struct iof_projection_info *fs_handle)
+{
+	struct iof_file_handle *fh;
+	struct iof_dir_handle *dh;
+	int rc;
+
+	IOF_TRACE_INFO(fs_handle,
+		       "Migrating open files");
+
+	D_MUTEX_LOCK(&fs_handle->of_lock);
+	d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
+		IOF_TRACE_INFO(fs_handle,
+			       "Inspecting file " GAH_PRINT_STR " %lu %p",
+			       GAH_PRINT_VAL(fh->common.gah), fh->inode_no,
+			       fh->ie);
+		mark_inode_tree(fs_handle, fh->inode_no);
+	}
+	D_MUTEX_UNLOCK(&fs_handle->of_lock);
+	D_MUTEX_LOCK(&fs_handle->od_lock);
+	d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
+		IOF_TRACE_INFO(fs_handle,
+			       "Inspecting dir " GAH_PRINT_STR " %p",
+			       GAH_PRINT_VAL(dh->gah), fh);
+		mark_inode_tree(fs_handle, dh->inode_no);
+	}
+	D_MUTEX_UNLOCK(&fs_handle->od_lock);
+
+	rc = d_hash_table_traverse(&fs_handle->inode_ht, inode_check_cb,
+				   fs_handle);
+	IOF_TRACE_INFO(fs_handle,
+		       "traverse returned %d", rc);
 }
 
 /* Helper function to set all projections off-line.
@@ -156,10 +257,12 @@ rereg_cb(const struct crt_cb_info *cb_info)
 	}
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
-		if (fs_handle->offline_reason)
-			continue;
+		if (!fs_handle->offline_reason) {
+			inode_check(fs_handle);
 
-		fs_handle->failover_state = iof_failover_complete;
+			fs_handle->failover_state = iof_failover_complete;
+		}
+
 		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	}
 }
@@ -329,13 +432,19 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 static void generic_cb(const struct crt_cb_info *cb_info)
 {
 	struct ioc_request *request = cb_info->cci_arg;
-	struct iof_projection_info *fs_handle =
-			request->cb->get_fsh(request);
+	struct iof_projection_info *fs_handle = request->cb->get_fsh(request);
 
-	IOF_TRACE_DEBUG(request, "cci_rc %d", cb_info->cci_rc);
 	/* No Error */
-	if (!cb_info->cci_rc)
+	if (!cb_info->cci_rc) {
+		IOF_TRACE_DEBUG(request,
+				"cci_rc %d %s",
+				cb_info->cci_rc,
+				d_errstr(cb_info->cci_rc));
 		D_GOTO(done, 0);
+	}
+
+	IOF_TRACE_INFO(request, "cci_rc %d %s",
+		       cb_info->cci_rc, d_errstr(cb_info->cci_rc));
 
 	/* Errors other than evictions */
 	if (!IOC_HOST_IS_DOWN(cb_info)) {
@@ -366,9 +475,8 @@ done:
  */
 int iof_fs_send(struct ioc_request *request)
 {
+	struct iof_projection_info *fs_handle = request->cb->get_fsh(request);
 	int rc;
-	struct iof_projection_info *fs_handle =
-			request->cb->get_fsh(request);
 
 	request->ep.ep_tag = 0;
 	request->ep.ep_rank = atomic_load_consume(
@@ -1868,6 +1976,9 @@ ino_flush(d_list_t *rlink, void *arg)
 						  list);
 	int rc;
 
+	/* Only evict entries that are direct children of the root, the kernel
+	 * will walk the tree for us
+	 */
 	if (ie->parent != 1)
 		return 0;
 
@@ -1877,14 +1988,22 @@ ino_flush(d_list_t *rlink, void *arg)
 					      strlen(ie->name));
 	if (rc != 0 && rc != -ENOENT)
 		IOF_TRACE_WARNING(fs_handle,
-				  "%lu %lu '%s': %d",
-				  ie->parent, ie->ino, ie->name, rc);
+				  "%lu %lu '%s': %d %s",
+				  ie->parent, ie->ino, ie->name, rc,
+				  strerror(-rc));
 	else
 		IOF_TRACE_INFO(fs_handle,
-			       "%lu %lu '%s': %d",
-			       ie->parent, ie->ino, ie->name, rc);
+			       "%lu %lu '%s': %d %s",
+			       ie->parent, ie->ino, ie->name, rc,
+			       strerror(-rc));
 
-	return 0;
+	/* If the FUSE connection is dead then do not traverse further, it doesn't
+	 * matter what gets returned here, as long as it's negative
+	 */
+	if (rc == -EBADF)
+		return -DER_NO_HDL;
+
+	return -DER_SUCCESS;
 }
 
 /* Called once per projection, before the FUSE filesystem has been torn down */
