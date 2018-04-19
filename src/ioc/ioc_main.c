@@ -1912,6 +1912,11 @@ detach_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_tracker *tracker = cb_info->cci_arg;
 
+	if (cb_info->cci_rc != -DER_SUCCESS)
+		IOF_TRACE_WARNING(cb_info->cci_rpc,
+				"detach RPC failed %d",
+				cb_info->cci_rc);
+
 	iof_tracker_signal(tracker);
 }
 
