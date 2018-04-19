@@ -140,6 +140,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req = req;
+	handle->inode_no = ino;
 
 	in = crt_req_get(handle->open_rpc);
 	IOF_TRACE_LINK(handle->open_rpc, req, "open_file_rpc");

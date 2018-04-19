@@ -650,8 +650,6 @@ fh_reset(void *arg)
 	struct iof_file_handle *fh = arg;
 	int rc;
 
-	D_FREE(fh->name);
-
 	if (fh->open_rpc) {
 		crt_req_decref(fh->open_rpc);
 		crt_req_decref(fh->open_rpc);

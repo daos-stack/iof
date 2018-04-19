@@ -418,21 +418,38 @@ struct iof_dir_handle {
 	d_list_t			list;
 };
 
-/* Data which is stored against an open file handle */
+/** Data which is stored for a currently open file */
 struct iof_file_handle {
+	/** The projection this file belongs to */
 	struct iof_projection_info	*fs_handle;
+	/** Common information for file handle, contains GAH and EP
+	 * information.  This is shared between CNSS and IL code to allow
+	 * use of some common code.
+	 */
 	struct iof_file_common		common;
+	/** Boolean flag to indicate GAH is valid.
+	 * Set to 1 when file is opened, however may be set to 0 either by
+	 * ionss returning -DER_NONEXIST or by ionss failure
+	 */
 	ATOMIC int			gah_ok;
+	/** Open RPC, precreated */
 	crt_rpc_t			*open_rpc;
+	/** Create RPC, precreated */
 	crt_rpc_t			*creat_rpc;
+	/** Release RPC, precreated */
 	crt_rpc_t			*release_rpc;
+	/** List of open files, stored in fs_handle->openfile_list */
 	d_list_t			list;
+	/** The inode number of the file */
 	ino_t				inode_no;
-	char				*name;
-
+	/** A pre-allocated inode entry.  This is created as the struct is
+	 * allocated and then used on a successful create() call.  Once
+	 * the file handle is in use then this field will be NULL.
+	 */
 	struct ioc_inode_entry		*ie;
-
-	/* Fuse req for open/create command */
+	/** Fuse req for open/create command.  Used by the RPC callback
+	 * function to reply to a FUSE request
+	 */
 	fuse_req_t			open_req;
 };
 
@@ -442,14 +459,13 @@ struct iof_file_handle {
  * These macros work on both file and directory handles.
  */
 
-/* Set the GAH so that it's valid */
+/** Set the GAH so that it's valid */
 #define H_GAH_SET_VALID(OH) atomic_store_release(&OH->gah_ok, 1)
 
-/* Set the GAH so that it's invalid.  Assumes it currently valid */
+/** Set the GAH so that it's invalid.  Assumes it currently valid */
 #define H_GAH_SET_INVALID(OH) atomic_store_release(&OH->gah_ok, 0)
 
-/* Check if the handle is valid by reading the gah_ok bit.
- */
+/** Check if the handle is valid by reading the gah_ok field. */
 #define H_GAH_IS_VALID(OH) atomic_load_consume(&OH->gah_ok)
 
 struct common_req {

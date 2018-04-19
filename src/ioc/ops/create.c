@@ -68,18 +68,21 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 
 	/* Reply to the create request with the GAH from the create call
 	 */
+
+	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
+	entry.generation = 1;
+	entry.ino = entry.attr.st_ino;
+
 	fi.fh = (uint64_t)handle;
 	handle->common.gah = out->gah;
 	H_GAH_SET_VALID(handle);
+	handle->inode_no = entry.ino;
+
 	pthread_mutex_lock(&handle->fs_handle->of_lock);
 	d_list_add_tail(&handle->list, &handle->fs_handle->openfile_list);
 	pthread_mutex_unlock(&handle->fs_handle->of_lock);
 	req = handle->open_req;
 	handle->open_req = 0;
-
-	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
-	entry.generation = 1;
-	entry.ino = entry.attr.st_ino;
 
 	/* Populate the inode table with the GAH from the duplicate file
 	 * so that it can still be accessed after the file is closed
