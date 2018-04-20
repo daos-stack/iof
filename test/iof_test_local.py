@@ -1108,6 +1108,16 @@ if __name__ == '__main__':
         sys.exit(rc)
 
     if not tests_to_run:
+        # If no tests are specified then run all tests, however do this by
+        # running regular tests as subtests of the 'go' test which will re-use
+        # a single instance of IOF, and all failover tests individually with
+        # a new IOF instance per test.
+        # This allows reduced speed for most tests, however a full test run
+        # to also include the failover tests.
         tests_to_run.append('Testlocal.go')
+        for ptest in dir(Testlocal):
+            if not ptest.startswith('test_failover'):
+                continue
+            tests_to_run.append('Testlocal.%s' % ptest)
 
     unittest.main(defaultTest=tests_to_run, argv=uargs)
