@@ -309,42 +309,39 @@ struct iof_setattr_in {
 
 extern struct crt_req_format QUERY_RPC_FMT;
 
-struct rpc_data {
-	struct crt_req_format fmt;
-	crt_opcode_t op_id;
+#define IOF_PROTO_BASE 0x01000000
+
+#define DEF_RPC_TYPE(TYPE) IOF_OPI_##TYPE
+
+#define IOF_RPCS_LIST					\
+	X(opendir,	gah_in,		gah_pair)	\
+	X(readdir,	readdir_in,	readdir_out)	\
+	X(closedir,	gah_in,		NULL)		\
+	X(getattr,	gah_in,		attr_out)	\
+	X(writex,	writex_in,	writex_out)	\
+	X(rename,	rename_in,	status_out)	\
+	X(readx,	readx_in,	readx_out)	\
+	X(unlink,	unlink_in,	status_out)	\
+	X(open,		open_in,	gah_pair)	\
+	X(create,	create_in,	create_out)	\
+	X(close,	gah_in,		NULL)		\
+	X(mkdir,	create_in,	entry_out)	\
+	X(readlink,	gah_in,		string_out)	\
+	X(symlink,	two_string_in,	entry_out)	\
+	X(fsync,	gah_in,		status_out)	\
+	X(fdatasync,	gah_in,		status_out)	\
+	X(statfs,	gah_in,		iov_pair)	\
+	X(lookup,	gah_string_in,	entry_out)	\
+	X(setattr,	setattr_in,	attr_out)
+
+#define X(a, b, c) DEF_RPC_TYPE(a),
+
+enum {
+	IOF_RPCS_LIST
 };
 
-#define DEF_RPC_TYPE(TYPE) IOF_##TYPE
+#undef X
 
-enum iof_rpc_type_default {
-	DEF_RPC_TYPE(opendir),		/* 0x10f00 */
-	DEF_RPC_TYPE(readdir),		/* 0x10f01 */
-	DEF_RPC_TYPE(closedir),		/* 0x10f02 */
-	DEF_RPC_TYPE(getattr),		/* 0x10f03 */
-	DEF_RPC_TYPE(writex),		/* 0x10f04 */
-	DEF_RPC_TYPE(rename),		/* 0x10f05 */
-	DEF_RPC_TYPE(readx),		/* 0x10f06 */
-	DEF_RPC_TYPE(unlink),		/* 0x10f07 */
-	DEF_RPC_TYPE(open),		/* 0x10f08 */
-	DEF_RPC_TYPE(create),		/* 0x10f09 */
-	DEF_RPC_TYPE(close),		/* 0x10f0a */
-	DEF_RPC_TYPE(mkdir),		/* 0x10f0b */
-	DEF_RPC_TYPE(readlink),		/* 0x10f0c */
-	DEF_RPC_TYPE(symlink),		/* 0x10f0d */
-	DEF_RPC_TYPE(fsync),		/* 0x10f0e */
-	DEF_RPC_TYPE(fdatasync),	/* 0x10f0f */
-	DEF_RPC_TYPE(statfs),		/* 0x10f10 */
-	DEF_RPC_TYPE(lookup),		/* 0x10f11 */
-	DEF_RPC_TYPE(setattr),		/* 0x10f12 */
-};
-
-struct proto {
-	char name[16];
-	crt_opcode_t id_base;
-	int rpc_type_count;
-	struct rpc_data *rpc_types;
-};
-
-int iof_register(struct proto **proto, crt_rpc_cb_t handlers[]);
+int iof_register(struct crt_proto_format **proto, crt_rpc_cb_t handlers[]);
 
 #endif

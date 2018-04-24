@@ -70,7 +70,7 @@ static struct iof_service_group *ionss_grps;
 static uint32_t ionss_count;
 static struct iof_projection *projections;
 static uint32_t projection_count;
-static struct proto *iof_proto;
+static struct crt_proto_format *iof_proto;
 
 #define BLOCK_SIZE 1024
 

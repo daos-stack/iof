@@ -94,7 +94,7 @@ struct iof_ctx {
 /*For IOF Plugin*/
 struct iof_state {
 	struct cnss_plugin_cb		*cb;
-	struct proto			*proto;
+	struct crt_proto_format		*proto;
 	struct iof_ctx			iof_ctx;
 	d_list_t			fs_list;
 	/* CNSS Prefix */
@@ -205,7 +205,9 @@ struct iof_projection_info {
 /*
  * Returns the correct RPC Type ID from the protocol registry.
  */
-#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proj.proto->rpc_types[DEF_RPC_TYPE(FN)].op_id)
+#define FS_TO_OP(HANDLE, FN) (CRT_PROTO_OPC((HANDLE)->proj.proto->cpf_base, \
+					    (HANDLE)->proj.proto->cpf_ver, \
+					    DEF_RPC_TYPE(FN)))
 
 int iof_is_mode_supported(uint8_t flags);
 

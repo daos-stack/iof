@@ -40,15 +40,6 @@
 #include "ios_gah.h"
 #include "intercept.h"
 
-/*
- * This will be defined by the calling function to select
- * the correct RPC type from the protocol registry.
- * This is used in the FS_TO_OP Macro below.
- */
-#ifndef IOF_PROTO_CLASS
-#define IOF_PROTO_CLASS DEFAULT
-#endif
-
 struct write_cb_r {
 	struct iof_file_common *f_info;
 	ssize_t len;
@@ -118,7 +109,9 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    fs_handle->proto->rpc_types[DEF_RPC_TYPE(writex)].op_id,
+			    CRT_PROTO_OPC(fs_handle->proto->cpf_base,
+					  fs_handle->proto->cpf_ver,
+					  DEF_RPC_TYPE(writex)),
 			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",

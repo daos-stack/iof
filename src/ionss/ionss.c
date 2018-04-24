@@ -2102,31 +2102,16 @@ out:
 		ios_fh_decref(handle, 1);
 }
 
+#define X(a, b, c) iof_##a##_handler,
+
+static crt_rpc_cb_t handlers[] = {
+	IOF_RPCS_LIST
+};
+
+#undef X
+
 static int iof_register_handlers(void)
 {
-#define DECL_RPC_HANDLER(NAME, FN)[DEF_RPC_TYPE(NAME)] = FN
-
-	crt_rpc_cb_t handlers[] = {
-		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
-		DECL_RPC_HANDLER(readdir, iof_readdir_handler),
-		DECL_RPC_HANDLER(closedir, iof_closedir_handler),
-		DECL_RPC_HANDLER(getattr, iof_getattr_handler),
-		DECL_RPC_HANDLER(writex, iof_writex_handler),
-		DECL_RPC_HANDLER(rename, iof_rename_handler),
-		DECL_RPC_HANDLER(readx, iof_readx_handler),
-		DECL_RPC_HANDLER(unlink, iof_unlink_handler),
-		DECL_RPC_HANDLER(open, iof_open_handler),
-		DECL_RPC_HANDLER(create, iof_create_handler),
-		DECL_RPC_HANDLER(close, iof_close_handler),
-		DECL_RPC_HANDLER(mkdir, iof_mkdir_handler),
-		DECL_RPC_HANDLER(readlink, iof_readlink_handler),
-		DECL_RPC_HANDLER(symlink, iof_symlink_handler),
-		DECL_RPC_HANDLER(fsync, iof_fsync_handler),
-		DECL_RPC_HANDLER(fdatasync, iof_fdatasync_handler),
-		DECL_RPC_HANDLER(statfs, iof_statfs_handler),
-		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
-		DECL_RPC_HANDLER(setattr, iof_setattr_handler),
-	};
 	return iof_register(NULL, handlers);
 }
 

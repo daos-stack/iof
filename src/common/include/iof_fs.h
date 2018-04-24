@@ -61,7 +61,7 @@ struct iof_projection {
 	/** Server group info */
 	struct iof_service_group	*grp;
 	/** Protocol used for RPCs */
-	struct proto			*proto;
+	struct crt_proto_format		*proto;
 	/** context to use */
 	crt_context_t			crt_ctx;
 	/** CNSS defined ionss id */

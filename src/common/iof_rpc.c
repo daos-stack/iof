@@ -225,35 +225,32 @@ struct crt_msg_field *setattr_in[] = {
 struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query", NULL,
 							 psr_out);
 
-#define RPC_TYPE(NAME, in, out) { .fmt = DEFINE_CRT_REQ_FMT(#NAME, in, out) }
+#define X(a, b, c)					\
+	static struct crt_req_format IOF_CRF_##a =	\
+		DEFINE_CRT_REQ_FMT(#a, b, c);
 
-struct rpc_data default_rpc_types[] = {
-	RPC_TYPE(opendir, gah_in, gah_pair),
-	RPC_TYPE(readdir, readdir_in, readdir_out),
-	RPC_TYPE(closedir, gah_in, NULL),
-	RPC_TYPE(getattr, gah_in, attr_out),
-	RPC_TYPE(writex, writex_in, writex_out),
-	RPC_TYPE(rename, rename_in, status_out),
-	RPC_TYPE(readx, readx_in, readx_out),
-	RPC_TYPE(unlink, unlink_in, status_out),
-	RPC_TYPE(open, open_in, gah_pair),
-	RPC_TYPE(create, create_in, create_out),
-	RPC_TYPE(close, gah_in, NULL),
-	RPC_TYPE(mkdir, create_in, entry_out),
-	RPC_TYPE(readlink, gah_in, string_out),
-	RPC_TYPE(symlink, two_string_in, entry_out),
-	RPC_TYPE(fsync, gah_in, status_out),
-	RPC_TYPE(fdatasync, gah_in, status_out),
-	RPC_TYPE(statfs, gah_in, iov_pair),
-	RPC_TYPE(lookup, gah_string_in, entry_out),
-	RPC_TYPE(setattr, setattr_in, attr_out),
+IOF_RPCS_LIST
+
+#undef X
+
+#define X(a, b, c)					\
+	{						\
+		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,	\
+		.prf_req_fmt = &IOF_CRF_##a,	\
+	},
+
+static struct crt_proto_rpc_format iof_rpc_types[] = {
+	IOF_RPCS_LIST
 };
 
-static struct proto iof_protocol_registry = {
-	.name = "IOF_PRIVATE",
-	.id_base = 0x10F00,
-	.rpc_type_count = ARRAY_SIZE(default_rpc_types),
-	.rpc_types = default_rpc_types
+#undef X
+
+static struct crt_proto_format iof_protocol_registry = {
+	.cpf_name = "IOF_PRIVATE",
+	.cpf_ver = 2,
+	.cpf_count = ARRAY_SIZE(iof_rpc_types),
+	.cpf_prf = iof_rpc_types,
+	.cpf_base = IOF_PROTO_BASE,
 };
 
 /* Bulk register a RPC type
@@ -261,36 +258,19 @@ static struct proto iof_protocol_registry = {
  * If there is a failure then register what is possible, and return
  * the first error that occurred.
  */
-int iof_register(struct proto **proto, crt_rpc_cb_t handlers[])
+int iof_register(struct crt_proto_format **proto, crt_rpc_cb_t handlers[])
 {
-	int i, ret = -DER_SUCCESS;
-	struct proto *p = &iof_protocol_registry;
-	struct rpc_data *rp = p->rpc_types;
+	int rc;
+	int i;
 
-	for (i = 0 ; i < p->rpc_type_count ; i++) {
-		int rc;
+	if (handlers)
+		for (i = 0; i < iof_protocol_registry.cpf_count; i++)
+			iof_protocol_registry.cpf_prf[i].prf_hdlr = handlers[i];
 
-		rp->op_id = p->id_base + i;
-		if (handlers)
-			rc = crt_rpc_srv_register(rp->op_id,
-						  CRT_RPC_FEAT_NO_TIMEOUT,
-						  &rp->fmt, handlers[i]);
-		else
-			rc = crt_rpc_register(rp->op_id,
-					      CRT_RPC_FEAT_NO_TIMEOUT,
-					      &rp->fmt);
+	rc = crt_proto_register(&iof_protocol_registry);
 
-		if (rc != -DER_SUCCESS)
-			IOF_LOG_ERROR("Failed to register RPC %s, rc=%d",
-				      rp->fmt.crf_name, rc);
+	if (proto && rc == -DER_SUCCESS)
+		*proto = &iof_protocol_registry;
 
-		if (rc != -DER_SUCCESS && ret == -DER_SUCCESS)
-			ret = rc;
-		rp++;
-	}
-
-	if (proto && ret == -DER_SUCCESS)
-		*proto = p;
-
-	return ret;
+	return rc;
 }
