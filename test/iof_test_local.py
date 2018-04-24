@@ -88,6 +88,7 @@ except ImportError:
 
 log_to_file = False
 valgrind_cnss_only = False
+use_fixed_paths = False
 
 def unlink_file(file_name):
     """Unlink a file without failing if it doesn't exist"""
@@ -229,16 +230,42 @@ class Testlocal(unittest.TestCase,
         # docker when /tmp is an overlay fs.
         export_tmp_dir = os.getenv("IOF_TMP_DIR", '/tmp')
 
-        self.cnss_prefix = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
-                                            dir=export_tmp_dir)
+        if use_fixed_paths:
+            top_dir = os.path.join(export_tmp_dir, os.getlogin(), 'iof')
+            self.cnss_prefix = os.path.join(top_dir, 'cnss')
+            self.export_dir = os.path.join(top_dir, 'ionss')
+            if not os.path.exists(self.cnss_prefix):
+                os.makedirs(self.cnss_prefix)
+            if not os.path.exists(self.export_dir):
+                os.makedirs(self.export_dir)
+        else:
+            self.cnss_prefix = tempfile.mkdtemp(prefix='tmp_iof_test_import_',
+                                                dir=export_tmp_dir)
+            self.export_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
+                                               dir=export_tmp_dir)
+
         self.import_dir = os.path.join(self.cnss_prefix, 'exp')
         common_methods.CTRL_DIR = os.path.join(self.cnss_prefix, '.ctrl')
         self.shutdown_file = os.path.join(common_methods.CTRL_DIR, 'shutdown')
         self.active_file = os.path.join(common_methods.CTRL_DIR, 'active')
-        self.export_dir = tempfile.mkdtemp(prefix='tmp_iof_test_export_',
-                                           dir=export_tmp_dir)
-        ompi_bin = os.getenv('IOF_OMPI_BIN', None)
 
+        if use_fixed_paths:
+            for idir in [common_methods.CTRL_DIR,
+                         os.path.join(self.cnss_prefix, 'exp'),
+                         os.path.join(self.cnss_prefix, 'usr')]:
+                try:
+                    os.stat(idir)
+                except OSError as e:
+                    if e.errno == errno.ENOENT:
+                        pass
+                    elif e.errno == errno.ENOTCONN:
+                        print("Unmounting previous projection/mount at %s",
+                              idir)
+                        subprocess.call(['fusermount', '-u', idir])
+                    else:
+                        raise
+
+        ompi_bin = os.getenv('IOF_OMPI_BIN', None)
         if ompi_bin:
             orterun = os.path.realpath(os.path.join(ompi_bin, 'orterun'))
         else:
@@ -1067,6 +1094,8 @@ if __name__ == '__main__':
                         help='Set the CaRT log mask')
     parser.add_argument('--internals-tracing', action='store_true', help='Turn '
                         'on internals path testing w/ RPC/Descriptor tracing')
+    parser.add_argument('--fixed-path', action='store_true',
+                        help='Use fixed paths for import/export')
     args = parser.parse_args()
 
     if args.internals_tracing:
@@ -1084,6 +1113,8 @@ if __name__ == '__main__':
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
     if args.logfile:
         log_to_file = True
+    if args.fixed_path:
+        use_fixed_paths = True
 
     if args.mask:
         os.environ['D_LOG_MASK'] = args.mask

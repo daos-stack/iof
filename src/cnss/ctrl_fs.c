@@ -1281,8 +1281,12 @@ int ctrl_fs_start(const char *prefix)
 		}
 
 		/* Make sure it's a directory */
+		errno = 0;
 		rc = stat(prefix, &stat_info);
-		if (rc != 0 || !S_ISDIR(stat_info.st_mode)) {
+		if (rc != 0 && errno == ENOTCONN) {
+			IOF_LOG_WARNING("Mount point already in use");
+			IOF_LOG_WARNING("Try: fusermount -u %s", prefix);
+		} else if (rc != 0 || !S_ISDIR(stat_info.st_mode)) {
 			IOF_LOG_ERROR("Could not create %s for ctrl fs, not a directory",
 				      prefix);
 			ctrl_fs.startup_rc = -EEXIST;

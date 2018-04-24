@@ -284,17 +284,20 @@ register_fuse(void *arg,
 	      bool threaded,
 	      void *private_data)
 {
-	struct plugin_entry *plugin = (struct plugin_entry *)arg;
-	struct fs_info *info;
+	struct plugin_entry	*plugin = arg;
+	struct fs_info		*info;
 	int rc;
 
 	if (!mnt) {
-		IOF_TRACE_ERROR(arg, "Invalid Mount point");
+		IOF_TRACE_ERROR(plugin, "Invalid Mount point");
 		return false;
 	}
 
-	if ((mkdir(mnt, 0755) && errno != EEXIST)) {
-		IOF_TRACE_ERROR(arg, "Could not create directory %s for import",
+	errno = 0;
+	rc = mkdir(mnt, 0755);
+	if (rc != 0 && errno != EEXIST) {
+		IOF_TRACE_ERROR(plugin,
+				"Could not create directory %s for import",
 				mnt);
 		return false;
 	}
@@ -313,7 +316,7 @@ register_fuse(void *arg,
 		goto cleanup_no_mutex;
 
 	if (pthread_mutex_init(&info->lock, NULL)) {
-		IOF_TRACE_ERROR(arg, "Count not create mutex");
+		IOF_TRACE_ERROR(plugin, "Count not create mutex");
 		goto cleanup_no_mutex;
 	}
 
@@ -335,7 +338,7 @@ register_fuse(void *arg,
 		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
 
 		if (!info->fuse) {
-			IOF_TRACE_ERROR(arg, "Could not initialize fuse");
+			IOF_TRACE_ERROR(plugin, "Could not initialize fuse");
 			fuse_opt_free_args(args);
 			iof_fuse_umount(info);
 			goto cleanup;
@@ -346,9 +349,9 @@ register_fuse(void *arg,
 			goto cleanup;
 	}
 
-	IOF_TRACE_DEBUG(arg,
+	IOF_TRACE_DEBUG(plugin,
 			"Registered a fuse mount point at : %s", info->mnt);
-	IOF_TRACE_DEBUG(arg,
+	IOF_TRACE_DEBUG(plugin,
 			"Private data %p threaded %u", private_data, info->mt);
 
 	fuse_opt_free_args(args);
@@ -361,7 +364,7 @@ register_fuse(void *arg,
 				    loop_fn, info);
 
 	if (rc) {
-		IOF_TRACE_ERROR(arg,
+		IOF_TRACE_ERROR(plugin,
 				"Could not start FUSE filesysten at '%s'",
 				info->mnt);
 		iof_fuse_umount(info);
@@ -374,7 +377,7 @@ register_fuse(void *arg,
 cleanup:
 	rc = pthread_mutex_destroy(&info->lock);
 	if (rc != 0)
-		IOF_TRACE_ERROR(arg,
+		IOF_TRACE_ERROR(plugin,
 				"Failed to destroy lock %d %s",
 				rc, strerror(rc));
 cleanup_no_mutex:
