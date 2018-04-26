@@ -365,7 +365,7 @@ int iof_fs_send(struct ioc_request *request)
 err:
 	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
 	crt_req_decref(request->rpc);
-	return -EIO;
+	return EIO;
 }
 
 static void

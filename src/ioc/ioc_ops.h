@@ -77,7 +77,7 @@
 	} while (0)
 
 #define IOC_REQ_SEND_LL(src, fsh, rc) \
-	(void)(rc = -iof_fs_send(&(src)->REQ_NAME))
+	(void)(rc = iof_fs_send(&(src)->REQ_NAME))
 
 #define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
 
