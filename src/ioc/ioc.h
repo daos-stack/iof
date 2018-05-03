@@ -185,6 +185,9 @@ struct iof_projection_info {
 	/* List of open file handles owned by FUSE */
 	pthread_mutex_t			of_lock;
 	d_list_t			openfile_list;
+
+	/* Held for any access/modification to a gah on any inode/file/dir */
+	pthread_mutex_t			gah_lock;
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)

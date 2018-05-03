@@ -106,7 +106,9 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 		if (!H_GAH_IS_VALID(handle))
 			D_GOTO(err, rc = EIO);
 
+		pthread_mutex_lock(&fs_handle->gah_lock);
 		in->gah = handle->common.gah;
+		pthread_mutex_unlock(&fs_handle->gah_lock);
 	} else {
 		/* Find the GAH of the inode */
 		rc = find_gah(fs_handle, ino, &in->gah);

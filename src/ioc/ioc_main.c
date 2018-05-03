@@ -242,6 +242,9 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		}
 
 		/* Mark all local GAH entries as invalid */
+
+		pthread_mutex_lock(&fs_handle->gah_lock);
+
 		pthread_mutex_lock(&fs_handle->of_lock);
 		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
 			if (fh->common.gah.root != rank)
@@ -262,6 +265,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 			H_GAH_SET_INVALID(dh);
 		}
 		pthread_mutex_unlock(&fs_handle->od_lock);
+		pthread_mutex_unlock(&fs_handle->gah_lock);
 	}
 
 	/* Send a RPC to register with the new server.
@@ -1392,6 +1396,7 @@ initialize_projection(struct iof_state *iof_state,
 	pthread_mutex_init(&fs_handle->od_lock, NULL);
 	D_INIT_LIST_HEAD(&fs_handle->openfile_list);
 	pthread_mutex_init(&fs_handle->of_lock, NULL);
+	pthread_mutex_init(&fs_handle->gah_lock, NULL);
 
 	fs_handle->max_read = fs_info->max_read;
 	fs_handle->max_iov_read = fs_info->max_iov_read;
@@ -1892,6 +1897,18 @@ static void iof_deregister_fuse(void *arg)
 	iof_pool_destroy(&fs_handle->pool);
 
 	rc = pthread_mutex_destroy(&fs_handle->od_lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(fs_handle,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
+
+	rc = pthread_mutex_destroy(&fs_handle->of_lock);
+	if (rc != 0)
+		IOF_TRACE_ERROR(fs_handle,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
+
+	rc = pthread_mutex_destroy(&fs_handle->gah_lock);
 	if (rc != 0)
 		IOF_TRACE_ERROR(fs_handle,
 				"Failed to destroy lock %d %s",

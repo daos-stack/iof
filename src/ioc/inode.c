@@ -69,7 +69,9 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->ino,
 		       GAH_PRINT_VAL(ie->gah));
 
-	memcpy(gah, &ie->gah, sizeof(*gah));
+	pthread_mutex_lock(&fs_handle->gah_lock);
+	*gah = ie->gah;
+	pthread_mutex_unlock(&fs_handle->gah_lock);
 
 	/* Once the GAH has been copied drop the reference on the parent inode
 	 */
@@ -140,7 +142,9 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (rc)
 		D_GOTO(err, rc);
 
+	pthread_mutex_lock(&fs_handle->gah_lock);
 	in->gah = ie->gah;
+	pthread_mutex_unlock(&fs_handle->gah_lock);
 
 	IOC_REQ_SEND_LL(desc, fs_handle, rc);
 	if (rc != 0)

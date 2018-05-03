@@ -77,7 +77,9 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	}
 
 	in = crt_req_get(handle->release_rpc);
+	pthread_mutex_lock(&fs_handle->gah_lock);
 	in->gah = handle->common.gah;
+	pthread_mutex_unlock(&fs_handle->gah_lock);
 	IOF_TRACE_LINK(handle->release_rpc, req, "release_file_rpc");
 
 	crt_req_addref(handle->release_rpc);
