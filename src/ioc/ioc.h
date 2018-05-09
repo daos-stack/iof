@@ -140,6 +140,13 @@ struct iof_wb {
 	bool				failure;
 };
 
+enum iof_failover_state {
+	iof_failover_running,
+	iof_failover_offline,
+	iof_failover_in_progress,
+	iof_failover_complete,
+};
+
 struct iof_projection_info {
 	struct iof_projection		proj;
 	struct iof_ctx			ctx;
@@ -152,6 +159,8 @@ struct iof_projection_info {
 	/* The name of the mount directory */
 	struct ios_name			mnt_dir;
 	char				*mount_point;
+
+	enum iof_failover_state		failover_state;
 
 	/* The name of the ctrlfs direcory */
 	struct ios_name			ctrl_dir;

@@ -118,7 +118,7 @@ int ioc_simple_resend(struct ioc_request *request)
  * client cannot continue in any form.
  */
 static void
-set_all_offline(struct iof_state *iof_state, int reason)
+set_all_offline(struct iof_state *iof_state, int reason, bool unlock)
 {
 	struct iof_projection_info *fs_handle;
 
@@ -127,6 +127,8 @@ set_all_offline(struct iof_state *iof_state, int reason)
 			       "Changing offline reason from %d to %d",
 			       fs_handle->offline_reason, reason);
 		fs_handle->offline_reason = reason;
+		if (unlock)
+			pthread_mutex_unlock(&fs_handle->gah_lock);
 	}
 }
 
@@ -144,11 +146,22 @@ static void
 rereg_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_state *iof_state = cb_info->cci_arg;
+	struct iof_projection_info *fs_handle;
 
 	IOF_TRACE_INFO(iof_state, "rc %d", cb_info->cci_rc);
 
-	if (cb_info->cci_rc != -DER_SUCCESS)
-		set_all_offline(iof_state, EHOSTDOWN);
+	if (cb_info->cci_rc != -DER_SUCCESS) {
+		set_all_offline(iof_state, EHOSTDOWN, true);
+		return;
+	}
+
+	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		if (fs_handle->offline_reason)
+			continue;
+
+		fs_handle->failover_state = iof_failover_complete;
+		pthread_mutex_unlock(&fs_handle->gah_lock);
+	}
 }
 
 /* The eviction handler atomically updates the PSR of the group for which
@@ -161,11 +174,13 @@ rereg_cb(const struct crt_cb_info *cb_info)
  */
 static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 {
-	d_rank_t updated_psr;
-	d_rank_list_t *psr_list = NULL;
-	struct iof_group_info *g = NULL;
-	struct iof_state *iof_state = arg;
-	struct iof_projection_info *fs_handle;
+	struct iof_state		*iof_state = arg;
+	d_rank_t			updated_psr;
+	d_rank_list_t			*psr_list = NULL;
+	struct iof_group_info		*g = NULL;
+	struct iof_projection_info	*fs_handle;
+	crt_rpc_t			*rpc = NULL;
+	int				active = 0;
 	int i, crc, rc;
 
 	IOF_TRACE_INFO(iof_state,
@@ -224,11 +239,15 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		struct iof_file_handle *fh;
 		struct iof_dir_handle *dh;
 
+		pthread_mutex_lock(&fs_handle->gah_lock);
+
 		if (fs_handle->proj.grp != &g->grp)
 			continue;
 
 		if (fs_handle->offline_reason)
 			continue;
+
+		/* Mark all local GAH entries as invalid */
 
 		if (!g->grp.enabled || !IOF_HAS_FAILOVER(fs_handle->flags)) {
 			IOF_TRACE_WARNING(fs_handle,
@@ -239,11 +258,11 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 				fs_handle->offline_reason = rc;
 			else
 				fs_handle->offline_reason = EHOSTDOWN;
+			fs_handle->failover_state = iof_failover_offline;
+		} else {
+			fs_handle->failover_state = iof_failover_in_progress;
+			active++;
 		}
-
-		/* Mark all local GAH entries as invalid */
-
-		pthread_mutex_lock(&fs_handle->gah_lock);
 
 		pthread_mutex_lock(&fs_handle->of_lock);
 		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
@@ -265,9 +284,18 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 			H_GAH_SET_INVALID(dh);
 		}
 		pthread_mutex_unlock(&fs_handle->od_lock);
-		pthread_mutex_unlock(&fs_handle->gah_lock);
 	}
 
+	/* If there are no potentially active projections then do not send the
+	 * re-attach RPC at all but just release the lock directly
+	 */
+	if (!active) {
+		d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+			pthread_mutex_unlock(&fs_handle->gah_lock);
+		}
+
+		return;
+	}
 	/* Send a RPC to register with the new server.
 	 *
 	 * Currently this doesn't do much other than help with the shutdown
@@ -275,18 +303,16 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	 * until the re-register succeeds.
 	 *
 	 */
-	{
-		crt_rpc_t *rpc = NULL;
-
-		rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &g->grp.psr_ep,
-				    QUERY_PSR_OP, &rpc);
-		if (rc != -DER_SUCCESS)
-			set_all_offline(iof_state, EHOSTDOWN);
-
-		rc = crt_req_send(rpc, rereg_cb, iof_state);
-		if (rc != -DER_SUCCESS)
-			set_all_offline(iof_state, EHOSTDOWN);
+	rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &g->grp.psr_ep,
+			    QUERY_PSR_OP, &rpc);
+	if (rc != -DER_SUCCESS) {
+		set_all_offline(iof_state, EHOSTDOWN, true);
+		return;
 	}
+
+	rc = crt_req_send(rpc, rereg_cb, iof_state);
+	if (rc != -DER_SUCCESS)
+		set_all_offline(iof_state, EHOSTDOWN, true);
 }
 
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
@@ -440,7 +466,7 @@ static int iof_uint_read(char *buf, size_t buflen, void *arg)
 	uint *value = arg;
 
 	snprintf(buf, buflen, "%u", *value);
-	return 0;
+	return CNSS_SUCCESS;
 }
 
 static int iof_uint64_read(char *buf, size_t buflen, void *arg)
@@ -448,7 +474,7 @@ static int iof_uint64_read(char *buf, size_t buflen, void *arg)
 	uint64_t *value = arg;
 
 	snprintf(buf, buflen, "%lu", *value);
-	return 0;
+	return CNSS_SUCCESS;
 }
 
 /* Attach to a CaRT group
@@ -1246,6 +1272,34 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	return ret;
 }
 
+static int failover_state_cb(char *buf, size_t buflen, void *arg)
+{
+	struct iof_projection_info *fs_handle = arg;
+	char *output;
+
+	switch (fs_handle->failover_state) {
+	case iof_failover_running:
+		output = "running";
+		break;
+	case iof_failover_offline:
+		output = "offline";
+		break;
+	case iof_failover_in_progress:
+		output = "in_progress";
+		break;
+	case iof_failover_complete:
+		output = "complete";
+		break;
+	default:
+		output = "unknown";
+		IOF_TRACE_ERROR(fs_handle, "Unknown failover state %d",
+				fs_handle->failover_state);
+	}
+
+	strncpy(buf, output, buflen);
+	return CNSS_SUCCESS;
+}
+
 static uint64_t online_read_cb(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
@@ -1265,7 +1319,7 @@ static int online_write_cb(uint64_t value, void *arg)
 	else
 		fs_handle->offline_reason = EHOSTDOWN;
 
-	return 0;
+	return CNSS_SUCCESS;
 }
 
 #define REGISTER_STAT(_STAT) cb->register_ctrl_variable(	\
@@ -1358,6 +1412,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
+	fs_handle->failover_state = iof_failover_running;
 	fs_handle->ctx.poll_interval = iof_state->iof_ctx.poll_interval;
 	fs_handle->ctx.callback_fn = iof_state->iof_ctx.callback_fn;
 	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private; "
@@ -1478,6 +1533,9 @@ initialize_projection(struct iof_state *iof_state,
 					  online_read_cb,
 					  online_write_cb,
 					  fs_handle);
+
+	cb->register_ctrl_variable(fs_handle->fs_dir, "failover_state",
+				   failover_state_cb, NULL, NULL, fs_handle);
 
 	cb->create_ctrl_subdir(fs_handle->fs_dir, "stats",
 			       &fs_handle->stats_dir);

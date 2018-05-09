@@ -223,6 +223,29 @@ class InternalsPathFramework(ColorizedOutput):
         self.normal_output('IONSS count = {0}PSR rank = {1}'.format(ionss_count,
                                                                     psr_rank))
 
+    def dump_failover_state(self):
+        """Log the current failover state, and return list"""
+
+        states = []
+        ctrl_fs_dir = CTRL_DIR
+
+        projs_dir = os.path.join(ctrl_fs_dir, 'iof', 'projections')
+        for proj in os.listdir(projs_dir):
+
+            mount_point = None
+            with open(os.path.join(projs_dir, proj, 'mount_point'), 'r') as f:
+                mount_point = f.read().strip()
+
+            state = 'unknown'
+            with open(os.path.join(projs_dir, proj, 'failover_state'),
+                      'r') as f:
+                state = f.read().strip()
+                states.append(state)
+
+            self.normal_output("state for {0} is '{1}'".format(mount_point,
+                                                               state))
+        return states
+
     def dump_cnss_stats(self, ctrl_fs_dir):
         """Dumps CNSS stats/FUSE callbacks for each IOF projection.
         Returns a list containing projection mount point, a list of the names of

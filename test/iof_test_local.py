@@ -466,6 +466,8 @@ class Testlocal(unittest.TestCase,
     def tearDown(self):
         """tear down the test"""
 
+        self.dump_failover_state()
+
         if self.internals_tracing == 'yes':
             if self.test_method == 'pyunit':
                 self.internals_path_testing_teardown()
@@ -897,7 +899,6 @@ class Testlocal(unittest.TestCase,
         while os.path.exists('/proc/%d' % iprocs[0]):
             time.sleep(1)
 
-
     def ft_stat_helper(self):
         """Helper function for the failover_stat test"""
 
@@ -930,6 +931,7 @@ class Testlocal(unittest.TestCase,
         Failover is disabled for ../exp so it should fail with EHOSTDOWN.
         """
 
+        self.dump_failover_state()
         self.kill_ionss_proc()
 
         # Now that the process is dead try performing I/O.  No wait is
@@ -945,6 +947,8 @@ class Testlocal(unittest.TestCase,
         if failed:
             self.fail('Failed with unexpected errno')
 
+        self.dump_failover_state()
+
         # Run the test a second time, however this time eviction should already
         # have happened so although the result is expected to be the same the
         # code-path internally is different.
@@ -952,6 +956,7 @@ class Testlocal(unittest.TestCase,
 
         if failed:
             self.fail('Failed 2nd pass with unexpected errno')
+        self.dump_failover_state()
 
     def clean_export_dir(self):
         """Clean up files created in backend fs"""

@@ -1096,7 +1096,7 @@ static int ctrl_read(const char *fname,
 			return -EIO;
 		}
 		rc = read_cb(mybuf, IOF_CTRL_MAX_LEN, cb_arg);
-		if (rc != 0) {
+		if (rc != CNSS_SUCCESS) {
 			IOF_LOG_ERROR("Error reading ctrl variable");
 			return -ENOENT;
 		}
@@ -1155,7 +1155,7 @@ static int ctrl_write(const char *fname,
 
 		if (trigger_cb != NULL) {
 			rc = trigger_cb(cb_arg);
-			if (rc != 0) {
+			if (rc != CNSS_SUCCESS) {
 				IOF_LOG_ERROR("Error triggering ctrl event");
 				return -ENOENT;
 			}
@@ -1175,7 +1175,7 @@ static int ctrl_write(const char *fname,
 			memcpy(mybuf, buf, mylen);
 			mybuf[mylen] = 0;
 			rc = write_cb(mybuf, cb_arg);
-			if (rc != 0) {
+			if (rc != CNSS_SUCCESS) {
 				IOF_LOG_ERROR("Error writing ctrl variable");
 				return -rc;
 			}
@@ -1207,7 +1207,7 @@ static int ctrl_release(const char *fname,
 
 		if (close_cb != NULL) {
 			rc = close_cb(handle->value, cb_arg);
-			if (rc != 0) {
+			if (rc != CNSS_SUCCESS) {
 				IOF_LOG_ERROR("Error closing ctrl tracker");
 				return -ENOENT;
 			}
