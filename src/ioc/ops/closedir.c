@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -80,9 +80,9 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 
 	IOF_TRACE_INFO(req, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
 
-	pthread_mutex_lock(&fs_handle->od_lock);
+	D_MUTEX_LOCK(&fs_handle->od_lock);
 	d_list_del(&dh->list);
-	pthread_mutex_unlock(&fs_handle->od_lock);
+	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
 	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
 	if (rc)

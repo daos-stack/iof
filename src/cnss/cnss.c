@@ -213,9 +213,9 @@ static void *ll_loop_fn(void *args)
 	struct fs_info *info = args;
 	const struct sigaction act = {.sa_handler = iof_signal_poke};
 
-	pthread_mutex_lock(&info->lock);
+	D_MUTEX_LOCK(&info->lock);
 	info->running = true;
-	pthread_mutex_unlock(&info->lock);
+	D_MUTEX_UNLOCK(&info->lock);
 
 	sigaction(SIGUSR1, &act, NULL);
 
@@ -232,9 +232,9 @@ static void *ll_loop_fn(void *args)
 
 	IOF_TRACE_DEBUG(info, "fuse loop completed %d", ret);
 
-	pthread_mutex_lock(&info->lock);
+	D_MUTEX_LOCK(&info->lock);
 	info->running = false;
-	pthread_mutex_unlock(&info->lock);
+	D_MUTEX_UNLOCK(&info->lock);
 	return (void *)(uintptr_t)ret;
 }
 
@@ -243,9 +243,9 @@ static void *loop_fn(void *args)
 	int ret;
 	struct fs_info *info = (struct fs_info *)args;
 
-	pthread_mutex_lock(&info->lock);
+	D_MUTEX_LOCK(&info->lock);
 	info->running = true;
-	pthread_mutex_unlock(&info->lock);
+	D_MUTEX_UNLOCK(&info->lock);
 
 	/*Blocking*/
 	if (info->mt) {
@@ -259,11 +259,11 @@ static void *loop_fn(void *args)
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
-	pthread_mutex_lock(&info->lock);
+	D_MUTEX_LOCK(&info->lock);
 	fuse_destroy(info->fuse);
 	info->fuse = NULL;
 	info->running = false;
-	pthread_mutex_unlock(&info->lock);
+	D_MUTEX_UNLOCK(&info->lock);
 
 	return (void *)(uintptr_t)ret;
 }
@@ -315,7 +315,7 @@ register_fuse(void *arg,
 	if (!info->mnt)
 		goto cleanup_no_mutex;
 
-	if (pthread_mutex_init(&info->lock, NULL)) {
+	if (pthread_mutex_init(&info->lock, NULL) != 0) {
 		IOF_TRACE_ERROR(plugin, "Count not create mutex");
 		goto cleanup_no_mutex;
 	}
@@ -396,7 +396,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	clock_gettime(CLOCK_REALTIME, &wait_time);
 
-	pthread_mutex_lock(&info->lock);
+	D_MUTEX_LOCK(&info->lock);
 
 	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
 
@@ -425,7 +425,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		}
 	}
 
-	pthread_mutex_unlock(&info->lock);
+	D_MUTEX_UNLOCK(&info->lock);
 
 	do {
 		IOF_TRACE_INFO(info, "Trying to join fuse thread");
@@ -526,10 +526,10 @@ static void barrier_done(struct crt_barrier_cb_info *info)
 		IOF_LOG_ERROR("Could not execute barrier: rc = %d\n",
 			      info->bci_rc);
 
-	pthread_mutex_lock(&b_info->lock);
+	D_MUTEX_LOCK(&b_info->lock);
 	b_info->in_barrier = false;
 	pthread_cond_signal(&b_info->cond);
-	pthread_mutex_unlock(&b_info->lock);
+	D_MUTEX_UNLOCK(&b_info->lock);
 }
 
 static void issue_barrier(void)
@@ -541,10 +541,10 @@ static void issue_barrier(void)
 	b_info.in_barrier = true;
 	crt_barrier(NULL, barrier_done, &b_info);
 	/* Existing service thread will progress barrier */
-	pthread_mutex_lock(&b_info.lock);
+	D_MUTEX_LOCK(&b_info.lock);
 	while (b_info.in_barrier)
 		pthread_cond_wait(&b_info.cond, &b_info.lock);
-	pthread_mutex_unlock(&b_info.lock);
+	D_MUTEX_UNLOCK(&b_info.lock);
 
 	pthread_cond_destroy(&b_info.cond);
 	pthread_mutex_destroy(&b_info.lock);
@@ -743,7 +743,9 @@ int main(int argc, char **argv)
 		return CNSS_ERR_NOMEM;
 	IOF_TRACE_ROOT(cnss_info, "cnss_info");
 
-	ctrl_info_init(&cnss_info->info);
+	rcb = ctrl_info_init(&cnss_info->info);
+	if (!rcb)
+		return CNSS_ERR_PTHREAD;
 	cnss_info->prefix = prefix;
 
 	D_ASPRINTF(ctrl_prefix, "%s/.ctrl", prefix);

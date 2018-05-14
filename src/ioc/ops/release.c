@@ -50,9 +50,9 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 
 	STAT_ADD(fs_handle->stats, release);
 
-	pthread_mutex_lock(&handle->fs_handle->of_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
 	d_list_del(&handle->list);
-	pthread_mutex_unlock(&handle->fs_handle->of_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 
 	/* If the projection is off-line then drop the local handle.
 	 *
@@ -77,9 +77,9 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	}
 
 	in = crt_req_get(handle->release_rpc);
-	pthread_mutex_lock(&fs_handle->gah_lock);
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = handle->common.gah;
-	pthread_mutex_unlock(&fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	IOF_TRACE_LINK(handle->release_rpc, req, "release_file_rpc");
 
 	crt_req_addref(handle->release_rpc);

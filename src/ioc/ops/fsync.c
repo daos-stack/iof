@@ -78,9 +78,9 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 		D_GOTO(out, rc = EIO);
 
 	in = crt_req_get(rpc);
-	pthread_mutex_lock(&fs_handle->gah_lock);
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = handle->common.gah;
-	pthread_mutex_unlock(&fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
 	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
 	if (rc)

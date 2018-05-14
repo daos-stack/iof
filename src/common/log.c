@@ -35,7 +35,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
 #include <pthread.h>
+#include <gurt/common.h>
+
 #include "log.h"
 
 int iof_log_handle;
@@ -58,7 +61,7 @@ void iof_log_init(const char *shortname, const char *longname, int *handle)
 	d_log_init();
 	new_handle = iof_log_allocfacility(shortname, longname);
 
-	pthread_mutex_lock(&lock);
+	D_MUTEX_LOCK(&lock);
 	if (handle == NULL) {
 		iof_log_handle = new_handle;
 	} else {
@@ -69,7 +72,7 @@ void iof_log_init(const char *shortname, const char *longname, int *handle)
 		if (iof_log_handle == -1)
 			iof_log_handle = new_handle;
 	}
-	pthread_mutex_unlock(&lock);
+	D_MUTEX_UNLOCK(&lock);
 }
 
 void iof_log_close(void)

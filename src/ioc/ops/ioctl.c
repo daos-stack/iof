@@ -59,9 +59,9 @@ handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
 		       handle->fs_handle->fs_id,
 		       handle->fs_handle->proj.cli_fs_id);
 	gah_info->version = IOF_IOCTL_VERSION;
-	pthread_mutex_lock(&handle->fs_handle->gah_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
 	gah_info->gah = handle->common.gah;
-	pthread_mutex_unlock(&handle->fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
 	gah_info->cnss_id = getpid();
 	gah_info->cli_fs_id = handle->fs_handle->proj.cli_fs_id;
 }

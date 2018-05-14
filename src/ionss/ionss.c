@@ -1166,13 +1166,13 @@ void iof_read_check_and_send(struct ios_projection *projection)
 	struct ionss_io_req_desc *rrd;
 	struct ionss_active_read *ard;
 
-	pthread_mutex_lock(&projection->lock);
+	D_MUTEX_LOCK(&projection->lock);
 	if (d_list_empty(&projection->read_list)) {
 		projection->current_read_count--;
 		IOF_LOG_DEBUG("Dropping read slot (%d/%d)",
 			      projection->current_read_count,
 			      projection->max_read_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		return;
 	}
 
@@ -1182,7 +1182,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 		IOF_LOG_WARNING("No ARD slot available (%d/%d)",
 				projection->current_read_count,
 				projection->max_read_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		return;
 	}
 
@@ -1196,7 +1196,7 @@ void iof_read_check_and_send(struct ios_projection *projection)
 			projection->current_read_count,
 			projection->max_read_count);
 
-	pthread_mutex_unlock(&projection->lock);
+	D_MUTEX_UNLOCK(&projection->lock);
 
 	ard->rpc = rrd->rpc;
 	ard->handle = rrd->handle;
@@ -1374,7 +1374,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 
 	projection = handle->projection;
 
-	pthread_mutex_lock(&projection->lock);
+	D_MUTEX_LOCK(&projection->lock);
 
 	/* Try and acquire a active read descriptor, if one is available then
 	 * start the read, else add it to the list
@@ -1386,7 +1386,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 		IOF_TRACE_DEBUG(ard, "Injecting new read (%d/%d)",
 				projection->current_read_count,
 				projection->max_read_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		ard->rpc = rpc;
 		ard->handle = handle;
 		iof_process_read_bulk(ard);
@@ -1399,7 +1399,7 @@ iof_readx_handler(crt_rpc_t *rpc)
 		rrd->rpc = rpc;
 		rrd->handle = handle;
 		d_list_add_tail(&rrd->list, &projection->read_list);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 	}
 
 	return;
@@ -1644,13 +1644,13 @@ void iof_write_check_and_send(struct ios_projection *projection)
 	struct iof_writex_in *in;
 	struct iof_writex_out *out;
 
-	pthread_mutex_lock(&projection->lock);
+	D_MUTEX_LOCK(&projection->lock);
 	if (d_list_empty(&projection->write_list)) {
 		projection->current_write_count--;
 		IOF_TRACE_DEBUG(projection, "Dropping write slot (%d/%d)",
 				projection->current_write_count,
 				projection->max_write_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		return;
 	}
 
@@ -1660,7 +1660,7 @@ void iof_write_check_and_send(struct ios_projection *projection)
 		IOF_TRACE_WARNING(projection, "No AWD slot available (%d/%d)",
 				  projection->current_write_count,
 				  projection->max_write_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		return;
 	}
 
@@ -1674,7 +1674,7 @@ void iof_write_check_and_send(struct ios_projection *projection)
 			projection->current_write_count,
 			projection->max_write_count);
 
-	pthread_mutex_unlock(&projection->lock);
+	D_MUTEX_UNLOCK(&projection->lock);
 
 	awd->rpc = wrd->rpc;
 	awd->handle = wrd->handle;
@@ -1850,7 +1850,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 
 	crt_req_addref(rpc);
 
-	pthread_mutex_lock(&projection->lock);
+	D_MUTEX_LOCK(&projection->lock);
 
 	/* Try and acquire a active write descriptor, if one is available then
 	 * start the write, else add it to the list
@@ -1862,7 +1862,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 		IOF_TRACE_DEBUG(awd, "Injecting new write (%d/%d)",
 				projection->current_write_count,
 				projection->max_write_count);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 		awd->rpc = rpc;
 		awd->handle = handle;
 		iof_process_write(awd);
@@ -1875,7 +1875,7 @@ iof_writex_handler(crt_rpc_t *rpc)
 		wrd->rpc = rpc;
 		wrd->handle = handle;
 		d_list_add_tail(&wrd->list, &projection->write_list);
-		pthread_mutex_unlock(&projection->lock);
+		D_MUTEX_UNLOCK(&projection->lock);
 	}
 	/* Do not call crt_reply_send() in this case as it'll be done in
 	 * the bulk handler.

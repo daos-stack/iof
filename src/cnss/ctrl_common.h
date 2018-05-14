@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 Intel Corporation
+/* Copyright (C) 2017-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,7 @@ int register_cnss_controls(struct ctrl_info *ctrl_info);
 /* Wait for shutdown signal */
 void wait_for_shutdown(struct ctrl_info *ctrl_info);
 /* Initialize ctrl_info */
-void ctrl_info_init(struct ctrl_info *ctrl_info);
+bool ctrl_info_init(struct ctrl_info *ctrl_info);
 /* A prototype for dump function that must be defined */
 int cnss_dump_log(struct ctrl_info *info);
 

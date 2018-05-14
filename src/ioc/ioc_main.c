@@ -128,7 +128,7 @@ set_all_offline(struct iof_state *iof_state, int reason, bool unlock)
 			       fs_handle->offline_reason, reason);
 		fs_handle->offline_reason = reason;
 		if (unlock)
-			pthread_mutex_unlock(&fs_handle->gah_lock);
+			D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	}
 }
 
@@ -160,7 +160,7 @@ rereg_cb(const struct crt_cb_info *cb_info)
 			continue;
 
 		fs_handle->failover_state = iof_failover_complete;
-		pthread_mutex_unlock(&fs_handle->gah_lock);
+		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	}
 }
 
@@ -239,7 +239,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		struct iof_file_handle *fh;
 		struct iof_dir_handle *dh;
 
-		pthread_mutex_lock(&fs_handle->gah_lock);
+		D_MUTEX_LOCK(&fs_handle->gah_lock);
 
 		if (fs_handle->proj.grp != &g->grp)
 			continue;
@@ -264,7 +264,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 			active++;
 		}
 
-		pthread_mutex_lock(&fs_handle->of_lock);
+		D_MUTEX_LOCK(&fs_handle->of_lock);
 		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
 			if (fh->common.gah.root != rank)
 				continue;
@@ -273,8 +273,8 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 				       GAH_PRINT_VAL(fh->common.gah), fh);
 			H_GAH_SET_INVALID(fh);
 		}
-		pthread_mutex_unlock(&fs_handle->of_lock);
-		pthread_mutex_lock(&fs_handle->od_lock);
+		D_MUTEX_UNLOCK(&fs_handle->of_lock);
+		D_MUTEX_LOCK(&fs_handle->od_lock);
 		d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
 			if (dh->gah.root != rank)
 				continue;
@@ -283,7 +283,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 				       GAH_PRINT_VAL(dh->gah), fh);
 			H_GAH_SET_INVALID(dh);
 		}
-		pthread_mutex_unlock(&fs_handle->od_lock);
+		D_MUTEX_UNLOCK(&fs_handle->od_lock);
 	}
 
 	/* If there are no potentially active projections then do not send the
@@ -291,7 +291,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	 */
 	if (!active) {
 		d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
-			pthread_mutex_unlock(&fs_handle->gah_lock);
+			D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 		}
 
 		return;
@@ -1448,10 +1448,17 @@ initialize_projection(struct iof_state *iof_state,
 	 * the server didn't close.
 	 */
 	D_INIT_LIST_HEAD(&fs_handle->opendir_list);
-	pthread_mutex_init(&fs_handle->od_lock, NULL);
+	ret = pthread_mutex_init(&fs_handle->od_lock, NULL);
+	if (ret != 0)
+		D_GOTO(err, 0);
 	D_INIT_LIST_HEAD(&fs_handle->openfile_list);
-	pthread_mutex_init(&fs_handle->of_lock, NULL);
-	pthread_mutex_init(&fs_handle->gah_lock, NULL);
+	ret = pthread_mutex_init(&fs_handle->of_lock, NULL);
+	if (ret != 0)
+		D_GOTO(err, 0);
+
+	ret = pthread_mutex_init(&fs_handle->gah_lock, NULL);
+	if (ret != 0)
+		D_GOTO(err, 0);
 
 	fs_handle->max_read = fs_info->max_read;
 	fs_handle->max_iov_read = fs_info->max_iov_read;

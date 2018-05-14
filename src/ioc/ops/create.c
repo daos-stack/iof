@@ -78,9 +78,9 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	H_GAH_SET_VALID(handle);
 	handle->inode_no = entry.ino;
 
-	pthread_mutex_lock(&handle->fs_handle->of_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
 	d_list_add_tail(&handle->list, &handle->fs_handle->openfile_list);
-	pthread_mutex_unlock(&handle->fs_handle->of_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 	req = handle->open_req;
 	handle->open_req = 0;
 

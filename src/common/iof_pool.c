@@ -189,13 +189,13 @@ iof_pool_reclaim(struct iof_pool *pool)
 	struct iof_pool_type *type;
 	int active_descriptors = false;
 
-	pthread_mutex_lock(&pool->lock);
+	D_MUTEX_LOCK(&pool->lock);
 	d_list_for_each_entry(type, &pool->list, type_list) {
 		d_list_t *entry, *enext;
 
 		IOF_TRACE_DEBUG(type, "Resetting type");
 
-		pthread_mutex_lock(&type->lock);
+		D_MUTEX_LOCK(&type->lock);
 
 		/* Reclaim any pending objects.  Count here just needs to be
 		 * larger than pending_count + free_count however simply
@@ -224,9 +224,9 @@ iof_pool_reclaim(struct iof_pool *pool)
 				       type->reg.name);
 			active_descriptors = true;
 		}
-		pthread_mutex_unlock(&type->lock);
+		D_MUTEX_UNLOCK(&type->lock);
 	}
-	pthread_mutex_unlock(&pool->lock);
+	D_MUTEX_UNLOCK(&pool->lock);
 	return active_descriptors;
 }
 
@@ -316,9 +316,9 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 
 	create_many(type);
 
-	pthread_mutex_lock(&pool->lock);
+	D_MUTEX_LOCK(&pool->lock);
 	d_list_add_tail(&type->type_list, &pool->list);
-	pthread_mutex_unlock(&pool->lock);
+	D_MUTEX_UNLOCK(&pool->lock);
 
 	return type;
 }
@@ -335,7 +335,7 @@ iof_pool_acquire(struct iof_pool_type *type)
 	d_list_t	*entry;
 	bool		at_limit = false;
 
-	pthread_mutex_lock(&type->lock);
+	D_MUTEX_LOCK(&type->lock);
 
 	type->no_restock++;
 
@@ -361,7 +361,7 @@ iof_pool_acquire(struct iof_pool_type *type)
 		}
 	}
 
-	pthread_mutex_unlock(&type->lock);
+	D_MUTEX_UNLOCK(&type->lock);
 
 	if (ptr)
 		IOF_TRACE_DEBUG(ptr, "Type %p Using %p", type, ptr);
@@ -385,10 +385,10 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 
 	IOF_TRACE_DEBUG(ptr, "Releasing");
 	IOF_TRACE_DOWN(ptr);
-	pthread_mutex_lock(&type->lock);
+	D_MUTEX_LOCK(&type->lock);
 	type->pending_count++;
 	d_list_add_tail(entry, &type->pending_list);
-	pthread_mutex_unlock(&type->lock);
+	D_MUTEX_UNLOCK(&type->lock);
 }
 
 /* Re-stock an object type.
@@ -408,7 +408,7 @@ iof_pool_restock(struct iof_pool_type *type)
 	IOF_TRACE_DEBUG(type, "Count (%d/%d/%d)", type->pending_count,
 			type->free_count, type->count);
 
-	pthread_mutex_lock(&type->lock);
+	D_MUTEX_LOCK(&type->lock);
 
 	/* Update restock hwm metrics */
 	if (type->no_restock > type->no_restock_hwm)
@@ -421,5 +421,5 @@ iof_pool_restock(struct iof_pool_type *type)
 	if (!type->reg.max_desc)
 		create_many(type);
 
-	pthread_mutex_unlock(&type->lock);
+	D_MUTEX_UNLOCK(&type->lock);
 }

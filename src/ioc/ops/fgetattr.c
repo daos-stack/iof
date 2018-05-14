@@ -89,9 +89,9 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		if (!H_GAH_IS_VALID(handle))
 			D_GOTO(err, rc = EIO);
 
-		pthread_mutex_lock(&fs_handle->gah_lock);
+		D_MUTEX_LOCK(&fs_handle->gah_lock);
 		in->gah = handle->common.gah;
-		pthread_mutex_unlock(&fs_handle->gah_lock);
+		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 		IOF_TRACE_ALIAS(req, handle, "getattr_fh_fuse_req");
 	} else {
 		rc = find_gah(fs_handle, ino, &in->gah);

@@ -108,9 +108,9 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 		D_GOTO(err, rc = EIO);
 	}
 
-	pthread_mutex_lock(&handle->fs_handle->gah_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
 	in->gah = handle->common.gah;
-	pthread_mutex_unlock(&handle->fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
 
 	in->xtvec.xt_len = len;
 	if (len <= handle->fs_handle->proj.max_iov_write) {

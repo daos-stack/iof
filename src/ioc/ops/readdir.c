@@ -103,9 +103,9 @@ static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 	}
 
 	in = crt_req_get(rpc);
-	pthread_mutex_lock(&fs_handle->gah_lock);
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = dir_handle->gah;
-	pthread_mutex_unlock(&fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	in->offset = offset;
 
 	iov.iov_len = len;

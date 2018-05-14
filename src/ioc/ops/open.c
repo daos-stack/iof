@@ -71,9 +71,9 @@ ioc_open_ll_cb(const struct crt_cb_info *cb_info)
 	fi.fh = (uint64_t)handle;
 	handle->common.gah = out->gah;
 	H_GAH_SET_VALID(handle);
-	pthread_mutex_lock(&handle->fs_handle->of_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
 	d_list_add_tail(&handle->list, &handle->fs_handle->openfile_list);
-	pthread_mutex_unlock(&handle->fs_handle->of_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 	req = handle->open_req;
 	handle->open_req = 0;
 

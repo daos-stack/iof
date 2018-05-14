@@ -85,13 +85,13 @@ static void save_free_entries(void *tpv_data)
 	if (d_list_empty(&tpv->free_entries))
 		return;
 
-	pthread_mutex_lock(&pool->lock);
+	D_MUTEX_LOCK(&pool->lock);
 	d_list_splice(&tpv->free_entries, &pool->free_entries);
 	d_list_splice(&tpv->allocated_blocks, &pool->allocated_blocks);
 	d_list_del(&tpv->link);
 	pthread_setspecific(pool->key, NULL);
 	D_FREE(tpv);
-	pthread_mutex_unlock(&pool->lock);
+	D_MUTEX_UNLOCK(&pool->lock);
 }
 
 #define BLOCK_SIZE 16384
@@ -187,13 +187,13 @@ static int get_tpv(struct obj_pool *pool, struct tpv_data **tpv)
 		D_INIT_LIST_HEAD(&tpv_data->allocated_blocks);
 		tpv_data->pool = pool;
 
-		pthread_mutex_lock(&pool->lock);
+		D_MUTEX_LOCK(&pool->lock);
 		d_list_add(&tpv_data->link, &pool->tpv_list);
 		/* Steal entries left by a dead thread */
 		if (!d_list_empty(&pool->free_entries))
 			d_list_splice_init(&pool->free_entries,
 					   &tpv_data->free_entries);
-		pthread_mutex_unlock(&pool->lock);
+		D_MUTEX_UNLOCK(&pool->lock);
 
 		pthread_setspecific(pool->key, tpv_data);
 	}
@@ -289,9 +289,9 @@ int obj_pool_put(obj_pool_t *pool, void *item)
 	rc = get_tpv(real_pool, &tpv_data);
 
 	if (rc != -DER_SUCCESS) {
-		pthread_mutex_lock(&real_pool->lock);
+		D_MUTEX_LOCK(&real_pool->lock);
 		d_list_add(&entry->link, &real_pool->free_entries);
-		pthread_mutex_unlock(&real_pool->lock);
+		D_MUTEX_UNLOCK(&real_pool->lock);
 		return rc;
 	}
 

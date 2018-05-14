@@ -125,9 +125,9 @@ ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
 		D_GOTO(out_err, rc = EIO);
 
 	in = crt_req_get(rb->rpc);
-	pthread_mutex_lock(&handle->fs_handle->gah_lock);
+	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
 	in->gah = handle->common.gah;
-	pthread_mutex_unlock(&handle->fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
 	in->xtvec.xt_off = position;
 	in->xtvec.xt_len = len;
 	in->data_bulk = rb->lb.handle;

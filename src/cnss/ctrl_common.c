@@ -40,21 +40,30 @@
 #include <string.h>
 #include <pthread.h>
 #include <gurt/dlog.h>
+#include <gurt/common.h>
 #include "ctrl_common.h"
 
-void ctrl_info_init(struct ctrl_info *ctrl_info)
+bool ctrl_info_init(struct ctrl_info *ctrl_info)
 {
+	int rc;
 	memset(ctrl_info, 0, sizeof(*ctrl_info));
-	pthread_mutex_init(&ctrl_info->lock, NULL);
-	pthread_cond_init(&ctrl_info->cond, NULL);
+	rc = pthread_mutex_init(&ctrl_info->lock, NULL);
+	if (rc != 0)
+		return false;
+	rc = pthread_cond_init(&ctrl_info->cond, NULL);
+	if (rc != 0) {
+		pthread_mutex_destroy(&ctrl_info->lock);
+		return false;
+	}
+	return true;
 }
 
 void wait_for_shutdown(struct ctrl_info *ctrl_info)
 {
-	pthread_mutex_lock(&ctrl_info->lock);
+	D_MUTEX_LOCK(&ctrl_info->lock);
 	while (!ctrl_info->shutting_down)
 		pthread_cond_wait(&ctrl_info->cond, &ctrl_info->lock);
-	pthread_mutex_unlock(&ctrl_info->lock);
+	D_MUTEX_UNLOCK(&ctrl_info->lock);
 	IOF_LOG_INFO("Shutdown signal received");
 }
 
@@ -89,10 +98,10 @@ static int shutdown_write_cb(uint64_t value, void *arg)
 	if (!ctrl_info->shutting_down) {
 		IOF_LOG_INFO("Shutting down");
 		ctrl_fs_disable(); /* disables new opens on ctrl files */
-		pthread_mutex_lock(&ctrl_info->lock);
+		D_MUTEX_LOCK(&ctrl_info->lock);
 		ctrl_info->shutting_down = 1;
 		pthread_cond_signal(&ctrl_info->cond);
-		pthread_mutex_unlock(&ctrl_info->lock);
+		D_MUTEX_UNLOCK(&ctrl_info->lock);
 	}
 
 	return 0;

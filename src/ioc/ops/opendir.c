@@ -65,9 +65,9 @@ opendir_ll_cb(struct ioc_request *request)
 		H_GAH_SET_VALID(dh);
 		dh->handle_valid = 1;
 		dh->ep = dh->fs_handle->proj.grp->psr_ep;
-		pthread_mutex_lock(&dh->fs_handle->od_lock);
+		D_MUTEX_LOCK(&dh->fs_handle->od_lock);
 		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
-		pthread_mutex_unlock(&dh->fs_handle->od_lock);
+		D_MUTEX_UNLOCK(&dh->fs_handle->od_lock);
 		fi.fh = (uint64_t)dh;
 		IOF_FUSE_REPLY_OPEN(f_req, fi);
 	} else {
