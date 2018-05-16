@@ -156,6 +156,7 @@ struct iof_projection_info {
 	struct ctrl_dir			*fs_dir;
 	struct ctrl_dir			*stats_dir;
 	struct iof_stats		*stats;
+	struct fuse_session		*session;
 	/* The name of the mount directory */
 	struct ios_name			mnt_dir;
 	char				*mount_point;

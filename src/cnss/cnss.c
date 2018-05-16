@@ -282,7 +282,8 @@ register_fuse(void *arg,
 	      struct fuse_args *args,
 	      const char *mnt,
 	      bool threaded,
-	      void *private_data)
+	      void *private_data,
+	      struct fuse_session **sessionp)
 {
 	struct plugin_entry	*plugin = arg;
 	struct fs_info		*info;
@@ -334,6 +335,8 @@ register_fuse(void *arg,
 		rc = fuse_session_mount(info->session, info->mnt);
 		if (rc != 0)
 			goto cleanup;
+
+		*sessionp = info->session;
 	} else {
 		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
 
@@ -401,7 +404,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
 
 	if (plugin->active && plugin->fns->flush_fuse)
-		plugin->fns->flush_fuse(info->session, info->private_data);
+		plugin->fns->flush_fuse(info->private_data);
 
 	if (info->running) {
 		IOF_TRACE_DEBUG(info,
@@ -486,8 +489,7 @@ void flush_fs(struct cnss_info *cnss_info)
 			if (!info->session)
 				continue;
 
-			plugin->fns->flush_fuse(info->session,
-						info->private_data);
+			plugin->fns->flush_fuse(info->private_data);
 		}
 	}
 }

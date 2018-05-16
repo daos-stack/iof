@@ -1694,7 +1694,8 @@ initialize_projection(struct iof_state *iof_state,
 				  &args,
 				  fs_handle->mnt_dir.name,
 				 (fs_handle->flags & IOF_CNSS_MT) != 0,
-				  fs_handle)) {
+				  fs_handle,
+				  &fs_handle->session)) {
 		IOF_TRACE_ERROR(fs_handle, "Unable to register FUSE fs");
 		D_GOTO(err, 0);
 	}
@@ -1861,7 +1862,7 @@ static int iof_post_start(void *arg)
 static int
 ino_flush(d_list_t *rlink, void *arg)
 {
-	struct fuse_session *session = arg;
+	struct iof_projection_info *fs_handle = arg;
 	struct ioc_inode_entry *ie = container_of(rlink,
 						  struct ioc_inode_entry,
 						  list);
@@ -1870,30 +1871,32 @@ ino_flush(d_list_t *rlink, void *arg)
 	if (ie->parent != 1)
 		return 0;
 
-	rc = fuse_lowlevel_notify_inval_entry(session,
+	rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
 					      ie->parent,
 					      ie->name,
 					      strlen(ie->name));
 	if (rc != 0 && rc != -ENOENT)
-		IOF_LOG_WARNING("%lu %lu '%s': %d",
-				ie->parent, ie->ino, ie->name, rc);
+		IOF_TRACE_WARNING(fs_handle,
+				  "%lu %lu '%s': %d",
+				  ie->parent, ie->ino, ie->name, rc);
 	else
-		IOF_LOG_INFO("%lu %lu '%s': %d",
-			     ie->parent, ie->ino, ie->name, rc);
+		IOF_TRACE_INFO(fs_handle,
+			       "%lu %lu '%s': %d",
+			       ie->parent, ie->ino, ie->name, rc);
 
 	return 0;
 }
 
 /* Called once per projection, before the FUSE filesystem has been torn down */
-static void iof_flush_fuse(void *arg1, void *arg2)
+static void iof_flush_fuse(void *arg)
 {
-	struct fuse_session *session = arg1;
-	struct iof_projection_info *fs_handle = arg2;
+	struct iof_projection_info *fs_handle = arg;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Flushing inode table");
 
-	rc = d_hash_table_traverse(&fs_handle->inode_ht, ino_flush, session);
+	rc = d_hash_table_traverse(&fs_handle->inode_ht, ino_flush,
+				   fs_handle->session);
 
 	IOF_TRACE_INFO(fs_handle, "Flush complete: %d", rc);
 }
