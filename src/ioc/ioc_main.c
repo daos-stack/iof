@@ -128,7 +128,7 @@ inode_check_cb(d_list_t *rlink, void *arg)
 
 	IOF_TRACE_INFO(fs_handle,
 		       "check inode %lu parent %lu failover %s",
-		       ie->ino, ie->parent, ie->failover ? "yes" : "no");
+		       ie->stat.st_ino, ie->parent, ie->failover ? "yes" : "no");
 
 	if (!ie->failover) {
 		int rc;
@@ -668,11 +668,11 @@ static bool ih_key_cmp(struct d_hash_table *htable, d_list_t *rlink,
 		       const void *key, unsigned int ksize)
 {
 	const struct ioc_inode_entry *ie;
-	const fuse_ino_t *ino = key;
+	const ino_t *ino = key;
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-	return *ino == ie->ino;
+	return *ino == ie->stat.st_ino;
 }
 
 static void ih_addref(struct d_hash_table *htable, d_list_t *rlink)
@@ -1989,12 +1989,12 @@ ino_flush(d_list_t *rlink, void *arg)
 	if (rc != 0 && rc != -ENOENT)
 		IOF_TRACE_WARNING(fs_handle,
 				  "%lu %lu '%s': %d %s",
-				  ie->parent, ie->ino, ie->name, rc,
+				  ie->parent, ie->stat.st_ino, ie->name, rc,
 				  strerror(-rc));
 	else
 		IOF_TRACE_INFO(fs_handle,
 			       "%lu %lu '%s': %d %s",
-			       ie->parent, ie->ino, ie->name, rc,
+			       ie->parent, ie->stat.st_ino, ie->name, rc,
 			       strerror(-rc));
 
 	/* If the FUSE connection is dead then do not traverse further, it doesn't

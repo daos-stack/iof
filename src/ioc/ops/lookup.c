@@ -68,15 +68,15 @@ void iof_entry_cb(struct ioc_request *request)
 	if (rc)
 		D_GOTO(out, rc);
 
-	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
+	entry.attr = out->stat;
 	entry.generation = 1;
 	entry.ino = entry.attr.st_ino;
 
-	desc->ie->ino = entry.attr.st_ino;
 	desc->ie->gah = out->gah;
+	desc->ie->stat = out->stat;
 	rlink = d_hash_rec_find_insert(&desc->fs_handle->inode_ht,
-				       &entry.ino,
-				       sizeof(entry.ino),
+				       &desc->ie->stat.st_ino,
+				       sizeof(desc->ie->stat.st_ino),
 				       &desc->ie->list);
 
 	if (rlink == &desc->ie->list) {

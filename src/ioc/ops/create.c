@@ -87,11 +87,11 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	/* Populate the inode table with the GAH from the duplicate file
 	 * so that it can still be accessed after the file is closed
 	 */
-	handle->ie->ino = entry.attr.st_ino;
 	handle->ie->gah = out->igah;
+	handle->ie->stat = out->stat;
 	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
-				       &entry.ino,
-				       sizeof(entry.ino),
+				       &handle->ie->stat.st_ino,
+				       sizeof(handle->ie->stat.st_ino),
 				       &handle->ie->list);
 
 	if (rlink == &handle->ie->list) {

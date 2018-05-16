@@ -50,7 +50,7 @@
 /* Find a GAH from a inode, return 0 if found */
 static int
 find_gah_internal(struct iof_projection_info *fs_handle,
-		  fuse_ino_t ino, struct ios_gah *gah, bool drop_ref)
+		  ino_t ino, struct ios_gah *gah, bool drop_ref)
 {
 	struct ioc_inode_entry *ie;
 	d_list_t *rlink;
@@ -66,7 +66,7 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->ino,
+	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->stat.st_ino,
 		       GAH_PRINT_VAL(ie->gah));
 
 	D_MUTEX_LOCK(&fs_handle->gah_lock);
@@ -98,7 +98,7 @@ find_gah_ref(struct iof_projection_info *fs_handle,
 
 /* Drop a reference on the GAH in the hash table */
 void
-drop_ino_ref(struct iof_projection_info *fs_handle, fuse_ino_t ino)
+drop_ino_ref(struct iof_projection_info *fs_handle, ino_t ino)
 {
 	d_list_t *rlink;
 
@@ -139,7 +139,7 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (ie->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
 		IOF_TRACE_WARNING(fs_handle,
 				  "Gah with old root %lu " GAH_PRINT_STR,
-				  ie->ino, GAH_PRINT_VAL(ie->gah));
+				  ie->stat.st_ino, GAH_PRINT_VAL(ie->gah));
 		D_GOTO(out, 0);
 		return;
 	}
