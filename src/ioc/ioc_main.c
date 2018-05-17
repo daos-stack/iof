@@ -257,6 +257,7 @@ rereg_cb(const struct crt_cb_info *cb_info)
 	}
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+
 		if (!fs_handle->offline_reason) {
 			inode_check(fs_handle);
 
@@ -2021,7 +2022,7 @@ static void iof_flush_fuse(void *arg)
 }
 
 /* Called once per projection, after the FUSE filesystem has been torn down */
-static void iof_deregister_fuse(void *arg)
+static int iof_deregister_fuse(void *arg)
 {
 	struct iof_projection_info *fs_handle = arg;
 	d_list_t *rlink = NULL;
@@ -2030,6 +2031,7 @@ static void iof_deregister_fuse(void *arg)
 	uint64_t refs = 0;
 	int handles = 0;
 	int rc;
+	int rcp = 0;
 
 	IOF_TRACE_INFO(fs_handle, "Draining inode table");
 	do {
@@ -2052,8 +2054,10 @@ static void iof_deregister_fuse(void *arg)
 		       refs, handles);
 
 	rc = d_hash_table_destroy_inplace(&fs_handle->inode_ht, false);
-	if (rc)
+	if (rc) {
 		IOF_TRACE_WARNING(fs_handle, "Failed to close inode handles");
+		rcp = EINVAL;
+	}
 
 	/* This code does not need to hold the locks as the fuse progression
 	 * thread is no longer running so no more calls to open()/opendir()
@@ -2084,22 +2088,28 @@ static void iof_deregister_fuse(void *arg)
 	iof_pool_destroy(&fs_handle->pool);
 
 	rc = pthread_mutex_destroy(&fs_handle->od_lock);
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_TRACE_ERROR(fs_handle,
 				"Failed to destroy lock %d %s",
 				rc, strerror(rc));
+		rcp = rc;
+	}
 
 	rc = pthread_mutex_destroy(&fs_handle->of_lock);
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_TRACE_ERROR(fs_handle,
 				"Failed to destroy lock %d %s",
 				rc, strerror(rc));
+		rcp = rc;
+	}
 
 	rc = pthread_mutex_destroy(&fs_handle->gah_lock);
-	if (rc != 0)
+	if (rc != 0) {
 		IOF_TRACE_ERROR(fs_handle,
 				"Failed to destroy lock %d %s",
 				rc, strerror(rc));
+		rcp = rc;
+	}
 
 	IOF_TRACE_DOWN(fs_handle);
 	d_list_del(&fs_handle->link);
@@ -2109,6 +2119,7 @@ static void iof_deregister_fuse(void *arg)
 
 	D_FREE(fs_handle->stats);
 	D_FREE(fs_handle);
+	return rcp;
 }
 
 static void

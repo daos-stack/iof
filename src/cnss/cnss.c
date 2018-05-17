@@ -470,8 +470,12 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	rc = (uintptr_t)rcp;
 
-	if (plugin->active && plugin->fns->deregister_fuse)
-		plugin->fns->deregister_fuse(info->private_data);
+	if (plugin->active && plugin->fns->deregister_fuse) {
+		int rcf = plugin->fns->deregister_fuse(info->private_data);
+
+		if (rcf)
+			rc = rcf;
+	}
 
 	if (info->session)
 		fuse_session_destroy(info->session);
@@ -497,24 +501,28 @@ void flush_fs(struct cnss_info *cnss_info)
 	}
 }
 
-void shutdown_fs(struct cnss_info *cnss_info)
+bool shutdown_fs(struct cnss_info *cnss_info)
 {
 	struct plugin_entry *plugin;
 	struct fs_info *info, *i2;
+	bool ok = true;
 	int rc;
 
 	d_list_for_each_entry(plugin, &cnss_info->plugins, list) {
 		d_list_for_each_entry_safe(info, i2, &plugin->fuse_list,
 					   entries) {
 			rc = deregister_fuse(plugin, info);
-			if (rc)
+			if (rc) {
 				IOF_TRACE_ERROR(cnss_info,
 						"Shutdown mount '%s' failed",
 						info->mnt);
+				ok = false;
+			}
 			D_FREE(info->mnt);
 			D_FREE(info);
 		}
 	}
+	return ok;
 }
 
 struct iof_barrier_info {
@@ -672,8 +680,8 @@ int main(int argc, char **argv)
 	struct plugin_entry *list_iter_next;
 	struct cnss_info *cnss_info;
 	bool active_plugins = false;
-
 	int ret;
+
 	bool service_process_set = false;
 	char *ctrl_prefix;
 	bool rcb;
@@ -907,11 +915,13 @@ int main(int argc, char **argv)
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush_plugin_services);
 
 shutdown_cart:
-	shutdown_fs(cnss_info);
+	rcb = shutdown_fs(cnss_info);
+
 	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
 
 	ret = crt_finalize();
-
+	if (!rcb)
+		ret = 1;
 	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
 
 	while (!d_list_empty(&cnss_info->plugins)) {

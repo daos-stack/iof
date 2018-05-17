@@ -203,10 +203,10 @@ struct cnss_plugin {
 					      * associated with plugin can
 					      * now be safely deallocated
 					      */
-	void (*deregister_fuse)(void *); /* Remove a previously registered fuse
-					  * handle.  Called only if
-					  * register_fuse_fs returned true
-					  */
+	int (*deregister_fuse)(void *); /* Remove a previously registered fuse
+					 * handle.  Called only if
+					 * register_fuse_fs returned true
+					 */
 	void (*flush_fuse)(void *); /* Flush a previously registered fuse
 				     * handle.  Called only if register_fuse_fs
 				     * returned true
@@ -234,7 +234,7 @@ typedef int (*cnss_plugin_init_t)(struct cnss_plugin **fns, size_t *size);
  * or change parameters or meaning then change this version to force a
  * re-compile of existing plugins.
  */
-#define CNSS_PLUGIN_VERSION 0x10f00d
+#define CNSS_PLUGIN_VERSION 0x10f00e
 
 /* Library (interception library or CPPR Library) needs function to "attach" to
  * local CNSS by opening file in ctrl filesystem and be able to detect network
