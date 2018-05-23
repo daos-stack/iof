@@ -344,9 +344,9 @@ iof_opendir_handler(crt_rpc_t *rpc)
 	local_handle->h_dir = fdopendir(local_handle->fd);
 	local_handle->offset = 0;
 
-	pthread_rwlock_wrlock(&base.gah_rwlock);
+	D_RWLOCK_WRLOCK(&base.gah_rwlock);
 	rc = ios_gah_allocate(base.gs, &out->gah, local_handle);
-	pthread_rwlock_unlock(&base.gah_rwlock);
+	D_RWLOCK_UNLOCK(&base.gah_rwlock);
 
 	if (rc != -DER_SUCCESS) {
 		closedir(local_handle->h_dir);
@@ -593,9 +593,9 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		D_FREE(handle);
 	}
 
-	pthread_rwlock_wrlock(&base.gah_rwlock);
+	D_RWLOCK_WRLOCK(&base.gah_rwlock);
 	ios_gah_deallocate(base.gs, &in->gah);
-	pthread_rwlock_unlock(&base.gah_rwlock);
+	D_RWLOCK_UNLOCK(&base.gah_rwlock);
 
 	rc = crt_reply_send(rpc);
 	if (rc)
@@ -2587,7 +2587,7 @@ int main(int argc, char **argv)
 	iof_log_init("ION", "IONSS", NULL);
 	IOF_LOG_INFO("IONSS version: %s", version);
 
-	pthread_rwlock_init(&base.gah_rwlock, NULL);
+	D_RWLOCK_INIT(&base.gah_rwlock, NULL);
 
 	while (1) {
 		static struct option long_options[] = {
@@ -2961,7 +2961,7 @@ cleanup:
 		iof_pool_destroy(&projection->pool);
 	}
 
-	pthread_rwlock_destroy(&base.gah_rwlock);
+	D_RWLOCK_DESTROY(&base.gah_rwlock);
 
 	ret = crt_context_destroy(base.crt_ctx, 0);
 	if (ret)

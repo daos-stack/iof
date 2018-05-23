@@ -330,7 +330,7 @@ static int find_node(struct ctrl_node *parent, struct ctrl_node **node,
 	*node = NULL;
 
 	if (!lock_held) {
-		rc = pthread_rwlock_rdlock(&parent->lock);
+		rc = D_RWLOCK_RDLOCK(&parent->lock);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not acquire lock on ctrl node %s",
 				      parent->name);
@@ -344,7 +344,7 @@ static int find_node(struct ctrl_node *parent, struct ctrl_node **node,
 	}
 
 	if (!lock_held) {
-		rc = pthread_rwlock_unlock(&parent->lock);
+		rc = D_RWLOCK_UNLOCK(&parent->lock);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not release lock on ctrl node %s",
 				      parent->name);
@@ -362,7 +362,7 @@ static int insert_node(struct ctrl_node *parent, struct ctrl_node *child)
 	int rc = 0;
 	struct ctrl_node *node;
 
-	pthread_rwlock_wrlock(&parent->lock);
+	D_RWLOCK_WRLOCK(&parent->lock);
 
 	rc = find_node(parent, &node, child->name, true);
 
@@ -384,7 +384,7 @@ static int insert_node(struct ctrl_node *parent, struct ctrl_node *child)
 
 	TAILQ_INSERT_TAIL(&parent->queue, child, entry);
 out:
-	pthread_rwlock_unlock(&parent->lock);
+	D_RWLOCK_UNLOCK(&parent->lock);
 
 	return rc;
 }
@@ -905,7 +905,7 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 	IOF_LOG_INFO("ctrl_fs readdir called for %s", node->name);
 
-	pthread_rwlock_rdlock(&node->lock);
+	D_RWLOCK_RDLOCK(&node->lock);
 	/* There doesn't seem to be an appropriate readdir error code if this
 	 * fails.   So I guess let it race, I guess.
 	 */
@@ -918,7 +918,7 @@ static int ctrl_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			break;
 	}
 
-	pthread_rwlock_unlock(&node->lock);
+	D_RWLOCK_UNLOCK(&node->lock);
 
 	return 0;
 }

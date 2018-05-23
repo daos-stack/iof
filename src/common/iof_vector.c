@@ -157,16 +157,16 @@ static int expand_if_needed(struct vector *vector, unsigned int index)
 
 	if (index >= vector->num_entries) {
 		/* Entry "present" but not allocated. */
-		pthread_rwlock_unlock(&vector->lock);
+		D_RWLOCK_UNLOCK(&vector->lock);
 
 		/* expand the vector */
-		pthread_rwlock_wrlock(&vector->lock);
+		D_RWLOCK_WRLOCK(&vector->lock);
 		if (index >= vector->num_entries)
 			rc = expand_vector(vector, index);
-		pthread_rwlock_unlock(&vector->lock);
+		D_RWLOCK_UNLOCK(&vector->lock);
 
 		/* reacquire reader lock and continue */
-		pthread_rwlock_rdlock(&vector->lock);
+		D_RWLOCK_RDLOCK(&vector->lock);
 	}
 
 	return rc;
@@ -249,10 +249,10 @@ int vector_get_(vector_t *vector, unsigned int index, void **ptr)
 	if (index >= realv->max_entries)
 		return -DER_INVAL;
 
-	pthread_rwlock_rdlock(&realv->lock);
+	D_RWLOCK_RDLOCK(&realv->lock);
 	if (index >= realv->num_entries) {
 		/* Entry "present" but not allocated. */
-		pthread_rwlock_unlock(&realv->lock);
+		D_RWLOCK_UNLOCK(&realv->lock);
 		return -DER_NONEXIST;
 	}
 
@@ -266,7 +266,7 @@ int vector_get_(vector_t *vector, unsigned int index, void **ptr)
 
 	release_ptr_lock(&realv->data[index]);
 
-	pthread_rwlock_unlock(&realv->lock);
+	D_RWLOCK_UNLOCK(&realv->lock);
 
 	return rc;
 }
@@ -293,15 +293,15 @@ int vector_dup_(vector_t *vector, unsigned int src_idx, unsigned int dst_idx,
 	if (src_idx >= realv->max_entries || dst_idx >= realv->max_entries)
 		return -DER_INVAL;
 
-	pthread_rwlock_rdlock(&realv->lock);
+	D_RWLOCK_RDLOCK(&realv->lock);
 	if (src_idx >= realv->num_entries) {
 		/* source entry "present" but not allocated. */
-		pthread_rwlock_unlock(&realv->lock);
+		D_RWLOCK_UNLOCK(&realv->lock);
 		return -DER_NONEXIST;
 	}
 	rc = expand_if_needed(realv, dst_idx);
 	if (rc != -DER_SUCCESS) {
-		pthread_rwlock_unlock(&realv->lock);
+		D_RWLOCK_UNLOCK(&realv->lock);
 		return rc;
 	}
 
@@ -323,7 +323,7 @@ int vector_dup_(vector_t *vector, unsigned int src_idx, unsigned int dst_idx,
 	/* Releases the ptr_lock */
 	set_ptr_value(&realv->data[dst_idx], entry);
 
-	pthread_rwlock_unlock(&realv->lock);
+	D_RWLOCK_UNLOCK(&realv->lock);
 
 	return rc;
 }
@@ -365,11 +365,11 @@ int vector_set_(vector_t *vector, unsigned int index, void *ptr, size_t size)
 	if (size != realv->entry_size || index >= realv->max_entries)
 		return -DER_INVAL;
 
-	pthread_rwlock_rdlock(&realv->lock);
+	D_RWLOCK_RDLOCK(&realv->lock);
 	rc = expand_if_needed(realv, index);
 
 	if (rc != -DER_SUCCESS) {
-		pthread_rwlock_unlock(&realv->lock);
+		D_RWLOCK_UNLOCK(&realv->lock);
 		return rc;
 	}
 
@@ -396,7 +396,7 @@ release:
 	/* Releases the ptr_lock */
 	set_ptr_value(&realv->data[index], entry);
 
-	pthread_rwlock_unlock(&realv->lock);
+	D_RWLOCK_UNLOCK(&realv->lock);
 
 	return rc;
 }
@@ -419,9 +419,9 @@ int vector_remove_(vector_t *vector, unsigned int index, void **ptr)
 	if (index >= realv->max_entries)
 		return -DER_INVAL;
 
-	pthread_rwlock_rdlock(&realv->lock);
+	D_RWLOCK_RDLOCK(&realv->lock);
 	if (index >= realv->num_entries) {
-		pthread_rwlock_unlock(&realv->lock);
+		D_RWLOCK_UNLOCK(&realv->lock);
 		return -DER_NONEXIST;
 	}
 
@@ -441,7 +441,7 @@ int vector_remove_(vector_t *vector, unsigned int index, void **ptr)
 	/* releases ptr lock */
 	set_ptr_value(&realv->data[index], NULL);
 
-	pthread_rwlock_unlock(&realv->lock);
+	D_RWLOCK_UNLOCK(&realv->lock);
 
 	return rc;
 }

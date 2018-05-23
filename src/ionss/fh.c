@@ -53,19 +53,19 @@ int ios_fh_alloc(struct ios_projection *projection,
 	if (!fh)
 		return -DER_NOMEM;
 
-	pthread_rwlock_wrlock(&base->gah_rwlock);
+	D_RWLOCK_WRLOCK(&base->gah_rwlock);
 
 	rc = ios_gah_allocate(base->gs, &fh->gah, fh);
 	if (rc) {
 		IOF_LOG_ERROR("Failed to acquire GAH %d", rc);
 		iof_pool_release(projection->fh_pool, fh);
-		pthread_rwlock_unlock(&base->gah_rwlock);
+		D_RWLOCK_UNLOCK(&base->gah_rwlock);
 		return -DER_NOMEM;
 	}
 
 	*fhp = fh;
 
-	pthread_rwlock_unlock(&base->gah_rwlock);
+	D_RWLOCK_UNLOCK(&base->gah_rwlock);
 
 	IOF_TRACE_INFO(fh, GAH_PRINT_FULL_STR, GAH_PRINT_FULL_VAL(fh->gah));
 
@@ -79,7 +79,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	uint oldref;
 	int rc;
 
-	pthread_rwlock_wrlock(&base->gah_rwlock);
+	D_RWLOCK_WRLOCK(&base->gah_rwlock);
 
 	oldref = atomic_fetch_sub(&fh->ref, count);
 
@@ -104,7 +104,7 @@ void ios_fh_decref(struct ionss_file_handle *fh, int count)
 	iof_pool_release(projection->fh_pool, fh);
 
 out:
-	pthread_rwlock_unlock(&base->gah_rwlock);
+	D_RWLOCK_UNLOCK(&base->gah_rwlock);
 }
 
 struct ionss_file_handle *
@@ -114,7 +114,7 @@ ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 	uint oldref;
 	int rc;
 
-	pthread_rwlock_rdlock(&base->gah_rwlock);
+	D_RWLOCK_RDLOCK(&base->gah_rwlock);
 
 	rc = ios_gah_get_info(base->gs, gah, (void **)&fh);
 	if (rc || !fh) {
@@ -130,7 +130,7 @@ ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 			GAH_PRINT_VAL(fh->gah), oldref + 1);
 
 out:
-	pthread_rwlock_unlock(&base->gah_rwlock);
+	D_RWLOCK_UNLOCK(&base->gah_rwlock);
 
 	return fh;
 }
@@ -141,7 +141,7 @@ ios_dirh_find(struct ios_base *base, struct ios_gah *gah)
 	struct ionss_dir_handle *dirh = NULL;
 	int rc;
 
-	pthread_rwlock_rdlock(&base->gah_rwlock);
+	D_RWLOCK_RDLOCK(&base->gah_rwlock);
 
 	rc = ios_gah_get_info(base->gs, gah, (void **)&dirh);
 	if (rc || !dirh) {
@@ -154,7 +154,7 @@ ios_dirh_find(struct ios_base *base, struct ios_gah *gah)
 	IOF_TRACE_DEBUG(dirh, GAH_PRINT_STR, GAH_PRINT_VAL(*gah));
 
 out:
-	pthread_rwlock_unlock(&base->gah_rwlock);
+	D_RWLOCK_UNLOCK(&base->gah_rwlock);
 
 	return dirh;
 }
