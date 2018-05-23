@@ -95,7 +95,6 @@ struct iof_ctx {
 struct iof_state {
 	struct cnss_plugin_cb		*cb;
 	struct proto			*proto;
-	size_t				cb_size;
 	struct iof_ctx			iof_ctx;
 	d_list_t			fs_list;
 	/* CNSS Prefix */
@@ -104,7 +103,7 @@ struct iof_state {
 	struct ctrl_dir			*projections_dir;
 	struct iof_group_info		*groups;
 	uint32_t			num_groups;
-
+	uint32_t			num_proj;
 };
 
 struct iof_group_info {

@@ -253,7 +253,9 @@ static void
 rereg_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_state *iof_state = cb_info->cci_arg;
+	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
 	struct iof_projection_info *fs_handle;
+	struct iof_fs_info *tmp, *fs_info;
 
 	IOF_TRACE_INFO(iof_state, "rc %d", cb_info->cci_rc);
 
@@ -262,9 +264,50 @@ rereg_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
+	if (query->count != query->query_list.iov_len / sizeof(struct iof_fs_info)) {
+		IOF_TRACE_ERROR(iof_state,
+				"Invalid response from IONSS %d %ld",
+				query->count,
+				query->query_list.iov_len / sizeof(struct iof_fs_info));
+		set_all_offline(iof_state, EINVAL, true);
+		return;
+	}
+
+	if (query->count != iof_state->num_proj) {
+		IOF_TRACE_ERROR(iof_state,
+				"Unexpected projection count %d %d",
+				query->count, iof_state->num_proj);
+		set_all_offline(iof_state, EINVAL, true);
+		return;
+	}
+
+	tmp = query->query_list.iov_buf;
+
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
+		fs_info = tmp++;
+
+		IOF_TRACE_DEBUG(fs_handle,
+				"Local projection dir is '%s'",
+				fs_handle->mnt_dir.name);
+
+		IOF_TRACE_DEBUG(fs_handle,
+				"Remote projection dir is '%s'",
+				fs_info->dir_name.name);
+
+
+		if (strncmp(fs_handle->mnt_dir.name,
+			    fs_info->dir_name.name,
+			    NAME_MAX) != 0) {
+			IOF_TRACE_ERROR(fs_handle,
+					"Projection directory incorrect");
+			fs_handle->offline_reason = EIO;
+		}
 
 		if (!fs_handle->offline_reason) {
+
+			/* Set the new GAH for the root inode */
+			fs_handle->gah = fs_info->gah;
+
 			inode_check(fs_handle);
 
 			fs_handle->failover_state = iof_failover_complete;
@@ -1392,7 +1435,6 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 				"with ret: %d", ret);
 		return ret;
 	}
-	iof_state->cb_size = cb_size;
 
 	return ret;
 }
@@ -1982,6 +2024,7 @@ static int iof_post_start(void *arg)
 		return 1;
 	}
 
+	iof_state->num_proj = total_projections;
 	return 0;
 }
 

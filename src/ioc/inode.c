@@ -56,7 +56,9 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 	d_list_t *rlink;
 
 	if (ino == 1) {
-		memcpy(gah, &fs_handle->gah, sizeof(*gah));
+		D_MUTEX_LOCK(&fs_handle->gah_lock);
+		*gah = fs_handle->gah;
+		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 		return 0;
 	}
 
