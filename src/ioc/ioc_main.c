@@ -934,9 +934,8 @@ common_release(void *arg)
 	static void type##_entry_init(void *arg, void *handle)	\
 	{							\
 		struct entry_req *req = arg;			\
-								\
 		req->fs_handle = handle;			\
-		req->opcode = FS_TO_OP(dh->fs_handle, type);	\
+		req->opcode = FS_TO_OP(req->fs_handle, type);	\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -1051,7 +1050,7 @@ rb_reset(void *arg)
 	}
 
 	rc = crt_req_create(rb->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(fs_handle, readx), &rb->rpc);
+			    FS_TO_OP(rb->fs_handle, readx), &rb->rpc);
 	if (rc || !rb->rpc) {
 		IOF_TRACE_ERROR(rb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(rb, lb);
@@ -1108,7 +1107,7 @@ wb_reset(void *arg)
 	}
 
 	rc = crt_req_create(wb->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(fs_handle, writex), &wb->rpc);
+			    FS_TO_OP(wb->fs_handle, writex), &wb->rpc);
 	if (rc || !wb->rpc) {
 		IOF_TRACE_ERROR(wb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(wb, lb);
@@ -1370,7 +1369,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return 1;
 	}
 
-	ret = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
+	ret = iof_register(&iof_state->proto, NULL);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
 				"with ret: %d", ret);
@@ -1521,6 +1520,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
+	fs_handle->proj.proto = iof_state->proto;
 	fs_handle->failover_state = iof_failover_running;
 	fs_handle->ctx.poll_interval = iof_state->iof_ctx.poll_interval;
 	fs_handle->ctx.callback_fn = iof_state->iof_ctx.callback_fn;

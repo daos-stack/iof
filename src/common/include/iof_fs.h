@@ -53,16 +53,29 @@ struct iof_service_group {
 	bool			enabled;   /* Indicates group is available */
 };
 
-/* For each projection */
+/** Projection specific information held on the client.
+ *
+ * Shared between CNSS and IL.
+ */
 struct iof_projection {
-	struct iof_service_group	*grp;      /* Server group info */
-	crt_context_t			*crt_ctx;  /* context to use */
-	uint32_t			grp_id;    /* CNSS defined ionss id */
-	uint32_t			max_iov_write; /* bulk threshold */
-	uint32_t			max_write; /* max write size */
-	int				cli_fs_id; /* client projection id */
-	bool				enabled;   /* Projection enabled */
-	bool				progress_thread;   /* progress_thread */
+	/** Server group info */
+	struct iof_service_group	*grp;
+	/** Protocol used for RPCs */
+	struct proto			*proto;
+	/** context to use */
+	crt_context_t			crt_ctx;
+	/** CNSS defined ionss id */
+	uint32_t			grp_id;
+	/** bulk threshold */
+	uint32_t			max_iov_write;
+	/** max write size */
+	uint32_t			max_write;
+	/** client projection id */
+	int				cli_fs_id;
+	/** Projection enabled flag */
+	bool				enabled;
+	/** True if there is a progress thread configured */
+	bool				progress_thread;
 };
 
 /* Common data stored on open file handles */
@@ -71,27 +84,6 @@ struct iof_file_common {
 	struct ios_gah		gah;
 	crt_endpoint_t		ep;
 };
-
-/*
- * This will be defined by the calling function to select
- * the correct RPC type from the protocol registry.
- * This is used in the FS_TO_OP Macro below.
- */
-#ifndef IOF_PROTO_CLASS
-#define IOF_PROTO_CLASS DEFAULT
-#endif
-
-/*
- * Helpers for forcing macro expansion.
- */
-#define EVAL_PROTO_CLASS(CLS) DEF_PROTO_CLASS(CLS)
-#define EVAL_RPC_TYPE(CLS, TYPE) DEF_RPC_TYPE(CLS, TYPE)
-/*
- * Returns the correct RPC Type ID from the protocol registry.
- */
-#define FS_TO_OP(HANDLE, FN) \
-		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
-		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
 
 /* Tracks remaining events for completion */
 struct iof_tracker {

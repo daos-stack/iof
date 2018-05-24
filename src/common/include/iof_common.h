@@ -314,35 +314,28 @@ struct rpc_data {
 	crt_opcode_t op_id;
 };
 
-#define DEF_PROTO_CLASS(NAME) IOF_PROTO_##NAME
-#define DEF_RPC_TYPE(CLASS, TYPE) IOF_##CLASS##_##TYPE
+#define DEF_RPC_TYPE(TYPE) IOF_##TYPE
 
 enum iof_rpc_type_default {
-	DEF_RPC_TYPE(DEFAULT, opendir),		/* 0x10f00 */
-	DEF_RPC_TYPE(DEFAULT, readdir),		/* 0x10f01 */
-	DEF_RPC_TYPE(DEFAULT, closedir),	/* 0x10f02 */
-	DEF_RPC_TYPE(DEFAULT, getattr),		/* 0x10f03 */
-	DEF_RPC_TYPE(DEFAULT, writex),		/* 0x10f04 */
-	DEF_RPC_TYPE(DEFAULT, rename),		/* 0x10f05 */
-	DEF_RPC_TYPE(DEFAULT, readx),		/* 0x10f06 */
-	DEF_RPC_TYPE(DEFAULT, unlink),		/* 0x10f07 */
-	DEF_RPC_TYPE(DEFAULT, open),		/* 0x10f08 */
-	DEF_RPC_TYPE(DEFAULT, create),		/* 0x10f09 */
-	DEF_RPC_TYPE(DEFAULT, close),		/* 0x10f0a */
-	DEF_RPC_TYPE(DEFAULT, mkdir),		/* 0x10f0b */
-	DEF_RPC_TYPE(DEFAULT, readlink),	/* 0x10f0c */
-	DEF_RPC_TYPE(DEFAULT, symlink),		/* 0x10f0d */
-	DEF_RPC_TYPE(DEFAULT, fsync),		/* 0x10f0e */
-	DEF_RPC_TYPE(DEFAULT, fdatasync),	/* 0x10f0f */
-	DEF_RPC_TYPE(DEFAULT, statfs),		/* 0x10f10 */
-	DEF_RPC_TYPE(DEFAULT, lookup),		/* 0x10f11 */
-	DEF_RPC_TYPE(DEFAULT, setattr),		/* 0x10f12 */
-	IOF_DEFAULT_RPC_TYPES,
-};
-
-enum iof_proto_class {
-	DEF_PROTO_CLASS(DEFAULT),
-	IOF_PROTO_CLASSES
+	DEF_RPC_TYPE(opendir),		/* 0x10f00 */
+	DEF_RPC_TYPE(readdir),		/* 0x10f01 */
+	DEF_RPC_TYPE(closedir),		/* 0x10f02 */
+	DEF_RPC_TYPE(getattr),		/* 0x10f03 */
+	DEF_RPC_TYPE(writex),		/* 0x10f04 */
+	DEF_RPC_TYPE(rename),		/* 0x10f05 */
+	DEF_RPC_TYPE(readx),		/* 0x10f06 */
+	DEF_RPC_TYPE(unlink),		/* 0x10f07 */
+	DEF_RPC_TYPE(open),		/* 0x10f08 */
+	DEF_RPC_TYPE(create),		/* 0x10f09 */
+	DEF_RPC_TYPE(close),		/* 0x10f0a */
+	DEF_RPC_TYPE(mkdir),		/* 0x10f0b */
+	DEF_RPC_TYPE(readlink),		/* 0x10f0c */
+	DEF_RPC_TYPE(symlink),		/* 0x10f0d */
+	DEF_RPC_TYPE(fsync),		/* 0x10f0e */
+	DEF_RPC_TYPE(fdatasync),	/* 0x10f0f */
+	DEF_RPC_TYPE(statfs),		/* 0x10f10 */
+	DEF_RPC_TYPE(lookup),		/* 0x10f11 */
+	DEF_RPC_TYPE(setattr),		/* 0x10f12 */
 };
 
 struct proto {
@@ -352,8 +345,6 @@ struct proto {
 	struct rpc_data *rpc_types;
 };
 
-extern const struct proto iof_protocol_registry[];
-
-int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[]);
+int iof_register(struct proto **proto, crt_rpc_cb_t handlers[]);
 
 #endif

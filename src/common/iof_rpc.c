@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -249,13 +249,11 @@ struct rpc_data default_rpc_types[] = {
 	RPC_TYPE(setattr, setattr_in, attr_out),
 };
 
-const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
-	[DEF_PROTO_CLASS(DEFAULT)] = {
-		.name = "IOF_PRIVATE",
-		.id_base = 0x10F00,
-		.rpc_type_count = IOF_DEFAULT_RPC_TYPES,
-		.rpc_types = default_rpc_types
-	}
+static struct proto iof_protocol_registry = {
+	.name = "IOF_PRIVATE",
+	.id_base = 0x10F00,
+	.rpc_type_count = ARRAY_SIZE(default_rpc_types),
+	.rpc_types = default_rpc_types
 };
 
 /* Bulk register a RPC type
@@ -263,16 +261,16 @@ const struct proto iof_protocol_registry[IOF_PROTO_CLASSES] = {
  * If there is a failure then register what is possible, and return
  * the first error that occurred.
  */
-int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
+int iof_register(struct proto **proto, crt_rpc_cb_t handlers[])
 {
-	int i, ret = 0;
-	const struct proto *proto = &iof_protocol_registry[cls];
-	struct rpc_data *rp = proto->rpc_types;
+	int i, ret = -DER_SUCCESS;
+	struct proto *p = &iof_protocol_registry;
+	struct rpc_data *rp = p->rpc_types;
 
-	for (i = 0 ; i < iof_protocol_registry->rpc_type_count ; i++) {
+	for (i = 0 ; i < p->rpc_type_count ; i++) {
 		int rc;
 
-		rp->op_id = proto->id_base + i;
+		rp->op_id = p->id_base + i;
 		if (handlers)
 			rc = crt_rpc_srv_register(rp->op_id,
 						  CRT_RPC_FEAT_NO_TIMEOUT,
@@ -282,14 +280,17 @@ int iof_register(enum iof_proto_class cls, crt_rpc_cb_t handlers[])
 					      CRT_RPC_FEAT_NO_TIMEOUT,
 					      &rp->fmt);
 
-		if (rc != 0)
+		if (rc != -DER_SUCCESS)
 			IOF_LOG_ERROR("Failed to register RPC %s, rc=%d",
 				      rp->fmt.crf_name, rc);
 
-		if (rc != 0 && ret == 0)
+		if (rc != -DER_SUCCESS && ret == -DER_SUCCESS)
 			ret = rc;
 		rp++;
 	}
+
+	if (proto && ret == -DER_SUCCESS)
+		*proto = p;
 
 	return ret;
 }

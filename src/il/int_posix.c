@@ -70,6 +70,7 @@ static struct iof_service_group *ionss_grps;
 static uint32_t ionss_count;
 static struct iof_projection *projections;
 static uint32_t projection_count;
+static struct proto *iof_proto;
 
 #define BLOCK_SIZE 1024
 
@@ -222,6 +223,7 @@ static int find_projections(void)
 
 		proj->cli_fs_id = i;
 		proj->crt_ctx = crt_ctx;
+		proj->proto = iof_proto;
 		snprintf(tmp, BUFSIZE, "iof/projections/%d/group_id", i);
 		rc = iof_ctrl_read_uint32(&proj->grp_id, tmp);
 		if (rc != 0) {
@@ -373,7 +375,7 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = iof_register(DEF_PROTO_CLASS(DEFAULT), NULL);
+	rc = iof_register(&iof_proto, NULL);
 	if (rc != 0) {
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();

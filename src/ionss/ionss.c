@@ -2104,7 +2104,7 @@ out:
 
 static int iof_register_handlers(void)
 {
-#define DECL_RPC_HANDLER(NAME, FN)[DEF_RPC_TYPE(DEFAULT, NAME)] = FN
+#define DECL_RPC_HANDLER(NAME, FN)[DEF_RPC_TYPE(NAME)] = FN
 
 	crt_rpc_cb_t handlers[] = {
 		DECL_RPC_HANDLER(opendir, iof_opendir_handler),
@@ -2127,7 +2127,7 @@ static int iof_register_handlers(void)
 		DECL_RPC_HANDLER(lookup, iof_lookup_handler),
 		DECL_RPC_HANDLER(setattr, iof_setattr_handler),
 	};
-	return iof_register(DEF_PROTO_CLASS(DEFAULT), handlers);
+	return iof_register(NULL, handlers);
 }
 
 /*

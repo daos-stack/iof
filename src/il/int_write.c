@@ -49,18 +49,6 @@
 #define IOF_PROTO_CLASS DEFAULT
 #endif
 
-/*
- * Helpers for forcing macro expansion.
- */
-#define EVAL_PROTO_CLASS(CLS) DEF_PROTO_CLASS(CLS)
-#define EVAL_RPC_TYPE(CLS, TYPE) DEF_RPC_TYPE(CLS, TYPE)
-/*
- * Returns the correct RPC Type ID from the protocol registry.
- */
-#define FS_TO_OP(HANDLE, FN) \
-		((&iof_protocol_registry[EVAL_PROTO_CLASS(IOF_PROTO_CLASS)])\
-		  ->rpc_types[EVAL_RPC_TYPE(IOF_PROTO_CLASS, FN)].op_id)
-
 struct write_cb_r {
 	struct iof_file_common *f_info;
 	ssize_t len;
@@ -130,7 +118,8 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    FS_TO_OP(fs_handle, writex), &rpc);
+			    fs_handle->proto->rpc_types[DEF_RPC_TYPE(writex)].op_id,
+			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);

@@ -94,6 +94,7 @@ struct iof_ctx {
 /*For IOF Plugin*/
 struct iof_state {
 	struct cnss_plugin_cb		*cb;
+	struct proto			*proto;
 	size_t				cb_size;
 	struct iof_ctx			iof_ctx;
 	d_list_t			fs_list;
@@ -201,6 +202,11 @@ struct iof_projection_info {
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
+
+/*
+ * Returns the correct RPC Type ID from the protocol registry.
+ */
+#define FS_TO_OP(HANDLE, FN) ((HANDLE)->proj.proto->rpc_types[DEF_RPC_TYPE(FN)].op_id)
 
 int iof_is_mode_supported(uint8_t flags);
 
