@@ -67,7 +67,6 @@ static void closedir_ll_cb(struct ioc_request *request)
 }
 
 static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
 	.on_result	= closedir_ll_cb,
 	.on_evict	= ioc_simple_resend
 };

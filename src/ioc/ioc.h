@@ -399,16 +399,15 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 struct ioc_request;
 
 struct ioc_request_api {
-	struct iof_projection_info	*(*get_fsh)(struct ioc_request *req);
 	void				(*on_send)(struct ioc_request *req);
 	void				(*on_result)(struct ioc_request *req);
 	int				(*on_evict)(struct ioc_request *req);
 };
 
 struct ioc_request {
+	struct iof_projection_info	*fsh;
 	int				rc;
 	int				err;
-	crt_endpoint_t			ep;
 	crt_rpc_t			*rpc;
 	fuse_req_t			req;
 	const struct ioc_request_api	*cb;

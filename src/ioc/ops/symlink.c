@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,6 @@
 #include "ioc_ops.h"
 
 static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
 	.on_send	= post_send,
 	.on_result	= iof_entry_cb,
 	.on_evict	= ioc_simple_resend

@@ -91,7 +91,7 @@ out_err:
 
 int ioc_simple_resend(struct ioc_request *request)
 {
-	struct iof_projection_info *fs_handle =	request->cb->get_fsh(request);
+	struct iof_projection_info *fs_handle = request->fsh;
 	crt_rpc_t *resend_rpc;
 	int rc;
 
@@ -447,7 +447,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 static void generic_cb(const struct crt_cb_info *cb_info)
 {
 	struct ioc_request *request = cb_info->cci_arg;
-	struct iof_projection_info *fs_handle = request->cb->get_fsh(request);
+	struct iof_projection_info *fs_handle = request->fsh;
 
 	/* No Error */
 	if (!cb_info->cci_rc) {
@@ -493,17 +493,17 @@ done:
  */
 int iof_fs_send(struct ioc_request *request)
 {
-	struct iof_projection_info *fs_handle = request->cb->get_fsh(request);
+	struct iof_projection_info *fs_handle = request->fsh;
+	crt_endpoint_t ep;
 	int rc;
 
-	request->ep.ep_tag = 0;
-	request->ep.ep_rank = atomic_load_consume(
-				&fs_handle->proj.grp->pri_srv_rank);
-	request->ep.ep_grp = fs_handle->proj.grp->dest_grp;
+	ep.ep_tag = 0;
+	ep.ep_rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
+	ep.ep_grp = fs_handle->proj.grp->dest_grp;
 
 	/* Defer clean up until the output is copied. */
 	crt_req_addref(request->rpc);
-	rc = crt_req_set_endpoint(request->rpc, &request->ep);
+	rc = crt_req_set_endpoint(request->rpc, &ep);
 	if (rc)
 		D_GOTO(err, 0);
 	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",

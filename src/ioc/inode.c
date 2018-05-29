@@ -122,7 +122,6 @@ static void ie_close_cb(struct ioc_request *request)
 }
 
 static const struct ioc_request_api api = {
-	.get_fsh	= get_fs_handle,
 	.on_send	= post_send,
 	.on_result	= ie_close_cb,
 };
@@ -148,7 +147,7 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 
 	IOC_REQ_INIT(desc, fs_handle, api, in, rc);
 	if (rc)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 
 	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = ie->gah;

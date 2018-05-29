@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,31 +44,31 @@
 #define TRACE_REQ TO_STR(STAT_KEY) "_fuse_req"
 #define TRACE_RPC TO_STR(STAT_KEY) "_rpc"
 
-#define IOC_REQ_INIT(src, fsh, api, in, rc)				\
+#define IOC_REQ_INIT(src, FSH, api, in, rc)				\
 	do {								\
 		rc = 0;							\
-		STAT_ADD(fsh->stats, STAT_KEY);				\
-		if (FS_IS_OFFLINE(fsh)) {				\
-			rc = -(fsh)->offline_reason;			\
+		STAT_ADD(FSH->stats, STAT_KEY);				\
+		if (FS_IS_OFFLINE(FSH)) {				\
+			rc = (FSH)->offline_reason;			\
 			break;						\
 		}							\
 		/* Acquire new object only if NULL */			\
 		if (!src) {						\
-			src = iof_pool_acquire(fsh->POOL_NAME);		\
-			IOF_TRACE_UP(src, fsh, TRACE_TYPE);		\
+			src = iof_pool_acquire(FSH->POOL_NAME);		\
+			IOF_TRACE_UP(src, FSH, TRACE_TYPE);		\
 		}							\
 		if (!src) {						\
-			rc = -ENOMEM;					\
+			rc = ENOMEM;					\
 			break;						\
 		}							\
 		(src)->REQ_NAME.cb = &api;				\
+		(src)->REQ_NAME.fsh = FSH;				\
 		in = crt_req_get((src)->REQ_NAME.rpc);			\
 	} while (0)
 
 #define IOC_REQ_INIT_LL(src, fsh, api, in, fuse_req, rc)		\
 	do {								\
 		IOC_REQ_INIT(src, fsh, api, in, rc);			\
-		rc = -rc;						\
 		if (rc)							\
 			break;						\
 		(src)->REQ_NAME.req = fuse_req;				\
@@ -89,12 +89,6 @@
 
 #define IOC_REQ_RELEASE(req)						  \
 	IOC_REQ_RELEASE_POOL(req, req->fs_handle->POOL_NAME)
-
-static struct iof_projection_info
-*get_fs_handle(struct ioc_request *req)
-{
-	return CONTAINER(req)->fs_handle;
-}
 
 #ifdef RESTOCK_ON_SEND
 static void post_send(struct ioc_request *req)
