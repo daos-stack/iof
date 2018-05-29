@@ -95,9 +95,15 @@ int ioc_simple_resend(struct ioc_request *request)
 	crt_rpc_t *resend_rpc;
 	int rc;
 
+	IOF_TRACE_INFO(fs_handle,
+		       "Performing simple resend of %p", request);
+
 	rc = crt_req_create(request->rpc->cr_ctx, NULL,
 			    request->rpc->cr_opc, &resend_rpc);
 	if (rc) {
+		/* TODO: Handle this case better, possibly by calling a
+		 * request callback
+		 */
 		IOF_TRACE_ERROR(request, "Failed to create retry RPC");
 		return EIO;
 	}
@@ -425,6 +431,14 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 #define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
 					((CB_INFO)->cci_rc == -DER_OOG))
 
+/* Check if the error is recoverable.  If there is a network problem not
+ * not resulting in eviction, or a memory allocation error at either
+ * end then retry.
+ */
+#define IOC_SHOULD_RESEND(RC) ((RC == -DER_UNREACH) ||	\
+				(RC == -DER_NOMEM) || \
+				(RC == -DER_DOS))
+
 /* A generic callback function to handle completion of RPCs sent from FUSE,
  * and replay the RPC to a different end point in case the target has been
  * evicted (denoted by an "Out Of Group" return code). For all other failures
@@ -447,8 +461,11 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	IOF_TRACE_INFO(request, "cci_rc %d %s",
 		       cb_info->cci_rc, d_errstr(cb_info->cci_rc));
 
-	/* Errors other than evictions */
-	if (!IOC_HOST_IS_DOWN(cb_info)) {
+	if (IOC_SHOULD_RESEND(cb_info->cci_rc)) {
+		ioc_simple_resend(request);
+		return;
+	} else if (!IOC_HOST_IS_DOWN(cb_info)) {
+		/* Errors other than evictions */
 		D_GOTO(done, request->err = EIO);
 	} else if (fs_handle->offline_reason) {
 		IOF_TRACE_ERROR(request, "Projection Offline");
