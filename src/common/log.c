@@ -49,7 +49,11 @@ static int iof_log_allocfacility(const char *shortname, const char *longname)
 	int handle;
 
 	handle = d_log_allocfacility(shortname, longname);
+#ifdef D_LOG_ARGS
 	d_log_sync_mask(0, false);
+#else
+	d_log_sync_mask();
+#endif
 
 	return handle;
 }
