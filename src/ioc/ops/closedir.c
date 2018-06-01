@@ -50,20 +50,20 @@
 
 static void closedir_ll_cb(struct ioc_request *request)
 {
-	struct iof_status_out *out	= IOC_GET_RESULT(request);
+	struct iof_status_out *out	= crt_reply_get(request->rpc);
 	struct TYPE_NAME *dh		= CONTAINER(request);
-	fuse_req_t f_req		= request->req;
-	int rc;
 
-	IOC_RESOLVE_STATUS(request, out);
-	rc = IOC_STATUS_TO_RC_LL(request);
-	IOC_REQ_RELEASE(dh);
-	if (!f_req)
-		return;
-	if (rc == 0)
-		IOF_FUSE_REPLY_ZERO(f_req);
+	IOC_REQUEST_RESOLVE(request, out);
+
+	if (!request->req)
+		D_GOTO(out, 0);
+
+	if (request->rc == 0)
+		IOF_FUSE_REPLY_ZERO(request->req);
 	else
-		IOF_FUSE_REPLY_ERR(f_req, rc);
+		IOF_FUSE_REPLY_ERR(request->req, request->rc);
+out:
+	IOC_REQ_RELEASE(dh);
 }
 
 static const struct ioc_request_api api = {

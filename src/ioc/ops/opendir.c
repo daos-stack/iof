@@ -53,14 +53,11 @@ static void
 opendir_ll_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*dh = CONTAINER(request);
-	struct iof_opendir_out	*out = IOC_GET_RESULT(request);
-	fuse_req_t		f_req = request->req;
+	struct iof_opendir_out	*out = crt_reply_get(request->rpc);
 	struct fuse_file_info	fi = {0};
-	int rc;
 
-	IOC_RESOLVE_STATUS(request, out);
-	rc = IOC_STATUS_TO_RC_LL(request);
-	if (rc == 0) {
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc == 0) {
 		dh->gah = out->gah;
 		H_GAH_SET_VALID(dh);
 		dh->handle_valid = 1;
@@ -69,10 +66,10 @@ opendir_ll_cb(struct ioc_request *request)
 		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
 		D_MUTEX_UNLOCK(&dh->fs_handle->od_lock);
 		fi.fh = (uint64_t)dh;
-		IOF_FUSE_REPLY_OPEN(f_req, fi);
+		IOF_FUSE_REPLY_OPEN(request->req, fi);
 	} else {
+		IOF_FUSE_REPLY_ERR(request->req, request->rc);
 		IOC_REQ_RELEASE(dh);
-		IOF_FUSE_REPLY_ERR(f_req, rc);
 	}
 }
 

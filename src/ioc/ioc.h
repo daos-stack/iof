@@ -403,14 +403,46 @@ struct ioc_request_api {
 	int				(*on_evict)(struct ioc_request *req);
 };
 
+enum ioc_request_state {
+	RS_INIT = 1,
+	RS_RESET,
+	RS_LIVE
+};
+
 struct ioc_request {
 	struct iof_projection_info	*fsh;
-	int				rc;
-	int				err;
 	crt_rpc_t			*rpc;
 	fuse_req_t			req;
 	const struct ioc_request_api	*cb;
+	int				rc;
+	enum ioc_request_state		rs;
 };
+
+#define IOC_REQUEST_INIT(REQUEST) ((REQUEST)->rs = RS_INIT)
+
+#define IOC_REQUEST_RESET(REQUEST)					\
+	do {								\
+		D_ASSERT((REQUEST)->rs == RS_INIT ||			\
+			(REQUEST)->rs == RS_RESET ||			\
+			(REQUEST)->rs == RS_LIVE);			\
+		(REQUEST)->rs = RS_RESET;				\
+		(REQUEST)->rc = 0;					\
+	} while (0)
+
+/* Correctly resolve the return codes and errors from the RPC response.
+ * If the error code was already non-zero, it means an error occurred on
+ * the client; do nothing. A non-zero error code in the RPC response
+ * denotes a server error, in which case, set the status error code to EIO.
+ *
+ */
+#define IOC_REQUEST_RESOLVE(STATUS, OUT)				\
+	do {								\
+		if (((OUT) != NULL) && (!(STATUS)->rc)) {		\
+			(STATUS)->rc = (OUT)->rc;			\
+			if ((OUT)->err)					\
+				(STATUS)->rc = EIO;			\
+		}							\
+	} while (0)
 
 /* Data which is stored against an open directory handle */
 struct iof_dir_handle {
@@ -524,38 +556,6 @@ int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 void drop_ino_ref(struct iof_projection_info *, ino_t);
 
 void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
-
-/* Extract a errno from status_cb_r suitable for returning to FUSE.
- * If err is non-zero then use that, otherwise use rc.  Return negative numbers
- * because IOF uses positive errnos everywhere but FUSE expects negative values.
- *
- * This macro could also with with other *cb_r structs which use the same
- * conventions for err/rc
- */
-
-#define IOC_STATUS_TO_RC_LL(STATUS) \
-	((STATUS)->err == 0 ? (STATUS)->rc : EIO)
-
-#define IOC_GET_RESULT(REQ) crt_reply_get((REQ)->rpc)
-
-/* Correctly resolve the return codes and errors from the RPC response.
- * If the error code was already non-zero, it means an error occurred on
- * the client; do nothing. A non-zero error code in the RPC response
- * denotes a server error, in which case, set the status error code to EIO.
- *
- * TODO: Unify the RPC output types so they can be processed without using
- * this macro, since the 'err' and 'rc' fields are common in all of them.
- */
-#define IOC_RESOLVE_STATUS(STATUS, OUT)					\
-	do {								\
-		if ((OUT) != NULL) {					\
-			if (!(STATUS)->err) {				\
-				(STATUS)->rc = (OUT)->rc;		\
-				if ((OUT)->err)				\
-					(STATUS)->err = EIO;		\
-			}						\
-		}							\
-	} while (0)
 
 int iof_fs_send(struct ioc_request *request);
 

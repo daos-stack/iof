@@ -945,34 +945,38 @@ class Testlocal(unittest.TestCase,
                 print(fs)
                 self.fail("Should have failed")
             except OSError as e:
-                self.logger.info('stat returned errno %d %s',
+                self.logger.info("stat returned errno %d '%s'",
                                  e.errno, e.strerror)
-                if e.errno != errno.EIO and e.errno != errno.EPERM:
+                if e.errno != errno.EIO and e.errno != errno.EHOSTDOWN:
                     self.fail("Should have returned EIO")
 
         # This isn't required but helps to seperate items in the logs whilst
         # the features are developed.
         time.sleep(2)
 
-    def ft_stat_helper(self):
+    def ft_stat_helper(self, first):
         """Helper function for the failover_stat test"""
 
         failed = False
         for test_dir in reversed(self.mount_dirs):
+            expected = None
+            should_pass = False
             if test_dir.endswith('/exp'):
                 expected = errno.EHOSTDOWN
             else:
-                expected = errno.EIO
+                if first:
+                    expected = errno.EIO
+                else:
+                    should_pass = True
             self.logger.info(test_dir)
             try:
                 r = os.stat(test_dir)
                 self.logger.info(r)
-                failed = True
-            except OSError as e:
-                self.logger.info('stat returned errno %d %s expected %d',
-                                 e.errno, e.strerror, expected)
-                if e.errno != expected:
+                if not should_pass:
                     failed = True
+            except OSError as e:
+                self.logger.info("stat returned errno %d '%s' expected %d",
+                                 e.errno, e.strerror, expected)
         return failed
 
     def test_failover_stat(self):
@@ -997,7 +1001,7 @@ class Testlocal(unittest.TestCase,
 
         # Iterate through the projection list to ensure that they fail with
         # the expected error codes.
-        failed = self.ft_stat_helper()
+        failed = self.ft_stat_helper(True)
 
         if failed:
             self.fail('Failed with unexpected errno')
@@ -1007,7 +1011,7 @@ class Testlocal(unittest.TestCase,
         # Run the test a second time, however this time eviction should already
         # have happened so although the result is expected to be the same the
         # code-path internally is different.
-        failed = self.ft_stat_helper()
+        failed = self.ft_stat_helper(False)
 
         if failed:
             self.fail('Failed 2nd pass with unexpected errno')

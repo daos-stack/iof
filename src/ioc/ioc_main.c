@@ -98,6 +98,8 @@ int ioc_simple_resend(struct ioc_request *request)
 	IOF_TRACE_INFO(fs_handle,
 		       "Performing simple resend of %p", request);
 
+	IOC_REQUEST_RESET(request);
+
 	rc = crt_req_create(request->rpc->cr_ctx, NULL,
 			    request->rpc->cr_opc, &resend_rpc);
 	if (rc) {
@@ -471,16 +473,16 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 /* Check if a remote host is down.  Used in RPC callback to check the cb_info
  * for permanent failure of the remote ep.
  */
-#define IOC_HOST_IS_DOWN(CB_INFO) (((CB_INFO)->cci_rc == -DER_EVICTED) || \
-					((CB_INFO)->cci_rc == -DER_OOG))
+#define IOC_HOST_IS_DOWN(CB_INFO) ((CB_INFO->cci_rc == -DER_EVICTED) || \
+					(CB_INFO->cci_rc == -DER_OOG))
 
 /* Check if the error is recoverable.  If there is a network problem not
  * not resulting in eviction, or a memory allocation error at either
  * end then retry.
  */
-#define IOC_SHOULD_RESEND(RC) ((RC == -DER_UNREACH) ||	\
-				(RC == -DER_NOMEM) || \
-				(RC == -DER_DOS))
+#define IOC_SHOULD_RESEND(CB_INFO) ((CB_INFO->cci_rc == -DER_UNREACH) || \
+					(CB_INFO->cci_rc == -DER_NOMEM) || \
+					(CB_INFO->cci_rc == -DER_DOS))
 
 /* A generic callback function to handle completion of RPCs sent from FUSE,
  * and replay the RPC to a different end point in case the target has been
@@ -491,6 +493,9 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 {
 	struct ioc_request *request = cb_info->cci_arg;
 	struct iof_projection_info *fs_handle = request->fsh;
+
+	D_ASSERT(request->rs == RS_RESET);
+	request->rs = RS_LIVE;
 
 	/* No Error */
 	if (!cb_info->cci_rc) {
@@ -504,15 +509,15 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	IOF_TRACE_INFO(request, "cci_rc %d %s",
 		       cb_info->cci_rc, d_errstr(cb_info->cci_rc));
 
-	if (IOC_SHOULD_RESEND(cb_info->cci_rc)) {
+	if (fs_handle->offline_reason) {
+		IOF_TRACE_ERROR(request, "Projection Offline");
+		D_GOTO(done, request->rc = fs_handle->offline_reason);
+	} else if (IOC_SHOULD_RESEND(cb_info)) {
 		ioc_simple_resend(request);
 		return;
 	} else if (!IOC_HOST_IS_DOWN(cb_info)) {
 		/* Errors other than evictions */
-		D_GOTO(done, request->err = EIO);
-	} else if (fs_handle->offline_reason) {
-		IOF_TRACE_ERROR(request, "Projection Offline");
-		D_GOTO(done, request->rc = fs_handle->offline_reason);
+		D_GOTO(done, request->rc = EIO);
 	}
 
 	if (request->cb->on_evict &&
@@ -783,6 +788,8 @@ dh_init(void *arg, void *handle)
 	struct iof_dir_handle *dh = arg;
 
 	dh->fs_handle = handle;
+	IOC_REQUEST_INIT(&dh->open_req);
+	IOC_REQUEST_INIT(&dh->close_req);
 }
 
 static bool
@@ -790,6 +797,8 @@ dh_reset(void *arg)
 {
 	struct iof_dir_handle *dh = arg;
 	int rc;
+
+	dh->reply_count = 0;
 
 	/* If there has been an error on the local handle, or readdir() is not
 	 * exhausted then ensure that all resources are freed correctly
@@ -817,6 +826,10 @@ dh_reset(void *arg)
 		crt_req_decref(dh->open_req.rpc);
 		return false;
 	}
+
+	IOC_REQUEST_RESET(&dh->open_req);
+	IOC_REQUEST_RESET(&dh->close_req);
+
 	return true;
 }
 
@@ -926,6 +939,7 @@ common_init(void *arg, void *handle)
 	struct common_req *req = arg;
 
 	req->fs_handle = handle;
+	IOC_REQUEST_INIT(&req->request);
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -952,6 +966,8 @@ gh_reset(void *arg)
 	}
 	crt_req_addref(req->request.rpc);
 
+	IOC_REQUEST_RESET(&req->request);
+
 	return true;
 }
 
@@ -977,6 +993,8 @@ close_reset(void *arg)
 	}
 	crt_req_addref(req->request.rpc);
 
+	IOC_REQUEST_RESET(&req->request);
+
 	return true;
 }
 
@@ -996,6 +1014,7 @@ common_release(void *arg)
 		struct entry_req *req = arg;			\
 		req->fs_handle = handle;			\
 		req->opcode = FS_TO_OP(req->fs_handle, type);	\
+		IOC_REQUEST_INIT(&req->request);		\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -1047,6 +1066,8 @@ entry_reset(void *arg)
 	}
 	crt_req_addref(req->request.rpc);
 
+	IOC_REQUEST_RESET(&req->request);
+
 	return true;
 }
 
@@ -1077,10 +1098,8 @@ rb_large_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
-	rb->fs_handle = handle;
+	rb_page_init(arg, handle);
 	rb->buf_size = rb->fs_handle->max_read;
-	rb->fbuf.count = 1;
-	rb->fbuf.buf[0].fd = -1;
 }
 
 static bool

@@ -51,10 +51,9 @@ void iof_entry_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*desc = CONTAINER(request);
 	struct iof_pool_type	*pool;
-	struct iof_entry_out	*out = IOC_GET_RESULT(request);
+	struct iof_entry_out	*out = crt_reply_get(request->rpc);
 	struct fuse_entry_param	 entry = {0};
 	d_list_t		 *rlink;
-	int			 rc;
 
 	if (request->rpc->cr_opc == FS_TO_OP(desc->fs_handle, lookup))
 		pool = desc->fs_handle->lookup_pool;
@@ -63,10 +62,9 @@ void iof_entry_cb(struct ioc_request *request)
 	else
 		pool = desc->fs_handle->symlink_pool;
 
-	IOC_RESOLVE_STATUS(request, out);
-	rc = IOC_STATUS_TO_RC_LL(request);
-	if (rc)
-		D_GOTO(out, rc);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc)
+		D_GOTO(out, 0);
 
 	entry.attr = out->stat;
 	entry.generation = 1;
@@ -91,9 +89,9 @@ void iof_entry_cb(struct ioc_request *request)
 		ie_close(desc->fs_handle, desc->ie);
 	}
 out:
-	if (rc) {
+	if (request->rc) {
 		drop_ino_ref(desc->fs_handle, desc->ie->parent);
-		IOF_FUSE_REPLY_ERR(request->req, rc);
+		IOF_FUSE_REPLY_ERR(request->req, request->rc);
 	} else {
 		IOF_FUSE_REPLY_ENTRY(request->req, entry);
 	}

@@ -50,14 +50,14 @@
 
 static void getattr_ll_cb(struct ioc_request *request)
 {
-	struct iof_attr_out *out = IOC_GET_RESULT(request);
-	int rc;
+	struct iof_attr_out *out = crt_reply_get(request->rpc);
 
-	rc = IOC_STATUS_TO_RC_LL(request);
-	if (rc == 0)
+	IOC_REQUEST_RESOLVE(request, out);
+
+	if (request->rc == 0)
 		IOF_FUSE_REPLY_ATTR(request->req, &out->stat);
 	else
-		IOF_FUSE_REPLY_ERR(request->req, rc);
+		IOF_FUSE_REPLY_ERR(request->req, request->rc);
 	IOC_REQ_RELEASE(CONTAINER(request));
 }
 
