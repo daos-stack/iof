@@ -799,13 +799,14 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         start_time = time.time()
         rtn = self.common_launch_cmd(cmd, timeout=timeout)
         elapsed = time.time() - start_time
-        print('Mdtest returned %d in %d seconds' % (rtn, elapsed))
+        print('Mdtest returned %d in %.2f seconds' % (rtn, elapsed))
         return (rtn, elapsed)
 
     def test_mdtest(self):
         """Test mdtest"""
-
-        (rtn, elapsed) = self.run_mdtest(count=10, iters=3)
+        icount = 10
+        iiters = 3
+        (rtn, elapsed) = self.run_mdtest(count=icount, iters=iiters)
         if rtn != 0:
             self.fail("Mdtest test_failed, rc = %d" % rtn)
         if elapsed > 5:
@@ -813,7 +814,20 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         if 'iof_simple' in self.id():
             (rtn, elapsed) = self.run_mdtest(count=500, iters=30)
         else:
-            (rtn, elapsed) = self.run_mdtest(count=5, iters=500)
+            desired_time = 30
+            per_rep_time = elapsed / (icount * iiters)
+            rcount = 5
+            riters = int((desired_time/per_rep_time)/rcount)
+            print('Mdtest took %.2f per rep, doing %d iters' % (per_rep_time,
+                                                                riters))
+            (rtn, elapsed) = self.run_mdtest(count=rcount, iters=riters)
+            if rtn != 0:
+                self.fail("Mdtest test_failed, rc = %d" % rtn)
+            per_rep_time = elapsed / (rcount*riters)
+            riters = int((desired_time/per_rep_time)/rcount)
+            print('Mdtest took %.2f per rep, doing %d iters' % (per_rep_time,
+                                                                riters))
+            (rtn, elapsed) = self.run_mdtest(count=rcount, iters=riters)
         if rtn != 0:
             self.fail("Mdtest test_failed, rc = %d" % rtn)
 
