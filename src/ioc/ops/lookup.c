@@ -49,18 +49,11 @@
 
 void iof_entry_cb(struct ioc_request *request)
 {
-	struct TYPE_NAME	*desc = CONTAINER(request);
-	struct iof_pool_type	*pool;
-	struct iof_entry_out	*out = crt_reply_get(request->rpc);
-	struct fuse_entry_param	 entry = {0};
-	d_list_t		 *rlink;
-
-	if (request->rpc->cr_opc == FS_TO_OP(desc->fs_handle, lookup))
-		pool = desc->fs_handle->lookup_pool;
-	else if (request->rpc->cr_opc ==  FS_TO_OP(desc->fs_handle, mkdir))
-		pool = desc->fs_handle->mkdir_pool;
-	else
-		pool = desc->fs_handle->symlink_pool;
+	struct entry_req		*desc = container_of(request, struct entry_req, request);
+	struct iof_projection_info	*fs_handle = desc->request.fsh;
+	struct iof_entry_out		*out = crt_reply_get(request->rpc);
+	struct fuse_entry_param		entry = {0};
+	d_list_t			*rlink;
 
 	IOC_REQUEST_RESOLVE(request, out);
 	if (request->rc)
@@ -72,7 +65,7 @@ void iof_entry_cb(struct ioc_request *request)
 
 	desc->ie->gah = out->gah;
 	desc->ie->stat = out->stat;
-	rlink = d_hash_rec_find_insert(&desc->fs_handle->inode_ht,
+	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &desc->ie->stat.st_ino,
 				       sizeof(desc->ie->stat.st_ino),
 				       &desc->ie->list);
@@ -85,17 +78,17 @@ void iof_entry_cb(struct ioc_request *request)
 		IOF_TRACE_INFO(request->req,
 			       "Existing file rlink %p %lu " GAH_PRINT_STR,
 			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
-		drop_ino_ref(desc->fs_handle, desc->ie->parent);
-		ie_close(desc->fs_handle, desc->ie);
+		drop_ino_ref(fs_handle, desc->ie->parent);
+		ie_close(fs_handle, desc->ie);
 	}
 out:
 	if (request->rc) {
-		drop_ino_ref(desc->fs_handle, desc->ie->parent);
+		drop_ino_ref(fs_handle, desc->ie->parent);
 		IOF_FUSE_REPLY_ERR(request->req, request->rc);
 	} else {
 		IOF_FUSE_REPLY_ENTRY(request->req, entry);
 	}
-	IOC_REQ_RELEASE_POOL(desc, pool);
+	iof_pool_release(desc->pool, desc);
 }
 
 static const struct ioc_request_api api = {
@@ -129,13 +122,15 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	strncpy(in->name.name, name, NAME_MAX);
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;
+	desc->pool = fs_handle->lookup_pool;
 
-	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 	return;
 err:
-	IOC_REQ_RELEASE(desc);
+	if (desc)
+		iof_pool_release(fs_handle->lookup_pool, desc);
 	drop_ino_ref(fs_handle, parent);
 	IOF_FUSE_REPLY_ERR(req, rc);
 }

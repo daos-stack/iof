@@ -58,7 +58,7 @@ void
 ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
-	struct TYPE_NAME		*desc = NULL;
+	struct entry_req		*desc = NULL;
 	struct iof_create_in		*in;
 	int rc;
 
@@ -71,6 +71,7 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;
+	desc->pool = fs_handle->mkdir_pool;
 	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;
 
@@ -78,11 +79,12 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
 		D_GOTO(err, rc = ENOENT);
-	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 	return;
 err:
-	IOC_REQ_RELEASE(desc);
 	IOF_FUSE_REPLY_ERR(req, rc);
+	if (desc)
+		iof_pool_release(fs_handle->mkdir_pool, desc);
 }

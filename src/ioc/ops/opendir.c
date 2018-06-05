@@ -61,15 +61,15 @@ opendir_ll_cb(struct ioc_request *request)
 		dh->gah = out->gah;
 		H_GAH_SET_VALID(dh);
 		dh->handle_valid = 1;
-		dh->ep = dh->fs_handle->proj.grp->psr_ep;
-		D_MUTEX_LOCK(&dh->fs_handle->od_lock);
-		d_list_add_tail(&dh->list, &dh->fs_handle->opendir_list);
-		D_MUTEX_UNLOCK(&dh->fs_handle->od_lock);
+		dh->ep = dh->open_req.fsh->proj.grp->psr_ep;
+		D_MUTEX_LOCK(&dh->open_req.fsh->od_lock);
+		d_list_add_tail(&dh->list, &dh->open_req.fsh->opendir_list);
+		D_MUTEX_UNLOCK(&dh->open_req.fsh->od_lock);
 		fi.fh = (uint64_t)dh;
 		IOF_FUSE_REPLY_OPEN(request->req, fi);
 	} else {
 		IOF_FUSE_REPLY_ERR(request->req, request->rc);
-		IOC_REQ_RELEASE(dh);
+		iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 	}
 }
 
@@ -98,11 +98,13 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	dh->inode_no = ino;
 
-	IOC_REQ_SEND_LL(dh, fs_handle, rc);
+	rc = iof_fs_send(&dh->open_req);
 	if (rc != 0)
-		D_GOTO(err, rc);
+		D_GOTO(err, 0);
 	return;
 err:
-	IOC_REQ_RELEASE(dh);
+	if (dh)
+		iof_pool_release(fs_handle->dh_pool, dh);
+
 	IOF_FUSE_REPLY_ERR(req, rc);
 }

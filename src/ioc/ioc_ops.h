@@ -62,7 +62,6 @@
 			break;						\
 		}							\
 		(src)->REQ_NAME.cb = &api;				\
-		(src)->REQ_NAME.fsh = FSH;				\
 		in = crt_req_get((src)->REQ_NAME.rpc);			\
 	} while (0)
 
@@ -76,24 +75,12 @@
 		IOF_TRACE_LINK((src)->REQ_NAME.rpc, fuse_req, TRACE_RPC);\
 	} while (0)
 
-#define IOC_REQ_SEND_LL(src, fsh, rc) \
-	(void)(rc = iof_fs_send(&(src)->REQ_NAME))
-
 #define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
-
-#define IOC_REQ_RELEASE_POOL(req, pool)					  \
-	do {								  \
-		if (req != NULL)					  \
-			iof_pool_release(pool, req); \
-	} while (0)
-
-#define IOC_REQ_RELEASE(req)						  \
-	IOC_REQ_RELEASE_POOL(req, req->fs_handle->POOL_NAME)
 
 #ifdef RESTOCK_ON_SEND
 static void post_send(struct ioc_request *req)
 {
-	iof_pool_restock(CONTAINER(req)->fs_handle->POOL_NAME);
+	iof_pool_restock(req->fsh->POOL_NAME);
 }
 #endif
 

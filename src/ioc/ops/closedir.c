@@ -63,7 +63,7 @@ static void closedir_ll_cb(struct ioc_request *request)
 	else
 		IOF_FUSE_REPLY_ERR(request->req, request->rc);
 out:
-	IOC_REQ_RELEASE(dh);
+	iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 }
 
 static const struct ioc_request_api api = {
@@ -73,7 +73,7 @@ static const struct ioc_request_api api = {
 
 void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 {
-	struct iof_projection_info *fs_handle = dh->fs_handle;
+	struct iof_projection_info *fs_handle = dh->open_req.fsh;
 	struct iof_gah_in *in;
 	int rc;
 
@@ -96,12 +96,12 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 		D_GOTO(err, rc = EIO);
 	}
 	in->gah = dh->gah;
-	IOC_REQ_SEND_LL(dh, fs_handle, rc);
+	rc = iof_fs_send(&dh->close_req);
 	if (rc != 0)
 		D_GOTO(err, rc);
 	return;
 err:
-	IOC_REQ_RELEASE(dh);
+	iof_pool_release(fs_handle->dh_pool, dh);
 	if (req)
 		IOF_FUSE_REPLY_ERR(req, rc);
 }

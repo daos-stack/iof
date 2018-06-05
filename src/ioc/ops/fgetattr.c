@@ -51,6 +51,7 @@
 static void getattr_ll_cb(struct ioc_request *request)
 {
 	struct iof_attr_out *out = crt_reply_get(request->rpc);
+	struct TYPE_NAME *desc;
 
 	IOC_REQUEST_RESOLVE(request, out);
 
@@ -58,7 +59,9 @@ static void getattr_ll_cb(struct ioc_request *request)
 		IOF_FUSE_REPLY_ATTR(request->req, &out->stat);
 	else
 		IOF_FUSE_REPLY_ERR(request->req, request->rc);
-	IOC_REQ_RELEASE(CONTAINER(request));
+
+	desc = CONTAINER(request);
+	iof_pool_release(desc->request.fsh->fgh_pool, desc);
 }
 
 static const struct ioc_request_api api = {
@@ -105,11 +108,12 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 			D_GOTO(err, rc = EHOSTDOWN);
 		}
 	}
-	IOC_REQ_SEND_LL(desc, fs_handle, rc);
+	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
 		D_GOTO(err, rc);
 	return;
 err:
 	IOF_FUSE_REPLY_ERR(req, rc);
-	IOC_REQ_RELEASE(desc);
+	if (desc)
+		iof_pool_release(fs_handle->fgh_pool, desc);
 }

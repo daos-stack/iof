@@ -84,7 +84,7 @@ readdir_cb(const struct crt_cb_info *cb_info)
  */
 static int readdir_get_data(struct iof_dir_handle *dir_handle, off_t offset)
 {
-	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
+	struct iof_projection_info *fs_handle = dir_handle->open_req.fsh;
 	struct iof_readdir_in *in;
 	struct readdir_cb_r reply = {0};
 	crt_rpc_t *rpc = NULL;
@@ -280,14 +280,14 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 	       struct fuse_file_info *fi)
 {
 	struct iof_dir_handle *dir_handle = (struct iof_dir_handle *)fi->fh;
-	struct iof_projection_info *fs_handle = dir_handle->fs_handle;
+	struct iof_projection_info *fs_handle = dir_handle->open_req.fsh;
 	off_t next_offset = offset;
 	void *buf = NULL;
 	size_t b_offset = 0;
 	int ret = EIO;
 	int rc;
 
-	STAT_ADD(dir_handle->fs_handle->stats, readdir);
+	STAT_ADD(fs_handle->stats, readdir);
 
 	IOF_TRACE_UP(req, dir_handle, "readdir_fuse_req");
 

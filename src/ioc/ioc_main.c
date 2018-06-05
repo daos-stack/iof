@@ -787,9 +787,9 @@ dh_init(void *arg, void *handle)
 {
 	struct iof_dir_handle *dh = arg;
 
-	dh->fs_handle = handle;
-	IOC_REQUEST_INIT(&dh->open_req);
-	IOC_REQUEST_INIT(&dh->close_req);
+	IOC_REQUEST_INIT(&dh->open_req, handle);
+	IOC_REQUEST_INIT(&dh->close_req, handle);
+	dh->rpc = NULL;
 }
 
 static bool
@@ -813,14 +813,14 @@ dh_reset(void *arg)
 	if (dh->close_req.rpc)
 		crt_req_decref(dh->close_req.rpc);
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(dh->fs_handle, opendir),
+	rc = crt_req_create(dh->open_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(dh->open_req.fsh, opendir),
 			    &dh->open_req.rpc);
 	if (rc || !dh->open_req.rpc)
 		return false;
 
-	rc = crt_req_create(dh->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(dh->fs_handle, closedir),
+	rc = crt_req_create(dh->open_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(dh->open_req.fsh, closedir),
 			    &dh->close_req.rpc);
 	if (rc || !dh->close_req.rpc) {
 		crt_req_decref(dh->open_req.rpc);
@@ -938,8 +938,7 @@ common_init(void *arg, void *handle)
 {
 	struct common_req *req = arg;
 
-	req->fs_handle = handle;
-	IOC_REQUEST_INIT(&req->request);
+	IOC_REQUEST_INIT(&req->request, handle);
 }
 
 /* Reset and prepare for use a getfattr descriptor */
@@ -957,8 +956,8 @@ gh_reset(void *arg)
 		req->request.rpc = NULL;
 	}
 
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->fs_handle, getattr),
+	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->request.fsh, getattr),
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
@@ -984,8 +983,8 @@ close_reset(void *arg)
 		req->request.rpc = NULL;
 	}
 
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->fs_handle, close),
+	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(req->request.fsh, close),
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
@@ -1008,13 +1007,12 @@ common_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
-#define entry_init(type)					\
-	static void type##_entry_init(void *arg, void *handle)	\
-	{							\
-		struct entry_req *req = arg;			\
-		req->fs_handle = handle;			\
-		req->opcode = FS_TO_OP(req->fs_handle, type);	\
-		IOC_REQUEST_INIT(&req->request);		\
+#define entry_init(type)						\
+	static void type##_entry_init(void *arg, void *handle)		\
+	{								\
+		struct entry_req *req = arg;				\
+		IOC_REQUEST_INIT(&req->request, handle);		\
+		req->opcode = FS_TO_OP(req->request.fsh, type);		\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -1057,7 +1055,7 @@ entry_reset(void *arg)
 	 * This means that both descriptor creation and destruction are
 	 * done off the critical path.
 	 */
-	rc = crt_req_create(req->fs_handle->proj.crt_ctx, NULL, req->opcode,
+	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL, req->opcode,
 			    &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);

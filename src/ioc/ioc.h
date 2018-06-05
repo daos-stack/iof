@@ -418,7 +418,12 @@ struct ioc_request {
 	enum ioc_request_state		rs;
 };
 
-#define IOC_REQUEST_INIT(REQUEST) ((REQUEST)->rs = RS_INIT)
+#define IOC_REQUEST_INIT(REQUEST, FSH)		\
+	do {					\
+		(REQUEST)->fsh = FSH;		\
+		(REQUEST)->rpc = NULL;		\
+		(REQUEST)->rs = RS_INIT;	\
+	} while (0)
 
 #define IOC_REQUEST_RESET(REQUEST)					\
 	do {								\
@@ -448,7 +453,6 @@ struct ioc_request {
 struct iof_dir_handle {
 	struct ioc_request		open_req;
 	struct ioc_request		close_req;
-	struct iof_projection_info	*fs_handle;
 	/* The handle for accessing the directory on the IONSS */
 	struct ios_gah			gah;
 	/* Any RPC reference held across readdir() calls */
@@ -521,7 +525,6 @@ struct iof_file_handle {
 
 struct common_req {
 	struct ioc_request		request;
-	struct iof_projection_info	*fs_handle;
 	d_list_t			list;
 };
 
@@ -536,11 +539,11 @@ struct ioc_inode_entry {
 };
 
 struct entry_req {
-	struct iof_projection_info	*fs_handle;
 	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;
 	d_list_t			list;
 	crt_opcode_t			opcode;
+	struct iof_pool_type		*pool;
 	char				*dest;
 };
 
