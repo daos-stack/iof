@@ -854,6 +854,10 @@ fh_init(void *arg, void *handle)
 	struct iof_file_handle *fh = arg;
 
 	fh->fs_handle = handle;
+	fh->open_rpc = NULL;
+	fh->creat_rpc = NULL;
+	fh->release_rpc = NULL;
+	fh->ie = NULL;
 }
 
 static bool
@@ -1013,6 +1017,8 @@ common_release(void *arg)
 		struct entry_req *req = arg;				\
 		IOC_REQUEST_INIT(&req->request, handle);		\
 		req->opcode = FS_TO_OP(req->request.fsh, type);		\
+		req->dest = NULL;					\
+		req->ie = NULL;						\
 	}
 entry_init(lookup);
 entry_init(mkdir);
@@ -1089,6 +1095,9 @@ rb_page_init(void *arg, void *handle)
 	rb->buf_size = 4096;
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
+	rb->rpc = NULL;
+	rb->failure = false;
+	rb->lb.buf = NULL;
 }
 
 static void
@@ -1155,6 +1164,9 @@ wb_init(void *arg, void *handle)
 	struct iof_wb *wb = arg;
 
 	wb->fs_handle = handle;
+	wb->rpc = NULL;
+	wb->failure = false;
+	wb->lb.buf = NULL;
 }
 
 static bool
