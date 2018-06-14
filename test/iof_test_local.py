@@ -275,7 +275,7 @@ class Testlocal(unittest.TestCase,
                   [{"full_path": self.export_dir},
                    {"full_path": '/usr'}]}
         config['projections'][0]['mount_path'] = 'exp'
-        config['projections'][0]['failover'] = 'disable'
+        config['projections'][1]['failover'] = 'disable'
 
         config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
                                                   prefix="ionss_",
@@ -902,36 +902,18 @@ class Testlocal(unittest.TestCase,
     def test_failover_fstat(self):
         """Test open file migration during failover
 
-        This test performs some I/O activity on the 'usr' projection
-        to load entries into the inode table, then it finds and opens
-        a file, triggers failover and verifies that it can still access
-        the file.
+        This test creates a file on the 'exp' projection export point,
+        then opens it via IOF, triggers failover and then tries to
+        call fstat on the file.
         """
 
-        # Check that /usr files are consistent.
-        u_stat = os.stat('/usr')
-        bin_files = sorted(os.listdir('/usr/bin'))
-        for bfile in bin_files:
-            fname = os.path.join('/usr/bin/', bfile)
-            s = os.lstat(fname)
-            if s.st_dev != u_stat.st_dev:
-                self.skipTest("Inconsistent device for /usr files")
+        e_dir = os.path.join(self.export_dir, 'tdir')
+        e_file = os.path.join(e_dir, 'tfile')
+        os.mkdir(e_dir)
+        f = open(e_file, mode='w')
+        f.close()
 
-        dirname = os.path.join(self.cnss_prefix, 'usr', 'share')
-        subdirs = os.listdir(dirname)
-        cdir = sorted(subdirs)[0]
-        subdir = os.path.join(dirname, cdir)
-        print('Looking at %s' % subdir)
-        subfiles = os.listdir(subdir)
-        sfile = sorted(subfiles)[0]
-        ffile = os.path.join(subdir, sfile)
-        print('Looking at %s' % ffile)
-        file_info = os.stat(ffile)
-        print(file_info)
-
-        for mf in os.listdir(subdir):
-            f = os.stat(os.path.join(subdir, mf))
-            print(f)
+        ffile = os.path.join(self.import_dir, 'tdir', 'tfile')
 
         fd = os.open(ffile, os.O_RDONLY)
 
@@ -950,44 +932,41 @@ class Testlocal(unittest.TestCase,
                 if e.errno != errno.EIO and e.errno != errno.EHOSTDOWN:
                     self.fail("Should have returned EIO")
 
-        # This isn't required but helps to seperate items in the logs whilst
-        # the features are developed.
-        time.sleep(2)
+    def ft_stat_helper(self, fsid, outcomes):
+        """Helper function for trying stat on projection
 
-    def ft_stat_helper(self, first):
-        """Helper function for the failover_stat test"""
+        fsid is the index of the projection to test.
+        outcomes is an array of expected error numbers, or
+        None for no error.
+        """
 
+        test_dir = self.mount_dirs[fsid]
         failed = False
-        for test_dir in reversed(self.mount_dirs):
-            expected = None
-            should_pass = False
-            if test_dir.endswith('/exp'):
-                expected = errno.EHOSTDOWN
-            else:
-                if first:
-                    expected = errno.EIO
-                else:
-                    should_pass = True
-            self.logger.info(test_dir)
+
+        for expected in outcomes:
             try:
+                self.dump_failover_state()
+                self.logger.info("Reading %s", test_dir)
                 r = os.stat(test_dir)
                 self.logger.info(r)
-                if not should_pass:
+                if expected is not None:
                     failed = True
             except OSError as e:
-                self.logger.info("stat returned errno %d '%s' expected %d",
-                                 e.errno, e.strerror, expected)
+                if e.errno == expected:
+                    self.logger.info("stat returned errno %d '%s'",
+                                     e.errno, e.strerror)
+                else:
+                    self.logger.info("stat returned errno %d '%s' expected %s",
+                                     e.errno, e.strerror, expected)
+                    failed = True
         return failed
 
     def test_failover_stat(self):
         """Basic failover test
 
-        Launch IOF as normal, kill one IONSS process and then call
-        stat on each projection.  This should see EHOSTDOWN if
-        failover is disabled and EIO if it is enabled (but not
-        implemented)
-
-        Failover is disabled for ../exp so it should fail with EHOSTDOWN.
+        Launch IOF as normal, kill one IONSS process and then call stat
+        projection.  This should see EIO initially as the feature is not yet
+        complete however future requests should work correctly.
         """
 
         self.dump_failover_state()
@@ -1001,21 +980,27 @@ class Testlocal(unittest.TestCase,
 
         # Iterate through the projection list to ensure that they fail with
         # the expected error codes.
-        failed = self.ft_stat_helper(True)
+        failed = self.ft_stat_helper(0, [errno.EIO, None])
+
+        self.dump_failover_state()
 
         if failed:
             self.fail('Failed with unexpected errno')
 
-        self.dump_failover_state()
+    def test_failover_off_stat(self):
+        """Non-failover test
 
-        # Run the test a second time, however this time eviction should already
-        # have happened so although the result is expected to be the same the
-        # code-path internally is different.
-        failed = self.ft_stat_helper(False)
+        Try accessing a filesystem after failure when failover is disabled.
+        This should return EHOSTDOWN in all cases.
+        """
+        self.dump_failover_state()
+        self.kill_ionss_proc()
+
+        failed = self.ft_stat_helper(1, [errno.EHOSTDOWN, errno.EHOSTDOWN])
+        self.dump_failover_state()
 
         if failed:
-            self.fail('Failed 2nd pass with unexpected errno')
-        self.dump_failover_state()
+            self.fail('Failed with unexpected errno')
 
     def clean_export_dir(self):
         """Clean up files created in backend fs"""
