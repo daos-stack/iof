@@ -132,10 +132,26 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 {
 	struct TYPE_NAME	*desc = NULL;
 	struct iof_gah_in	*in;
+	struct iof_file_handle *fh, *fh2;
+	struct ioc_inode_entry *iec, *ie2;
 	int			rc;
 
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(err, rc = fs_handle->offline_reason);
+
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
+
+	/* Check that all files opened for this inode have been released */
+	d_list_for_each_entry_safe(fh, fh2, &ie->ie_fh_list, fh_ino_list) {
+		IOF_TRACE_WARNING(ie, "open file %p", fh);
+		d_list_del_init(&fh->fh_ino_list);
+	}
+
+	d_list_for_each_entry_safe(iec, ie2, &ie->ie_ie_children, ie_ie_list) {
+		IOF_TRACE_WARNING(ie, "child inode %p", iec);
+		d_list_del_init(&iec->ie_ie_list);
+	}
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
 	if (ie->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
 		IOF_TRACE_WARNING(fs_handle,

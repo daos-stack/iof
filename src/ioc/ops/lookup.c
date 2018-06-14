@@ -65,6 +65,8 @@ void iof_entry_cb(struct ioc_request *request)
 
 	desc->ie->gah = out->gah;
 	desc->ie->stat = out->stat;
+	D_INIT_LIST_HEAD(&desc->ie->ie_fh_list);
+	D_INIT_LIST_HEAD(&desc->ie->ie_ie_children);
 	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &desc->ie->stat.st_ino,
 				       sizeof(desc->ie->stat.st_ino),

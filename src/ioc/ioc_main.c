@@ -118,8 +118,6 @@ int ioc_simple_resend(struct ioc_request *request)
 	request->rpc = resend_rpc;
 	/* Second addref is called in iof_fs_send */
 	crt_req_addref(request->rpc);
-	D_MUTEX_LOCK(&fs_handle->gah_lock);
-	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	return iof_fs_send(request);
 }
 
@@ -147,63 +145,227 @@ inode_check_cb(d_list_t *rlink, void *arg)
 						      strlen(ie->name));
 		IOF_TRACE_INFO(fs_handle,
 			       "inval returned %d", rc);
+
+		/* If there is a failure due to bad file descriptor then
+		 * no future calls will work so abort the traverse by
+		 * returning an error code here, otherwise keep trying
+		 * other inodes.
+		 */
+		if (rc == EBADF)
+			return -DER_INVAL;
+
+		return -DER_SUCCESS;
 	}
 
 	return -DER_SUCCESS;
 }
 
+/* Helper function for mark_fh_inode and mark_dh_inode.
+ *
+ * Walk the filesystem hierarchy upwards from inode until either
+ * a inode already marked as failover is found, or to the root,
+ * marking all inodes as required for failover.
+ */
 static void mark_inode_tree(struct iof_projection_info *fs_handle,
-			    fuse_ino_t ino)
+			    struct ioc_inode_entry *ie)
 {
-	struct ioc_inode_entry *ie;
+	struct ioc_inode_entry *iep;
 	d_list_t *rlink;
 
-	while (ino != 1) {
+	while (ie->parent != 1) {
 		IOF_TRACE_DEBUG(fs_handle,
-				"Looking up %lu", ino);
+				"Looking up %lu", ie->parent);
 		rlink = d_hash_rec_find(&fs_handle->inode_ht,
-					&ino, sizeof(ino));
+					&ie->parent, sizeof(ie->parent));
 		if (!rlink) {
 			IOF_TRACE_WARNING(fs_handle,
-					  "Unable to find inode %lu", ino);
+					  "Unable to find inode %lu",
+					  ie->parent);
 			return;
 		}
-		ie = container_of(rlink, struct ioc_inode_entry, list);
+
+		iep = container_of(rlink, struct ioc_inode_entry, list);
 
 		IOF_TRACE_DEBUG(fs_handle,
 				"Found %p for %lu %d",
-				ie, ino, ie->failover);
+				iep, ie->stat.st_ino, iep->failover);
 
-		if (ie->failover) {
+		d_list_add(&ie->ie_ie_list, &iep->ie_ie_children);
+		if (iep->failover) {
 			d_hash_rec_decref(&fs_handle->inode_ht, rlink);
 			return;
 		}
 
-		ie->failover = true;
-		ino = ie->parent;
+		iep->failover = true;
+		ie = iep;
+		/* Remove the reference added by rec_find */
 		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+	}
+
+	IOF_TRACE_INFO(ie,
+		       "Child of root %lu %lu",
+		       ie->stat.st_ino, ie->parent);
+	d_list_add(&ie->ie_ie_list, &fs_handle->p_ie_children);
+
+}
+
+/* Process open file handle for failover.
+ *
+ * Identify inode entry for file, add file to inode entry list,
+ * and walk inode tree marking all entries for failover.
+ */
+static void mark_fh_inode(struct iof_file_handle *fh)
+{
+	struct ioc_inode_entry *ie;
+	d_list_t *rlink;
+
+	rlink = d_hash_rec_find(&fh->fs_handle->inode_ht,
+				&fh->inode_no, sizeof(fh->inode_no));
+
+	if (!rlink) {
+		IOF_TRACE_WARNING(fh->fs_handle,
+				  "Unable to find inode %lu", fh->inode_no);
+		return;
+	}
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+
+	d_list_add(&fh->fh_ino_list, &ie->ie_fh_list);
+	ie->failover = true;
+
+	mark_inode_tree(fh->fs_handle, ie);
+	/* Drop the reference taken by rec_find() */
+	d_hash_rec_decref(&fh->fs_handle->inode_ht, rlink);
+}
+
+/* Process open directory handle for failover.
+ *
+ * Identify inode entry for directory.
+ * and walk inode tree marking all entries for failover.
+ */
+static void mark_dh_inode(struct iof_dir_handle *dh)
+{
+	struct ioc_inode_entry *ie;
+	d_list_t *rlink;
+
+	rlink = d_hash_rec_find(&dh->open_req.fsh->inode_ht,
+				&dh->inode_no, sizeof(dh->inode_no));
+
+	if (!rlink) {
+		IOF_TRACE_WARNING(dh->open_req.fsh,
+				  "Unable to find inode %lu", dh->inode_no);
+		return;
+	}
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+
+	ie->failover = true;
+
+	mark_inode_tree(dh->open_req.fsh, ie);
+	/* Drop the reference taken by rec_find() */
+	d_hash_rec_decref(&dh->open_req.fsh->inode_ht, rlink);
+}
+
+/* Add a reference to the GAH counter */
+static void gah_addref(struct iof_projection_info *fs_handle)
+{
+	int oldref;
+
+	oldref = atomic_fetch_add(&fs_handle->p_gah_update_count, 1);
+
+	IOF_TRACE_DEBUG(fs_handle, "addref to %u", oldref + 1);
+}
+
+/* Remove a reference to the GAH counter, and if it drops to zero
+ * then complete the failover activities
+ */
+static void gah_decref(struct iof_projection_info *fs_handle)
+{
+	int oldref;
+
+	oldref = atomic_fetch_sub(&fs_handle->p_gah_update_count, 1);
+	IOF_TRACE_DEBUG(fs_handle, "decref to %u", oldref - 1);
+
+	if (oldref == 1) {
+		struct ioc_request *request, *r2;
+
+		IOF_TRACE_INFO(fs_handle,
+			       "Failover complete, marking as on-line");
+
+		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+		fs_handle->failover_state = iof_failover_complete;
+
+		D_MUTEX_LOCK(&fs_handle->p_request_lock);
+		d_list_for_each_entry_safe(request, r2,
+					   &fs_handle->p_requests_pending,
+					   r_list) {
+			int rc;
+
+			d_list_del(&request->r_list);
+			rc = request->ir_api->on_evict(request);
+			if (rc != 0) {
+				request->rc = rc;
+				if (request->ir_api->on_result)
+					request->ir_api->on_result(request);
+			}
+		}
+		D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
 	}
 }
 
-/* Update projection to identify inodes which relate to open files.
+/* Callback for inode migrate RPC.
  *
+ * If the RPC succeeded then update the GAH for the inode, else log an error.
+ *
+ * TODO: ADD gah_ok to inode handles.
+ */
+static void imigrate_cb(const struct crt_cb_info *cb_info)
+{
+	struct ioc_inode_migrate *im = cb_info->cci_arg;
+	struct iof_entry_out	*out = crt_reply_get(cb_info->cci_rpc);
+
+	IOF_TRACE_INFO(im->im_ie, "reply %d '%s' %d '-%s'",
+		       out->rc, strerror(out->rc),
+		       out->err, d_errstr(out->err));
+
+	if (cb_info->cci_rc != -DER_SUCCESS) {
+		IOF_TRACE_WARNING(im->im_ie,
+				  "RPC failure %d, inode %lu going offline",
+				  cb_info->cci_rc, im->im_ie->stat.st_ino);
+		goto out;
+	}
+
+	if (out->rc != 0 || out->err != -DER_SUCCESS) {
+		IOF_TRACE_WARNING(im->im_ie,
+				  "inode %lu going offline %d %d",
+				  im->im_ie->stat.st_ino,
+				  out->rc, out->err);
+		goto out;
+	}
+	im->im_ie->gah = out->gah;
+out:
+	gah_decref(im->im_fsh);
+	D_FREE(im);
+}
+
+/* Update projection to identify inodes which relate to open files.
  */
 static void inode_check(struct iof_projection_info *fs_handle)
 {
+	struct ioc_inode_entry *ie, *ie2;
 	struct iof_file_handle *fh;
 	struct iof_dir_handle *dh;
+	d_rank_t rank;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle,
 		       "Migrating open files");
 
 	D_MUTEX_LOCK(&fs_handle->of_lock);
-	d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
+	d_list_for_each_entry(fh, &fs_handle->openfile_list, fh_of_list) {
 		IOF_TRACE_INFO(fs_handle,
 			       "Inspecting file " GAH_PRINT_STR " %lu %p",
 			       GAH_PRINT_VAL(fh->common.gah), fh->inode_no,
 			       fh->ie);
-		mark_inode_tree(fs_handle, fh->inode_no);
+		mark_fh_inode(fh);
 	}
 	D_MUTEX_UNLOCK(&fs_handle->of_lock);
 	D_MUTEX_LOCK(&fs_handle->od_lock);
@@ -211,7 +373,7 @@ static void inode_check(struct iof_projection_info *fs_handle)
 		IOF_TRACE_INFO(fs_handle,
 			       "Inspecting dir " GAH_PRINT_STR " %p",
 			       GAH_PRINT_VAL(dh->gah), fh);
-		mark_inode_tree(fs_handle, dh->inode_no);
+		mark_dh_inode(dh);
 	}
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
@@ -219,6 +381,49 @@ static void inode_check(struct iof_projection_info *fs_handle)
 				   fs_handle);
 	IOF_TRACE_INFO(fs_handle,
 		       "traverse returned %d", rc);
+
+	rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
+
+	d_list_for_each_entry_safe(ie, ie2, &fs_handle->p_ie_children,
+				   ie_ie_list) {
+		crt_rpc_t *rpc = NULL;
+		struct iof_imigrate_in *in;
+		struct ioc_inode_migrate *im;
+		crt_endpoint_t ep;
+
+		ep.ep_tag = 0;
+		ep.ep_rank = rank;
+		ep.ep_grp = fs_handle->proj.grp->dest_grp;
+
+		IOF_TRACE_INFO(ie, "child inode %p %lu %lu",
+			       ie, ie->stat.st_ino, ie->parent);
+
+		D_ALLOC_PTR(im);
+		if (!im)
+			continue;
+
+		rc = crt_req_create(fs_handle->proj.crt_ctx, &ep,
+				    FS_TO_OP(fs_handle, imigrate), &rpc);
+		if (rc != -DER_SUCCESS || rpc == NULL) {
+			IOF_TRACE_ERROR(fs_handle, "Failed to allocate RPC");
+			D_FREE(im);
+			continue;
+		}
+
+		im->im_ie = ie;
+		im->im_fsh = fs_handle;
+		in = crt_req_get(rpc);
+		in->gah = fs_handle->gah;
+		strncpy(in->name.name, ie->name, NAME_MAX);
+		in->inode = ie->stat.st_ino;
+		gah_addref(fs_handle);
+		rc = crt_req_send(rpc, imigrate_cb, im);
+		if (rc != 0) {
+			IOF_TRACE_ERROR(fs_handle, "Failed to send RPC");
+			D_FREE(im);
+			gah_decref(fs_handle);
+		}
+	}
 }
 
 /* Helper function to set all projections off-line.
@@ -296,7 +501,6 @@ rereg_cb(const struct crt_cb_info *cb_info)
 				"Remote projection dir is '%s'",
 				fs_info->dir_name.name);
 
-
 		if (strncmp(fs_handle->mnt_dir.name,
 			    fs_info->dir_name.name,
 			    NAME_MAX) != 0) {
@@ -305,17 +509,16 @@ rereg_cb(const struct crt_cb_info *cb_info)
 			fs_handle->offline_reason = EIO;
 		}
 
+		atomic_store_release(&fs_handle->p_gah_update_count, 1);
 		if (!fs_handle->offline_reason) {
 
 			/* Set the new GAH for the root inode */
 			fs_handle->gah = fs_info->gah;
 
 			inode_check(fs_handle);
-
-			fs_handle->failover_state = iof_failover_complete;
 		}
 
-		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+		gah_decref(fs_handle);
 	}
 }
 
@@ -420,7 +623,8 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		}
 
 		D_MUTEX_LOCK(&fs_handle->of_lock);
-		d_list_for_each_entry(fh, &fs_handle->openfile_list, list) {
+		d_list_for_each_entry(fh, &fs_handle->openfile_list,
+				      fh_of_list) {
 			if (fh->common.gah.root != rank)
 				continue;
 			IOF_TRACE_INFO(fs_handle,
@@ -493,9 +697,10 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 {
 	struct ioc_request *request = cb_info->cci_arg;
 	struct iof_projection_info *fs_handle = request->fsh;
+	int rc;
 
-	D_ASSERT(request->rs == RS_RESET);
-	request->rs = RS_LIVE;
+	D_ASSERT(request->r_rs == RS_RESET);
+	request->r_rs = RS_LIVE;
 
 	/* No Error */
 	if (!cb_info->cci_rc) {
@@ -513,16 +718,29 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_ERROR(request, "Projection Offline");
 		D_GOTO(done, request->rc = fs_handle->offline_reason);
 	} else if (IOC_SHOULD_RESEND(cb_info)) {
-		ioc_simple_resend(request);
+		rc = ioc_simple_resend(request);
+		if (rc != -DER_SUCCESS)
+			D_GOTO(done, request->rc = rc);
 		return;
 	} else if (!IOC_HOST_IS_DOWN(cb_info)) {
 		/* Errors other than evictions */
 		D_GOTO(done, request->rc = EIO);
 	}
 
-	if (request->ir_api->on_evict &&
-	    !request->ir_api->on_evict(request))
+	if (request->ir_api->on_evict) {
+		if (fs_handle->failover_state == iof_failover_in_progress) {
+			/* Add to list for deferred execution */
+			D_MUTEX_LOCK(&fs_handle->p_request_lock);
+			d_list_add_tail(&request->r_list,
+					&fs_handle->p_requests_pending);
+			D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
+		} else {
+			rc = request->ir_api->on_evict(request);
+			if (rc != 0)
+				D_GOTO(done, request->rc = rc);
+		}
 		return;
+	}
 done:
 	if (request->ir_api->on_result)
 		request->ir_api->on_result(request);
@@ -920,6 +1138,7 @@ fh_reset(void *arg)
 	crt_req_addref(fh->open_rpc);
 	crt_req_addref(fh->creat_rpc);
 	crt_req_addref(fh->release_rpc);
+	D_INIT_LIST_HEAD(&fh->fh_ino_list);
 	return true;
 }
 
@@ -1552,7 +1771,7 @@ initialize_projection(struct iof_state *iof_state,
 	struct iof_pool_reg fh = {.init = fh_init,
 				  .reset = fh_reset,
 				  .release = fh_release,
-				  POOL_TYPE_INIT(iof_file_handle, list)};
+				  POOL_TYPE_INIT(iof_file_handle, fh_of_list)};
 
 	struct iof_pool_reg fgt = {.init = common_init,
 				   .reset = gh_reset,
@@ -1656,6 +1875,13 @@ initialize_projection(struct iof_state *iof_state,
 	ret = pthread_mutex_init(&fs_handle->gah_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
+
+	ret = pthread_mutex_init(&fs_handle->p_request_lock, NULL);
+	if (ret != 0)
+		D_GOTO(err, 0);
+
+	D_INIT_LIST_HEAD(&fs_handle->p_ie_children);
+	D_INIT_LIST_HEAD(&fs_handle->p_requests_pending);
 
 	fs_handle->max_read = fs_info->max_read;
 	fs_handle->max_iov_read = fs_info->max_iov_read;
@@ -2161,7 +2387,8 @@ static int iof_deregister_fuse(void *arg)
 	IOF_TRACE_INFO(fs_handle, "Closed %d directory handles", handles);
 
 	handles = 0;
-	d_list_for_each_entry_safe(fh, fh2, &fs_handle->openfile_list, list) {
+	d_list_for_each_entry_safe(fh, fh2, &fs_handle->openfile_list,
+				   fh_of_list) {
 		IOF_TRACE_INFO(fs_handle, "Closing file " GAH_PRINT_STR
 			       " %p", GAH_PRINT_VAL(fh->common.gah), fh);
 		ioc_int_release(fh);
@@ -2192,6 +2419,14 @@ static int iof_deregister_fuse(void *arg)
 	}
 
 	rc = pthread_mutex_destroy(&fs_handle->gah_lock);
+	if (rc != 0) {
+		IOF_TRACE_ERROR(fs_handle,
+				"Failed to destroy lock %d %s",
+				rc, strerror(rc));
+		rcp = rc;
+	}
+
+	rc = pthread_mutex_destroy(&fs_handle->p_request_lock);
 	if (rc != 0) {
 		IOF_TRACE_ERROR(fs_handle,
 				"Failed to destroy lock %d %s",

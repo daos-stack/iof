@@ -51,7 +51,7 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	STAT_ADD(fs_handle->stats, release);
 
 	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
-	d_list_del(&handle->list);
+	d_list_del(&handle->fh_of_list);
 	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 
 	/* If the projection is off-line then drop the local handle.
@@ -89,10 +89,12 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 		D_GOTO(out_err, ret = EIO);
 	}
 
+	d_list_del(&handle->fh_ino_list);
 	iof_pool_release(fs_handle->fh_pool, handle);
 	return;
 
 out_err:
+	d_list_del(&handle->fh_ino_list);
 	iof_pool_release(fs_handle->fh_pool, handle);
 	if (req)
 		IOF_FUSE_REPLY_ERR(req, ret);

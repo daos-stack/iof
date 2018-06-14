@@ -79,7 +79,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	handle->inode_no = entry.ino;
 
 	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
-	d_list_add_tail(&handle->list, &handle->fs_handle->openfile_list);
+	d_list_add_tail(&handle->fh_of_list, &handle->fs_handle->openfile_list);
 	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 	req = handle->open_req;
 	handle->open_req = 0;
@@ -89,6 +89,8 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	 */
 	handle->ie->gah = out->igah;
 	handle->ie->stat = out->stat;
+	D_INIT_LIST_HEAD(&handle->ie->ie_fh_list);
+	D_INIT_LIST_HEAD(&handle->ie->ie_ie_children);
 	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
 				       &handle->ie->stat.st_ino,
 				       sizeof(handle->ie->stat.st_ino),

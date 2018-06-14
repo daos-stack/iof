@@ -147,6 +147,12 @@ struct iof_gah_string_in {
 	struct ios_name name;
 };
 
+struct iof_imigrate_in {
+	struct ios_gah gah;
+	struct ios_name name;
+	int inode;
+};
+
 struct iof_string_out {
 	d_string_t path;
 	int rc;
@@ -332,7 +338,8 @@ extern struct crt_req_format QUERY_RPC_FMT;
 	X(fdatasync,	gah_in,		status_out)	\
 	X(statfs,	gah_in,		iov_pair)	\
 	X(lookup,	gah_string_in,	entry_out)	\
-	X(setattr,	setattr_in,	attr_out)
+	X(setattr,	setattr_in,	attr_out)	\
+	X(imigrate,	imigrate_in,	entry_out)
 
 #define X(a, b, c) DEF_RPC_TYPE(a),
 

@@ -242,6 +242,20 @@ struct iof_projection_info {
 
 	/** Held for any access/modification to a gah on any inode/file/dir */
 	pthread_mutex_t			gah_lock;
+
+	/** Reference count for pending migrate RPCS */
+	ATOMIC int			p_gah_update_count;
+
+	/** List of requests to be actioned when failover completes */
+	d_list_t			p_requests_pending;
+	pthread_mutex_t			p_request_lock;
+
+	/** List of child inodes.
+	 *
+	 * Populated during failover only, should be empty if not a
+	 * directory.
+	 */
+	d_list_t			p_ie_children;
 };
 
 #define FS_IS_OFFLINE(HANDLE) ((HANDLE)->offline_reason != 0)
@@ -487,7 +501,14 @@ struct ioc_request {
 	 * Used to ensure REQUEST_INIT()/REQUEST_RESET() have been invoked
 	 * correctly.
 	 */
-	enum ioc_request_state		rs;
+	enum ioc_request_state		r_rs;
+
+	/** List of requests.
+	 *
+	 * Used during failover to keep a list of requests that need to be
+	 * actioned once failover is complete.
+	 */
+	d_list_t			r_list;
 };
 
 /** Initialise a request.  To be called once per request */
@@ -495,16 +516,18 @@ struct ioc_request {
 	do {					\
 		(REQUEST)->fsh = FSH;		\
 		(REQUEST)->rpc = NULL;		\
-		(REQUEST)->rs = RS_INIT;	\
+		(REQUEST)->r_rs = RS_INIT;	\
+		(REQUEST)->r_list.prev = NULL;	\
+		(REQUEST)->r_list.next = NULL;	\
 	} while (0)
 
 /** Reset a request for re-use.  To be called before each use */
 #define IOC_REQUEST_RESET(REQUEST)					\
 	do {								\
-		D_ASSERT((REQUEST)->rs == RS_INIT ||			\
-			(REQUEST)->rs == RS_RESET ||			\
-			(REQUEST)->rs == RS_LIVE);			\
-		(REQUEST)->rs = RS_RESET;				\
+		D_ASSERT((REQUEST)->r_rs == RS_INIT ||			\
+			(REQUEST)->r_rs == RS_RESET ||			\
+			(REQUEST)->r_rs == RS_LIVE);			\
+		(REQUEST)->r_rs = RS_RESET;				\
 		(REQUEST)->rc = 0;					\
 	} while (0)
 
@@ -549,22 +572,36 @@ struct ioc_inode_entry {
 	 */
 	char		name[256];
 	/** The parent inode of this entry.
+	 *
 	 * As with name this will be correct when created however may
 	 * be incorrect at any point after that.  The inode does not hold
 	 * a reference on the parent so the inode may not be valid.
 	 */
 	fuse_ino_t	parent;
 
-	/**
-	 * Hash table of inodes
-	 *
+	/** Hash table of inodes.
 	 * All valid inodes are kept in a hash table, using the hash table
 	 * locking.
 	 */
 	d_list_t	list;
 
-	/**
-	 * Reference counting for the inode.
+	/** List of inodes.
+	 * Populated during failover to be a list of inodes per parent
+	 * directory.
+	 */
+	d_list_t	ie_ie_list;
+
+	/** List of child inodes.
+	 * Populated during failover to be a list of children for a directory
+	 */
+	d_list_t	ie_ie_children;
+
+	/** List of open file handles for this inode.
+	 * Populated during failover only.
+	 */
+	d_list_t	ie_fh_list;
+
+	/** Reference counting for the inode.
 	 * Used by the hash table callbacks
 	 */
 	ATOMIC uint	ref;
@@ -632,7 +669,10 @@ struct iof_file_handle {
 	/** Release RPC, precreated */
 	crt_rpc_t			*release_rpc;
 	/** List of open files, stored in fs_handle->openfile_list */
-	d_list_t			list;
+	d_list_t			fh_of_list;
+
+	/** List of open files for inode, stored in ino->ie_fh_list */
+	d_list_t			fh_ino_list;
 	/** The inode number of the file */
 	ino_t				inode_no;
 	/** A pre-allocated inode entry.  This is created as the struct is
@@ -650,6 +690,8 @@ struct iof_file_handle {
  * using it as a bool and accessing it though the use of atomics.
  *
  * These macros work on both file and directory handles.
+ *
+ * TODO: Add gah_ok to inode entries.
  */
 
 /** Set the GAH so that it's valid */
@@ -670,6 +712,15 @@ struct iof_file_handle {
 struct common_req {
 	struct ioc_request		request;
 	d_list_t			list;
+};
+
+/** Callback structure for inode migrate RPC.
+ *
+ * Used so migrate callback function has access to the filesystem handle.
+ */
+struct ioc_inode_migrate {
+	struct ioc_inode_entry *im_ie;
+	struct iof_projection_info *im_fsh;
 };
 
 /** Entry request type.

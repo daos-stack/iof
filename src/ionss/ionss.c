@@ -1062,6 +1062,84 @@ out:
 	IOF_TRACE_DOWN(rpc);
 }
 
+static void
+iof_imigrate_handler(crt_rpc_t *rpc)
+{
+	struct iof_imigrate_in		*in = crt_req_get(rpc);
+	struct iof_entry_out		*out = crt_reply_get(rpc);
+	struct ionss_file_handle	*parent = NULL;
+	struct ionss_file_handle	*fh;
+	struct ionss_mini_file		mf = {.type = inode_handle,
+					      .flags = O_PATH | O_NOATIME | O_NOFOLLOW | O_RDONLY};
+	int rc;
+	int fd;
+
+	VALIDATE_ARGS_GAH_FILE(rpc, in, out, parent);
+	if (out->err)
+		goto out;
+
+	IOF_TRACE_UP(rpc, parent, "inode_migrate");
+
+	mf.inode_no = in->inode;
+
+	fh = htable_mf_find(parent->projection, &mf);
+	if (fh) {
+		out->gah = fh->gah;
+
+		IOF_TRACE_DEBUG(rpc, "Migrate to " GAH_PRINT_STR,
+				GAH_PRINT_VAL(out->gah));
+		goto out;
+	}
+
+	fd = openat(parent->fd, in->name.name, mf.flags);
+	if (fd == -1) {
+		IOF_TRACE_DEBUG(rpc,
+				"No file at location '%s'",
+				in->name.name);
+		out->rc = ENOENT;
+		goto out;
+	}
+
+	rc = fstat(fd, &out->stat);
+	if (rc != 0) {
+		IOF_TRACE_DEBUG(rpc,
+				"Could not stat file at location '%s'",
+				in->name.name);
+		out->rc = ENOENT;
+		close(fd);
+		goto out;
+	}
+	if (out->stat.st_ino != mf.inode_no) {
+		IOF_TRACE_DEBUG(rpc,
+				"Wrong file at location '%s' %lu %lu",
+				in->name.name,
+				out->stat.st_ino,
+				mf.inode_no);
+		out->rc = ENOENT;
+		close(fd);
+		goto out;
+	}
+
+	fh = htable_mf_insert(parent->projection, &mf, fd);
+	if (!fh) {
+		close(fd);
+		D_GOTO(out, out->err = -DER_NOMEM);
+	}
+
+	out->gah = fh->gah;
+	goto out;
+
+out:
+
+	IOF_TRACE_DEBUG(parent->projection, "Result %d %d",
+			out->rc, out->err);
+	rc = crt_reply_send(rpc);
+	if (rc)
+		IOF_TRACE_ERROR(rpc, "response not sent, ret = %d", rc);
+
+	IOF_TRACE_DOWN(rpc);
+}
+
 /* Handle a close from a client.
  * For close RPCs there is no reply so simply ack the RPC first
  * and then do the work off the critical path.

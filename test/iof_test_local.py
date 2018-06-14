@@ -1035,7 +1035,7 @@ class Testlocal(unittest.TestCase,
         if failed:
             self.fail('Failed with unexpected errno')
 
-        self.ft_stat_many_helper(f1.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(f1.fileno(), None)
         self.ft_stat_many_helper(f2.fileno(), errno.EHOSTDOWN)
         self.ft_stat_many_helper(f4.fileno(), errno.EHOSTDOWN)
         self.ft_stat_many_helper(f5.fileno(), errno.EHOSTDOWN)

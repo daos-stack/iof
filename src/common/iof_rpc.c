@@ -78,6 +78,12 @@ struct crt_msg_field *gah_string_in[] = {
 	&CMF_IOF_NAME,	/* name */
 };
 
+struct crt_msg_field *imigrate_in[] = {
+	&CMF_GAH,	/* gah of parent */
+	&CMF_IOF_NAME,	/* name */
+	&CMF_INT,	/* inode */
+};
+
 struct crt_msg_field *string_out[] = {
 	&CMF_STRING,
 	&CMF_INT,
