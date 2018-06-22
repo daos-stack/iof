@@ -773,6 +773,9 @@ class Testlocal(unittest.TestCase,
             if not os.path.exists(testname):
                 self.skipTest("%s executable not found" % tname)
 
+            ioil_file = os.path.join(self.log_path, '%s.log' % tname)
+            unlink_file(ioil_file)
+            environ['D_LOG_FILE'] = ioil_file
             self.logger.info("libioil test - input string:\n %s\n", testname)
             # set this to match value used by this job
             cmd = []
