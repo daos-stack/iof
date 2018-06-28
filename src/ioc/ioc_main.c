@@ -1749,7 +1749,6 @@ initialize_projection(struct iof_state *iof_state,
 
 	if (writeable) {
 		REGISTER_STAT(create);
-		REGISTER_STAT(rmdir);
 		REGISTER_STAT(mkdir);
 		REGISTER_STAT(unlink);
 		REGISTER_STAT(symlink);

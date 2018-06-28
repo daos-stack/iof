@@ -58,7 +58,6 @@ struct iof_stats {
 	ATOMIC unsigned int getattr;
 	ATOMIC unsigned int create;
 	ATOMIC unsigned int readlink;
-	ATOMIC unsigned int rmdir;
 	ATOMIC unsigned int mkdir;
 	ATOMIC unsigned int statfs;
 	ATOMIC unsigned int unlink;

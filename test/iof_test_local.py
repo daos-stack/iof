@@ -259,7 +259,7 @@ class Testlocal(unittest.TestCase,
                     if e.errno == errno.ENOENT:
                         pass
                     elif e.errno == errno.ENOTCONN:
-                        print("Unmounting previous projection/mount at %s",
+                        print("Unmounting previous projection/mount at %s" %
                               idir)
                         subprocess.call(['fusermount', '-u', idir])
                     else:

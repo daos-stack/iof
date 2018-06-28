@@ -157,6 +157,8 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	struct iof_rb *rb = NULL;
 	int rc;
 
+	STAT_ADD(handle->fs_handle->stats, read);
+
 	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
