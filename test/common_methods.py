@@ -69,7 +69,7 @@ IMPORT_MNT = None
 CTRL_DIR = None
 
 try:
-    from colorama import Fore, Style
+    from colorama import Fore
     COLORAMA = True
 except ImportError:
     COLORAMA = False
@@ -120,7 +120,7 @@ class ColorizedOutput():
             prefix = ''
         if colour and COLORAMA:
             self.logger.info(getattr(Fore, colour) + output)
-            print(Style.RESET_ALL, end="")
+            print(Fore.RESET, end="")
         else:
             self.logger.info(prefix + output)
         if self.stream:
@@ -162,9 +162,10 @@ class ColorizedOutput():
 
             if prefix == 'ERROR:':
                 self.logger.info(Fore.RED + output)
+
             elif prefix == 'WARN:':
                 self.logger.info(Fore.YELLOW + output)
-            print(Style.RESET_ALL, end="")
+        print(Fore.RESET, end="")
 
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
