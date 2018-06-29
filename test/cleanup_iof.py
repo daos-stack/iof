@@ -82,9 +82,9 @@ class TestCleanUpIof():
 
     def has_terminated(self, proc, waittime):
         """Check if the process has terminated
-        Wait up to 60s for the process to die by itself,
-        return non-zero or zero return code indicating
-        success or failure respectively."""
+        Wait up to waittime for the process to die by itself,
+        return True if process has exited, or false if it
+        is still running"""
         i = waittime
         while i > 0:
             msg = "Check if the %s process has terminated" % proc
@@ -115,15 +115,18 @@ class TestCleanUpIof():
     def ionss_shutdown(self):
         """Shutdown iof"""
         self.logger.info("wait for ionss shutdown")
-        ionssrtn = self.has_terminated("ionss", 10)
-        if ionssrtn != 0:
-            self.logger.info("CNSS and IONSS processes have terminated.\n")
+        start_time = time.time()
+        ionssrtn = self.has_terminated("ionss", 20)
+        elapsed = time.time() - start_time
+        if ionssrtn:
+            self.logger.info("CNSS and IONSS processes have terminated in "
+                             "%d seconds\n",
+                             elapsed)
         else:
             # Log the error message. Fail the test with the same error message
-            self.logger.info("IOF Cleanup failed. \
-                        IONSS processes have not terminated. \
-                        IONSS return code: %d.\n", \
-                        ionssrtn)
+            self.logger.info("IOF Cleanup failed. IONSS processes have not "
+                             "terminated in %d seconds.",
+                             elapsed)
             return 1
         return 0
 
@@ -137,14 +140,13 @@ class TestCleanUpIof():
             f.write('1')
         cnssrtn = self.has_terminated("cnss", 10)
         elapsed = time.time() - start_time
-        if cnssrtn != 0:
+        if cnssrtn:
             self.logger.info("CNSS processes have terminated in %d seconds.\n",
                              elapsed)
         else:
             # Log the error message. Fail the test with the same error message
-            self.logger.info("IOF Cleanup failed. \
-                        CNSS processes have not terminated in %d seconds. \
-                        CNSS return code: %d.\n", \
-                        elapsed, cnssrtn)
+            self.logger.info("IOF Cleanup failed. CNSS processes have not "
+                             "terminated in %d seconds",
+                             elapsed)
             return 1
         return 0
