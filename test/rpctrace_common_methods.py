@@ -71,10 +71,10 @@ class RpcTrace(common_methods.ColorizedOutput):
     """dictionary maps descriptor to 'registered/deregistered/linked' states
     w/ regard to IOF_TRACE macros"""
 
-    ALLOC_STATE = 'RPC ALLOCATED'
-    DEALLOC_STATE = 'RPC DEALLOCATED'
-    SUBMIT_STATE = 'RPC SUBMITTED'
-    SENT_STATE = 'RPC SENT'
+    ALLOC_STATE = 'ALLOCATED'
+    DEALLOC_STATE = 'DEALLOCATED'
+    SUBMIT_STATE = 'SUBMITTED'
+    SENT_STATE = 'SENT'
     STATES = [ALLOC_STATE, SUBMIT_STATE, SENT_STATE, DEALLOC_STATE]
     ALLOC_SEARCH_STRS = ('allocated', 'allocated per RPC request received')
     SUBMIT_SEARCH_STR = 'submitted'
@@ -87,9 +87,6 @@ class RpcTrace(common_methods.ColorizedOutput):
 
     def __init__(self, fname, output_stream):
         self.set_log(output_stream)
-        self.input_file = None
-
-        """Set the input file to be used"""
         self.input_file = fname
         #search for all process ids in logfile with multiple instances logged
         with open(self.input_file, 'r') as f:
@@ -176,7 +173,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                     dealloc_table)
         headers = ['OPCODE']
         headers.extend(self.STATES)
-        return ('{0}'.format(tabulate.tabulate(table, headers=headers)), errors)
+        return (tabulate.tabulate(table, headers=headers), errors)
 
     def _rpc_tabulate_populate_lists(self):
         """Create and populate lists for all RPC states for table ouput of
@@ -276,8 +273,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                pid_to_trace))
 
         f = open(self.input_file, 'r')
-        output_rpcs = []
-        errors = []
+        ort = []
 
         for line in f:
             if any(s in line for s in self.SEARCH_STRS[0]) or \
@@ -321,30 +317,26 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                                    rpc_state,
                                                                    opcode)
                     function_name = fields[6]
-                    prefix = '{0}: {1}'.format(state, rpc)
                     if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
-                        if extra:
-                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3} {4}' \
-                                               .format(prefix,
-                                                       rpc_state[4:],
-                                                       opcode,
-                                                       function_name,
-                                                       extra))
-                        else:
-                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3}' \
-                                               .format(prefix,
-                                                       rpc_state[4:],
-                                                       opcode,
-                                                       function_name))
+                        ort.append([state,
+                                    rpc,
+                                    rpc_state,
+                                    opcode,
+                                    function_name,
+                                    extra])
 
-        if output_rpcs:
-            output_rpcs.insert(0, 'RPC State Transitions:')
-            output_rpcs.insert(1, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
-                               format('RPC', 'STATE', 'Op', 'Function'))
-            output_rpcs.insert(2, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
-                               format('---', '-----', '--', '--------'))
-            output_rpcs.append('')
+        if ort:
+            str_out = tabulate.tabulate(ort, headers=['STATE',
+                                                      'RPC',
+                                                      'STATE',
+                                                      'Op',
+                                                      'Function',
+                                                      'Extra'])
+            self.normal_output('RPC State Transitions:')
+            self.normal_output(str_out)
+            self.normal_output('')
 
+        output_rpcs = []
         output_rpcs.append('Opcode State Transition Tally:')
         (ret_str, errors) = self._rpc_tabulate()
         output_rpcs.append(ret_str)
@@ -559,32 +551,30 @@ class RpcTrace(common_methods.ColorizedOutput):
                                 output.append(' '.join(nxtline.splitlines()))
                         self.list_output(output)
                         return
-                    else: #tracing a reused descriptor
-                        #start the log dump where the specific reused descriptor
-                        #is registered, logging will include all instances of
-                        #this descriptor after
-                        if position_desc_cnt == location:
-                            output.append('MARK: {0}'.\
-                                          format(' '.join(line.splitlines())))
-                            for nxtline in f:
-                                desc_log_marked = False
-                                if 'TRACE' in nxtline:
-                                    fields = nxtline.strip().split()
-                                    rpc = fields[7].strip().split('(')[1].\
-                                          strip().split(')')[0]
-                                    if any(s == rpc for s in descriptors):
-                                        output.\
-                                        append('MARK: {0}'.\
-                                               format(' '.join(nxtline.\
-                                                               splitlines())))
-                                        desc_log_marked = True
-                                if not desc_log_marked and self.VERBOSE_LOG:
-                                    #print the remaining non-relevant log mesgs
-                                    output.append(' '.join(nxtline.\
-                                                           splitlines()))
-                            self.list_output(output)
-                            return
-                        position_desc_cnt += 1
+                    #start the log dump where the specific reused descriptor
+                    #is registered, logging will include all instances of
+                    #this descriptor after
+                    if position_desc_cnt == location:
+                        output.append('MARK: {0}'.\
+                                      format(' '.join(line.splitlines())))
+                        for nxtline in f:
+                            desc_log_marked = False
+                            if 'TRACE' in nxtline:
+                                fields = nxtline.strip().split()
+                                rpc = fields[7].strip().split('(')[1].\
+                                      strip().split(')')[0]
+                                if any(s == rpc for s in descriptors):
+                                    output\
+                                        .append('MARK: {0}'.\
+                                                format(' '.join(nxtline.\
+                                                                splitlines())))
+                                    desc_log_marked = True
+                            if not desc_log_marked and self.VERBOSE_LOG:
+                                #print the remaining non-relevant log mesgs
+                                output.append(' '.join(nxtline.splitlines()))
+                        self.list_output(output)
+                        return
+                    position_desc_cnt += 1
 
                 if not desc_log_marked and self.VERBOSE_LOG:
                     #print the remaining non-relevant log messages
