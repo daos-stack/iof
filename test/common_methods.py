@@ -115,7 +115,7 @@ class ColorizedOutput():
     def colour_output(self, colour, output, prefix=None):
         """Show output in colour"""
         if prefix:
-            prefix = ' :{0}'.format(prefix)
+            prefix = '{0}: '.format(prefix)
         else:
             prefix = ''
         if colour and COLORAMA:
@@ -124,7 +124,7 @@ class ColorizedOutput():
         else:
             self.logger.info(prefix + output)
         if self.stream:
-            self.stream.write("{0} {1}\n".format(prefix, output))
+            self.stream.write("{0}{1}\n".format(prefix, output))
 
     def success_output(self, output):
         """Green output to console, writes output to internals.out"""
@@ -136,7 +136,7 @@ class ColorizedOutput():
 
     def warning_output(self, output):
         """Yellow output to console, writes output to internals.out"""
-        self.colour_output('YELLOW', output, 'WARN')
+        self.colour_output('YELLOW', output, 'WARNING')
 
     def normal_output(self, output):
         """Normal output to console, writes output to internals.out"""

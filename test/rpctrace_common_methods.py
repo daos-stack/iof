@@ -450,7 +450,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                     new_obj = fields[7].strip().split('(')[1].strip().\
                               split(')')[0]
                     parent = fields[-1]
-                    obj_type = fields[-3]
+                    obj_type_l = fields[-3]
+                    obj_type = obj_type_l[1:-1]
                     if new_obj not in self.trace_dict:
                         self.trace_dict.setdefault(new_obj, []).\
                                                    append((obj_type, parent))
@@ -474,7 +475,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                     #create an alias for an already registered descriptor
                     fields = line.strip().split()
                     parent = fields[-1]
-                    obj_type = fields[-3]
+                    obj_type_l = fields[-3]
+                    obj_type = obj_type_l[1:-1]
                     #find index of descriptor in order to append alias
                     #to correct index in the chance it is reused in the dict
                     index = self.find_reused_descriptor_index(log_path, line)
@@ -684,10 +686,10 @@ class RpcTrace(common_methods.ColorizedOutput):
                                   format(key, typ, par,
                                          par_types))
                 elif par == 'root':
-                    output.append('{0:<24}{1:<30}{2} [None]'.\
+                    output.append('{0:<30}{1:<30}{2} [None]'.\
                                   format(key, typ, par))
                 else: #fail if missing parent/link
-                    output.append('ERROR: {0:<24}{1:<30}{2} [None]'.\
+                    output.append('ERROR: {0:<30}{1:<30}{2} [None]'.\
                                   format(key, typ, par))
                     missing_links.append(par)
 
@@ -701,17 +703,17 @@ class RpcTrace(common_methods.ColorizedOutput):
                 #reformat rpc list for better output display in table
                 temp_v = []
                 v_output = ''
-                add_format = 'no'
+                add_format = False
                 for i in v:
-                    if add_format == 'no':
-                        temp_v.append('{:>25}:{:<15}'.format(i[0], i[1]))
-                        add_format = 'yes'
-                    else:
+                    if add_format:
                         temp_v.append('{:>65}:{:<15}'.format(i[0], i[1]))
+                    else:
+                        temp_v.append('{:>25}:{:<15}'.format(i[0], i[1]))
+                        add_format = True
                 if v:
                     v_output = '\n'.join(temp_v)
                 type_field = str([x[0] for x in self.trace_dict[k]])
-                output.append('{:<20}{:<20}{}'.\
+                output.append('{:<20}{:<25}{}'.\
                               format(k, type_field, v_output))
         self.list_output(output)
 
@@ -730,18 +732,22 @@ class RpcTrace(common_methods.ColorizedOutput):
         with open(log_path, 'r') as f:
             output = []
             self.normal_output('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
-                               format('Descriptor', 'State', 'Funct',
-                                      '----------', '-----', '-----'))
+                               format('Descriptor', 'State', 'Function',
+                                      '----------', '-----', '--------'))
             for line in f:
                 if 'TRACE' not in line:
                     continue
 
                 state = None
                 fields = line.strip().split()
-                desc = fields[7].strip().split('(')[1][:-1]
+                part = fields[7]
+                start_idx = part.find('(')
+                desc = part[start_idx+1:-1]
+                if desc == '(nil)':
+                    continue
                 res = None
 
-                if 'Registered' in line:
+                if 'Registered new' in line:
                     state = 'Registered'
                     if desc in self.desc_state:
                         res = ('ERROR', state, 'previous state: {0}' \
@@ -753,7 +759,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                 #the descriptor
                 elif 'Alias' in line:
                     state = 'Alias'
-                    obj_type = fields[-3]
+                    obj_type_l = fields[-3]
+                    obj_type = obj_type_l[1:-1]
                     if self.desc_state.get(desc, None) != 'Registered':
                         res = ('ERROR', state, 'Not registered')
                     else:
@@ -783,7 +790,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 if not res:
                     continue
 
-                function_name = fields[7].strip().split('(')[0]
+                function_name = part[:start_idx]
                 if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
                     desc = '{0}: {1}'.format(res[0], desc)
                     if len(res) == 2:
