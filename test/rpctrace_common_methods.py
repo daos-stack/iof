@@ -338,14 +338,15 @@ class RpcTrace(common_methods.ColorizedOutput):
             pids = []
             for line in f:
                 fields = line.strip().split()
-                pid = fields[2].strip().split('[')[1].strip().\
-                              split(']')[0]
+                pid = int(fields[2][5:-1])
                 if pid not in pids:
                     pids.append(pid)
 
         #index_multiprocess will determine which PID to trace
         #(ie index 0 will be assigned the first PID found in logs)
-        pid_to_trace = pids[index_multiprocess]
+        spids = sorted(pids)
+        pid_to_trace = spids[index_multiprocess]
+        pid_str = "CaRT[%d]" % pid_to_trace
 
         if self.SOURCE is None:
             self.error_output('Source not designated for rpc reporting in logs')
@@ -359,13 +360,15 @@ class RpcTrace(common_methods.ColorizedOutput):
         errors = []
 
         for line in f:
-            if (any(s in line for s in self.SEARCH_STRS[0]) or \
-               any(s in line for s in self.SEARCH_STRS[1:])) and \
-               pid_to_trace in line:
+            if any(s in line for s in self.SEARCH_STRS[0]) or \
+               any(s in line for s in self.SEARCH_STRS[1:]):
                 rpc_state = None
                 rpc = None
                 opcode = None
                 fields = line.strip().split()
+                if fields[2] != pid_str:
+                    continue
+
                 #remove ending punctuation from log msg
                 translator = str.maketrans('', '', string.punctuation)
                 str_match = fields[-1].translate(translator)

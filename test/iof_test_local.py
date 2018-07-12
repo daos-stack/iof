@@ -86,7 +86,7 @@ except ImportError:
 #pylint: disable=too-many-instance-attributes
 #pylint: disable=too-many-ancestors
 
-log_to_file = False
+log_to_file = True
 valgrind_cnss_only = False
 use_fixed_paths = False
 
@@ -122,9 +122,7 @@ class Testlocal(unittest.TestCase,
     d = {}
     ionss_config_file = None
     ionss_logfiles = []
-    ionss_logfiles_marker = []
     cnss_logfile = None
-    cnss_logfile_marker = None
     log_path = None
     internals_tracing = ""
     origin_rpctrace = None
@@ -178,8 +176,6 @@ class Testlocal(unittest.TestCase,
         else:
             self.cnss_logfile = os.path.join(self.log_path, '1/rank.0/stdout')
 
-        self.cnss_logfile_marker = self.timestamp_logfile(self.cnss_logfile)
-
         self.ionss_logfiles = []
         if log_to_file:
             self.ionss_logfiles.append(os.path.join(self.log_path, 'ionss.log'))
@@ -188,9 +184,6 @@ class Testlocal(unittest.TestCase,
                 if rank != 'rank.0':
                     self.ionss_logfiles.append(os.path.join(self.log_path, '1',
                                                             rank, 'stdout'))
-        self.ionss_logfiles_marker = []
-        for ionss_log in self.ionss_logfiles:
-            self.ionss_logfiles_marker.append(self.timestamp_logfile(ionss_log))
 
         #Verify FUSE Mount
         self.verify_mount(self.mount_dirs)

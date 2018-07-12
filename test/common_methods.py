@@ -170,18 +170,6 @@ class ColorizedOutput():
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
 
-    def timestamp_logfile(self, log_dir):
-        """Collect timestamp of log."""
-        timestamp = None
-        with open(log_dir, 'r') as f:
-            if os.stat(log_dir).st_size == 0:
-                self.error_output('{0} file is empty'.format(log_dir))
-            else:
-                last_line = f.readlines()[-1]
-                fields = last_line.strip().split()
-                timestamp = fields[0]
-        return timestamp
-
     def verify_mount(self, mount_dir):
         """Compares /proc/mounts to see if expected mount point is really
         mounted for each IOF projection."""
