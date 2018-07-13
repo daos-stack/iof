@@ -1002,6 +1002,95 @@ class Testlocal(unittest.TestCase,
         if failed:
             self.fail('Failed with unexpected errno')
 
+    def ft_stat_many_helper(self, fd, expected):
+        """Helper function for test_failover_many()"""
+        if not expected:
+            print(os.stat(fd))
+            return
+
+        try:
+            print(os.stat(fd))
+            self.fail("Should have failed")
+        except OSError as e:
+            if e.errno != expected:
+                raise
+
+    def test_failover_many(self):
+        """Test failover with open files
+
+        Test various permutations of failover:
+        - Open a file in the top-level directory.
+        - Open a file in a subdirectory.
+        - Make a subdirectory, create a file in it and unlink the file.
+        - Open a file in the top-level directory, them remove it on the backend
+        - Open a file in the top-level directory, then remove and replace with
+          alternate file on backend.
+        - Open a file, then close it.
+
+        After failover then try the following:
+        Try to stat each open file.
+        Try to stat each subdirectory which has open files.
+        Try to stat a untouched, but pre-existing subdirectory.
+        Try to stat the previously created subdirectory
+
+        Many of these cases are expected to fail currently (and removing the
+        file before failover always will) so the test is mostly to confirm the
+        code doesn't crash and to see progress on feature development.
+        """
+
+        frontend_dir = self.import_dir
+        backend_dir = self.export_dir
+
+        # Open a file.
+        f1 = open(os.path.join(frontend_dir, 'f1'), mode='w')
+        os.mkdir(os.path.join(frontend_dir, 'd1'))
+        os.mkdir(os.path.join(frontend_dir, 'd2'))
+        # Open a file which will remain open.
+        f2 = open(os.path.join(frontend_dir, 'd1', 'f2'), mode='w')
+        # Open a file, then remove it so d2 is empty.
+        f3 = open(os.path.join(frontend_dir, 'd2', 'f3'), mode='w')
+        f3.close()
+        # Open a file which will be removed on the backend.
+        f4 = open(os.path.join(frontend_dir, 'f4'), mode='w')
+        os.unlink(os.path.join(backend_dir, 'f4'))
+        # Open a file which will be overwritten on the backend.
+        f5 = open(os.path.join(frontend_dir, 'f5'), mode='w')
+        os.unlink(os.path.join(backend_dir, 'f5'))
+        f6 = open(os.path.join(backend_dir, 'f6'), mode='w')
+        f6.close()
+        os.rename(os.path.join(backend_dir, 'f6'),
+                  os.path.join(backend_dir, 'f5'))
+        f7 = open(os.path.join(frontend_dir, 'f7'), mode='w')
+        f7.close()
+
+        print(os.fstat(f1.fileno()))
+        print(os.fstat(f2.fileno()))
+        print(os.fstat(f4.fileno()))
+        print(os.fstat(f5.fileno()))
+        print(os.stat(os.path.join(frontend_dir, 'd2')))
+        print(os.stat(os.path.join(frontend_dir, 'f7')))
+
+        # Now all the files are open kill a ionss process, and trigger failover.
+        # Note this is the failover_stat() test.
+        self.kill_ionss_proc()
+        failed = self.ft_stat_helper(0, [errno.EIO, None])
+        self.dump_failover_state()
+
+        if failed:
+            self.fail('Failed with unexpected errno')
+
+        self.ft_stat_many_helper(f1.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(f2.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(f4.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(f5.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(os.path.join(frontend_dir, 'd2'), None)
+        self.ft_stat_many_helper(os.path.join(frontend_dir, 'f7'), None)
+
+        f1.close()
+        f2.close()
+        f4.close()
+        f5.close()
+
     def clean_export_dir(self):
         """Clean up files created in backend fs"""
         idir = os.path.join(self.export_dir)
