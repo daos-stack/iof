@@ -35,6 +35,13 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+
+/**
+ * \file
+ *
+ * CNSS/IOF client headers.
+ */
+
 #ifndef __IOF_H__
 #define __IOF_H__
 
@@ -77,45 +84,80 @@ struct iof_stats {
 	ATOMIC unsigned int setattr;
 };
 
-/* A common structure for holding a cart context and thread details */
+/**
+ * A common structure for holding a cart context and thread details.
+ *
+ * This is included in both iof_state for global values, and once per
+ * projection for projection specific entries.
+ */
 struct iof_ctx {
-	/* cart context */
+	/** cart context */
 	crt_context_t			crt_ctx;
+	/** pthread identifier */
 	pthread_t			thread;
+	/** Object pool.  This is used on projections to flush on shutdown */
 	struct iof_pool			*pool;
+	/** Tracker to detect thread start */
 	struct iof_tracker		thread_start_tracker;
+	/** Tracker to signal thread stop */
 	struct iof_tracker		thread_stop_tracker;
+	/** Tracker to detect thread stop */
 	struct iof_tracker		thread_shutdown_tracker;
+	/** Poll interval to pass to crt_progress */
 	uint32_t			poll_interval;
+	/** Callback function to pass to crt_progress() */
 	crt_progress_cond_cb_t		callback_fn;
 };
 
-/*For IOF Plugin*/
+/**
+ * Global state for IOF client.
+ *
+ */
 struct iof_state {
+	/** Callback to CNSS plugin */
 	struct cnss_plugin_cb		*cb;
+	/** CaRT RPC protocol used */
 	struct crt_proto_format		*proto;
+	/** iof_ctx for state */
 	struct iof_ctx			iof_ctx;
+	/** List of projections */
 	d_list_t			fs_list;
-	/* CNSS Prefix */
+	/** CNSS Prefix.  Parent directory of projections */
 	char				*cnss_prefix;
+	/** ctrl_fs inoss directory handle */
 	struct ctrl_dir			*ionss_dir;
+	/** ctrl_fs projections directory handle */
 	struct ctrl_dir			*projections_dir;
+	/** Group information */
 	struct iof_group_info		*groups;
+	/** Number of groups, will be 1 */
 	uint32_t			num_groups;
+	/** Number of projections */
 	uint32_t			num_proj;
 };
 
+/**
+ * IOF Group struct.
+ *
+ * Intended to be used to support multiple groups but support for that is not
+ * in place yet so only 1 group is currently allowed.
+ *
+ */
+
 struct iof_group_info {
+	/** Service group pointer */
 	struct iof_service_group	grp;
+	/** The group name */
 	char				*grp_name;
 
-	/* Set to true if the CaRT group attached */
+	/** Set to true if the CaRT group attached */
 	bool				crt_attached;
 
-	/* Set to true if registered with the IONSS */
+	/** Set to true if registered with the IONSS */
 	bool				iof_registered;
 };
 
+/** Read buffer descriptor */
 struct iof_rb {
 	d_list_t			list;
 	struct iof_projection_info	*fs_handle;
@@ -129,6 +171,7 @@ struct iof_rb {
 	bool				failure;
 };
 
+/** Write buffer descriptor */
 struct iof_wb {
 	d_list_t			list;
 	struct iof_projection_info	*fs_handle;
@@ -156,17 +199,18 @@ struct iof_projection_info {
 	struct ctrl_dir			*stats_dir;
 	struct iof_stats		*stats;
 	struct fuse_session		*session;
-	/* The name of the mount directory */
+	/** The basename of the mount point */
 	struct ios_name			mnt_dir;
+	/** The mount location */
 	char				*mount_point;
 
 	enum iof_failover_state		failover_state;
 
-	/* The name of the ctrlfs direcory */
+	/** The name of the ctrlfs directory */
 	struct ios_name			ctrl_dir;
-	/* fuse client implementation */
+	/** fuse client implementation */
 	struct fuse_lowlevel_ops	*fuse_ops;
-	/* Feature Flags */
+	/** Feature Flags */
 	uint64_t			flags;
 	int				fs_id;
 	struct iof_pool			pool;
@@ -183,19 +227,20 @@ struct iof_projection_info {
 	uint32_t			max_read;
 	uint32_t			max_iov_read;
 	uint32_t			readdir_size;
-	/* set to error code if projection is off-line */
+	/** set to error code if projection is off-line */
 	int				offline_reason;
+	/** Hash table of open inodes */
 	struct d_hash_table		inode_ht;
 
-	/* List of directory handles owned by FUSE */
 	pthread_mutex_t			od_lock;
+	/** List of directory handles owned by FUSE */
 	d_list_t			opendir_list;
 
-	/* List of open file handles owned by FUSE */
 	pthread_mutex_t			of_lock;
+	/** List of open file handles owned by FUSE */
 	d_list_t			openfile_list;
 
-	/* Held for any access/modification to a gah on any inode/file/dir */
+	/** Held for any access/modification to a gah on any inode/file/dir */
 	pthread_mutex_t			gah_lock;
 };
 
@@ -227,7 +272,8 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		FLAGS &= ~MODE;					\
 	} while (0)
 
-/* Dump the file open mode to the logile
+/**
+ * Dump the file open mode to the logile.
  *
  * On a 64 bit system O_LARGEFILE is assumed so always set but defined to zero
  * so set LARGEFILE here for debugging
@@ -258,8 +304,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 			IOF_LOG_ERROR("%p Flags 0%o", (HANDLE), _flag);	\
 	} while (0)
 
-/* Dump the file mode to the logfile
- */
+/** Dump the file mode to the logfile. */
 #define LOG_MODES(HANDLE, INPUT) do {					\
 		int _flag = (INPUT) & S_IFMT;				\
 		LOG_MODE((HANDLE), _flag, S_IFREG);			\
@@ -398,10 +443,18 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 
 struct ioc_request;
 
+/**
+ * IOF Request API.
+ *
+ * Set of callbacks invoked during the lifetime of a request.
+ */
 struct ioc_request_api {
-	void				(*on_send)(struct ioc_request *req);
-	void				(*on_result)(struct ioc_request *req);
-	int				(*on_evict)(struct ioc_request *req);
+	/** Called after RPC has been sent */
+	void	(*on_send)(struct ioc_request *req);
+	/** Called once, per request with the result */
+	void	(*on_result)(struct ioc_request *req);
+	/** Called on eviction, can re-send to new rank */
+	int	(*on_evict)(struct ioc_request *req);
 };
 
 enum ioc_request_state {
@@ -410,15 +463,34 @@ enum ioc_request_state {
 	RS_LIVE
 };
 
+/**
+ * IOF Request descriptor.
+ *
+ */
 struct ioc_request {
+	/** Pointer to projection for this request. */
 	struct iof_projection_info	*fsh;
+	/** Pointer to the RPC for this request. */
 	crt_rpc_t			*rpc;
+	/** Fuse request for this IOF request, may be 0 */
 	fuse_req_t			req;
-	const struct ioc_request_api	*cb;
+	/** Callbacks to use for this request */
+	const struct ioc_request_api	*ir_api;
+	/** Error status of this request.
+	 *
+	 * This is a libc error number and is set before a call to
+	 *  on_result
+	 */
 	int				rc;
+	/** Request state.
+	 *
+	 * Used to ensure REQUEST_INIT()/REQUEST_RESET() have been invoked
+	 * correctly.
+	 */
 	enum ioc_request_state		rs;
 };
 
+/** Initialise a request.  To be called once per request */
 #define IOC_REQUEST_INIT(REQUEST, FSH)		\
 	do {					\
 		(REQUEST)->fsh = FSH;		\
@@ -426,6 +498,7 @@ struct ioc_request {
 		(REQUEST)->rs = RS_INIT;	\
 	} while (0)
 
+/** Reset a request for re-use.  To be called before each use */
 #define IOC_REQUEST_RESET(REQUEST)					\
 	do {								\
 		D_ASSERT((REQUEST)->rs == RS_INIT ||			\
@@ -435,46 +508,110 @@ struct ioc_request {
 		(REQUEST)->rc = 0;					\
 	} while (0)
 
-/* Correctly resolve the return codes and errors from the RPC response.
+/**
+ * Resolve request status.
+ *
+ * Correctly resolve the return codes and errors from the RPC response.
  * If the error code was already non-zero, it means an error occurred on
  * the client; do nothing. A non-zero error code in the RPC response
  * denotes a server error, in which case, set the status error code to EIO.
- *
  */
-#define IOC_REQUEST_RESOLVE(STATUS, OUT)				\
+#define IOC_REQUEST_RESOLVE(REQUEST, OUT)				\
 	do {								\
-		if (((OUT) != NULL) && (!(STATUS)->rc)) {		\
-			(STATUS)->rc = (OUT)->rc;			\
+		if (((OUT) != NULL) && (!(REQUEST)->rc)) {		\
+			(REQUEST)->rc = (OUT)->rc;			\
 			if ((OUT)->err)					\
-				(STATUS)->rc = EIO;			\
+				(REQUEST)->rc = EIO;			\
 		}							\
 	} while (0)
 
-/* Data which is stored against an open directory handle */
+/**
+ * Inode handle.
+ *
+ * Describes any entry in the projection that the kernel knows about, may
+ * be a directory, file, symbolic link or anything else.
+ */
+
+struct ioc_inode_entry {
+	/** The GAH for this inode */
+	struct ios_gah	gah;
+	/** stat structure for this inode.
+	 * This will be valid, but out-of-date at any given moment in time,
+	 * mainly used for the inode number and type.
+	 */
+	struct stat	stat;
+
+	/** The name of the entry, relative to the parent.
+	 * This would have been valid when the inode was first observed
+	 * however may be incorrect at any point after that.  It may not
+	 * even match the local kernels view of the projection as it is
+	 * not updated on local rename requests.
+	 */
+	char		name[256];
+	/** The parent inode of this entry.
+	 * As with name this will be correct when created however may
+	 * be incorrect at any point after that.  The inode does not hold
+	 * a reference on the parent so the inode may not be valid.
+	 */
+	fuse_ino_t	parent;
+
+	/**
+	 * Hash table of inodes
+	 *
+	 * All valid inodes are kept in a hash table, using the hash table
+	 * locking.
+	 */
+	d_list_t	list;
+
+	/**
+	 * Reference counting for the inode.
+	 * Used by the hash table callbacks
+	 */
+	ATOMIC uint	ref;
+
+	/** Failover flag
+	 * Set to true during failover if this inode should be migrated
+	 */
+	bool		failover;
+};
+
+/**
+ * Directory handle.
+ *
+ * Describes a open directory, may be used for readdir() calls.
+ */
 struct iof_dir_handle {
+	/** Request for opening the directory */
 	struct ioc_request		open_req;
+	/** Request for closing the directory */
 	struct ioc_request		close_req;
-	/* The handle for accessing the directory on the IONSS */
+	/** The GAH to use when accessing the directory */
 	struct ios_gah			gah;
-	/* Any RPC reference held across readdir() calls */
+	/** Any RPC reference held across readdir() calls */
 	crt_rpc_t			*rpc;
-	/* Pointer to any retreived data from readdir() RPCs */
+	/** Pointer to any retreived data from readdir() RPCs */
 	struct iof_readdir_reply	*replies;
 	int				reply_count;
 	void				*replies_base;
-	/* Set to True if the current batch of replies is the final one */
+	/** Set to True if the current batch of replies is the final one */
 	int				last_replies;
-	/* Set to 1 initially, but 0 if there is a unrecoverable error */
+	/** Set to 1 initially, but 0 if there is a unrecoverable error */
 	int				handle_valid;
 	/* Set to 0 if the server rejects the GAH at any point */
 	ATOMIC int			gah_ok;
-	/* The inode number of the directory */
+	/** The inode number of the directory */
 	ino_t				inode_no;
+	/** Endpoint for this directory handle */
 	crt_endpoint_t			ep;
+	/** List of directory handles */
 	d_list_t			list;
 };
 
-/** Data which is stored for a currently open file */
+/**
+ * Open file handle.
+ *
+ * Describes a file open for reading/writing.
+ */
 struct iof_file_handle {
 	/** The projection this file belongs to */
 	struct iof_projection_info	*fs_handle;
@@ -524,21 +661,21 @@ struct iof_file_handle {
 /** Check if the handle is valid by reading the gah_ok field. */
 #define H_GAH_IS_VALID(OH) atomic_load_consume(&OH->gah_ok)
 
+/** Common request type.
+ *
+ * Used for getattr and close only.
+ *
+ * TODO: Rename this to something more specific.
+ */
 struct common_req {
 	struct ioc_request		request;
 	d_list_t			list;
 };
 
-struct ioc_inode_entry {
-	struct ios_gah	gah;
-	char		name[256];
-	struct stat	stat;
-	d_list_t	list;
-	fuse_ino_t	parent;
-	ATOMIC uint	ref;
-	bool		failover;
-};
-
+/** Entry request type.
+ *
+ * Request for all RPC types that can return a new inode.
+ */
 struct entry_req {
 	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;

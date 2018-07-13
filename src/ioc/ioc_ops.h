@@ -61,7 +61,7 @@
 			rc = ENOMEM;					\
 			break;						\
 		}							\
-		(src)->REQ_NAME.cb = &api;				\
+		(src)->REQ_NAME.ir_api = &api;				\
 		in = crt_req_get((src)->REQ_NAME.rpc);			\
 	} while (0)
 

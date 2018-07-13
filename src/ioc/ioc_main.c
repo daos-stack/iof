@@ -520,12 +520,12 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 		D_GOTO(done, request->rc = EIO);
 	}
 
-	if (request->cb->on_evict &&
-	    !request->cb->on_evict(request))
+	if (request->ir_api->on_evict &&
+	    !request->ir_api->on_evict(request))
 		return;
 done:
-	if (request->cb->on_result)
-		request->cb->on_result(request);
+	if (request->ir_api->on_result)
+		request->ir_api->on_result(request);
 }
 
 /*
@@ -559,8 +559,8 @@ int iof_fs_send(struct ioc_request *request)
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc)
 		D_GOTO(err, 0);
-	if (request->cb->on_send)
-		request->cb->on_send(request);
+	if (request->ir_api->on_send)
+		request->ir_api->on_send(request);
 	return 0;
 err:
 	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
