@@ -86,7 +86,6 @@ except ImportError:
 #pylint: disable=too-many-instance-attributes
 #pylint: disable=too-many-ancestors
 
-log_to_file = True
 valgrind_cnss_only = False
 use_fixed_paths = False
 
@@ -121,12 +120,10 @@ class Testlocal(unittest.TestCase,
     final_cstats = []
     d = {}
     ionss_config_file = None
-    ionss_logfiles = []
+    ionss_logfile = None
     cnss_logfile = None
     log_path = None
-    internals_tracing = ""
-    origin_rpctrace = None
-    targets_rpctrace = []
+    internals_tracing = False
     ionss_count = 3
     cnss_valgrind = False
     ionss_valgrind = False
@@ -171,19 +168,9 @@ class Testlocal(unittest.TestCase,
         call this during setUp() of each test, go method will call this
         only once per run"""
 
-        if log_to_file:
-            self.cnss_logfile = os.path.join(self.log_path, 'cnss.log')
-        else:
-            self.cnss_logfile = os.path.join(self.log_path, '1/rank.0/stdout')
+        self.cnss_logfile = os.path.join(self.log_path, 'cnss.log')
 
-        self.ionss_logfiles = []
-        if log_to_file:
-            self.ionss_logfiles.append(os.path.join(self.log_path, 'ionss.log'))
-        else:
-            for rank in os.listdir(os.path.join(self.log_path, '1')):
-                if rank != 'rank.0':
-                    self.ionss_logfiles.append(os.path.join(self.log_path, '1',
-                                                            rank, 'stdout'))
+        self.ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
         #Verify FUSE Mount
         self.verify_mount(self.mount_dirs)
@@ -301,8 +288,9 @@ class Testlocal(unittest.TestCase,
         default_log_mask = "INFO,CTRL=WARN"
         if self.using_valgrind():
             default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
-        self.internals_tracing = os.getenv("INTERNALS_TRACING", "no")
-        if self.internals_tracing == "yes":
+        itracing = os.getenv("INTERNALS_TRACING", "no")
+        if itracing == "yes":
+            self.internals_tracing = True
             default_log_mask = "DEBUG,PMIX=WARN"
         self.log_mask = os.getenv("D_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
@@ -311,7 +299,7 @@ class Testlocal(unittest.TestCase,
         if 'mdtest' in self.id():
             #turn off debugging for mdtest
             self.log_mask = "WARN"
-            self.internals_tracing = "no"
+            self.internals_tracing = False
 
         cmd = [orterun,
                '--output-filename', self.log_path]
@@ -324,10 +312,9 @@ class Testlocal(unittest.TestCase,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'CRT_TIMEOUT=11',
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface])
-        if log_to_file:
-            cnss_file = os.path.join(self.log_path, 'cnss.log')
-            unlink_file(cnss_file)
-            cmd.extend(['-x', 'D_LOG_FILE=%s' % cnss_file])
+        cnss_file = os.path.join(self.log_path, 'cnss.log')
+        unlink_file(cnss_file)
+        cmd.extend(['-x', 'D_LOG_FILE=%s' % cnss_file])
 
         if self.cnss_valgrind:
             cmd.extend(valgrind)
@@ -337,10 +324,10 @@ class Testlocal(unittest.TestCase,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
                     '-x', 'OFI_INTERFACE=%s' % self.ofi_interface,
                     '-x', 'D_LOG_MASK=%s' % self.log_mask])
-        if log_to_file:
-            ionss_file = os.path.join(self.log_path, 'ionss.log')
-            unlink_file(ionss_file)
-            cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
+
+        ionss_file = os.path.join(self.log_path, 'ionss.log')
+        unlink_file(ionss_file)
+        cmd.extend(['-x', 'D_LOG_FILE=%s' % ionss_file])
 
         if self.ionss_valgrind:
             cmd.extend(valgrind)
@@ -366,7 +353,7 @@ class Testlocal(unittest.TestCase,
 
         self.mount_dirs = common_methods.import_list()
 
-        if self.internals_tracing == 'yes':
+        if self.internals_tracing:
             #Create a dump file for all testing and internals path output
             i_log_file = os.path.realpath(os.path.join(self.log_path,
                                                        'internals.out'))
@@ -413,43 +400,26 @@ class Testlocal(unittest.TestCase,
         """RPC tracing runs at the end of each test"""
 
         #Origin RPC tracing for one CNSS instance
-        self.origin_rpctrace = rpctrace_common_methods.\
-                               RpcTrace('origin', self.internals_log_file)
-        self.origin_rpctrace.rpc_reporting(self.cnss_logfile)
+        o_rpctrace = rpctrace_common_methods.RpcTrace('origin',
+                                                      self.internals_log_file)
+        o_rpctrace.rpc_reporting(self.cnss_logfile)
 
         #Target RPC tracing for multiple IONSS instances
-        self.targets_rpctrace = []
-        for index, ionss_log in enumerate(self.ionss_logfiles):
-            if log_to_file:
-                if index > 0:
-                    #there should only be "ionss.log" present in logfiles
-                    self.error_output('Invalid ionss logfiles present with' \
-                                      '--log-to-file option')
-                    break
-                #all ionss instances will be logged to ionss.log, therefore will
-                #need to handle multiple processes by separating by PID
-                for rank in range(self.ionss_count):
-                    self.targets_rpctrace.\
-                    append(rpctrace_common_methods.\
-                           RpcTrace('target', self.internals_log_file))
-                    #rank will correlate to PID to trace in log
-                    #(ie rank 0 will trace for the first PID found in the logs)
-                    self.targets_rpctrace[rank].rpc_reporting(ionss_log, rank)
-            else:
-                #all process ranks will be logged to separate files
-                self.targets_rpctrace.append(rpctrace_common_methods.\
-                                             RpcTrace('target',
-                                                      self.internals_log_file))
-                self.targets_rpctrace[index].rpc_reporting(ionss_log)
+        for rank in range(self.ionss_count):
+            rank_log = rpctrace_common_methods.RpcTrace('target',
+                                                        self.internals_log_file)
+            # rank will correlate to PID to trace in log
+            # (ie rank 0 will trace for the first PID found in the logs)
+            rank_log.rpc_reporting(self.ionss_logfile, rank)
 
         #Descriptor tracing for the CNSS
-        self.origin_rpctrace.descriptor_rpc_trace(self.cnss_logfile)
+        o_rpctrace.descriptor_rpc_trace(self.cnss_logfile)
 
         missing_links = []
-        descriptor = self.origin_rpctrace.descriptor_to_trace(self.cnss_logfile)
+        descriptor = o_rpctrace.descriptor_to_trace(self.cnss_logfile)
         if descriptor is not None:
-            missing_links = self.origin_rpctrace.\
-                            rpc_trace_output(descriptor, self.cnss_logfile)
+            missing_links = o_rpctrace.rpc_trace_output(descriptor,
+                                                        self.cnss_logfile)
         if missing_links:
             self.fail('Missing links for TRACE macros: %s' % missing_links)
 
@@ -461,7 +431,7 @@ class Testlocal(unittest.TestCase,
 
         self.dump_failover_state()
 
-        if self.internals_tracing == 'yes':
+        if self.internals_tracing:
             if self.test_method == 'pyunit':
                 self.internals_path_testing_teardown()
 
@@ -476,7 +446,7 @@ class Testlocal(unittest.TestCase,
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
 
-        if self.internals_tracing == 'yes':
+        if self.internals_tracing:
             self.rpc_descriptor_tracing()
 
         self.cleanup(procrtn)
@@ -1138,11 +1108,11 @@ class Testlocal(unittest.TestCase,
             subtest_count += 1
             with self.subTest(possible[5:]):
                 self.mark_log('Starting test %s:' % possible)
-                if self.internals_tracing == 'yes':
+                if self.internals_tracing:
                     self.internals_path_testing_setup()
                 obj()
 
-                if self.internals_tracing == 'yes':
+                if self.internals_tracing:
                     self.internals_path_testing_teardown()
                 self.mark_log('Finished test %s, cleaning up' % possible)
                 self.clean_export_dir()
@@ -1219,8 +1189,6 @@ if __name__ == '__main__':
                         help='Redirect daemon output to a file')
     parser.add_argument('--launch', action='store_true',
                         help='Launch a local file system for interactive use')
-    parser.add_argument('--log-to-file', action='store_true',
-                        help='Log to a single file', dest='logfile')
     parser.add_argument('--log-mask', dest='mask', metavar='MASK', type=str,
                         help='Set the CaRT log mask')
     parser.add_argument('--internals-tracing', action='store_true', help='Turn '
@@ -1242,8 +1210,6 @@ if __name__ == '__main__':
         os.environ['TR_USE_VALGRIND'] = 'callgrind'
     if args.redirect:
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
-    if args.logfile:
-        log_to_file = True
     if args.fixed_path:
         use_fixed_paths = True
 

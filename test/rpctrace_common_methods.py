@@ -832,32 +832,33 @@ class RpcTrace(common_methods.ColorizedOutput):
         position_desc_cnt = 0
         with open(log_dir, 'r') as f:
             for line in f:
-                if log_line in line:
-                    fields = line.strip().split()
-                    if "Link" in line:
-                        descriptor = fields[-1]
-                    else:
-                        descriptor = fields[7].strip().split('(')[1].strip().\
-                                     split(')')[0]
-                    reused_descs = [v for k, v in self.trace_dict.items() \
-                                    if descriptor in k]
-                    if len(reused_descs) > 1:
-                        for nxtline in f:
-                            if 'TRACE' in nxtline and 'Registered new' in \
-                                nxtline:
-                                fields = nxtline.strip().split()
-                                new_obj = fields[7].strip().split('(')[1].\
-                                          strip().split(')')[0]
-                                if new_obj == descriptor:
-                                    position_desc_cnt += 1
+                if log_line != line:
+                    continue
+                fields = line.strip().split()
+                if "Link" in line:
+                    descriptor = fields[-1]
+                else:
+                    descriptor = fields[7].strip().split('(')[1].strip().\
+                                 split(')')[0]
+                reused_descs = [v for k, v in self.trace_dict.items() \
+                                if descriptor in k]
+                if len(reused_descs) > 1:
+                    for nxtline in f:
+                        if 'TRACE' in nxtline and 'Registered new' in \
+                           nxtline:
+                            fields = nxtline.strip().split()
+                            new_obj = fields[7].strip().split('(')[1].\
+                                      strip().split(')')[0]
+                            if new_obj == descriptor:
+                                position_desc_cnt += 1
 
-                    pos = len(reused_descs) - position_desc_cnt - 1
-                    if pos > 0:
-                        descriptor = '{0}_{1}'.\
-                                      format(descriptor,
-                                             len(reused_descs) - \
-                                             position_desc_cnt - 1)
-                    return descriptor
+                pos = len(reused_descs) - position_desc_cnt - 1
+                if pos > 0:
+                    descriptor = '{0}_{1}'.\
+                                 format(descriptor,
+                                        len(reused_descs) - \
+                                        position_desc_cnt - 1)
+                return descriptor
 
         self.error_output('Reused descriptor index not found')
         return None
