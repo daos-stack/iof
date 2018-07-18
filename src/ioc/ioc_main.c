@@ -2104,7 +2104,7 @@ static void iof_flush_fuse(void *arg)
 	IOF_TRACE_INFO(fs_handle, "Flushing inode table");
 
 	rc = d_hash_table_traverse(&fs_handle->inode_ht, ino_flush,
-				   fs_handle->session);
+				   fs_handle);
 
 	IOF_TRACE_INFO(fs_handle, "Flush complete: %d", rc);
 }
