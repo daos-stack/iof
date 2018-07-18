@@ -120,8 +120,6 @@ class Testlocal(unittest.TestCase,
     final_cstats = []
     d = {}
     ionss_config_file = None
-    ionss_logfile = None
-    cnss_logfile = None
     log_path = None
     internals_tracing = False
     ionss_count = 3
@@ -167,10 +165,6 @@ class Testlocal(unittest.TestCase,
         """Call all methods for internals path testing framework. pyunit will
         call this during setUp() of each test, go method will call this
         only once per run"""
-
-        self.cnss_logfile = os.path.join(self.log_path, 'cnss.log')
-
-        self.ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
         #Verify FUSE Mount
         self.verify_mount(self.mount_dirs)
@@ -358,9 +352,6 @@ class Testlocal(unittest.TestCase,
             i_log_file = os.path.realpath(os.path.join(self.log_path,
                                                        'internals.out'))
             self.internals_log_file = open(i_log_file, 'w')
-            self.internals_log_file.write('\nStarting for {0}:\n' \
-                                          .format(self.id()))
-
             if self.test_method == 'pyunit':
                 self.internals_path_testing_setup()
 #pylint: enable=too-many-branches
@@ -399,27 +390,29 @@ class Testlocal(unittest.TestCase,
     def rpc_descriptor_tracing(self):
         """RPC tracing runs at the end of each test"""
 
+        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
+        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
+
         #Origin RPC tracing for one CNSS instance
-        o_rpctrace = rpctrace_common_methods.RpcTrace('origin',
+        o_rpctrace = rpctrace_common_methods.RpcTrace(cnss_logfile,
                                                       self.internals_log_file)
-        o_rpctrace.rpc_reporting(self.cnss_logfile)
+        o_rpctrace.rpc_reporting()
 
         #Target RPC tracing for multiple IONSS instances
+        rank_log = rpctrace_common_methods.RpcTrace(ionss_logfile,
+                                                    self.internals_log_file)
         for rank in range(self.ionss_count):
-            rank_log = rpctrace_common_methods.RpcTrace('target',
-                                                        self.internals_log_file)
             # rank will correlate to PID to trace in log
             # (ie rank 0 will trace for the first PID found in the logs)
-            rank_log.rpc_reporting(self.ionss_logfile, rank)
+            rank_log.rpc_reporting(rank)
 
         #Descriptor tracing for the CNSS
-        o_rpctrace.descriptor_rpc_trace(self.cnss_logfile)
+        o_rpctrace.descriptor_rpc_trace()
 
         missing_links = []
-        descriptor = o_rpctrace.descriptor_to_trace(self.cnss_logfile)
+        descriptor = o_rpctrace.descriptor_to_trace()
         if descriptor is not None:
-            missing_links = o_rpctrace.rpc_trace_output(descriptor,
-                                                        self.cnss_logfile)
+            missing_links = o_rpctrace.rpc_trace_output(descriptor)
         if missing_links:
             self.fail('Missing links for TRACE macros: %s' % missing_links)
 

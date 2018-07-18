@@ -40,7 +40,6 @@ RpcTrace class definition
 Methods associated to RPC tracing for error debuging.
 """
 
-import sys
 import string
 import os
 from collections import Counter
@@ -86,11 +85,26 @@ class RpcTrace(common_methods.ColorizedOutput):
     VERBOSE_STATE_TRANSITIONS = False
     VERBOSE_LOG = True
 
-    SOURCE = None
-
-    def __init__(self, source, output_stream):
-        self.SOURCE = source
+    def __init__(self, fname, output_stream):
         self.set_log(output_stream)
+        self.input_file = None
+
+        """Set the input file to be used"""
+        self.input_file = fname
+        #search for all process ids in logfile with multiple instances logged
+        with open(self.input_file, 'r') as f:
+            pids = []
+            for line in f:
+                fields = line.split()
+                if len(fields[0]) != 17:
+                    continue
+                pid = int(fields[2][5:-1])
+                if pid not in pids:
+                    pids.append(pid)
+
+        #index_multiprocess will determine which PID to trace
+        #(ie index 0 will be assigned the first PID found in logs)
+        self.pids = sorted(pids)
 
     def _rpc_error_state_tracing(self, rpc, rpc_state, opcode):
         """Error checking for rpc state"""
@@ -233,129 +247,35 @@ class RpcTrace(common_methods.ColorizedOutput):
         return (op_table, alloc_table, dealloc_table, sent_table, submit_table,
                 errors)
 
-    def rpc_reporting(self, logfile_path, index_multiprocess=None):
+    def rpc_reporting(self, index_multiprocess=None):
         """RPC reporting for RPC state machine"""
 
-        #index_multiprocess is None if there is only one process being traced,
-        #otherwise first index should start at 0
         if index_multiprocess is not None:
-            self._rpc_reporting_multiprocess(logfile_path, index_multiprocess)
+            #index_multiprocess is None if there is only one process being
+            #traced, otherwise first index should start at 0
+            pid_to_trace = self.pids[index_multiprocess]
+            self._rpc_reporting_pid(pid_to_trace)
             return
 
-        self.rpc_dict = {}
-        self.op_state_list = []
-        self.rpc_op_dict = {}
+        if len(self.pids) != 1:
+            self.error_output("Multiprocess log file")
+            return
 
-        if self.SOURCE is None:
-            self.error_output('Source not designated for rpc reporting in logs')
-            sys.exit(2)
-        self.normal_output('\nCaRT RPC Reporting ({0}):\nLogfile: {1}\n'.\
-                           format(self.SOURCE, logfile_path))
+        self._rpc_reporting_pid(self.pids[0])
 
-        f = open(logfile_path, 'r')
-        output_rpcs = []
-        errors = []
-
-        for line in f:
-            if any(s in line for s in self.SEARCH_STRS[0]) or \
-               any(s in line for s in self.SEARCH_STRS[1:]):
-                rpc_state = None
-                rpc = None
-                opcode = None
-                fields = line.strip().split()
-                #remove ending punctuation from log msg
-                translator = str.maketrans('', '', string.punctuation)
-                str_match = fields[-1].translate(translator)
-                if str_match == '0': #'decref to 0'
-                    str_match = ' '.join(fields[-3:]).translate(translator)
-                elif str_match == 'received': #'allocated per RPC request
-                    # received'
-                    str_match = ' '.join(fields[-5:]).translate(translator)
-
-                rpc = fields[8]
-
-                if any(s in str_match for s in self.SEARCH_STRS[0]):
-                    rpc_state = self.ALLOC_STATE
-                    opcode = fields[10][:-2]
-                elif str_match == self.SEARCH_STRS[-1]:
-                    rpc_state = self.DEALLOC_STATE
-                    opcode = fields[10][:-2]
-                #opcode not printed in submitted/sent log messages;
-                #use rpc_op_dict{} to store RPC and opcode
-                elif str_match == self.SEARCH_STRS[1]:
-                    rpc_state = self.SUBMIT_STATE
-                    opcode = self.rpc_op_dict.get(rpc, None)
-                elif str_match == self.SEARCH_STRS[2]:
-                    rpc_state = self.SENT_STATE
-                    opcode = self.rpc_op_dict.get(rpc, None)
-
-                if rpc and opcode and rpc_state:
-                    self.op_state_list.append((opcode, rpc_state))
-                    (state, extra) = self._rpc_error_state_tracing(rpc,
-                                                                   rpc_state,
-                                                                   opcode)
-                    function_name = fields[6]
-                    prefix = '{0}: {1}'.format(state, rpc)
-                    if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
-                        if extra:
-                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3} {4}' \
-                                               .format(prefix,
-                                                       rpc_state[4:],
-                                                       opcode,
-                                                       function_name,
-                                                       extra))
-                        else:
-                            output_rpcs.append('{0:<30}{1:<15}{2:<12}{3}' \
-                                               .format(prefix,
-                                                       rpc_state[4:],
-                                                       opcode,
-                                                       function_name))
-
-        if output_rpcs:
-            output_rpcs.insert(0, 'RPC State Transitions:')
-            output_rpcs.insert(1, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
-                               format('RPC', 'STATE', 'Op', 'Function'))
-            output_rpcs.insert(2, '{0:<30}{1:<15}{2:<12}{3:<10}'.\
-                               format('---', '-----', '--', '--------'))
-            output_rpcs.append('')
-
-        output_rpcs.append('Opcode State Transition Tally:')
-        (ret_str, errors) = self._rpc_tabulate()
-        output_rpcs.append(ret_str)
-        output_rpcs.extend(errors)
-
-        self.list_output(output_rpcs)
-        f.close()
-
-    def _rpc_reporting_multiprocess(self, logfile_path, index_multiprocess):
+    def _rpc_reporting_pid(self, pid_to_trace):
         """RPC reporting for RPC state machine, for mutiprocesses"""
         self.rpc_dict = {}
         self.op_state_list = []
         self.rpc_op_dict = {}
 
-        #search for all process ids in logfile with multiple instances logged
-        with open(logfile_path, 'r') as f:
-            pids = []
-            for line in f:
-                fields = line.strip().split()
-                pid = int(fields[2][5:-1])
-                if pid not in pids:
-                    pids.append(pid)
-
-        #index_multiprocess will determine which PID to trace
-        #(ie index 0 will be assigned the first PID found in logs)
-        spids = sorted(pids)
-        pid_to_trace = spids[index_multiprocess]
         pid_str = "CaRT[%d]" % pid_to_trace
 
-        if self.SOURCE is None:
-            self.error_output('Source not designated for rpc reporting in logs')
-            sys.exit(2)
-        self.normal_output('\nCaRT RPC Reporting ({0}):\nLogfile: {1}, '
-                           'PID: {2}\n'.format(self.SOURCE, logfile_path,
+        self.normal_output('\nCaRT RPC Reporting:\nLogfile: {0}, '
+                           'PID: {1}\n'.format(self.input_file,
                                                pid_to_trace))
 
-        f = open(logfile_path, 'r')
+        f = open(self.input_file, 'r')
         output_rpcs = []
         errors = []
 
@@ -435,13 +355,15 @@ class RpcTrace(common_methods.ColorizedOutput):
 
     #************ Descriptor Tracing Methods (IOF_TRACE macros) **********
 
-    def descriptor_rpc_trace(self, log_path):
+    def descriptor_rpc_trace(self):
         """Parses twice thru log to create a hierarchy of descriptors and also
            a dict storing all RPCs tied to a descriptor"""
         self.trace_dict = {}
         self.desc_dict = {}
-        self.normal_output('\nIOF Descriptor/RPC Tracing ({0}):\n'
-                           'Logfile: {1}'.format(self.SOURCE, log_path))
+        log_path = self.input_file
+        self.normal_output('\nIOF Descriptor/RPC Tracing:\n'
+                           'Logfile: {0}'.format(log_path))
+
 
         self._descriptor_error_state_tracing(log_path)
 
@@ -565,7 +487,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return traces_for_log_dump
 
-    def _rpc_trace_output_logdump(self, traces_for_log_dump, log_path):
+    def _rpc_trace_output_logdump(self, traces_for_log_dump):
         """Prints all log messages relating to the given descriptor or any
            pointer in the descriptor's hierarchy"""
         descriptors = []
@@ -595,7 +517,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                             for item in sublist if item[0] == trace])
 
         output = []
-        with open(log_path, 'r') as f:
+        with open(self.input_file, 'r') as f:
             output.append('\nLog dump for descriptor hierarchy ({0}):'\
                           .format(trace))
             for line in f:
@@ -670,7 +592,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.list_output(output)
 
-    def rpc_trace_output(self, descriptor, log_path):
+    def rpc_trace_output(self, descriptor):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
            log messages related to descriptor"""
         missing_links = []
@@ -724,7 +646,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         traces_for_log_dump = self._rpc_trace_output_hierarchy(descriptor)
 
         #Log dump for descriptor hierarchy
-        self._rpc_trace_output_logdump(traces_for_log_dump, log_path)
+        self._rpc_trace_output_logdump(traces_for_log_dump)
 
         return missing_links
 
@@ -863,14 +785,14 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.error_output('Reused descriptor index not found')
         return None
 
-    def descriptor_to_trace(self, log_dir):
+    def descriptor_to_trace(self):
         """Find the file handle to use for descriptor tracing:
         if an error or warning is found in trace logs, use that descriptor,
         otherwise use first fuse op instance in logs"""
         descriptor = None
         position_desc_cnt = 0
         fuse_file = os.path.join('src', 'ioc', 'ops')
-        with open(log_dir, 'r') as f:
+        with open(self.input_file, 'r') as f:
             for line in f:
                 if 'TRACE' in line:
                     if 'ERR' in line or 'WARN' in line:
@@ -898,7 +820,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                  len(reused_descs) - \
                                                  position_desc_cnt - 1)
                         return descriptor
-        with open(log_dir, 'r') as f:
+        with open(self.input_file, 'r') as f:
             for line in f:
                 if fuse_file in line and 'TRACE' in line:
                     fields = line.strip().split()
