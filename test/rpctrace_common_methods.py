@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2017 Intel Corporation
+# Copyright (C) 2017-2018 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -44,7 +44,7 @@ import sys
 import string
 import os
 from collections import Counter
-from tabulate import tabulate
+import tabulate
 import common_methods
 
 # pylint: disable=too-many-locals
@@ -92,7 +92,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.SOURCE = source
         self.set_log(output_stream)
 
-    def rpc_error_state_tracing(self, rpc, rpc_state, opcode):
+    def _rpc_error_state_tracing(self, rpc, rpc_state, opcode):
         """Error checking for rpc state"""
 
         # Returns a tuple of (State, Extra string)
@@ -130,7 +130,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.rpc_dict[rpc] = rpc_state
         return (status, message)
 
-    def rpc_tabulate(self):
+    def _rpc_tabulate(self):
         """Use tabulate pkg to formulate table of opcodes and RPC states"""
         op_table = []
         alloc_table = []
@@ -140,7 +140,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         errors = []
 
         (op_table, alloc_table, dealloc_table, sent_table, submit_table,
-         errors) = self.rpc_tabulate_populate_lists()
+         errors) = self._rpc_tabulate_populate_lists()
 
         #Error checking and tabulate method called to create table outputs
 
@@ -162,9 +162,9 @@ class RpcTrace(common_methods.ColorizedOutput):
                     dealloc_table)
         headers = ['OPCODE']
         headers.extend(self.STATES)
-        return ('{0}'.format(tabulate(table, headers=headers)), errors)
+        return ('{0}'.format(tabulate.tabulate(table, headers=headers)), errors)
 
-    def rpc_tabulate_populate_lists(self):
+    def _rpc_tabulate_populate_lists(self):
         """Create and populate lists for all RPC states for table ouput of
         Opcode vs State Transition Counts"""
         op_table = []
@@ -184,33 +184,33 @@ class RpcTrace(common_methods.ColorizedOutput):
         for value, count in sorted(Counter(newlist).items()):
             count_list[value] = count
 
-        for value, count in sorted(Counter(self.op_state_list).items()):
-            if value[0] not in op_table or value[0] == op_table[-1]:
-                if value[0] not in op_table:
-                    op_table.append(value[0])
+        for (op, state), count in sorted(Counter(self.op_state_list).items()):
+            if op not in op_table or op == op_table[-1]:
+                if op not in op_table:
+                    op_table.append(op)
 
-                if value[1] == self.ALLOC_STATE:
+                if state == self.ALLOC_STATE:
                     alloc_table.append(count)
                     alloc_total += 1
-                elif value[1] == self.DEALLOC_STATE:
+                elif state == self.DEALLOC_STATE:
                     dealloc_table.append(count)
                     dealloc_total += 1
-                elif value[1] == self.SUBMIT_STATE:
+                elif state == self.SUBMIT_STATE:
                     submit_table.append(count)
                     submit_total += 1
-                elif value[1] == self.SENT_STATE:
+                elif state == self.SENT_STATE:
                     sent_table.append(count)
                     sent_total += 1
 
-                if value[0] == op_table[-1]:
+                if op == op_table[-1]:
                     #"end" is determined by how many state types are present
                     #per opcode (states are sorted)
                     #(4 = ALLOC, DEALLOC, SENT, SUBMIT) - end state is submit
                     #(2 = ALLOC, DEALLOC) - end state is dealloc
-                    if (value[1] == self.SUBMIT_STATE and \
-                        count_list[value[0]] == 4) or \
-                       (value[1] == self.DEALLOC_STATE and \
-                        count_list[value[0]] == 2):
+                    if (state == self.SUBMIT_STATE and \
+                        count_list[op] == 4) or \
+                       (state == self.DEALLOC_STATE and \
+                        count_list[op] == 2):
 
                         #zero out blank table entries and reset counters
                         if alloc_total == 0:
@@ -228,7 +228,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
             else:
                 errors.append('ERROR: RPC {0} found but does not match previous'
-                              ' opcode {1}'.format(value[0], op_table[-1]))
+                              ' opcode {1}'.format(op, op_table[-1]))
 
         return (op_table, alloc_table, dealloc_table, sent_table, submit_table,
                 errors)
@@ -239,7 +239,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         #index_multiprocess is None if there is only one process being traced,
         #otherwise first index should start at 0
         if index_multiprocess is not None:
-            self.rpc_reporting_multiprocess(logfile_path, index_multiprocess)
+            self._rpc_reporting_multiprocess(logfile_path, index_multiprocess)
             return
 
         self.rpc_dict = {}
@@ -291,9 +291,9 @@ class RpcTrace(common_methods.ColorizedOutput):
 
                 if rpc and opcode and rpc_state:
                     self.op_state_list.append((opcode, rpc_state))
-                    (state, extra) = self.rpc_error_state_tracing(rpc,
-                                                                  rpc_state,
-                                                                  opcode)
+                    (state, extra) = self._rpc_error_state_tracing(rpc,
+                                                                   rpc_state,
+                                                                   opcode)
                     function_name = fields[6]
                     prefix = '{0}: {1}'.format(state, rpc)
                     if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
@@ -320,14 +320,14 @@ class RpcTrace(common_methods.ColorizedOutput):
             output_rpcs.append('')
 
         output_rpcs.append('Opcode State Transition Tally:')
-        (ret_str, errors) = self.rpc_tabulate()
+        (ret_str, errors) = self._rpc_tabulate()
         output_rpcs.append(ret_str)
         output_rpcs.extend(errors)
 
         self.list_output(output_rpcs)
         f.close()
 
-    def rpc_reporting_multiprocess(self, logfile_path, index_multiprocess):
+    def _rpc_reporting_multiprocess(self, logfile_path, index_multiprocess):
         """RPC reporting for RPC state machine, for mutiprocesses"""
         self.rpc_dict = {}
         self.op_state_list = []
@@ -397,9 +397,9 @@ class RpcTrace(common_methods.ColorizedOutput):
 
                 if rpc and opcode and rpc_state:
                     self.op_state_list.append((opcode, rpc_state))
-                    (state, extra) = self.rpc_error_state_tracing(rpc,
-                                                                  rpc_state,
-                                                                  opcode)
+                    (state, extra) = self._rpc_error_state_tracing(rpc,
+                                                                   rpc_state,
+                                                                   opcode)
                     function_name = fields[6]
                     prefix = '{0}: {1}'.format(state, rpc)
                     if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
@@ -426,7 +426,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             output_rpcs.append('')
 
         output_rpcs.append('Opcode State Transition Tally:')
-        (ret_str, errors) = self.rpc_tabulate()
+        (ret_str, errors) = self._rpc_tabulate()
         output_rpcs.append(ret_str)
         output_rpcs.extend(errors)
 
@@ -443,7 +443,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.normal_output('\nIOF Descriptor/RPC Tracing ({0}):\n'
                            'Logfile: {1}'.format(self.SOURCE, log_path))
 
-        self.descriptor_error_state_tracing(log_path)
+        self._descriptor_error_state_tracing(log_path)
 
         with open(log_path, 'r') as f:
             for line in f:
@@ -482,7 +482,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                     obj_type = obj_type_l[1:-1]
                     #find index of descriptor in order to append alias
                     #to correct index in the chance it is reused in the dict
-                    index = self.find_reused_descriptor_index(log_path, line)
+                    index = self._find_reused_descriptor_index(log_path, line)
                     if index in self.trace_dict:
                         self.trace_dict.setdefault(index, []).\
                                                    append((obj_type, parent))
@@ -499,14 +499,14 @@ class RpcTrace(common_methods.ColorizedOutput):
                     rpc_type = fields[9]
                     #find index of descriptor in order to append rpc
                     #to correct index in the chance it is reused in the dict
-                    index = self.find_reused_descriptor_index(log_path, line)
+                    index = self._find_reused_descriptor_index(log_path, line)
                     if index in self.desc_dict:
                         self.desc_dict[index].append((rpc, rpc_type))
                     else:
                         self.error_output('Descriptor {0} is not present'.\
                                           format(index))
 
-    def rpc_trace_output_hierarchy(self, descriptor):
+    def _rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
         output = []
         #append all descriptors/rpcs in hierarchy for log dump
@@ -565,7 +565,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return traces_for_log_dump
 
-    def rpc_trace_output_logdump(self, traces_for_log_dump, log_path):
+    def _rpc_trace_output_logdump(self, traces_for_log_dump, log_path):
         """Prints all log messages relating to the given descriptor or any
            pointer in the descriptor's hierarchy"""
         descriptors = []
@@ -721,14 +721,14 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.list_output(output)
 
         #Hierarchy for given descriptor
-        traces_for_log_dump = self.rpc_trace_output_hierarchy(descriptor)
+        traces_for_log_dump = self._rpc_trace_output_hierarchy(descriptor)
 
         #Log dump for descriptor hierarchy
-        self.rpc_trace_output_logdump(traces_for_log_dump, log_path)
+        self._rpc_trace_output_logdump(traces_for_log_dump, log_path)
 
         return missing_links
 
-    def descriptor_error_state_tracing(self, log_path):
+    def _descriptor_error_state_tracing(self, log_path):
         """Check for any descriptors that are not registered/deregistered"""
         self.normal_output('\nDescriptor State Transitions:')
         self.desc_state = {}
@@ -823,7 +823,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.error_output('{0}:{1} not deregistered from state'.\
                               format(d, state))
 
-    def find_reused_descriptor_index(self, log_dir, log_line):
+    def _find_reused_descriptor_index(self, log_dir, log_line):
         """Iterate over the log file given the line where the descriptor is
         created to find the position count of the descriptor (suffix appended to
         descriptor key in dict for reused descriptors)
