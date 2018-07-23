@@ -63,7 +63,10 @@ readdir_cb(const struct crt_cb_info *cb_info)
 		 *
 		 */
 		IOF_LOG_ERROR("Error from RPC %d", cb_info->cci_rc);
-		reply->err = EIO;
+		if (cb_info->cci_rc == -DER_EVICTED)
+			reply->err = EHOSTDOWN;
+		else
+			reply->err = EIO;
 		iof_tracker_signal(&reply->tracker);
 		return;
 	}

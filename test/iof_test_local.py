@@ -773,6 +773,111 @@ class Testlocal(unittest.TestCase,
             self.fail("IO interception library failed to attach," + \
                 " il_ioctl: %s" % final_il_ioctl)
 
+
+    @unittest.skipUnless(have_iofmod, "needs iofmod")
+    def test_readdir(self):
+        """Test readdir through iofmod"""
+
+        dirname = os.path.join(self.cnss_prefix, 'usr')
+
+        dh = iofmod.opendir(dirname)
+
+        if dh is not None:
+            self.fail("Failed to open directory: '{}'".format(os.strerror(dh)))
+
+        files = []
+        while True:
+            fname = iofmod.readdir()
+            if fname is None:
+                break
+
+            self.logger.info(fname)
+
+            if isinstance(fname, int):
+                self.fail("readdir failed with {}".format(os.strerror(fname)))
+
+            files.append(fname)
+
+        rc = iofmod.rewinddir()
+        if isinstance(rc, int):
+            self.fail("Failed to rewind directory: '{}'".format \
+                      (os.strerror(rc)))
+
+        usr_files = os.listdir('/usr')
+        self.logger.info('projected files: %s', files)
+        self.logger.info('native files   : %s', usr_files)
+        if files != usr_files:
+            self.fail("Directory contents are wrong")
+
+        rc = iofmod.closedir()
+
+        if isinstance(rc, int):
+            self.fail("Failed to close directory: '{}'".format(os.strerror(rc)))
+
+    @unittest.skipUnless(have_iofmod, "needs iofmod")
+    def test_failover_off_readdir(self):
+        """Test failover readdir through iofmod
+
+        This tests a projection with failover disabled, after failover future
+        readdir calls should fail with EHOSTDOWN
+        """
+
+        dirname = os.path.join(self.cnss_prefix, 'usr')
+
+        dh = iofmod.opendir(dirname)
+
+        if dh is not None:
+            self.fail("Failed to open directory: '{}'".format(os.strerror(dh)))
+
+        files = []
+        while True:
+            fname = iofmod.readdir()
+            if fname is None:
+                break
+
+            self.logger.info(fname)
+
+            files.append(fname)
+
+        usr_files = os.listdir('/usr')
+        self.logger.info('projected files: %s', files)
+        self.logger.info('native files   : %s', usr_files)
+        if files != usr_files:
+            self.fail("Directory contents are wrong")
+
+        rc = iofmod.rewinddir()
+        if isinstance(rc, int):
+            self.fail("Failed to rewind directory: '{}'".format \
+                      (os.strerror(rc)))
+
+        # Now kill a ionss so the next RPC will trigger failover.
+        self.kill_ionss_proc()
+
+        # Send a RPC, which should be sent, and then return an error.
+        fname = iofmod.readdir()
+        self.logger.info(fname)
+        if isinstance(fname, int):
+            self.logger.info("Failed with %s", os.strerror(fname))
+            if fname != errno.EHOSTDOWN:
+                self.fail("Should have got EHOSTDOWN")
+        else:
+            self.fail("Should have got EHOSTDOWN")
+
+        # Make a new request, which should fail before it gets sent.
+        fname = iofmod.readdir()
+        self.logger.info(fname)
+        if isinstance(fname, int):
+            self.logger.info("Failed with %s", os.strerror(fname))
+            if fname != errno.EHOSTDOWN:
+                self.fail("Should have got EHOSTDOWN")
+        else:
+            self.fail("Should have got EHOSTDOWN")
+
+        rc = iofmod.closedir()
+
+        if isinstance(rc, int):
+            self.fail("Failed to close directory: '{}'".format(os.strerror(rc)))
+
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_iofmod(self):
         """Calls all C tests present in C/Python shim"""
@@ -1225,8 +1330,8 @@ if __name__ == '__main__':
     uargs.insert(0, sys.argv[0])
 
     if args.launch:
-        rc = local_launch(ioil_path)
-        sys.exit(rc)
+        launch_rc = local_launch(ioil_path)
+        sys.exit(launch_rc)
 
     if not tests_to_run:
         # If no tests are specified then run all tests, however do this by

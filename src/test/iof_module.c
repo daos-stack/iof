@@ -45,6 +45,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <python3.4m/Python.h>
+#include <dirent.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -277,7 +278,113 @@ static PyObject *test_dir_mode(PyObject *self, PyObject *args)
 	Py_RETURN_NONE;
 }
 
+/* Directory handle testing functions.
+ *
+ * Python does not appear to have complete calls for accessing directories but
+ * replies on os.listdir() which does not hold open a handle, so implement core
+ * functionality here, which is then driven from iof_test_local.py.
+ *
+ * Allow the opening, reading and closing of a single directory handle, instead
+ * of creating an object, or returning a pointer to python simply use a global
+ * variable here and test for NULL before use.
+ *
+ */
+
+static DIR *dirp;
+
+/* Open a directory by name and save the handle, return None on success or an
+ * error number on failure
+ */
+static PyObject *do_opendir(PyObject *self, PyObject *args)
+{
+	const char *path;
+	int rc;
+
+	if (!PyArg_ParseTuple(args, "s", &path))
+		return NULL;
+
+	errno = 0;
+	dirp = opendir(path);
+	rc = errno;
+	if (!dirp)
+		return Py_BuildValue("i", rc);
+
+	Py_RETURN_NONE;
+}
+
+/* Read a single filename from the open directory handle, return either a string
+ * on success, None on if no remaining file or an error number on failure.
+ */
+static PyObject *do_readdir(PyObject *self, PyObject *args)
+{
+	struct dirent *entry;
+	int rc;
+
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+
+	if (!dirp)
+		return Py_BuildValue("i", EINVAL);
+
+	errno = 0;
+	entry = readdir(dirp);
+	if (!entry) {
+		rc = errno;
+		if (rc == 0)
+			Py_RETURN_NONE;
+		else
+			return Py_BuildValue("i", rc);
+	}
+	return Py_BuildValue("s", entry->d_name);
+}
+
+/* Rewind the open directory handle.  Return None on success or errno on
+ * failure, but note that rewinddir() call itself does not return a error
+ * code
+ */
+static PyObject *do_rewinddir(PyObject *self, PyObject *args)
+{
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+
+	if (!dirp)
+		return Py_BuildValue("i", EINVAL);
+
+	rewinddir(dirp);
+
+	Py_RETURN_NONE;
+}
+
+/* Close the open directory handle.
+ *
+ * Return None on success or an errno on failure.
+ */
+static PyObject *do_closedir(PyObject *self, PyObject *args)
+{
+	int rc;
+
+	if (!PyArg_ParseTuple(args, ""))
+		return NULL;
+
+	if (!dirp)
+		return Py_BuildValue("i", EINVAL);
+
+	errno = 0;
+	rc = closedir(dirp);
+	if (rc == -1) {
+		rc = errno;
+		return Py_BuildValue("i", rc);
+	}
+	dirp = NULL;
+
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef iofMethods[] = {
+	{ "opendir", do_opendir, METH_VARARGS, "Open a directory"},
+	{ "readdir", do_readdir, METH_VARARGS, "Read a filename from a directory"},
+	{ "rewinddir", do_rewinddir, METH_VARARGS, "Rewind a directory"},
+	{ "closedir", do_closedir, METH_VARARGS, "Close a directory"},
 	{ "open_test_file", open_test_file, METH_VARARGS, NULL },
 	{ "test_write_file", test_write_file, METH_VARARGS, NULL },
 	{ "test_read_file", test_read_file, METH_VARARGS, NULL },
