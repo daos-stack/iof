@@ -64,12 +64,18 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 
 	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
 	if (!rlink)
-		return -1;
+		return ENOENT;
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
 	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->stat.st_ino,
 		       GAH_PRINT_VAL(ie->gah));
+
+	if (!H_GAH_IS_VALID(ie)) {
+		IOF_TRACE_INFO(ie, "Gah is invalid");
+		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+		return EHOSTDOWN;
+	}
 
 	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	*gah = ie->gah;
@@ -152,6 +158,14 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 		d_list_del_init(&iec->ie_ie_list);
 	}
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+
+	if (!H_GAH_IS_VALID(ie)) {
+		IOF_TRACE_WARNING(fs_handle,
+				  "Gah is not valid %lu " GAH_PRINT_STR,
+				  ie->stat.st_ino, GAH_PRINT_VAL(ie->gah));
+		D_GOTO(out, 0);
+		return;
+	}
 
 	if (ie->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
 		IOF_TRACE_WARNING(fs_handle,

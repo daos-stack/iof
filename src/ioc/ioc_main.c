@@ -139,6 +139,8 @@ inode_check_cb(d_list_t *rlink, void *arg)
 	if (!ie->failover) {
 		int rc;
 
+		H_GAH_SET_INVALID(ie);
+
 		rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
 						      ie->parent,
 						      ie->name,
@@ -156,6 +158,9 @@ inode_check_cb(d_list_t *rlink, void *arg)
 
 		return -DER_SUCCESS;
 	}
+
+	if (ie->parent != 1)
+		H_GAH_SET_INVALID(ie);
 
 	return -DER_SUCCESS;
 }
@@ -330,6 +335,7 @@ static void imigrate_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_WARNING(im->im_ie,
 				  "RPC failure %d, inode %lu going offline",
 				  cb_info->cci_rc, im->im_ie->stat.st_ino);
+		H_GAH_SET_INVALID(im->im_ie);
 		goto out;
 	}
 
@@ -338,6 +344,7 @@ static void imigrate_cb(const struct crt_cb_info *cb_info)
 				  "inode %lu going offline %d %d",
 				  im->im_ie->stat.st_ino,
 				  out->rc, out->err);
+		H_GAH_SET_INVALID(im->im_ie);
 		goto out;
 	}
 	im->im_ie->gah = out->gah;

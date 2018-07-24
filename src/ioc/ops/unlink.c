@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -81,10 +81,8 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, parent, &in->gah);
-	if (rc != 0) {
-		ret = ENOENT;
-		goto out_err;
-	}
+	if (rc != 0)
+		D_GOTO(out_err, ret = rc);
 
 	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
 	if (rc) {

@@ -94,7 +94,7 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, ino, &in->gah);
 	if (rc != 0)
-		D_GOTO(err, rc = ENOENT);
+		D_GOTO(err, 0);
 
 	dh->inode_no = ino;
 

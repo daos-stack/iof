@@ -579,7 +579,14 @@ struct ioc_inode_entry {
 	 */
 	fuse_ino_t	parent;
 
-	/** Hash table of inodes.
+	/** Boolean flag to indicate GAH is valid.
+	 * Set to 1 when inode is opened, however may be set to 0 either by
+	 * ionss returning -DER_NONEXIST or by ionss failure
+	 */
+
+	ATOMIC int	gah_ok;
+
+	/** Hash table of inodes
 	 * All valid inodes are kept in a hash table, using the hash table
 	 * locking.
 	 */
@@ -634,7 +641,7 @@ struct iof_dir_handle {
 	int				last_replies;
 	/** Set to 1 initially, but 0 if there is a unrecoverable error */
 	int				handle_valid;
-	/* Set to 0 if the server rejects the GAH at any point */
+	/** Set to 0 if the server rejects the GAH at any point */
 	ATOMIC int			gah_ok;
 	/** The inode number of the directory */
 	ino_t				inode_no;

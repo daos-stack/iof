@@ -67,6 +67,7 @@ void iof_entry_cb(struct ioc_request *request)
 	desc->ie->stat = out->stat;
 	D_INIT_LIST_HEAD(&desc->ie->ie_fh_list);
 	D_INIT_LIST_HEAD(&desc->ie->ie_ie_children);
+	H_GAH_SET_VALID(desc->ie);
 	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &desc->ie->stat.st_ino,
 				       sizeof(desc->ie->stat.st_ino),
@@ -119,7 +120,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->gah);
 	if (rc != 0)
-		D_GOTO(err, rc = ENOENT);
+		D_GOTO(err, 0);
 
 	strncpy(in->name.name, name, NAME_MAX);
 	strncpy(desc->ie->name, name, NAME_MAX);

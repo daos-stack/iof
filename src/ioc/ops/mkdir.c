@@ -78,7 +78,7 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
-		D_GOTO(err, rc = ENOENT);
+		D_GOTO(err, 0);
 	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
 		D_GOTO(err, 0);

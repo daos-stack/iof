@@ -101,12 +101,7 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	} else {
 		rc = find_gah(fs_handle, ino, &in->gah);
 		if (rc != 0)
-			D_GOTO(err, rc = ENOENT);
-		if (in->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
-			IOF_TRACE_WARNING(fs_handle,
-					  "Gah with old root %lu", ino);
-			D_GOTO(err, rc = EHOSTDOWN);
-		}
+			D_GOTO(err, 0);
 	}
 	rc = iof_fs_send(&desc->request);
 	if (rc != 0)

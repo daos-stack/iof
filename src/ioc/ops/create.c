@@ -91,6 +91,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	handle->ie->stat = out->stat;
 	D_INIT_LIST_HEAD(&handle->ie->ie_fh_list);
 	D_INIT_LIST_HEAD(&handle->ie->ie_ie_children);
+	H_GAH_SET_VALID(handle->ie);
 	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
 				       &handle->ie->stat.st_ino,
 				       sizeof(handle->ie->stat.st_ino),
@@ -196,7 +197,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
-		D_GOTO(out_err, ret = ENOENT);
+		D_GOTO(out_err, ret = rc);
 
 	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;

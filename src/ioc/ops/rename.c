@@ -82,11 +82,11 @@ ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, parent, &in->old_gah);
 	if (rc != 0)
-		D_GOTO(err, ret = ENOENT);
+		D_GOTO(err, ret = rc);
 
 	rc = find_gah(fs_handle, newparent, &in->new_gah);
 	if (rc != 0)
-		D_GOTO(err, ret = ENOENT);
+		D_GOTO(err, ret = rc);
 
 	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
 	if (rc) {

@@ -113,7 +113,7 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 		/* Find the GAH of the inode */
 		rc = find_gah(fs_handle, ino, &in->gah);
 		if (rc != 0)
-			D_GOTO(err, rc = ENOENT);
+			D_GOTO(err, 0);
 	}
 
 	in->to_set = to_set;

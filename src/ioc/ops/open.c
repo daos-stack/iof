@@ -147,10 +147,8 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	/* Find the GAH of the file to open */
 	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0) {
-		ret = ENOENT;
-		goto out_err;
-	}
+	if (rc != 0)
+		D_GOTO(out_err, ret = rc);
 
 	in->flags = fi->flags;
 	IOF_TRACE_INFO(req, "flags 0%o", fi->flags);
