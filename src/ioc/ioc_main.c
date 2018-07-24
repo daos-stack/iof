@@ -327,7 +327,7 @@ static void imigrate_cb(const struct crt_cb_info *cb_info)
 	struct ioc_inode_migrate *im = cb_info->cci_arg;
 	struct iof_entry_out	*out = crt_reply_get(cb_info->cci_rpc);
 
-	IOF_TRACE_INFO(im->im_ie, "reply %d '%s' %d '-%s'",
+	IOF_TRACE_INFO(im->im_ie, "reply %d '%s' %d -%s",
 		       out->rc, strerror(out->rc),
 		       out->err, d_errstr(out->err));
 
@@ -712,13 +712,13 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	/* No Error */
 	if (!cb_info->cci_rc) {
 		IOF_TRACE_DEBUG(request,
-				"cci_rc %d %s",
+				"cci_rc %d -%s",
 				cb_info->cci_rc,
 				d_errstr(cb_info->cci_rc));
 		D_GOTO(done, 0);
 	}
 
-	IOF_TRACE_INFO(request, "cci_rc %d %s",
+	IOF_TRACE_INFO(request, "cci_rc %d -%s",
 		       cb_info->cci_rc, d_errstr(cb_info->cci_rc));
 
 	if (fs_handle->offline_reason) {
@@ -846,7 +846,7 @@ get_info(struct iof_state *iof_state, struct iof_group_info *group,
 
 	if (reply.err) {
 		IOF_TRACE_INFO(iof_state,
-			       "Bad RPC reply %d %s",
+			       "Bad RPC reply %d -%s",
 			       reply.err,
 			       d_errstr(reply.err));
 		/* Matches decref in this function */

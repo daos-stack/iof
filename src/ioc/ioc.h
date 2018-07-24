@@ -543,8 +543,16 @@ struct ioc_request {
 	do {								\
 		if (((OUT) != NULL) && (!(REQUEST)->rc)) {		\
 			(REQUEST)->rc = (OUT)->rc;			\
-			if ((OUT)->err)					\
-				(REQUEST)->rc = EIO;			\
+			if ((OUT)->err)	{				\
+				if ((OUT)->rc == -DER_NOMEM)		\
+					(REQUEST)->rc = ENOMEM;		\
+				else					\
+					(REQUEST)->rc = EIO;		\
+				IOF_TRACE_INFO((REQUEST),		\
+					"Returning '%s' from -%s",	\
+					strerror((REQUEST)->rc),	\
+					d_errstr((OUT)->err));		\
+			}						\
 		}							\
 	} while (0)
 

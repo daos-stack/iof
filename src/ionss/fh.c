@@ -119,7 +119,7 @@ ios_fh_find(struct ios_base *base, struct ios_gah *gah)
 	rc = ios_gah_get_info(base->gs, gah, (void **)&fh);
 	if (rc || !fh) {
 		IOF_TRACE_ERROR(&base,
-				"Failed to load fh from " GAH_PRINT_FULL_STR " %d %s",
+				"Failed to load fh from " GAH_PRINT_FULL_STR " %d -%s",
 				GAH_PRINT_FULL_VAL(*gah), rc, d_errstr(rc));
 		D_GOTO(out, fh = NULL);
 	}
@@ -146,7 +146,7 @@ ios_dirh_find(struct ios_base *base, struct ios_gah *gah)
 	rc = ios_gah_get_info(base->gs, gah, (void **)&dirh);
 	if (rc || !dirh) {
 		IOF_TRACE_ERROR(&base,
-				"Failed to load dirh from " GAH_PRINT_FULL_STR " %d %s",
+				"Failed to load dirh from " GAH_PRINT_FULL_STR " %d -%s",
 				GAH_PRINT_FULL_VAL(*gah), rc, d_errstr(rc));
 		D_GOTO(out, dirh = NULL);
 	}
