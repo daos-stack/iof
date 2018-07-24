@@ -157,6 +157,8 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 		IOF_TRACE_WARNING(ie, "child inode %p", iec);
 		d_list_del_init(&iec->ie_ie_list);
 	}
+
+	d_list_del_init(&ie->ie_ie_list);
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
 	if (!H_GAH_IS_VALID(ie)) {
