@@ -198,6 +198,22 @@ class Testlocal(unittest.TestCase,
         if self.id() == '__main__.Testlocal.go':
             self.test_method = 'go'
 
+        # If valgrind is requested for a failover test then enable it on the
+        # cnss only.  Running the ionss under valgrind for the failover tests
+        # causes them to be skipped.
+        # In addition only use the --continuous flag for failover.
+        #
+        # Note that running the failover tests under valgrind does not cause
+        # test failures, as orterun ignores the return code, however they will
+        # be picked up by Jenkins via the XML files.  For non-failover tests
+        # the valgrind exit code will be picked up and the test failed that way.
+        failover_test = False
+        global valgrind_cnss_only
+        test_name = self.id()
+        if test_name.split('.')[2].startswith('test_failover'):
+            failover_test = True
+            valgrind_cnss_only = True
+
         # set the standalone test flag
         self.test_local = True
         # Allow the use of a custom temp directory.  This can be needed on
@@ -300,7 +316,8 @@ class Testlocal(unittest.TestCase,
 
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
-        cmd.append('--continuous')
+        if failover_test:
+            cmd.append('--continuous')
         cmd.extend(['-n', '1',
                     '-x', 'D_LOG_MASK=%s' % self.log_mask,
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
