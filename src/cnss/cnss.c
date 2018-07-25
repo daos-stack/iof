@@ -316,7 +316,8 @@ register_fuse(void *arg,
 	if (!info->mnt)
 		goto cleanup_no_mutex;
 
-	if (pthread_mutex_init(&info->lock, NULL) != 0) {
+	rc = D_MUTEX_INIT(&info->lock, NULL);
+	if (rc != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(plugin, "Count not create mutex");
 		goto cleanup_no_mutex;
 	}

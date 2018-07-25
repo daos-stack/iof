@@ -113,7 +113,10 @@ struct iof_pool {
 	bool		init;
 };
 
-/* Create a new pool, called once at startup */
+/* Create a new pool, called once at startup
+ *
+ * Returns a CaRT error code.
+ */
 int iof_pool_init(struct iof_pool *, void *arg)
 	__attribute((warn_unused_result, nonnull(1)));
 

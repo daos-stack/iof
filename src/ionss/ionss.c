@@ -2763,8 +2763,7 @@ int main(int argc, char **argv)
 		int rc;
 
 		ret = iof_pool_init(&projection->pool, projection);
-		if (ret != 0) {
-			ret = -DER_NOMEM;
+		if (ret != -DER_SUCCESS) {
 			err = 1;
 			goto cleanup;
 		}
@@ -2791,8 +2790,8 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		rc = pthread_mutex_init(&projection->lock, NULL);
-		if (rc != 0)
+		rc = D_MUTEX_INIT(&projection->lock, NULL);
+		if (rc != -DER_SUCCESS)
 			continue;
 
 		D_INIT_LIST_HEAD(&projection->read_list);

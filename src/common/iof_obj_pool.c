@@ -115,9 +115,11 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 	if (rc != 0)
 		return -DER_NOMEM;
 
-	rc = pthread_mutex_init(&real_pool->lock, NULL);
-	if (rc != 0)
-		return -DER_NOMEM;
+	rc = D_MUTEX_INIT(&real_pool->lock, NULL);
+	if (rc != -DER_SUCCESS) {
+		pthread_key_delete(real_pool->key);
+		return rc;
+	}
 
 	D_INIT_LIST_HEAD(&real_pool->free_entries);
 	D_INIT_LIST_HEAD(&real_pool->allocated_blocks);

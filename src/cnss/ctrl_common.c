@@ -46,9 +46,10 @@
 bool ctrl_info_init(struct ctrl_info *ctrl_info)
 {
 	int rc;
+
 	memset(ctrl_info, 0, sizeof(*ctrl_info));
-	rc = pthread_mutex_init(&ctrl_info->lock, NULL);
-	if (rc != 0)
+	rc = D_MUTEX_INIT(&ctrl_info->lock, NULL);
+	if (rc != -DER_SUCCESS)
 		return false;
 	rc = pthread_cond_init(&ctrl_info->cond, NULL);
 	if (rc != 0) {

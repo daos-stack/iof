@@ -72,13 +72,13 @@ iof_pool_init(struct iof_pool *pool, void *arg)
 	IOF_TRACE_DEBUG(pool, "Creating a pool");
 	D_INIT_LIST_HEAD(&pool->list);
 
-	rc = pthread_mutex_init(&pool->lock, NULL);
-	if (rc != 0)
+	rc = D_MUTEX_INIT(&pool->lock, NULL);
+	if (rc != -DER_SUCCESS)
 		return rc;
 
 	pool->init = true;
 	pool->arg = arg;
-	return 0;
+	return -DER_SUCCESS;
 }
 
 /* Destroy an object pool */
@@ -301,9 +301,11 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	if (!type)
 		return NULL;
 
-	rc = pthread_mutex_init(&type->lock, NULL);
-	if (rc != 0)
+	rc = D_MUTEX_INIT(&type->lock, NULL);
+	if (rc != -DER_SUCCESS) {
+		D_FREE(type);
 		return NULL;
+	}
 
 	IOF_TRACE_UP(type, pool, reg->name);
 
@@ -312,7 +314,7 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	type->pool = pool;
 
 	type->count = 0;
-	memcpy(&type->reg, reg, sizeof(*reg));
+	type->reg = *reg;
 
 	create_many(type);
 

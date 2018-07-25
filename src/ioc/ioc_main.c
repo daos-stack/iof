@@ -1827,7 +1827,7 @@ initialize_projection(struct iof_state *iof_state,
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
 
 	ret = iof_pool_init(&fs_handle->pool, fs_handle);
-	if (ret != 0)
+	if (ret != -DER_SUCCESS)
 		D_GOTO(err, 0);
 
 	IOF_TRACE_UP(&fs_handle->pool, fs_handle, "iof_pool");
@@ -1871,19 +1871,19 @@ initialize_projection(struct iof_state *iof_state,
 	 * the server didn't close.
 	 */
 	D_INIT_LIST_HEAD(&fs_handle->opendir_list);
-	ret = pthread_mutex_init(&fs_handle->od_lock, NULL);
+	ret = D_MUTEX_INIT(&fs_handle->od_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
 	D_INIT_LIST_HEAD(&fs_handle->openfile_list);
-	ret = pthread_mutex_init(&fs_handle->of_lock, NULL);
+	ret = D_MUTEX_INIT(&fs_handle->of_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
 
-	ret = pthread_mutex_init(&fs_handle->gah_lock, NULL);
+	ret = D_MUTEX_INIT(&fs_handle->gah_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
 
-	ret = pthread_mutex_init(&fs_handle->p_request_lock, NULL);
+	ret = D_MUTEX_INIT(&fs_handle->p_request_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
 
