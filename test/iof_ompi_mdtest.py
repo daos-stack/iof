@@ -48,7 +48,7 @@ import NodeControlRunner
 #pylint: enable=import-error
 
 
-class TestMdtest(object):
+class TestMdtest():
     """Simple python test"""
     def __init__(self, test_info=None, log_base_path=None):
         self.test_info = test_info

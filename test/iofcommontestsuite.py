@@ -102,14 +102,14 @@ def valgrind_suffix(log_path, pmix=True):
                 '--suppressions=%s' % crt_suppressfile,
                 '--suppressions=%s' % iof_suppressfile,
                 '--show-reachable=yes']
-    elif use_valgrind == "callgrind":
+    if use_valgrind == "callgrind":
         return ['valgrind',
                 '--fair-sched=try',
                 '--tool=callgrind',
                 '--callgrind-out-file=%s' %
                 os.path.join(log_path,
                              "callgrind-%s.in" % pid)]
-    elif use_valgrind == "memcheck-native":
+    if use_valgrind == "memcheck-native":
         cmd = ['valgrind',
                '--fair-sched=try',
                '--sim-hints=fuse-compatible',

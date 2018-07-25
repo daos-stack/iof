@@ -92,9 +92,8 @@ class TestCleanUpIof():
             procrtn = self.launch_cmd(msg, cmd)
             if procrtn is 1:
                 return True
-            else:
-                time.sleep(1)
-                i = i - 1
+            time.sleep(1)
+            i = i - 1
         return False
 
     def test_iofshutdown(self):
