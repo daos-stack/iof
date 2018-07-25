@@ -1571,6 +1571,9 @@ iof_thread_stop(struct iof_ctx *iof_ctx)
 {
 	void *rtn;
 
+	if (!iof_ctx->thread)
+		return 0;
+
 	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
 	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
 	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
@@ -1578,6 +1581,8 @@ iof_thread_stop(struct iof_ctx *iof_ctx)
 	IOF_TRACE_INFO(iof_ctx,
 		       "CRT thread stopped with %d",
 		       (int)(uintptr_t)rtn);
+
+	iof_ctx->thread = 0;
 
 	return (int)(uintptr_t)rtn;
 }

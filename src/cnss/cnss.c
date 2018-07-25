@@ -610,6 +610,8 @@ add_plugin(struct cnss_info *info,
 	if (rc != 0) {
 		IOF_TRACE_ERROR(entry,
 				"ctrl dir creation failed (%d), disabling", rc);
+		if (entry->fns->destroy_plugin_data)
+			entry->fns->destroy_plugin_data(entry->fns->handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 		return false;
@@ -677,8 +679,8 @@ int main(int argc, char **argv)
 	char *plugin_file = NULL;
 	const char *prefix = NULL;
 	char *version = iof_get_version();
-	struct plugin_entry *list_iter;
-	struct plugin_entry *list_iter_next;
+	struct plugin_entry *entry;
+	struct plugin_entry *entry2;
 	struct cnss_info *cnss_info;
 	bool active_plugins = false;
 	int ret;
@@ -822,8 +824,8 @@ int main(int argc, char **argv)
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
 	 */
-	d_list_for_each_entry(list_iter, &cnss_info->plugins, list) {
-		if (list_iter->active && list_iter->fns->require_service) {
+	d_list_for_each_entry(entry, &cnss_info->plugins, list) {
+		if (entry->active && entry->fns->require_service) {
 			service_process_set = true;
 			break;
 		}
@@ -872,25 +874,25 @@ int main(int argc, char **argv)
 	CALL_PLUGIN_FN_CHECK(&cnss_info->plugins, post_start);
 
 	/* Walk the plugins and check for active ones */
-	d_list_for_each_entry_safe(list_iter, list_iter_next,
-				   &cnss_info->plugins, list) {
-		if (list_iter->active) {
+	d_list_for_each_entry_safe(entry, entry2, &cnss_info->plugins, list) {
+		if (entry->active) {
 			active_plugins = true;
 			continue;
 		}
-		if (list_iter->fns->destroy_plugin_data) {
+		if (entry->fns->destroy_plugin_data) {
 			IOF_TRACE_INFO(cnss_info,
 				       "Plugin %s(%p) calling destroy_plugin_data at %p",
-				       list_iter->fns->name,
-				       list_iter->fns->handle,
-				       FN_TO_PVOID(list_iter->fns->destroy_plugin_data));
-			list_iter->fns->destroy_plugin_data(list_iter->fns->handle);
+				       entry->fns->name,
+				       entry->fns->handle,
+				       FN_TO_PVOID(entry->fns->destroy_plugin_data));
+			entry->fns->destroy_plugin_data(entry->fns->handle);
 		}
-		d_list_del(&list_iter->list);
+		d_list_del(&entry->list);
 
-		if (list_iter->dl_handle)
-			dlclose(list_iter->dl_handle);
-		D_FREE(list_iter);
+		if (entry->dl_handle)
+			dlclose(entry->dl_handle);
+		IOF_TRACE_DOWN(entry);
+		D_FREE(entry);
 	}
 
 	/* TODO: How to handle this case? */
@@ -925,14 +927,11 @@ shutdown_cart:
 		ret = 1;
 	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
 
-	while (!d_list_empty(&cnss_info->plugins)) {
-		struct plugin_entry *entry;
+	d_list_for_each_entry_safe(entry, entry2, &cnss_info->plugins, list) {
 
-		entry = d_list_entry(cnss_info->plugins.next,
-				     struct plugin_entry, list);
 		d_list_del(&entry->list);
 
-		if (entry->dl_handle != NULL)
+		if (entry->dl_handle)
 			dlclose(entry->dl_handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);

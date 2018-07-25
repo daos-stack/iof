@@ -474,7 +474,7 @@ int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
 		       struct ctrl_dir **newdir)
 {
 	struct ctrl_node *node;
-	int rc = 0;
+	int rc;
 
 	pthread_once(&once_init, init_root_node);
 
@@ -505,11 +505,12 @@ int ctrl_create_subdir(struct ctrl_dir *parent, const char *subdir,
 
 	rc = add_ctrl_dir(subdir, &node);
 
-	if (rc != 0)
+	if (rc == 0) {
+		*newdir = (struct ctrl_dir *)node;
+		IOF_LOG_INFO("Registered %s as ctrl subdir", subdir);
+	} else {
 		IOF_LOG_ERROR("Bad subdir %s specified", subdir);
-
-	*newdir = (struct ctrl_dir *)node;
-	IOF_LOG_INFO("Registered %s as ctrl subdir", subdir);
+	}
 
 	return rc;
 }
