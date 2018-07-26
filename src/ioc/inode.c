@@ -72,7 +72,6 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 		       GAH_PRINT_VAL(ie->gah));
 
 	if (!H_GAH_IS_VALID(ie)) {
-		IOF_TRACE_INFO(ie, "Gah is invalid");
 		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
 		return EHOSTDOWN;
 	}
@@ -102,6 +101,34 @@ find_gah_ref(struct iof_projection_info *fs_handle,
 	     struct ios_gah *gah)
 {
 	return find_gah_internal(fs_handle, ino, gah, false);
+}
+
+int
+find_inode(struct iof_projection_info *fs_handle, ino_t ino,
+	   struct ioc_inode_entry **iep)
+{
+	struct ioc_inode_entry *ie;
+	d_list_t *rlink;
+
+	if (ino == 1)
+		return EINVAL;
+
+	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	if (!rlink)
+		return ENOENT;
+
+	ie = container_of(rlink, struct ioc_inode_entry, list);
+
+	if (!H_GAH_IS_VALID(ie)) {
+		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+		return EHOSTDOWN;
+	}
+
+	IOF_TRACE_INFO(ie, "Using inode %lu " GAH_PRINT_STR, ie->stat.st_ino,
+		       GAH_PRINT_VAL(ie->gah));
+
+	*iep = ie;
+	return 0;
 }
 
 /* Drop a reference on the GAH in the hash table */
@@ -161,20 +188,14 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	d_list_del_init(&ie->ie_ie_list);
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
-	if (!H_GAH_IS_VALID(ie)) {
-		IOF_TRACE_WARNING(ie,
-				  "Gah is not valid %lu " GAH_PRINT_STR,
-				  ie->stat.st_ino, GAH_PRINT_VAL(ie->gah));
+	if (!H_GAH_IS_VALID(ie))
 		D_GOTO(out, 0);
-		return;
-	}
 
 	if (ie->gah.root != atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank)) {
-		IOF_TRACE_WARNING(fs_handle,
+		IOF_TRACE_WARNING(ie,
 				  "Gah with old root %lu " GAH_PRINT_STR,
 				  ie->stat.st_ino, GAH_PRINT_VAL(ie->gah));
 		D_GOTO(out, 0);
-		return;
 	}
 
 	IOF_TRACE_INFO(ie, GAH_PRINT_STR, GAH_PRINT_VAL(ie->gah));

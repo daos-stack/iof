@@ -469,12 +469,25 @@ struct ioc_request_api {
 	void	(*on_result)(struct ioc_request *req);
 	/** Called on eviction, can re-send to new rank */
 	int	(*on_evict)(struct ioc_request *req);
+	/** Called before sending */
+	int	(*on_presend)(struct ioc_request *req);
 };
 
 enum ioc_request_state {
 	RS_INIT = 1,
 	RS_RESET,
 	RS_LIVE
+};
+
+/** The type of any handle stored in the request.
+ *
+ * If set to other than RHS_NONE then the GAH from the appropiate
+ * pointer type will be used, rather than the PSR.
+ */
+enum ioc_request_htype {
+	RHS_NONE,
+	RHS_ROOT,
+	RHS_INODE,
 };
 
 /**
@@ -501,14 +514,23 @@ struct ioc_request {
 	 * Used to ensure REQUEST_INIT()/REQUEST_RESET() have been invoked
 	 * correctly.
 	 */
-	enum ioc_request_state		r_rs;
+	enum ioc_request_state		ir_rs;
 
+	/** Request handle type */
+	enum ioc_request_htype		ir_ht;
+
+	union {
+		/** Optional pointer to inode.
+		 * Only valid if ir_ht == RHS_INODE
+		 */
+		struct ioc_inode_entry		*ir_inode;
+	};
 	/** List of requests.
 	 *
 	 * Used during failover to keep a list of requests that need to be
 	 * actioned once failover is complete.
 	 */
-	d_list_t			r_list;
+	d_list_t			ir_list;
 };
 
 /** Initialise a request.  To be called once per request */
@@ -516,18 +538,20 @@ struct ioc_request {
 	do {					\
 		(REQUEST)->fsh = FSH;		\
 		(REQUEST)->rpc = NULL;		\
-		(REQUEST)->r_rs = RS_INIT;	\
-		(REQUEST)->r_list.prev = NULL;	\
-		(REQUEST)->r_list.next = NULL;	\
+		(REQUEST)->ir_rs = RS_INIT;	\
+		(REQUEST)->ir_list.prev = NULL;	\
+		(REQUEST)->ir_list.next = NULL;	\
 	} while (0)
 
 /** Reset a request for re-use.  To be called before each use */
 #define IOC_REQUEST_RESET(REQUEST)					\
 	do {								\
-		D_ASSERT((REQUEST)->r_rs == RS_INIT ||			\
-			(REQUEST)->r_rs == RS_RESET ||			\
-			(REQUEST)->r_rs == RS_LIVE);			\
-		(REQUEST)->r_rs = RS_RESET;				\
+		D_ASSERT((REQUEST)->ir_rs == RS_INIT ||			\
+			(REQUEST)->ir_rs == RS_RESET ||			\
+			(REQUEST)->ir_rs == RS_LIVE);			\
+		(REQUEST)->ir_rs = RS_RESET;				\
+		(REQUEST)->ir_ht = RHS_NONE;				\
+		(REQUEST)->ir_inode = NULL;				\
 		(REQUEST)->rc = 0;					\
 	} while (0)
 
@@ -704,19 +728,37 @@ struct iof_file_handle {
 /* GAH ok manipulation macros. gah_ok is defined as a int but we're
  * using it as a bool and accessing it though the use of atomics.
  *
- * These macros work on both file and directory handles.
- *
- * TODO: Add gah_ok to inode entries.
+ * These macros work on inode, file and directory handles.
  */
 
 /** Set the GAH so that it's valid */
-#define H_GAH_SET_VALID(OH) atomic_store_release(&OH->gah_ok, 1)
+#define H_GAH_SET_VALID(OH) atomic_store_release(&(OH)->gah_ok, 1)
 
 /** Set the GAH so that it's invalid.  Assumes it currently valid */
-#define H_GAH_SET_INVALID(OH) atomic_store_release(&OH->gah_ok, 0)
+#define H_GAH_SET_INVALID(OH) do {					\
+		atomic_store_release(&(OH)->gah_ok, 0);			\
+		IOF_TRACE_INFO((OH), "Marking GAH as invalid");		\
+	} while (0)
 
-/** Check if the handle is valid by reading the gah_ok field. */
-#define H_GAH_IS_VALID(OH) atomic_load_consume(&OH->gah_ok)
+/** Check if the file handle is valid by reading the gah_ok field. */
+#define F_GAH_IS_VALID(OH) ({						\
+			int _rc = atomic_load_consume(&(OH)->gah_ok);	\
+			if (!_rc)					\
+				IOF_TRACE_INFO((OH),			\
+					"GAH is invalid " GAH_PRINT_STR,\
+					GAH_PRINT_VAL((OH)->common.gah)); \
+			_rc;						\
+		})
+
+/** Check if the dir or inode handle is valid by reading the gah_ok field. */
+#define H_GAH_IS_VALID(OH) ({						\
+			int _rc = atomic_load_consume(&(OH)->gah_ok);	\
+			if (!_rc)					\
+				IOF_TRACE_INFO((OH),			\
+					"GAH is invalid " GAH_PRINT_STR,\
+					GAH_PRINT_VAL((OH)->gah));	\
+			_rc;						\
+		})
 
 /** Common request type.
  *
@@ -761,6 +803,11 @@ int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 
 /* Drop a reference on the GAH in the hash table */
 void drop_ino_ref(struct iof_projection_info *, ino_t);
+
+/* Find a inode pointer from number. returns an error code if not found */
+int
+find_inode(struct iof_projection_info *fs_handle, ino_t ino,
+	   struct ioc_inode_entry **iep);
 
 void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 

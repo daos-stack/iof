@@ -148,10 +148,10 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		D_GOTO(err, rc = handle->fs_handle->offline_reason);
 
-	if (!H_GAH_IS_VALID(handle))
-		/* If the server has reported that the GAH is invalid
-		 * then do not try and use it.
-		 */
+	/* If the server has reported that the GAH is invalid then do not try
+	 * and use it.
+	 */
+	if (!F_GAH_IS_VALID(handle))
 		D_GOTO(err, rc = EIO);
 
 	wb = iof_pool_acquire(handle->fs_handle->write_pool);
@@ -198,10 +198,10 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	if (FS_IS_OFFLINE(handle->fs_handle))
 		D_GOTO(err, rc = handle->fs_handle->offline_reason);
 
-	if (!H_GAH_IS_VALID(handle))
-		/* If the server has reported that the GAH is invalid
-		 * then do not try and use it.
-		 */
+	/* If the server has reported that the GAH is invalid then do not try
+	 * and use it.
+	 */
+	if (!F_GAH_IS_VALID(handle))
 		D_GOTO(err, rc = EIO);
 
 	/* Check for buffer count being 1.  According to the documentation this

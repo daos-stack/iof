@@ -103,7 +103,7 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	in = crt_req_get(rpc);
 
 	if (handle) {
-		if (!H_GAH_IS_VALID(handle))
+		if (!F_GAH_IS_VALID(handle))
 			D_GOTO(err, rc = EIO);
 
 		D_MUTEX_LOCK(&fs_handle->gah_lock);

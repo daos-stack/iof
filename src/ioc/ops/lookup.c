@@ -116,7 +116,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	if (rc)
 		D_GOTO(err, rc);
 
-	IOF_TRACE_INFO(req, "Req %p ie %p", req, &desc->ie->list);
+	IOF_TRACE_INFO(req, "Req %p ie %p", req, &desc->ie);
 
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->gah);

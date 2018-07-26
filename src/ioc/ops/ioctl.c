@@ -85,7 +85,7 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
-	if (!H_GAH_IS_VALID(handle))
+	if (!F_GAH_IS_VALID(handle))
 		D_GOTO(out_err, 0);
 
 	if (cmd == TCGETS) {

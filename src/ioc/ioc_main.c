@@ -98,7 +98,8 @@ int ioc_simple_resend(struct ioc_request *request)
 	IOF_TRACE_INFO(fs_handle,
 		       "Performing simple resend of %p", request);
 
-	IOC_REQUEST_RESET(request);
+	request->ir_rs = RS_RESET;
+	request->rc = 0;
 
 	rc = crt_req_create(request->rpc->cr_ctx, NULL,
 			    request->rpc->cr_opc, &resend_rpc);
@@ -132,7 +133,7 @@ inode_check_cb(d_list_t *rlink, void *arg)
 						  struct ioc_inode_entry,
 						  list);
 
-	IOF_TRACE_INFO(fs_handle,
+	IOF_TRACE_INFO(ie,
 		       "check inode %lu parent %lu failover %s",
 		       ie->stat.st_ino, ie->parent, ie->failover ? "yes" : "no");
 
@@ -298,10 +299,10 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 		D_MUTEX_LOCK(&fs_handle->p_request_lock);
 		d_list_for_each_entry_safe(request, r2,
 					   &fs_handle->p_requests_pending,
-					   r_list) {
+					   ir_list) {
 			int rc;
 
-			d_list_del(&request->r_list);
+			d_list_del(&request->ir_list);
 			rc = request->ir_api->on_evict(request);
 			if (rc != 0) {
 				request->rc = rc;
@@ -745,8 +746,8 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	struct iof_projection_info *fs_handle = request->fsh;
 	int rc;
 
-	D_ASSERT(request->r_rs == RS_RESET);
-	request->r_rs = RS_LIVE;
+	D_ASSERT(request->ir_rs == RS_RESET);
+	request->ir_rs = RS_LIVE;
 
 	/* No Error */
 	if (!cb_info->cci_rc) {
@@ -777,7 +778,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 		if (fs_handle->failover_state == iof_failover_in_progress) {
 			/* Add to list for deferred execution */
 			D_MUTEX_LOCK(&fs_handle->p_request_lock);
-			d_list_add_tail(&request->r_list,
+			d_list_add_tail(&request->ir_list,
 					&fs_handle->p_requests_pending);
 			D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
 		} else {
@@ -800,8 +801,6 @@ done:
  * for abstracting various other features related to RPCs such as fail-over
  * and load balance, at the same time preventing code duplication.
  *
- * TODO: Deferred Execution: Check for PSR eviction and add requests
- * on open handles to a queue if migration of handles is in progress.
  */
 int iof_fs_send(struct ioc_request *request)
 {
@@ -809,16 +808,36 @@ int iof_fs_send(struct ioc_request *request)
 	crt_endpoint_t ep;
 	int rc;
 
+	/*
+	 * Call any on_presend function.  This is done here rather than
+	 * before calling fs_send() to allow retry to load updated GAH
+	 * values after failover.
+	 */
+	if (request->ir_api->on_presend) {
+		rc = request->ir_api->on_presend(request);
+		if (rc != 0)
+			return rc;
+	}
+
 	ep.ep_tag = 0;
-	ep.ep_rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
 	ep.ep_grp = fs_handle->proj.grp->dest_grp;
+
+	/* Pick an appropiate rank, for most cases this is the root of the GAH
+	 * however if that is not known then send to the PSR
+	 */
+	if (request->ir_ht == RHS_INODE)
+		ep.ep_rank = request->ir_inode->gah.root;
+	else if (request->ir_ht == RHS_ROOT)
+		ep.ep_rank = fs_handle->gah.root;
+	else
+		ep.ep_rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
 
 	/* Defer clean up until the output is copied. */
 	crt_req_addref(request->rpc);
 	rc = crt_req_set_endpoint(request->rpc, &ep);
 	if (rc)
 		D_GOTO(err, 0);
-	IOF_TRACE_INFO(request, "Sending RPC to PSR Rank %d",
+	IOF_TRACE_INFO(request, "Sending RPC to rank %d",
 		       request->rpc->cr_ep.ep_rank);
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc)
@@ -2403,11 +2422,13 @@ static int iof_deregister_fuse(void *arg)
 		struct ioc_inode_entry *ie;
 
 		rlink = d_hash_rec_first(&fs_handle->inode_ht);
-		IOF_TRACE_DEBUG(fs_handle, "rlink is %p", rlink);
+
 		if (!rlink)
 			break;
 
 		ie = container_of(rlink, struct ioc_inode_entry, list);
+
+		IOF_TRACE_DEBUG(ie, "Dropping %d", ie->ref);
 
 		refs += ie->ref;
 		ie->parent = 0;

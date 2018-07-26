@@ -1010,18 +1010,8 @@ class Testlocal(unittest.TestCase,
         self.kill_ionss_proc()
         for i in range(0, 2):
             print("Loop %d" % i)
-            try:
-                fs = os.fstat(fd)
-                print(fs)
-                if i != 1:
-                    self.fail("Should have failed")
-            except OSError as e:
-                self.logger.info("stat returned errno %d '%s'",
-                                 e.errno, e.strerror)
-                if e.errno != errno.EIO:
-                    self.fail("Should have returned EIO")
-                if i != 0:
-                    self.fail("Should have failed")
+            fs = os.fstat(fd)
+            print(fs)
 
     def ft_stat_helper(self, fsid, outcomes):
         """Helper function for trying stat on projection
@@ -1041,6 +1031,7 @@ class Testlocal(unittest.TestCase,
                 r = os.stat(test_dir)
                 self.logger.info(r)
                 if expected is not None:
+                    self.logger.info("stat succeeded but expected %d", expected)
                     failed = True
             except OSError as e:
                 if e.errno == expected:
@@ -1071,7 +1062,7 @@ class Testlocal(unittest.TestCase,
 
         # Iterate through the projection list to ensure that they fail with
         # the expected error codes.
-        failed = self.ft_stat_helper(0, [errno.EIO, None])
+        failed = self.ft_stat_helper(0, [None, None])
 
         self.dump_failover_state()
 
@@ -1164,7 +1155,7 @@ class Testlocal(unittest.TestCase,
         # Now all the files are open kill a ionss process, and trigger failover.
         # Note this is the failover_stat() test.
         self.kill_ionss_proc()
-        failed = self.ft_stat_helper(0, [errno.EIO, None])
+        failed = self.ft_stat_helper(0, [None, None])
         self.dump_failover_state()
 
         if failed:

@@ -61,10 +61,10 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 	IOF_TRACE_INFO(handle);
 
-	if (!H_GAH_IS_VALID(handle))
-		/* If the server has reported that the GAH is invalid
-		 * then do not try to do anything with it.
-		 */
+	/* If the server has reported that the GAH is invalid then do not try to
+	 * do anything with it.
+	 */
+	if (!F_GAH_IS_VALID(handle))
 		D_GOTO(out, rc = EIO);
 
 	if (datasync)
