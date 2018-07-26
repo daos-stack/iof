@@ -125,6 +125,7 @@ class Testlocal(unittest.TestCase,
     ionss_count = 3
     cnss_valgrind = False
     ionss_valgrind = False
+    failover_test = False
 
     def using_valgrind(self):
         """Check if any part of the test is running under valgrind"""
@@ -207,11 +208,10 @@ class Testlocal(unittest.TestCase,
         # test failures, as orterun ignores the return code, however they will
         # be picked up by Jenkins via the XML files.  For non-failover tests
         # the valgrind exit code will be picked up and the test failed that way.
-        failover_test = False
         global valgrind_cnss_only
         test_name = self.id()
         if test_name.split('.')[2].startswith('test_failover'):
-            failover_test = True
+            self.failover_test = True
             valgrind_cnss_only = True
 
         # set the standalone test flag
@@ -316,7 +316,7 @@ class Testlocal(unittest.TestCase,
 
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
-        if failover_test:
+        if self.failover_test:
             cmd.append('--continuous')
         cmd.extend(['-n', '1',
                     '-x', 'D_LOG_MASK=%s' % self.log_mask,
@@ -432,6 +432,12 @@ class Testlocal(unittest.TestCase,
             missing_links = o_rpctrace.rpc_trace_output(descriptor)
         if missing_links:
             self.fail('Missing links for TRACE macros: %s' % missing_links)
+
+        if o_rpctrace.have_errors:
+            self.fail("Cnss log has integrity errors")
+
+        if not self.failover_test and rank_log.have_errors:
+            self.fail("IONSS log has integrity errors")
 
         self.internals_log_file.close()
         self.internals_log_file = None

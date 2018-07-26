@@ -107,6 +107,7 @@ class ColorizedOutput():
 
     logger = logging.getLogger("TestRunnerLogger")
     stream = None
+    have_errors = False
 
     def set_log(self, stream):
         """ Set a logfile stream """
@@ -132,6 +133,7 @@ class ColorizedOutput():
 
     def error_output(self, output):
         """Red output to console, writes output to internals.out"""
+        self.have_errors = True
         self.colour_output('RED', output, 'ERROR')
 
     def warning_output(self, output):
