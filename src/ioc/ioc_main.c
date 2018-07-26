@@ -159,9 +159,6 @@ inode_check_cb(d_list_t *rlink, void *arg)
 		return -DER_SUCCESS;
 	}
 
-	if (ie->parent != 1)
-		H_GAH_SET_INVALID(ie);
-
 	return -DER_SUCCESS;
 }
 
@@ -316,6 +313,81 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 	}
 }
 
+static void imigrate_cb(const struct crt_cb_info *cb_info);
+
+static void imigrate_send(struct iof_projection_info *fs_handle,
+			  struct ioc_inode_entry *ie,
+			  struct ioc_inode_entry *iep)
+{
+	crt_rpc_t *rpc = NULL;
+	struct iof_imigrate_in *in;
+	struct ioc_inode_migrate *im;
+	struct ioc_inode_entry *iec;
+	crt_endpoint_t ep;
+	d_rank_t rank;
+	int rc;
+
+	if (!ie->failover) {
+		IOF_TRACE_INFO(ie, "Not marked for failover, skipping");
+		return;
+	}
+
+	rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
+
+	ep.ep_tag = 0;
+	ep.ep_rank = rank;
+	ep.ep_grp = fs_handle->proj.grp->dest_grp;
+
+	IOF_TRACE_INFO(ie, "child inode %p %lu %lu",
+		       ie, ie->stat.st_ino, ie->parent);
+
+	D_ALLOC_PTR(im);
+	if (!im)
+		D_GOTO(traverse, 0);
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, &ep,
+			    FS_TO_OP(fs_handle, imigrate), &rpc);
+	if (rc != -DER_SUCCESS || rpc == NULL) {
+		IOF_TRACE_ERROR(fs_handle, "Failed to allocate RPC");
+		D_FREE(im);
+		D_GOTO(traverse, 0);
+	}
+
+	im->im_ie = ie;
+	im->im_fsh = fs_handle;
+	in = crt_req_get(rpc);
+	if (iep) {
+		/* If there is a parent and it is valid then try and load
+		 * from that, if it is not valid they try anyway using the
+		 * root as there's a chance the inode will be open anyway
+		 * but do not send the filename in this case.
+		 */
+		if (H_GAH_IS_VALID(iep)) {
+			in->gah = iep->gah;
+			strncpy(in->name.name, ie->name, NAME_MAX);
+		} else {
+			in->gah = fs_handle->gah;
+		}
+	} else {
+		in->gah = fs_handle->gah;
+		strncpy(in->name.name, ie->name, NAME_MAX);
+	}
+	in->inode = ie->stat.st_ino;
+	gah_addref(fs_handle);
+	rc = crt_req_send(rpc, imigrate_cb, im);
+	if (rc != 0) {
+		IOF_TRACE_ERROR(fs_handle, "Failed to send RPC");
+		D_FREE(im);
+		gah_decref(fs_handle);
+		D_GOTO(traverse, 0);
+	}
+	return;
+
+traverse:
+	d_list_for_each_entry(iec, &ie->ie_ie_children, ie_ie_list)
+		imigrate_send(fs_handle, iec, ie);
+}
+
 /* Callback for inode migrate RPC.
  *
  * If the RPC succeeded then update the GAH for the inode, else log an error.
@@ -326,6 +398,7 @@ static void imigrate_cb(const struct crt_cb_info *cb_info)
 {
 	struct ioc_inode_migrate *im = cb_info->cci_arg;
 	struct iof_entry_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct ioc_inode_entry *iec;
 
 	IOF_TRACE_INFO(im->im_ie, "reply %d '%s' %d -%s",
 		       out->rc, strerror(out->rc),
@@ -347,8 +420,15 @@ static void imigrate_cb(const struct crt_cb_info *cb_info)
 		H_GAH_SET_INVALID(im->im_ie);
 		goto out;
 	}
+
+	IOF_TRACE_INFO(im->im_ie, GAH_PRINT_STR " -> " GAH_PRINT_STR,
+		       GAH_PRINT_VAL(im->im_ie->gah), GAH_PRINT_VAL(out->gah));
 	im->im_ie->gah = out->gah;
+
 out:
+	d_list_for_each_entry(iec, &im->im_ie->ie_ie_children, ie_ie_list)
+		imigrate_send(im->im_fsh, iec, im->im_ie);
+
 	gah_decref(im->im_fsh);
 	D_FREE(im);
 }
@@ -357,10 +437,9 @@ out:
  */
 static void inode_check(struct iof_projection_info *fs_handle)
 {
-	struct ioc_inode_entry *ie, *ie2;
+	struct ioc_inode_entry *ie;
 	struct iof_file_handle *fh;
 	struct iof_dir_handle *dh;
-	d_rank_t rank;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle,
@@ -389,48 +468,8 @@ static void inode_check(struct iof_projection_info *fs_handle)
 	IOF_TRACE_INFO(fs_handle,
 		       "traverse returned %d", rc);
 
-	rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
-
-	d_list_for_each_entry_safe(ie, ie2, &fs_handle->p_ie_children,
-				   ie_ie_list) {
-		crt_rpc_t *rpc = NULL;
-		struct iof_imigrate_in *in;
-		struct ioc_inode_migrate *im;
-		crt_endpoint_t ep;
-
-		ep.ep_tag = 0;
-		ep.ep_rank = rank;
-		ep.ep_grp = fs_handle->proj.grp->dest_grp;
-
-		IOF_TRACE_INFO(ie, "child inode %p %lu %lu",
-			       ie, ie->stat.st_ino, ie->parent);
-
-		D_ALLOC_PTR(im);
-		if (!im)
-			continue;
-
-		rc = crt_req_create(fs_handle->proj.crt_ctx, &ep,
-				    FS_TO_OP(fs_handle, imigrate), &rpc);
-		if (rc != -DER_SUCCESS || rpc == NULL) {
-			IOF_TRACE_ERROR(fs_handle, "Failed to allocate RPC");
-			D_FREE(im);
-			continue;
-		}
-
-		im->im_ie = ie;
-		im->im_fsh = fs_handle;
-		in = crt_req_get(rpc);
-		in->gah = fs_handle->gah;
-		strncpy(in->name.name, ie->name, NAME_MAX);
-		in->inode = ie->stat.st_ino;
-		gah_addref(fs_handle);
-		rc = crt_req_send(rpc, imigrate_cb, im);
-		if (rc != 0) {
-			IOF_TRACE_ERROR(fs_handle, "Failed to send RPC");
-			D_FREE(im);
-			gah_decref(fs_handle);
-		}
-	}
+	d_list_for_each_entry(ie, &fs_handle->p_ie_children, ie_ie_list)
+		imigrate_send(fs_handle, ie, NULL);
 }
 
 /* Helper function to set all projections off-line.

@@ -1091,6 +1091,13 @@ iof_imigrate_handler(crt_rpc_t *rpc)
 		goto out;
 	}
 
+	/* Only try to find by filename if the name is valid, in some cases
+	 * the CNSS will send a inode request where the parent is invalid
+	 * so we do not expect this to pass.
+	 */
+	if (in->name.name[0] == '\0')
+		D_GOTO(out, out->rc = ENOENT);
+
 	fd = openat(parent->fd, in->name.name, mf.flags);
 	if (fd == -1) {
 		IOF_TRACE_DEBUG(rpc,

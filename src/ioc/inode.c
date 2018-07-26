@@ -162,7 +162,7 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
 	if (!H_GAH_IS_VALID(ie)) {
-		IOF_TRACE_WARNING(fs_handle,
+		IOF_TRACE_WARNING(ie,
 				  "Gah is not valid %lu " GAH_PRINT_STR,
 				  ie->stat.st_ino, GAH_PRINT_VAL(ie->gah));
 		D_GOTO(out, 0);

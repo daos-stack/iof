@@ -1008,16 +1008,20 @@ class Testlocal(unittest.TestCase,
         print(s)
 
         self.kill_ionss_proc()
-        for _ in range(0, 2):
+        for i in range(0, 2):
+            print("Loop %d" % i)
             try:
                 fs = os.fstat(fd)
                 print(fs)
-                self.fail("Should have failed")
+                if i != 1:
+                    self.fail("Should have failed")
             except OSError as e:
                 self.logger.info("stat returned errno %d '%s'",
                                  e.errno, e.strerror)
-                if e.errno != errno.EIO and e.errno != errno.EHOSTDOWN:
+                if e.errno != errno.EIO:
                     self.fail("Should have returned EIO")
+                if i != 0:
+                    self.fail("Should have failed")
 
     def ft_stat_helper(self, fsid, outcomes):
         """Helper function for trying stat on projection
@@ -1167,7 +1171,7 @@ class Testlocal(unittest.TestCase,
             self.fail('Failed with unexpected errno')
 
         self.ft_stat_many_helper(f1.fileno(), None)
-        self.ft_stat_many_helper(f2.fileno(), errno.EHOSTDOWN)
+        self.ft_stat_many_helper(f2.fileno(), None)
         self.ft_stat_many_helper(f4.fileno(), errno.EHOSTDOWN)
         self.ft_stat_many_helper(f5.fileno(), errno.EHOSTDOWN)
         self.ft_stat_many_helper(os.path.join(frontend_dir, 'd2'), None)
