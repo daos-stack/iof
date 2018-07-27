@@ -37,6 +37,7 @@
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 IofLogIter class definition.
+IofLogLine class definition.
 
 This provides a way of querying CaRT logfiles for processing.
 """
@@ -48,6 +49,37 @@ class ReadWithoutReset(Exception):
 class InvalidPid(Exception):
     """Exception to be raised when invalid pid is requested"""
     pass
+
+class IofLogLine():
+    """Class for parsing CaRT log lines
+
+    This class implements a way of inspecting individual lines of a log
+    file.
+
+    It allows for queries such as 'string in line' which will match against
+    the message only, and != which will match the entire line.
+    """
+    def __init__(self, line, fields):
+        self.line = line.strip()
+        self.fields = fields
+        self.msg = None
+
+    def __contains__(self, item):
+        if self.msg is None:
+            self.msg = ' '.join(self.fields[5:])
+        idx = self.msg.find(item)
+        if idx != -1:
+            return True
+        return False
+
+    def __ne__(self, other):
+        if not isinstance(other, str):
+            return False
+        return self.line != other
+
+    def split(self):
+        """Allow for line.split() to work"""
+        return self.fields
 
 # pylint: disable=too-few-public-methods
 class IofLogIter():
@@ -107,7 +139,7 @@ class IofLogIter():
             if self._trace_only and fields[6] != 'TRACE:':
                 continue
 
-            return line[:-1]
+            return IofLogLine(line, fields)
 
     def get_pids(self):
         """Return an array of pids appearing in the file"""
