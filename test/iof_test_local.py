@@ -360,6 +360,9 @@ class Testlocal(unittest.TestCase,
 
         self.logger.info("Running")
 
+        w_log_file = os.path.join(self.cnss_prefix, '.ctrl', 'write_log')
+        self.wfd = open(w_log_file, 'w')
+
         self.mount_dirs = common_methods.import_list()
 
         if self.internals_tracing:
@@ -368,12 +371,18 @@ class Testlocal(unittest.TestCase,
 #pylint: enable=too-many-branches
 
     def mark_log(self, msg):
-        """Log a message to stdout and to the CNSS logs"""
+        """Log a message to stdout and to the CNSS logs
 
-        log_file = os.path.join(self.cnss_prefix, '.ctrl', 'write_log')
+        self.wfd is a file descriptor for the write_log file in the ctrl
+        filesystem, anything written to it gets output to the CaRT log
+        for the cnss directly.
+        """
+
         self.normal_output(msg)
-        with open(log_file, 'w')  as fd:
-            fd.write(msg)
+        self.wfd.seek(0)
+        self.wfd.write(msg)
+        self.wfd.flush()
+        os.fsync(self.wfd.fileno())
 
     def internals_path_testing_teardown(self):
         """Call all methods for internals path testing framework.
@@ -443,6 +452,8 @@ class Testlocal(unittest.TestCase,
         """tear down the test"""
 
         self.dump_failover_state()
+
+        self.wfd.close()
 
         if self.internals_tracing:
             if self.test_method == 'pyunit':
@@ -1323,7 +1334,7 @@ class Testlocal(unittest.TestCase,
 
             subtest_count += 1
             with self.subTest(possible[5:]):
-                self.mark_log('Starting test %s:' % possible)
+                self.mark_log('Starting test %s' % possible)
                 if self.internals_tracing:
                     self.internals_path_testing_setup()
                 obj()
