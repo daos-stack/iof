@@ -296,12 +296,10 @@ class Testlocal(unittest.TestCase,
             self.cnss_valgrind = True
 
         default_log_mask = "INFO,CTRL=WARN"
-        if self.using_valgrind():
-            default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN"
         itracing = os.getenv("INTERNALS_TRACING", "no")
         if itracing == "yes":
             self.internals_tracing = True
-            default_log_mask = "DEBUG,PMIX=WARN"
+            default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN,PMIX=INFO,GRP=INFO"
         self.log_mask = os.getenv("D_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
