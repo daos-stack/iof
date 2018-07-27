@@ -40,7 +40,6 @@ RpcTrace class definition
 Methods associated to RPC tracing for error debuging.
 """
 
-import string
 import os
 from collections import Counter
 import tabulate
@@ -77,12 +76,6 @@ class RpcTrace(common_methods.ColorizedOutput):
     SUBMIT_STATE = 'SUBMITTED'
     SENT_STATE = 'SENT'
     STATES = [ALLOC_STATE, SUBMIT_STATE, SENT_STATE, DEALLOC_STATE]
-    ALLOC_SEARCH_STRS = ('allocated', 'allocated per RPC request received')
-    SUBMIT_SEARCH_STR = 'submitted'
-    SENT_SEARCH_STR = 'sent'
-    DEALLOC_SEARCH_STR = 'decref to 0'
-    SEARCH_STRS = [ALLOC_SEARCH_STRS, SUBMIT_SEARCH_STR, SENT_SEARCH_STR,
-                   DEALLOC_SEARCH_STR]
     VERBOSE_STATE_TRANSITIONS = False
     VERBOSE_LOG = True
 
@@ -268,52 +261,48 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.lf.reset(pid=pid_to_trace)
         for line in self.lf:
-            if any(s in line for s in self.SEARCH_STRS[0]) or \
-               any(s in line for s in self.SEARCH_STRS[1:]):
-                rpc_state = None
-                rpc = None
-                opcode = None
+            rpc_state = None
+            rpc = None
+            opcode = None
+            fields = None
+
+            if line.endswith('allocated.') or \
+               line.endswith('allocated per RPC request received.'):
+                rpc_state = self.ALLOC_STATE
+                fields = line.split()
+                opcode = fields[10][:-2]
+            elif line.endswith('), decref to 0.'):
+                rpc_state = self.DEALLOC_STATE
+                fields = line.split()
+                opcode = fields[10][:-2]
+            #opcode not printed in submitted/sent log messages;
+            #use rpc_op_dict{} to store RPC and opcode
+            elif line.endswith('submitted.'):
+                rpc_state = self.SUBMIT_STATE
+            elif line.endswith(' sent.'):
+                rpc_state = self.SENT_STATE
+            else:
+                continue
+
+            if fields is None:
                 fields = line.split()
 
-                #remove ending punctuation from log msg
-                translator = str.maketrans('', '', string.punctuation)
-                str_match = fields[-1].translate(translator)
-                if str_match == '0': #'decref to 0'
-                    str_match = ' '.join(fields[-3:]).translate(translator)
-                elif str_match == 'received': #'allocated per RPC request
-                    # received'
-                    str_match = ' '.join(fields[-5:]).translate(translator)
+            rpc = fields[8]
+            if opcode is None:
+                opcode = self.rpc_op_dict.get(rpc, None)
 
-                rpc = fields[8]
-
-                if any(s in str_match for s in self.SEARCH_STRS[0]):
-                    rpc_state = self.ALLOC_STATE
-                    opcode = fields[10][:-2]
-                elif str_match == self.SEARCH_STRS[-1]:
-                    rpc_state = self.DEALLOC_STATE
-                    opcode = fields[10][:-2]
-                #opcode not printed in submitted/sent log messages;
-                #use rpc_op_dict{} to store RPC and opcode
-                elif str_match == self.SEARCH_STRS[1]:
-                    rpc_state = self.SUBMIT_STATE
-                    opcode = self.rpc_op_dict.get(rpc, None)
-                elif str_match == self.SEARCH_STRS[2]:
-                    rpc_state = self.SENT_STATE
-                    opcode = self.rpc_op_dict.get(rpc, None)
-
-                if rpc and opcode and rpc_state:
-                    self.op_state_list.append((opcode, rpc_state))
-                    (state, extra) = self._rpc_error_state_tracing(rpc,
-                                                                   rpc_state,
-                                                                   opcode)
-                    function_name = fields[6]
-                    if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
-                        ort.append([state,
-                                    rpc,
-                                    rpc_state,
-                                    opcode,
-                                    function_name,
-                                    extra])
+            self.op_state_list.append((opcode, rpc_state))
+            (state, extra) = self._rpc_error_state_tracing(rpc,
+                                                           rpc_state,
+                                                           opcode)
+            function_name = fields[6]
+            if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
+                ort.append([state,
+                            rpc,
+                            rpc_state,
+                            opcode,
+                            function_name,
+                            extra])
 
         if ort:
             str_out = tabulate.tabulate(ort, headers=['STATE',
@@ -353,7 +342,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 continue
             #register a new descriptor/object in the log hierarchy
             fields = line.split()
-            new_obj = fields[7].strip().split('(')[1].strip().split(')')[0]
+            new_obj = line.descriptor
             parent = fields[-1]
             obj_type_l = fields[-3]
             obj_type = obj_type_l[1:-1]
@@ -399,7 +388,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 continue
             #register RPCs tied to given handle
             fields = line.split()
-            rpc = fields[7].strip().split('(')[1].strip().split(')')[0]
+            rpc = line.descriptor
             rpc_type = fields[9]
             #find index of descriptor in order to append rpc
             #to correct index in the chance it is reused in the dict

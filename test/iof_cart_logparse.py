@@ -77,6 +77,26 @@ class IofLogLine():
             return False
         return self.line != other
 
+    def __getattr__(self, attr):
+        if attr == 'descriptor':
+            part = self.fields[7]
+            start_idx = part.find('(')
+            desc = part[start_idx+1:-1]
+            if desc == '(nil)':
+                return ''
+            return desc
+        raise AttributeError
+
+    def endswith(self, item):
+        """Mimic the str.endswith() function
+
+        This only matches on the actual string part of the message, not the
+        timestamp/pid/faculty parts.
+        """
+        if self.msg is None:
+            self.msg = ' '.join(self.fields[5:])
+        return self.msg.endswith(item)
+
     def split(self):
         """Allow for line.split() to work"""
         return self.fields
