@@ -707,6 +707,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
                 function_name = part[:start_idx]
                 if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
+                    if res[0] != 'SUCCESS':
+                        self.have_errors = True
                     desc = '{0}: {1}'.format(res[0], desc)
                     if len(res) == 2:
                         output.append('{0:<30}{1:<20}{2}()' \

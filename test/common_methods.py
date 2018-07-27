@@ -163,11 +163,10 @@ class ColorizedOutput():
                 prefix = None
 
             if prefix == 'ERROR:':
-                self.logger.info(Fore.RED + output)
+                self.logger.info(Fore.RED + output + Fore.RESET)
 
             elif prefix == 'WARN:':
-                self.logger.info(Fore.YELLOW + output)
-        print(Fore.RESET, end="")
+                self.logger.info(Fore.YELLOW + output + Fore.RESET)
 
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""

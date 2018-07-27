@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016-2017 Intel Corporation
+# Copyright (C) 2016-2018 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -65,43 +65,90 @@ By default the output is displayed on the screen.
 #pylint: disable=too-many-locals
 #pylint: disable=broad-except
 import os
+import json
 import subprocess
 import time
 import logging
 
+CART_PREFIX = None
+SELF_PREFIX = None
+
+def load_config():
+    """Load the build data from the json file"""
+    global CART_PREFIX
+    global SELF_PREFIX
+
+    fd = open('.build_vars-Linux.json')
+    data = json.load(fd)
+    fd.close()
+    new_path = '%s/bin:%s/bin:%s/bin:%s' % (data['OMPI_PREFIX'],
+                                            data['CART_PREFIX'],
+                                            data['PREFIX'],
+                                            os.environ['PATH'])
+
+    CART_PREFIX = data['CART_PREFIX']
+    SELF_PREFIX = data['PREFIX']
+    os.environ['PATH'] = new_path
+    return data
+
+def valgrind_iof_supp_file():
+    """Return the path of the IOF memcheck suppression file"""
+
+    iof_test_bin = os.getenv('IOF_TEST_BIN')
+    if iof_test_bin:
+        prefix_dir = os.path.join(iof_test_bin, '..', 'etc')
+    elif SELF_PREFIX:
+        prefix_dir = os.path.join(SELF_PREFIX, 'etc')
+    else:
+        prefix_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)),
+                                  '..', 'utils')
+
+    iof_suppressfile = os.path.join(prefix_dir, 'memcheck-iof.supp')
+    return os.path.realpath(iof_suppressfile)
+
+def valgrind_cart_supp_file():
+    """Return the path of the CaRT memcheck suppression file"""
+
+    print(CART_PREFIX)
+    cart_prefix = os.getenv('IOF_CART_PREFIX', CART_PREFIX)
+    if not cart_prefix:
+        return None
+
+    print(cart_prefix)
+
+    crt_suppressfile = os.path.join(cart_prefix,
+                                    'etc',
+                                    'memcheck-cart.supp')
+    if not os.path.exists(crt_suppressfile):
+        return None
+    return crt_suppressfile
+
 def valgrind_suffix(log_path, pmix=True):
     """Return the commands required to launch valgrind"""
     use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
-    crt_suppressfile = os.path.join(os.getenv('IOF_CART_PREFIX', ".."),
-                                    "etc", "memcheck-cart.supp")
+    crt_suppressfile = valgrind_cart_supp_file()
+    iof_suppressfile = valgrind_iof_supp_file()
     pid = '%p'
     if pmix:
         pid = '%q{PMIX_RANK}'
 
-    iof_test_bin = os.getenv('IOF_TEST_BIN')
-    if iof_test_bin:
-        iof_suppressfile = os.path.join(iof_test_bin, '..', 'etc',
-                                        'memcheck-iof.supp')
-    else:
-        iof_suppressfile = os.path.join(
-            os.path.dirname(os.path.realpath(__file__)),
-            '..', 'utils', 'memcheck-iof.supp')
-    iof_suppressfile = os.path.realpath(iof_suppressfile)
     if use_valgrind == 'memcheck':
-        return ['valgrind',
-                '--fair-sched=try',
-                '--free-fill=0x87',
-                '--xml=yes',
-                '--xml-file=%s' %
-                os.path.join(log_path,
-                             "valgrind-%s.xml" % pid),
-                '--sim-hints=fuse-compatible',
-                '--leak-check=full', '--gen-suppressions=all',
-                '--fullpath-after=',
-                '--partial-loads-ok=yes',
-                '--suppressions=%s' % crt_suppressfile,
-                '--suppressions=%s' % iof_suppressfile,
-                '--show-reachable=yes']
+        cmd = ['valgrind',
+               '--fair-sched=try',
+               '--free-fill=0x87',
+               '--xml=yes',
+               '--xml-file=%s' %
+               os.path.join(log_path,
+                            "valgrind-%s.xml" % pid),
+               '--sim-hints=fuse-compatible',
+               '--leak-check=full', '--gen-suppressions=all',
+               '--fullpath-after=',
+               '--partial-loads-ok=yes',
+               '--suppressions=%s' % iof_suppressfile,
+               '--show-reachable=yes']
+        if crt_suppressfile:
+            cmd.append('--suppressions=%s' % crt_suppressfile)
+        return cmd
     if use_valgrind == "callgrind":
         return ['valgrind',
                 '--fair-sched=try',
@@ -122,7 +169,7 @@ def valgrind_suffix(log_path, pmix=True):
                '--partial-loads-ok=yes',
                '--suppressions=%s' % iof_suppressfile,
                '--show-reachable=yes']
-        if os.path.exists(crt_suppressfile):
+        if crt_suppressfile:
             cmd.append('--suppressions=%s' % crt_suppressfile)
         return cmd
     return []

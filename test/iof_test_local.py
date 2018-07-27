@@ -314,7 +314,7 @@ class Testlocal(unittest.TestCase,
 
         if getpass.getuser() == 'root':
             cmd.append('--allow-run-as-root')
-        if self.failover_test:
+        if self.failover_test or valgrind:
             cmd.append('--continuous')
         cmd.extend(['-n', '1',
                     '-x', 'D_LOG_MASK=%s' % self.log_mask,
@@ -363,10 +363,6 @@ class Testlocal(unittest.TestCase,
         self.mount_dirs = common_methods.import_list()
 
         if self.internals_tracing:
-            #Create a dump file for all testing and internals path output
-            i_log_file = os.path.realpath(os.path.join(self.log_path,
-                                                       'internals.out'))
-            self.internals_log_file = open(i_log_file, 'w')
             if self.test_method == 'pyunit':
                 self.internals_path_testing_setup()
 #pylint: enable=too-many-branches
@@ -405,17 +401,21 @@ class Testlocal(unittest.TestCase,
     def rpc_descriptor_tracing(self):
         """RPC tracing runs at the end of each test"""
 
+        #Create a dump file for all testing and internals path output
+        i_log_file = os.path.join(self.log_path, 'internals.out')
+        internals_log_file = open(i_log_file, 'w')
+
         cnss_logfile = os.path.join(self.log_path, 'cnss.log')
         ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
         #Origin RPC tracing for one CNSS instance
         o_rpctrace = rpctrace_common_methods.RpcTrace(cnss_logfile,
-                                                      self.internals_log_file)
+                                                      internals_log_file)
         o_rpctrace.rpc_reporting()
 
         #Target RPC tracing for multiple IONSS instances
         rank_log = rpctrace_common_methods.RpcTrace(ionss_logfile,
-                                                    self.internals_log_file)
+                                                    internals_log_file)
         for rank in range(self.ionss_count):
             # rank will correlate to PID to trace in log
             # (ie rank 0 will trace for the first PID found in the logs)
@@ -437,8 +437,7 @@ class Testlocal(unittest.TestCase,
         if not self.failover_test and rank_log.have_errors:
             self.fail("IONSS log has integrity errors")
 
-        self.internals_log_file.close()
-        self.internals_log_file = None
+        internals_log_file.close()
 
     def tearDown(self):
         """tear down the test"""
@@ -1279,10 +1278,12 @@ if __name__ == '__main__':
     #
     # Unrecognised args are passed through to unittest.main().
     cnss_path = find_executable('cnss')
-    if not cnss_path:
-        print("cnss executable not found.  Run setup script first")
-        sys.exit(1)
-    iof_root = os.path.dirname(os.path.dirname(cnss_path))
+    if cnss_path:
+        iof_root = os.path.dirname(os.path.dirname(cnss_path))
+    else:
+        jdata = iofcommontestsuite.load_config()
+        print("cnss executable not found.  Loading congfiguration from json")
+        iof_root = jdata['PREFIX']
     ioil_path = os.path.join(iof_root, 'lib')
 
     tests = []

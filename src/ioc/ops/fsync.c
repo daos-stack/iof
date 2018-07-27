@@ -53,6 +53,8 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 	STAT_ADD(fs_handle->stats, fsync);
 
+	IOF_TRACE_UP(req, handle, "fsync");
+
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out, rc = fs_handle->offline_reason);
 

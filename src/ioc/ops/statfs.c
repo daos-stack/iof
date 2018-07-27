@@ -73,6 +73,8 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 	int rc;
 	int ret;
 
+	IOF_TRACE_UP(req, fs_handle, "statfs");
+
 	STAT_ADD(fs_handle->stats, statfs);
 
 	if (FS_IS_OFFLINE(fs_handle)) {

@@ -68,8 +68,10 @@
 #define IOC_REQ_INIT_LL(src, fsh, api, in, fuse_req, rc)		\
 	do {								\
 		IOC_REQ_INIT(src, fsh, api, in, rc);			\
-		if (rc)							\
+		if (rc)	{						\
+			IOF_TRACE_UP(fuse_req, fsh, TRACE_REQ);		\
 			break;						\
+		}							\
 		(src)->REQ_NAME.req = fuse_req;				\
 		IOF_TRACE_UP(fuse_req, src, TRACE_REQ);			\
 		IOF_TRACE_LINK((src)->REQ_NAME.rpc, fuse_req, TRACE_RPC);\

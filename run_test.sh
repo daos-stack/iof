@@ -1,5 +1,5 @@
 #!/bin/bash
-# Copyright (C) 2016-2017 Intel Corporation
+# Copyright (C) 2016-2018 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,25 +52,18 @@ else
 fi
 if [[ "$IOF_TEST_MODE" =~ (native|all) ]]; then
   scons utest
-  cd ${TESTDIR}
+  pushd ${TESTDIR}
   # Pass the list of test description files to the test_runner
   python3 test_runner "${JENKINS_TEST_LIST[@]}"
-  cd -
+  popd
 fi
 
 if [[ "$IOF_TEST_MODE" =~ (memcheck|all) ]]; then
   scons utest --utest-mode=memcheck
   export TR_USE_VALGRIND="memcheck"
-  cd ${TESTDIR}
+  pushd ${TESTDIR}
   python3 test_runner "${JENKINS_TEST_LIST[@]}"
-  cd -
-
-  RESULTS="valgrind_results"
-  if [[ ! -e ${RESULTS} ]]; then mkdir ${RESULTS}; fi
-
-  # Recursive copy to results, including all directories and matching files,
-  # but pruning empty directories from the tree.
-  rsync -rm --include="*/" --include="valgrind*xml" "--exclude=*" ${TESTDIR} ${RESULTS}
+  popd
 fi
 
 ./test_iof_libs.sh
