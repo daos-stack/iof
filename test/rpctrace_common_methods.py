@@ -45,6 +45,7 @@ import os
 from collections import Counter
 import tabulate
 import common_methods
+import iof_cart_logparse
 
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
@@ -88,20 +89,11 @@ class RpcTrace(common_methods.ColorizedOutput):
     def __init__(self, fname, output_stream):
         self.set_log(output_stream)
         self.input_file = fname
-        #search for all process ids in logfile with multiple instances logged
-        with open(self.input_file, 'r') as f:
-            pids = []
-            for line in f:
-                fields = line.split()
-                if len(fields[0]) != 17:
-                    continue
-                pid = int(fields[2][5:-1])
-                if pid not in pids:
-                    pids.append(pid)
 
         #index_multiprocess will determine which PID to trace
         #(ie index 0 will be assigned the first PID found in logs)
-        self.pids = sorted(pids)
+
+        self.lf = iof_cart_logparse.IofLogIter(self.input_file)
 
     def _rpc_error_state_tracing(self, rpc, rpc_state, opcode):
         """Error checking for rpc state"""
@@ -247,18 +239,20 @@ class RpcTrace(common_methods.ColorizedOutput):
     def rpc_reporting(self, index_multiprocess=None):
         """RPC reporting for RPC state machine"""
 
+        pids = self.lf.get_pids()
+
         if index_multiprocess is not None:
             #index_multiprocess is None if there is only one process being
             #traced, otherwise first index should start at 0
-            pid_to_trace = self.pids[index_multiprocess]
+            pid_to_trace = pids[index_multiprocess]
             self._rpc_reporting_pid(pid_to_trace)
             return
 
-        if len(self.pids) != 1:
+        if len(pids) != 1:
             self.error_output("Multiprocess log file")
             return
 
-        self._rpc_reporting_pid(self.pids[0])
+        self._rpc_reporting_pid(pids[0])
 
     def _rpc_reporting_pid(self, pid_to_trace):
         """RPC reporting for RPC state machine, for mutiprocesses"""
@@ -266,24 +260,20 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.op_state_list = []
         self.rpc_op_dict = {}
 
-        pid_str = "CaRT[%d]" % pid_to_trace
-
         self.normal_output('\nCaRT RPC Reporting:\nLogfile: {0}, '
                            'PID: {1}\n'.format(self.input_file,
                                                pid_to_trace))
 
-        f = open(self.input_file, 'r')
         ort = []
 
-        for line in f:
+        self.lf.reset(pid=pid_to_trace)
+        for line in self.lf:
             if any(s in line for s in self.SEARCH_STRS[0]) or \
                any(s in line for s in self.SEARCH_STRS[1:]):
                 rpc_state = None
                 rpc = None
                 opcode = None
-                fields = line.strip().split()
-                if fields[2] != pid_str:
-                    continue
+                fields = line.split()
 
                 #remove ending punctuation from log msg
                 translator = str.maketrans('', '', string.punctuation)
@@ -343,7 +333,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         output_rpcs.extend(errors)
 
         self.list_output(output_rpcs)
-        f.close()
+
 
     #************ Descriptor Tracing Methods (IOF_TRACE macros) **********
 
@@ -352,73 +342,72 @@ class RpcTrace(common_methods.ColorizedOutput):
            a dict storing all RPCs tied to a descriptor"""
         self.trace_dict = {}
         self.desc_dict = {}
-        log_path = self.input_file
         self.normal_output('\nIOF Descriptor/RPC Tracing:\n'
-                           'Logfile: {0}'.format(log_path))
+                           'Logfile: {0}'.format(self.input_file))
 
+        self._descriptor_error_state_tracing()
 
-        self._descriptor_error_state_tracing(log_path)
+        self.lf.reset(trace_only=True)
+        for line in self.lf:
+            if "Registered new" not in line:
+                continue
+            #register a new descriptor/object in the log hierarchy
+            fields = line.split()
+            new_obj = fields[7].strip().split('(')[1].strip().split(')')[0]
+            parent = fields[-1]
+            obj_type_l = fields[-3]
+            obj_type = obj_type_l[1:-1]
+            if new_obj not in self.trace_dict:
+                self.trace_dict.setdefault(new_obj, []).\
+                    append((obj_type, parent))
+                self.desc_dict[new_obj] = []
+            else:
+                #add all reused descriptors to the dict, and append
+                #iteration number
+                reuse_iter = 1
+                descriptor_iter = '{0}_{1}'.format(new_obj, reuse_iter)
+                while descriptor_iter in self.trace_dict:
+                    reuse_iter += 1
+                    descriptor_iter = '{0}_{1}'.format(new_obj,
+                                                       reuse_iter)
+                self.trace_dict.setdefault(descriptor_iter, []).\
+                    append((obj_type, parent))
+                self.desc_dict[descriptor_iter] = []
 
-        with open(log_path, 'r') as f:
-            for line in f:
-                if "TRACE" in line and "Registered new" in line:
-                    #register a new descriptor/object in the log hierarchy
-                    fields = line.strip().split()
-                    new_obj = fields[7].strip().split('(')[1].strip().\
-                              split(')')[0]
-                    parent = fields[-1]
-                    obj_type_l = fields[-3]
-                    obj_type = obj_type_l[1:-1]
-                    if new_obj not in self.trace_dict:
-                        self.trace_dict.setdefault(new_obj, []).\
-                                                   append((obj_type, parent))
-                        self.desc_dict[new_obj] = []
-                    else:
-                        #add all reused descriptors to the dict, and append
-                        #iteration number
-                        reuse_iter = 1
-                        descriptor_iter = '{0}_{1}'.format(new_obj, reuse_iter)
-                        while descriptor_iter in self.trace_dict:
-                            reuse_iter += 1
-                            descriptor_iter = '{0}_{1}'.format(new_obj,
-                                                               reuse_iter)
-                        self.trace_dict.setdefault(descriptor_iter, []).\
-                                                   append((obj_type, parent))
-                        self.desc_dict[descriptor_iter] = []
+        self.lf.reset(trace_only=True)
+        for line in self.lf:
+            if "Alias" not in line:
+                continue
+            #create an alias for an already registered descriptor
+            fields = line.split()
+            parent = fields[-1]
+            obj_type_l = fields[-3]
+            obj_type = obj_type_l[1:-1]
+            #find index of descriptor in order to append alias
+            #to correct index in the chance it is reused in the dict
+            index = self._find_reused_descriptor_index(line)
+            if index in self.trace_dict:
+                self.trace_dict.setdefault(index, []).\
+                    append((obj_type, parent))
+            else:
+                self.error_output('{0} cannot be an alias, not '
+                                  'registered'.format(index))
 
-        with open(log_path, 'r') as f:
-            for line in f:
-                if "TRACE" in line and "Alias" in line:
-                    #create an alias for an already registered descriptor
-                    fields = line.strip().split()
-                    parent = fields[-1]
-                    obj_type_l = fields[-3]
-                    obj_type = obj_type_l[1:-1]
-                    #find index of descriptor in order to append alias
-                    #to correct index in the chance it is reused in the dict
-                    index = self._find_reused_descriptor_index(log_path, line)
-                    if index in self.trace_dict:
-                        self.trace_dict.setdefault(index, []).\
-                                                   append((obj_type, parent))
-                    else:
-                        self.error_output('{0} cannot be an alias, not '
-                                          'registered'.format(index))
-
-        with open(log_path, 'r') as f:
-            for line in f:
-                if "TRACE" in line and "Link" in line:
-                    #register RPCs tied to given handle
-                    fields = line.strip().split()
-                    rpc = fields[7].strip().split('(')[1].strip().split(')')[0]
-                    rpc_type = fields[9]
-                    #find index of descriptor in order to append rpc
-                    #to correct index in the chance it is reused in the dict
-                    index = self._find_reused_descriptor_index(log_path, line)
-                    if index in self.desc_dict:
-                        self.desc_dict[index].append((rpc, rpc_type))
-                    else:
-                        self.error_output('Descriptor {0} is not present'.\
-                                          format(index))
+        self.lf.reset(trace_only=True)
+        for line in self.lf:
+            if "Link" not in line:
+                continue
+            #register RPCs tied to given handle
+            fields = line.split()
+            rpc = fields[7].strip().split('(')[1].strip().split(')')[0]
+            rpc_type = fields[9]
+            #find index of descriptor in order to append rpc
+            #to correct index in the chance it is reused in the dict
+            index = self._find_reused_descriptor_index(line)
+            if index in self.desc_dict:
+                self.desc_dict[index].append((rpc, rpc_type))
+            else:
+                self.error_output('Descriptor {0} is not present'.format(index))
 
     def _rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
@@ -509,6 +498,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                             for item in sublist if item[0] == trace])
 
         output = []
+        # Convert this to self.lf
         with open(self.input_file, 'r') as f:
             output.append('\nLog dump for descriptor hierarchy ({0}):'\
                           .format(trace))
@@ -640,89 +630,87 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return missing_links
 
-    def _descriptor_error_state_tracing(self, log_path):
+    def _descriptor_error_state_tracing(self):
         """Check for any descriptors that are not registered/deregistered"""
         self.normal_output('\nDescriptor State Transitions:')
         self.desc_state = {}
-        with open(log_path, 'r') as f:
-            output = []
-            self.normal_output('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
-                               format('Descriptor', 'State', 'Function',
-                                      '----------', '-----', '--------'))
-            for line in f:
-                if 'TRACE' not in line:
-                    continue
 
-                state = None
-                fields = line.strip().split()
-                part = fields[7]
-                start_idx = part.find('(')
-                desc = part[start_idx+1:-1]
-                if desc == '(nil)':
-                    continue
-                res = None
+        output = []
+        self.normal_output('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
+                           format('Descriptor', 'State', 'Function',
+                                  '----------', '-----', '--------'))
 
-                if 'Registered new' in line:
-                    state = 'Registered'
-                    if desc in self.desc_state:
-                        res = ('ERROR', state, 'previous state: {0}' \
-                               .format(self.desc_state[desc]))
-                    else:
-                        res = ('SUCCESS', state)
-                    self.desc_state[desc] = state
-                #only for aliases, key for dict will now be "type" and value
-                #the descriptor
-                elif 'Alias' in line:
-                    state = 'Alias'
-                    obj_type_l = fields[-3]
-                    obj_type = obj_type_l[1:-1]
-                    if self.desc_state.get(desc, None) != 'Registered':
-                        res = ('ERROR', state, 'Not registered')
-                    else:
-                        res = ('SUCCESS', state)
-                    self.desc_state[obj_type] = desc
-                elif 'Link' in line:
-                    state = 'Linked'
-                    if self.desc_state.get(desc, None) == 'Linked' or \
-                       desc not in self.desc_state:
-                        res = ('SUCCESS', state)
-                    else:
-                        res = ('ERROR', state)
-                    self.desc_state[desc] = state
-                elif 'Deregistered' in line:
-                    state = 'Deregistered'
-                    if self.desc_state.get(desc, None) == 'Registered':
-                        del self.desc_state[desc]
-                        res = ('SUCCESS', state)
-                        #check for aliases to also de-register
-                        for k, v in list(self.desc_state.items()):
-                            if v == desc:
-                                del self.desc_state[k]
-                    elif self.desc_state.get(desc, None) == 'Linked':
-                        res = ('ERROR', state, 'Linked RPC')
-                    else:
-                        res = ('ERROR', state)
-                if not res:
-                    continue
+        self.lf.reset(trace_only=True)
+        for line in self.lf:
+            state = None
+            fields = line.split()
+            part = fields[7]
+            start_idx = part.find('(')
+            desc = part[start_idx+1:-1]
+            if desc == '(nil)':
+                continue
+            res = None
 
-                function_name = part[:start_idx]
-                if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
-                    if res[0] != 'SUCCESS':
-                        self.have_errors = True
-                    desc = '{0}: {1}'.format(res[0], desc)
-                    if len(res) == 2:
-                        output.append('{0:<30}{1:<20}{2}()' \
-                                      .format(desc,
-                                              res[1],
-                                              function_name))
-                    else:
-                        output.append('{0:<30}{1:<20}{2}() ({3})' \
-                                      .format(desc,
-                                              res[1],
-                                              function_name,
-                                              res[2]))
+            if 'Registered new' in line:
+                state = 'Registered'
+                if desc in self.desc_state:
+                    res = ('ERROR', state, 'previous state: {0}' \
+                           .format(self.desc_state[desc]))
+                else:
+                    res = ('SUCCESS', state)
+                self.desc_state[desc] = state
+            #only for aliases, key for dict will now be "type" and value the
+            #descriptor
+            elif 'Alias' in line:
+                state = 'Alias'
+                obj_type_l = fields[-3]
+                obj_type = obj_type_l[1:-1]
+                if self.desc_state.get(desc, None) != 'Registered':
+                    res = ('ERROR', state, 'Not registered')
+                else:
+                    res = ('SUCCESS', state)
+                self.desc_state[obj_type] = desc
+            elif 'Link' in line:
+                state = 'Linked'
+                if self.desc_state.get(desc, None) == 'Linked' or \
+                   desc not in self.desc_state:
+                    res = ('SUCCESS', state)
+                else:
+                    res = ('ERROR', state)
+                self.desc_state[desc] = state
+            elif 'Deregistered' in line:
+                state = 'Deregistered'
+                if self.desc_state.get(desc, None) == 'Registered':
+                    del self.desc_state[desc]
+                    res = ('SUCCESS', state)
+                    #check for aliases to also de-register
+                    for k, v in list(self.desc_state.items()):
+                        if v == desc:
+                            del self.desc_state[k]
+                elif self.desc_state.get(desc, None) == 'Linked':
+                    res = ('ERROR', state, 'Linked RPC')
+                else:
+                    res = ('ERROR', state)
+            if not res:
+                continue
 
-            self.list_output(output)
+            function_name = part[:start_idx]
+            if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
+                if res[0] != 'SUCCESS':
+                    self.have_errors = True
+                desc = '{0}: {1}'.format(res[0], desc)
+                if len(res) == 2:
+                    output.append('{0:<30}{1:<20}{2}()'.format(desc,
+                                                               res[1],
+                                                               function_name))
+                else:
+                    output.append('{0:<30}{1:<20}{2}() ({3})' \
+                                  .format(desc,
+                                          res[1],
+                                          function_name,
+                                          res[2]))
+
+        self.list_output(output)
 
         #check if all descriptors are deregistered
         for d in list(self.desc_state):
@@ -737,18 +725,30 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.error_output('{0}:{1} not deregistered from state'.\
                               format(d, state))
 
-    def _find_reused_descriptor_index(self, log_dir, log_line):
+    def _find_reused_descriptor_index(self, log_line):
         """Iterate over the log file given the line where the descriptor is
         created to find the position count of the descriptor (suffix appended to
         descriptor key in dict for reused descriptors)
         Return the index of the descriptor"""
         descriptor = None
         position_desc_cnt = 0
-        with open(log_dir, 'r') as f:
+        # Do not use self.lf here as this function is called from within a loop
+        # which is already iterating over the file
+        f2 = log_line.split()
+        if "Link" in f2:
+            descriptor = f2[-1]
+        else:
+            descriptor = f2[7].strip().split('(')[1].strip().split(')')[0]
+        reused_descs = [v for k, v in self.trace_dict.items() \
+                        if descriptor in k]
+        if len(reused_descs) == 1:
+            return descriptor
+
+        with open(self.input_file, 'r') as f:
             for line in f:
-                if log_line != line:
+                if log_line != line.strip():
                     continue
-                fields = line.strip().split()
+                fields = line.split()
                 if "Link" in line:
                     descriptor = fields[-1]
                 else:
@@ -784,6 +784,9 @@ class RpcTrace(common_methods.ColorizedOutput):
         descriptor = None
         position_desc_cnt = 0
         fuse_file = os.path.join('src', 'ioc', 'ops')
+
+        # Change this to use self.lf.  It needs testing with the re-use of
+        # f later on
         with open(self.input_file, 'r') as f:
             for line in f:
                 if 'TRACE' in line:
@@ -812,12 +815,13 @@ class RpcTrace(common_methods.ColorizedOutput):
                                                  len(reused_descs) - \
                                                  position_desc_cnt - 1)
                         return descriptor
-        with open(self.input_file, 'r') as f:
-            for line in f:
-                if fuse_file in line and 'TRACE' in line:
-                    fields = line.strip().split()
-                    descriptor = fields[7].strip().split('(')[1].strip().\
-                                 split(')')[0]
-                    return descriptor
+
+        self.lf.reset(trace_only=True)
+        for line in self.lf:
+            if fuse_file in line:
+                fields = line.split()
+                descriptor = fields[7].strip().split('(')[1].strip().\
+                             split(')')[0]
+                return descriptor
         self.error_output('Descriptor not found to trace')
         return None
