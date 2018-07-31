@@ -796,7 +796,6 @@ class Testlocal(unittest.TestCase,
             self.fail("IO interception library failed to attach," + \
                 " il_ioctl: %s" % final_il_ioctl)
 
-
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_readdir(self):
         """Test readdir through iofmod"""
@@ -836,6 +835,107 @@ class Testlocal(unittest.TestCase,
 
         if isinstance(rc, int):
             self.fail("Failed to close directory: '{}'".format(os.strerror(rc)))
+
+#pylint: disable=too-many-branches
+    @unittest.skipUnless(have_iofmod, "needs iofmod")
+    def test_failover_readdir(self):
+        """Test readdir with failover through iofmod"""
+
+        # Firstly make a subdirectory, so we're not dealing directly with
+        # the import directory.
+        dirname = os.path.join(self.import_dir)
+        for d in range(0, 5):
+            dirname = os.path.join(dirname, str(d))
+            os.mkdir(dirname)
+        self.logger.info("Directory is %s", dirname)
+
+        # Then make some files in it, just so there is something to observe.
+        for f in range(0, 5):
+            fd = open(os.path.join(dirname, str(f)), 'w')
+            fd.close()
+
+        # Now open a handle which will be used throughout.
+        dh = iofmod.opendir(dirname)
+        if dh is not None:
+            self.fail("Failed to open directory: '{}'".format(os.strerror(dh)))
+
+        # Read the directory listing, aborting on any error
+        files = []
+        while True:
+            fname = iofmod.readdir()
+            if fname is None:
+                break
+
+            if isinstance(fname, int):
+                self.fail("readdir failed with {}".format(os.strerror(fname)))
+
+            files.append(fname)
+        self.logger.info(files)
+
+        # Now kill a server, which won't yet trigger failover.
+        self.kill_ionss_proc()
+
+        # Rewind a directory, and try to read it.  The first call to readdir
+        # should trigger failover.
+        rc = iofmod.rewinddir()
+        if isinstance(rc, int):
+            self.fail("Failed to rewind directory: '{}'".format \
+                      (os.strerror(rc)))
+
+        nfiles = []
+        while True:
+            fname = iofmod.readdir()
+            if fname is None:
+                break
+
+            if isinstance(fname, int):
+                if fname != errno.EHOSTDOWN:
+                    self.fail("readdir failed with {}".format \
+                              (os.strerror(fname)))
+                break
+
+            # As the code is not written yet check we got the expected result.
+            self.fail("Should have got EHOSTDOWN")
+
+            nfiles.append(fname)
+
+        self.logger.info(nfiles)
+
+        # Rewind a directory, and read it again.  This will cause another
+        # attempt to send a RPC which should be rejected before it's sent
+        # this time, so in the case of failure will take a different
+        # codepath to above, but the result should be the same.
+        rc = iofmod.rewinddir()
+        if isinstance(rc, int):
+            self.fail("Failed to rewind directory: '{}'".format \
+                      (os.strerror(rc)))
+
+        while True:
+            fname = iofmod.readdir()
+            if fname is None:
+                break
+
+            if isinstance(fname, int):
+                if fname != errno.EHOSTDOWN:
+                    self.fail("readdir failed with {}".format \
+                              (os.strerror(fname)))
+                break
+
+            # As the code is not written yet check we got the expected result.
+            self.fail("Should have got EHOSTDOWN")
+
+            nfiles.append(fname)
+
+        self.logger.info(nfiles)
+
+
+        self.logger.info('projected files: %s', files)
+
+        rc = iofmod.closedir()
+
+        if isinstance(rc, int):
+            self.fail("Failed to close directory: '{}'".format(os.strerror(rc)))
+#pylint: enable=too-many-branches
 
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_failover_off_readdir(self):

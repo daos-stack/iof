@@ -93,7 +93,7 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it.
 		 */
-		D_GOTO(err, rc = EIO);
+		D_GOTO(err, rc = EHOSTDOWN);
 	}
 	in->gah = dh->gah;
 	rc = iof_fs_send(&dh->close_req);

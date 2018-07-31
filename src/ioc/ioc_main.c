@@ -459,7 +459,7 @@ static void inode_check(struct iof_projection_info *fs_handle)
 	d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
 		IOF_TRACE_INFO(fs_handle,
 			       "Inspecting dir " GAH_PRINT_STR " %p",
-			       GAH_PRINT_VAL(dh->gah), fh);
+			       GAH_PRINT_VAL(dh->gah), dh);
 		mark_dh_inode(dh);
 	}
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
@@ -686,7 +686,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 				continue;
 			IOF_TRACE_INFO(fs_handle,
 				       "Invalidating dir " GAH_PRINT_STR " %p",
-				       GAH_PRINT_VAL(dh->gah), fh);
+				       GAH_PRINT_VAL(dh->gah), dh);
 			H_GAH_SET_INVALID(dh);
 		}
 		D_MUTEX_UNLOCK(&fs_handle->od_lock);

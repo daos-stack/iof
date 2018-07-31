@@ -304,7 +304,7 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it
 		 */
-		D_GOTO(out_err, ret = EIO);
+		D_GOTO(out_err, ret = EHOSTDOWN);
 
 	/* If the handle has been reported as invalid in the past then do not
 	 * process any more requests at this stage.
