@@ -1052,7 +1052,7 @@ static void ih_free(struct d_hash_table *htable, d_list_t *rlink)
 
 	ie = container_of(rlink, struct ioc_inode_entry, list);
 
-	IOF_TRACE_DEBUG(ie);
+	IOF_TRACE_DEBUG(ie, "%lu", ie->parent);
 	if (ie->parent)
 		drop_ino_ref(fs_handle, ie->parent);
 	ie_close(fs_handle, ie);

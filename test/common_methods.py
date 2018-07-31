@@ -151,10 +151,7 @@ class ColorizedOutput():
         otherwise if dump_to_console is set output entire list to console"""
         if self.stream:
             for item in output_list:
-                if item.startswith('MARK:'):
-                    self.stream.write("***** {0} *****\n".format(item[6:]))
-                else:
-                    self.stream.write("{0}\n".format(item))
+                self.stream.write("{0}\n".format(item))
         if not COLORAMA:
             return
         for item in output_list:

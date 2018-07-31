@@ -648,7 +648,7 @@ add_plugin(struct cnss_info *info,
 
 	D_INIT_LIST_HEAD(&entry->fuse_list);
 
-	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p ",
+	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p",
 		     entry->fns->name,
 		     (void *)entry->fns->handle,
 		     FN_TO_PVOID(fn));

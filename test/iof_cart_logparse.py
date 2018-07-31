@@ -50,6 +50,36 @@ class InvalidPid(Exception):
     """Exception to be raised when invalid pid is requested"""
     pass
 
+class InvalidLogFile(Exception):
+    """Exception to be raised when log file cannot be parsed"""
+    pass
+
+LOG_LEVELS = {'FATAL' :1,
+              'CRIT'  :2,
+              'ERR'   :3,
+              'WARN'  :4,
+              'NOTE'  :5,
+              'INFO'  :6,
+              'DBUG'  :7}
+
+# pylint: disable=too-few-public-methods
+class IofLogRaw():
+    """Class for raw (non cart log lines) in cart log files
+
+    This is used for lines that cannot be identified as cart log lines,
+    for example mercury logs being sent to the same file.
+    """
+    def __init__(self, line):
+        self.line = line.strip('\n')
+        self.trace = False
+
+    def to_str(self):
+        """Convert the object to a string, in a way that is compatible with
+        IofLogLine
+        """
+        return self.line
+# pylint: enable=too-few-public-methods
+
 class IofLogLine():
     """Class for parsing CaRT log lines
 
@@ -60,9 +90,19 @@ class IofLogLine():
     the message only, and != which will match the entire line.
     """
     def __init__(self, line, fields):
-        self.line = line.strip()
+        self.line = line.strip('\n')
         self.fields = fields
+        self.level = fields[4]
+        if self.level not in LOG_LEVELS:
+            raise InvalidLogFile(self.level)
         self.msg = None
+        self.trace = bool(fields[6] == 'TRACE:')
+
+    def to_str(self, mark=False):
+        """Convert the object to a string"""
+        if mark:
+            return '***** %s *****' % self.line
+        return self.line
 
     def __contains__(self, item):
         if self.msg is None:
@@ -101,7 +141,6 @@ class IofLogLine():
         """Allow for line.split() to work"""
         return self.fields
 
-# pylint: disable=too-few-public-methods
 class IofLogIter():
     """Class for parsing CaRT log files
 
@@ -111,14 +150,15 @@ class IofLogIter():
 
     def __init__(self, fname):
         """Load a file, and check how many processes have written to it"""
-        self._fname = fname
 
         pids = []
-        self._fd = open(self._fname, 'r')
+        self._fd = open(fname, 'r')
         self._eof = False
 
         self._pid_str = None
         self._trace_only = False
+        self._level = None
+        self._raw = False
 
         for line in self:
             fields = line.split()
@@ -148,9 +188,9 @@ class IofLogIter():
                 continue
 
             fields = line.split()
-            if len(fields[0]) != 17:
-                continue
-            if len(fields) < 6:
+            if len(fields[0]) != 17 or len(fields) < 6:
+                if self._raw:
+                    return IofLogRaw(line)
                 continue
 
             if self._pid_str and fields[2] != self._pid_str:
@@ -159,17 +199,26 @@ class IofLogIter():
             if self._trace_only and fields[6] != 'TRACE:':
                 continue
 
+            if self._level is not None:
+                level = fields[4]
+                lid = LOG_LEVELS[level]
+                if lid > self._level:
+                    continue
+
             return IofLogLine(line, fields)
 
     def get_pids(self):
         """Return an array of pids appearing in the file"""
         return self._pids
 
-    def reset(self, pid=None, trace_only=False):
+    def reset(self, pid=None, trace_only=False, level=None, raw=False):
         """Rewind file iterator, and set options
 
         If pid is set the the iterator will only return lines matchine the pid
         If trace_only is True then the iterator will only return trace lines.
+        If level is set then only return lines of at least level severity
+        if raw is set then all lines in the file are returned, even non-log
+        lines.
         """
         self._fd.seek(0)
         self._eof = False
@@ -181,3 +230,8 @@ class IofLogIter():
         else:
             self._pid_str = None
         self._trace_only = trace_only
+        if level is None:
+            self._level = None
+        else:
+            self._level = LOG_LEVELS[level]
+        self._raw = raw

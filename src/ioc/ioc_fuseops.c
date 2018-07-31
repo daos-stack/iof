@@ -105,7 +105,7 @@ ioc_fuse_init(void *arg, struct fuse_conn_info *conn)
 	IOF_TRACE_INFO(fs_handle, "max write %#x", conn->max_write);
 	IOF_TRACE_INFO(fs_handle, "readahead %#x", conn->max_readahead);
 
-	IOF_TRACE_INFO(fs_handle, "Capability supported %#x ", conn->capable);
+	IOF_TRACE_INFO(fs_handle, "Capability supported %#x", conn->capable);
 
 	ioc_show_flags(fs_handle, conn->capable);
 
