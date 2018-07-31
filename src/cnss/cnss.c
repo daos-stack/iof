@@ -478,8 +478,11 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 			rc = rcf;
 	}
 
-	if (info->session)
+	if (info->session) {
+		IOF_TRACE_INFO(info, "destroying session %p", info->session);
 		fuse_session_destroy(info->session);
+		IOF_TRACE_INFO(info, "session destroyed");
+	}
 
 	return rc;
 }

@@ -1832,6 +1832,7 @@ initialize_projection(struct iof_state *iof_state,
 	struct fuse_args		args = {0};
 	bool				writeable = false;
 	int				ret;
+	struct fuse_lowlevel_ops	*fuse_ops = NULL;
 
 	struct iof_pool_reg pt = {.init = dh_init,
 				  .reset = dh_reset,
@@ -2128,8 +2129,8 @@ initialize_projection(struct iof_state *iof_state,
 			D_GOTO(err, 0);
 	}
 
-	fs_handle->fuse_ops = iof_get_fuse_ops(fs_handle->flags);
-	if (!fs_handle->fuse_ops)
+	fuse_ops = iof_get_fuse_ops(fs_handle->flags);
+	if (!fuse_ops)
 		D_GOTO(err, 0);
 
 	/* Register the directory handle type
@@ -2182,7 +2183,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	if (!cb->register_fuse_fs(cb->handle,
 				  NULL,
-				  fs_handle->fuse_ops,
+				  fuse_ops,
 				  &args,
 				  fs_handle->mnt_dir.name,
 				 (fs_handle->flags & IOF_CNSS_MT) != 0,
@@ -2192,6 +2193,8 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
+	D_FREE(fuse_ops);
+
 	IOF_TRACE_DEBUG(fs_handle, "Fuse mount installed at: '%s'",
 			fs_handle->mnt_dir.name);
 
@@ -2200,6 +2203,7 @@ initialize_projection(struct iof_state *iof_state,
 	return true;
 err:
 	iof_pool_destroy(&fs_handle->pool);
+	D_FREE(fuse_ops);
 	D_FREE(fs_handle);
 	return false;
 }
@@ -2510,7 +2514,6 @@ static int iof_deregister_fuse(void *arg)
 	d_list_del(&fs_handle->link);
 
 	D_FREE(fs_handle->mount_point);
-	D_FREE(fs_handle->fuse_ops);
 
 	D_FREE(fs_handle->stats);
 	D_FREE(fs_handle);

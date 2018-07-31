@@ -81,14 +81,12 @@ static void ioc_show_flags(void *handle, unsigned int in)
 /* Called on filesystem init.  It has the ability to both observe configuration
  * options, but also to modify them.  As we do not use the FUSE command line
  * parsing this is where we apply tunables.
- *
- * The return value is used to set private_data, however as we want
- * private_data to be set by the CNSS register routine we simply read it and
- * return the value here.
  */
-static void *ioc_init_core(struct iof_projection_info *fs_handle,
-			   struct fuse_conn_info *conn)
+static void
+ioc_fuse_init(void *arg, struct fuse_conn_info *conn)
 {
+	struct iof_projection_info *fs_handle = arg;
+
 	IOF_TRACE_INFO(fs_handle,
 		       "Fuse configuration for projection srv:%d cli:%d",
 		       fs_handle->fs_id, fs_handle->proj.cli_fs_id);
@@ -122,8 +120,6 @@ static void *ioc_init_core(struct iof_projection_info *fs_handle,
 	IOF_TRACE_INFO(fs_handle, "max_background %d", conn->max_background);
 	IOF_TRACE_INFO(fs_handle,
 		       "congestion_threshold %d", conn->congestion_threshold);
-
-	return fs_handle;
 }
 
 /*
@@ -204,11 +200,9 @@ int iof_is_mode_supported(uint8_t flags)
 	return 0;
 }
 
-void ioc_ll_init(void *arg, struct fuse_conn_info *conn)
+static void ioc_fuse_destroy(void *userdata)
 {
-	struct iof_projection_info *fs_handle = arg;
-
-	ioc_init_core(fs_handle, conn);
+	IOF_TRACE_INFO(userdata, "destroy callback");
 }
 
 struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t flags)
@@ -219,7 +213,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t flags)
 	if (!fuse_ops)
 		return NULL;
 
-	fuse_ops->init = ioc_ll_init;
+	fuse_ops->init = ioc_fuse_init;
 	fuse_ops->getattr = ioc_ll_getattr;
 	fuse_ops->lookup = ioc_ll_lookup;
 	fuse_ops->forget = ioc_ll_forget;
@@ -233,6 +227,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t flags)
 	fuse_ops->releasedir = ioc_ll_releasedir;
 	fuse_ops->readdir = ioc_ll_readdir;
 	fuse_ops->ioctl = ioc_ll_ioctl;
+	fuse_ops->destroy = ioc_fuse_destroy;
 
 	if (!(flags & IOF_WRITEABLE))
 		return fuse_ops;

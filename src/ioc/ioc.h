@@ -208,8 +208,6 @@ struct iof_projection_info {
 
 	/** The name of the ctrlfs directory */
 	struct ios_name			ctrl_dir;
-	/** fuse client implementation */
-	struct fuse_lowlevel_ops	*fuse_ops;
 	/** Feature Flags */
 	uint64_t			flags;
 	int				fs_id;
