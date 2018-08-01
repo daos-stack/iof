@@ -333,28 +333,33 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 #define IOF_UNSUPPORTED_OPEN_FLAGS (IOF_UNSUPPORTED_CREATE_FLAGS | O_CREAT | \
 					O_EXCL)
 
-#define IOF_FUSE_REPLY_ERR(req, status)					\
+#define IOC_REPLY_ERR_RAW(handle, req, status)				\
 	do {								\
 		int __err = status;					\
 		int __rc;						\
 		if (__err <= 0) {					\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(handle,				\
 					"Invalid call to fuse_reply_err: %d", \
 					__err);				\
 			__err = EIO;					\
 		}							\
 		if (__err == ENOTSUP || __err == EIO)			\
-			IOF_TRACE_WARNING(req, "Returning %d '%s'",	\
+			IOF_TRACE_WARNING(handle, "Returning %d '%s'",	\
 					  __err, strerror(__err));	\
 		else							\
-			IOF_TRACE_DEBUG(req, "Returning %d '%s'",	\
+			IOF_TRACE_DEBUG(handle, "Returning %d '%s'",	\
 					__err, strerror(__err));	\
 		__rc = fuse_reply_err(req, __err);			\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(handle,				\
 					"fuse_reply_err returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
+	} while (0)
+
+#define IOF_FUSE_REPLY_ERR(req, status)			\
+	do {						\
+		IOC_REPLY_ERR_RAW(req, req, status);	\
+		IOF_TRACE_DOWN(req);			\
 	} while (0)
 
 #define IOF_FUSE_REPLY_ZERO(req)					\
