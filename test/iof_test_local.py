@@ -97,6 +97,12 @@ def unlink_file(file_name):
     except FileNotFoundError:
         pass
 
+def create_file(directory, fname):
+    """Create a empty file in the directory"""
+
+    fd = open(os.path.join(directory, fname), mode='w')
+    fd.close()
+
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
                 iofcommontestsuite.CommonTestSuite,
@@ -667,9 +673,7 @@ class Testlocal(unittest.TestCase,
     def test_file_basic_write(self):
         """Write to a existing file"""
 
-        filename = os.path.join(self.export_dir, 'write_file')
-        with open(filename, 'w') as fd:
-            fd.close()
+        create_file(self.export_dir, 'write_file')
 
         filename = os.path.join(self.import_dir, 'write_file')
         with open(filename, 'w') as fd:
@@ -867,8 +871,7 @@ class Testlocal(unittest.TestCase,
 
         # Then make some files in it, just so there is something to observe.
         for f in range(0, 5):
-            fd = open(os.path.join(dirname, str(f)), 'w')
-            fd.close()
+            create_file(dirname, str(f))
 
         # Now open a handle which will be used throughout.
         dh = iofmod.opendir(dirname)
@@ -1108,10 +1111,8 @@ class Testlocal(unittest.TestCase,
         """
 
         e_dir = os.path.join(self.export_dir, 'tdir')
-        e_file = os.path.join(e_dir, 'tfile')
         os.mkdir(e_dir)
-        f = open(e_file, mode='w')
-        f.close()
+        create_file(e_dir, 'tfile')
 
         ffile = os.path.join(self.import_dir, 'tdir', 'tfile')
 
@@ -1210,6 +1211,37 @@ class Testlocal(unittest.TestCase,
             if e.errno != expected:
                 raise
 
+    def test_failover_unlink(self, subdir=False):
+        """Test unlink under failover"""
+
+        idir = self.import_dir
+        edir = self.export_dir
+        if subdir:
+            # If requested use a subdirectory for the test files.
+            idir = os.path.join(self.import_dir, 'test_dir')
+            edir = os.path.join(self.export_dir, 'test_dir')
+            os.mkdir(edir)
+
+        # Create two files on the backend so FUSE does not know about them.
+        create_file(edir, 'u1')
+        create_file(edir, 'u2')
+
+        # Kill a server.
+        self.kill_ionss_proc()
+
+        # Test unlink where the request triggers eviction.
+        os.unlink(os.path.join(idir, 'u1'))
+
+        # Test unlink after failover.
+        os.unlink(os.path.join(idir, 'u2'))
+
+        files = os.listdir(idir)
+        self.logger.info("Files are %s", files)
+
+    def test_failover_unlink_subdir(self):
+        """"Test unlink failover when the files are in a subdirectory"""
+        return self.test_failover_unlink(subdir=True)
+
     def test_failover_many(self):
         """Test failover with open files
 
@@ -1243,20 +1275,17 @@ class Testlocal(unittest.TestCase,
         # Open a file which will remain open.
         f2 = open(os.path.join(frontend_dir, 'd1', 'f2'), mode='w')
         # Open a file, then remove it so d2 is empty.
-        f3 = open(os.path.join(frontend_dir, 'd2', 'f3'), mode='w')
-        f3.close()
+        create_file(os.path.join(frontend_dir, 'd2'), 'f3')
         # Open a file which will be removed on the backend.
         f4 = open(os.path.join(frontend_dir, 'f4'), mode='w')
         os.unlink(os.path.join(backend_dir, 'f4'))
         # Open a file which will be overwritten on the backend.
         f5 = open(os.path.join(frontend_dir, 'f5'), mode='w')
         os.unlink(os.path.join(backend_dir, 'f5'))
-        f6 = open(os.path.join(backend_dir, 'f6'), mode='w')
-        f6.close()
+        create_file(backend_dir, 'f6')
         os.rename(os.path.join(backend_dir, 'f6'),
                   os.path.join(backend_dir, 'f5'))
-        f7 = open(os.path.join(frontend_dir, 'f7'), mode='w')
-        f7.close()
+        create_file(backend_dir, 'f7')
 
         print(os.fstat(f1.fileno()))
         print(os.fstat(f2.fileno()))
