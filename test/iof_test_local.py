@@ -70,6 +70,7 @@ from distutils.spawn import find_executable
 import iofcommontestsuite
 import common_methods
 import rpctrace_common_methods
+import iof_cart_logparse
 
 sys.path.append('install/Linux/TESTING/scripts')
 try:
@@ -103,6 +104,15 @@ def create_file(directory, fname):
 
     fd = open(os.path.join(directory, fname), mode='w')
     fd.close()
+
+def show_line(line, sev, msg):
+    """Output a log line in gcc error format"""
+
+    print("{}:{}:1: {}: {} '{}'".format(line.filename,
+                                        line.lineno,
+                                        sev,
+                                        msg,
+                                        line.get_msg()))
 
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
@@ -468,6 +478,64 @@ class Testlocal(unittest.TestCase,
         self.cleanup(procrtn)
 
         self.normal_output("Ending {0}".format(self.id()))
+
+        self._check_log()
+
+#pylint: disable=too-many-branches
+    def _check_log(self):
+        """Check cnss log file for consistency"""
+
+        active_desc = set()
+        active_desc.add('root')
+        err_count = 0
+
+        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
+        cl = iof_cart_logparse.IofLogIter(cnss_logfile)
+        cl.reset(trace_only=True)
+        error_files = set()
+
+        # This is a list of files which are known to have unresolved errors, so
+        # ignore them for now.
+        error_files_ok = ['src/common/iof_bulk.c']
+
+        have_debug = False
+
+        for line in cl:
+            if not have_debug and \
+               line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
+                have_debug = True
+            desc = line.descriptor
+            if 'Registered new' in line:
+                if desc in active_desc:
+                    show_line(line, 'error', 'invalid add')
+                    err_count += 1
+                if line.parent not in active_desc:
+                    show_line(line, 'error', 'add with bad parent')
+                    err_count += 1
+                active_desc.add(desc)
+            elif 'Link' in line:
+                parent = line.parent
+                if parent not in active_desc:
+                    show_line(line, 'error', 'link with bad parent')
+                    err_count += 1
+                desc = parent
+            elif 'Deregistered' in line:
+                if desc not in active_desc:
+                    show_line(line, 'error', 'invalid remove')
+                    err_count += 1
+                active_desc.remove(desc)
+                continue
+            if desc not in active_desc:
+                if have_debug and line.filename not in error_files_ok:
+                    show_line(line, 'error', 'inactive desc')
+                    error_files.add(line.filename)
+                    err_count += 1
+        active_desc.remove('root')
+        if active_desc:
+            raise Exception('Active descriptors at end of log file')
+        if error_files or err_count:
+            raise Exception('Errors detected in log file')
+#pylint: enable=too-many-branches
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:

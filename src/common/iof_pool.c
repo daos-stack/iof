@@ -69,12 +69,14 @@ iof_pool_init(struct iof_pool *pool, void *arg)
 {
 	int rc;
 
-	IOF_TRACE_DEBUG(pool, "Creating a pool");
 	D_INIT_LIST_HEAD(&pool->list);
 
 	rc = D_MUTEX_INIT(&pool->lock, NULL);
 	if (rc != -DER_SUCCESS)
 		return rc;
+
+	IOF_TRACE_UP(pool, arg, "iof_pool");
+	IOF_TRACE_DEBUG(pool, "Creating a pool");
 
 	pool->init = true;
 	pool->arg = arg;
@@ -149,7 +151,7 @@ restock(struct iof_pool_type *type, int count)
 		void *ptr = (void *)entry - type->reg.offset;
 		bool rcb = true;
 
-		IOF_TRACE_DEBUG(ptr, "Resetting");
+		IOF_TRACE_DEBUG(type, "Resetting %p", ptr);
 
 		d_list_del(entry);
 		type->pending_count--;
@@ -366,7 +368,7 @@ iof_pool_acquire(struct iof_pool_type *type)
 	D_MUTEX_UNLOCK(&type->lock);
 
 	if (ptr)
-		IOF_TRACE_DEBUG(ptr, "Type %p Using %p", type, ptr);
+		IOF_TRACE_DEBUG(type, "Using %p", ptr);
 	else if (at_limit)
 		IOF_TRACE_INFO(type, "Descriptor limit hit");
 	else

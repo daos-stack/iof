@@ -93,6 +93,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	D_INIT_LIST_HEAD(&handle->ie->ie_ie_children);
 	D_INIT_LIST_HEAD(&handle->ie->ie_ie_list);
 	H_GAH_SET_VALID(handle->ie);
+	IOF_TRACE_UP(handle->ie, handle->fs_handle, "inode");
 	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
 				       &handle->ie->stat.st_ino,
 				       sizeof(handle->ie->stat.st_ino),

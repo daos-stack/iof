@@ -54,6 +54,10 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	d_list_del(&handle->fh_of_list);
 	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
 
+	if (req) {
+		IOF_TRACE_UP(req, handle, "release_fuse_req");
+	}
+
 	/* If the projection is off-line then drop the local handle.
 	 *
 	 * This means a resource leak on the IONSS should the projection
@@ -62,9 +66,7 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
-	IOF_TRACE_UP(req, handle, "release_fuse_req");
-
-	IOF_TRACE_INFO(req, GAH_PRINT_STR,
+	IOF_TRACE_INFO(handle, GAH_PRINT_STR,
 		       GAH_PRINT_VAL(handle->common.gah));
 
 	/* If the server has reported that the GAH is invalid then do not send a
@@ -77,7 +79,7 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = handle->common.gah;
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
-	IOF_TRACE_LINK(handle->release_rpc, req, "release_file_rpc");
+	IOF_TRACE_LINK(handle->release_rpc, handle, "release_file_rpc");
 
 	crt_req_addref(handle->release_rpc);
 	rc = crt_req_send(handle->release_rpc, ioc_ll_gen_cb, req);
@@ -92,10 +94,9 @@ void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 
 out_err:
 	d_list_del(&handle->fh_ino_list);
-	iof_pool_release(fs_handle->fh_pool, handle);
 	if (req)
 		IOF_FUSE_REPLY_ERR(req, ret);
-
+	iof_pool_release(fs_handle->fh_pool, handle);
 }
 
 void ioc_ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)

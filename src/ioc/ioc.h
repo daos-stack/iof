@@ -360,7 +360,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 
 #define IOF_FUSE_REPLY_ERR(req, status)			\
 	do {						\
-		IOC_REPLY_ERR_RAW(req, (req), status);	\
+		IOC_REPLY_ERR_RAW(req, req, status);	\
 		IOF_TRACE_DOWN(req);			\
 	} while (0)
 
@@ -417,16 +417,15 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 					__rc, strerror(-__rc));		\
 	} while (0)
 
-#define IOF_FUSE_REPLY_OPEN(req, fi)					\
+#define IOF_FUSE_REPLY_OPEN(handle, req, fi)				\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning open");			\
-		__rc = fuse_reply_open(req, &fi);			\
+		IOF_TRACE_DEBUG(handle, "Returning open");		\
+		__rc = fuse_reply_open(req, &(fi));			\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(handle,				\
 					"fuse_reply_open returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
 #define IOC_REPLY_OPEN(ioc_req, fi)					\
@@ -477,16 +476,15 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
-#define IOF_FUSE_REPLY_IOCTL(req, gah_info, size)			\
+#define IOC_REPLY_IOCTL(handle, req, gah_info)				\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning ioctl");		\
-		__rc = fuse_reply_ioctl(req, 0, &gah_info, size);	\
+		IOF_TRACE_DEBUG(handle, "Returning ioctl");		\
+		__rc = fuse_reply_ioctl(req, 0, &(gah_info), sizeof(gah_info)); \
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(handle,				\
 					"fuse_reply_ioctl returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
 struct ioc_request;

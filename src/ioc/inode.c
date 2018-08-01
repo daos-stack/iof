@@ -153,6 +153,7 @@ static void ie_close_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*desc = CONTAINER(request);
 
+	IOF_TRACE_DOWN(request);
 	iof_pool_release(desc->request.fsh->close_pool, desc);
 }
 
@@ -204,6 +205,8 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (rc)
 		D_GOTO(err, 0);
 
+	IOF_TRACE_UP(&desc->request, ie, "close_req");
+
 	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	in->gah = ie->gah;
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
@@ -212,12 +215,14 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (rc != 0)
 		D_GOTO(err, 0);
 
+	IOF_TRACE_DOWN(ie);
 	return;
 
 err:
 	IOF_TRACE_ERROR(ie, "Failed to close " GAH_PRINT_STR " %d",
 			GAH_PRINT_VAL(ie->gah), rc);
 out:
+	IOF_TRACE_DOWN(ie);
 	if (desc)
 		iof_pool_release(fs_handle->close_pool, desc);
 }

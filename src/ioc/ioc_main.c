@@ -668,7 +668,8 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		atomic_compare_exchange(&g->grp.pri_srv_rank,
 					evicted_psr, new_psr);
 		updated_psr = atomic_load_consume(&g->grp.pri_srv_rank);
-		IOF_TRACE_INFO(g, "Updated: %d, Evicted: %d, New: %d",
+		IOF_TRACE_INFO(iof_state,
+			       "Updated: %d, Evicted: %d, New: %d",
 			       updated_psr, evicted_psr, new_psr);
 		/* TODO: This is needed for FUSE operations which are
 		 * not yet using the failover codepath to send RPCs.
@@ -1084,7 +1085,7 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	group->grp.psr_ep.ep_rank = psr_list->rl_ranks[0];
 	group->grp.psr_ep.ep_tag = 0;
 	d_rank_list_free(psr_list);
-	IOF_TRACE_INFO(group, "Primary Service Rank: %d",
+	IOF_TRACE_INFO(iof_state, "Primary Service Rank: %d",
 		       atomic_load_consume(&group->grp.pri_srv_rank));
 
 	snprintf(buf, BUFSIZE, "%d", group->grp.grp_id);
@@ -1927,12 +1928,11 @@ initialize_projection(struct iof_state *iof_state,
 		return false;
 
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
+	IOF_TRACE_UP(&fs_handle->ctx, fs_handle, "iof_ctx");
 
 	ret = iof_pool_init(&fs_handle->pool, fs_handle);
 	if (ret != -DER_SUCCESS)
 		D_GOTO(err, 0);
-
-	IOF_TRACE_UP(&fs_handle->pool, fs_handle, "iof_pool");
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
@@ -2596,13 +2596,12 @@ static int iof_deregister_fuse(void *arg)
 		rcp = rc;
 	}
 
-	IOF_TRACE_DOWN(fs_handle);
+	IOF_TRACE_DOWN(&fs_handle->ctx);
 	d_list_del(&fs_handle->link);
 
 	D_FREE(fs_handle->mount_point);
 
 	D_FREE(fs_handle->stats);
-	D_FREE(fs_handle);
 	return rcp;
 }
 

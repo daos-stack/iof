@@ -110,6 +110,7 @@
 #define IOF_TRACE_UP(ptr, parent, type)				\
 	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
 		  "Registered new '%s' from %p", type, parent)
+
 /* Link an RPC to a descriptor */
 #define IOF_TRACE_LINK(ptr, parent, type)			\
 	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\

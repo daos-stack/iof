@@ -230,7 +230,7 @@ static void *ll_loop_fn(void *args)
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
-	IOF_TRACE_DEBUG(info, "fuse loop completed %d", ret);
+	IOF_LOG_DEBUG("%p fuse loop completed %d", info, ret);
 
 	D_MUTEX_LOCK(&info->lock);
 	info->running = false;
@@ -940,10 +940,10 @@ shutdown_cart:
 		D_FREE(entry);
 	}
 
+	IOF_TRACE_INFO(cnss_info, "Exiting with status %d", ret);
+
 	IOF_TRACE_DOWN(cnss_info);
 	D_FREE(ctrl_prefix);
-
-	IOF_TRACE_INFO(cnss_info, "Exiting with status %d", ret);
 
 	D_FREE(cnss_info);
 

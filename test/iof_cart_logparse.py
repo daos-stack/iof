@@ -139,6 +139,25 @@ class IofLogLine():
             return True
         return False
 
+    def __getattr__(self, attr):
+        if attr == 'parent':
+            if self._fields[2] == 'Registered':
+                return self._fields[12-6]
+            if self._fields[2] == 'Link':
+                return self._fields[11-6]
+        if attr == 'filename':
+            (filename, _) = self._fields[0].split(':')
+            return filename
+        if attr == 'lineno':
+            (_, lineno) = self._fields[0].split(':')
+            return int(lineno)
+        raise AttributeError
+
+    def get_msg(self):
+        """Return the message part of a line, stripping up to and
+        including the filename"""
+        return ' '.join(self._fields[1:])
+
     def endswith(self, item):
         """Mimic the str.endswith() function
 
@@ -165,6 +184,7 @@ class IofLogIter():
         # or do a first pass checking the pid list.  This allows the same
         # iterator to work fast if the file can be kept in memory, or the
         # same, bug slower if it needs to be re-read each time.
+        self._fd = None
         self._fd = open(fname, 'r')
         self._data = []
         index = 0
@@ -200,7 +220,8 @@ class IofLogIter():
         self._pids = sorted(pids)
 
     def __del__(self):
-        self._fd.close()
+        if self._fd:
+            self._fd.close()
 
     def __iter__(self):
         return self

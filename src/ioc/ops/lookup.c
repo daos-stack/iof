@@ -69,19 +69,20 @@ void iof_entry_cb(struct ioc_request *request)
 	D_INIT_LIST_HEAD(&desc->ie->ie_ie_children);
 	D_INIT_LIST_HEAD(&desc->ie->ie_ie_list);
 	H_GAH_SET_VALID(desc->ie);
+	IOF_TRACE_UP(desc->ie, fs_handle, "inode");
 	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &desc->ie->stat.st_ino,
 				       sizeof(desc->ie->stat.st_ino),
 				       &desc->ie->ie_htl);
 
 	if (rlink == &desc->ie->ie_htl) {
-		desc->ie = NULL;
-		IOF_TRACE_INFO(request->req, "New file %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(desc->ie, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
+		desc->ie = NULL;
 	} else {
-		IOF_TRACE_INFO(request->req,
-			       "Existing file rlink %p %lu " GAH_PRINT_STR,
-			       rlink, entry.ino, GAH_PRINT_VAL(out->gah));
+		IOF_TRACE_INFO(container_of(rlink, struct ioc_inode_entry, ie_htl),
+			       "Existing file %lu " GAH_PRINT_STR,
+			       entry.ino, GAH_PRINT_VAL(out->gah));
 		drop_ino_ref(fs_handle, desc->ie->parent);
 		ie_close(fs_handle, desc->ie);
 	}

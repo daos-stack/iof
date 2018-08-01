@@ -46,14 +46,14 @@
 
 static void
 handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
-		 struct iof_gah_info *gah_info, void *trace)
+		 struct iof_gah_info *gah_info)
 {
 	STAT_ADD(handle->fs_handle->stats, il_ioctl);
 
 	/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
 	 * allocated that many bytes in data
 	 */
-	IOF_TRACE_INFO(trace, "Requested " GAH_PRINT_STR " fs_id=%d,"
+	IOF_TRACE_INFO(handle, "Requested " GAH_PRINT_STR " fs_id=%d,"
 		       " cli_fs_id=%d",
 		       GAH_PRINT_VAL(handle->common.gah),
 		       handle->fs_handle->fs_id,
@@ -75,9 +75,7 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 	struct iof_gah_info gah_info = {0};
 	int ret = EIO;
 
-	IOF_TRACE_UP(req, handle, "ioctl_fuse_req");
-
-	IOF_TRACE_INFO(req, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
+	IOF_TRACE_INFO(handle, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
 		       GAH_PRINT_VAL(handle->common.gah));
 
 	STAT_ADD(handle->fs_handle->stats, ioctl);
@@ -98,11 +96,11 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 		D_GOTO(out_err, ret = ENOTSUP);
 	}
 
-	handle_gah_ioctl(cmd, handle, &gah_info, req);
+	handle_gah_ioctl(cmd, handle, &gah_info);
 
-	IOF_FUSE_REPLY_IOCTL(req, gah_info, sizeof(gah_info));
+	IOC_REPLY_IOCTL(handle, req, gah_info);
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+	IOC_REPLY_ERR_RAW(handle, req, ret);
 }

@@ -322,7 +322,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
             if "Registered new" in line:
 
-                if not to_trace and not to_trace_fuse and fuse_file in line:
+                if not to_trace and \
+                   not to_trace_fuse and fuse_file in line.filename:
                     to_trace_fuse = line.descriptor
 
                 #register a new descriptor/object in the log hierarchy
@@ -532,19 +533,23 @@ class RpcTrace(common_methods.ColorizedOutput):
                 linked[desc] = set()
             elif 'Link' in line:
                 state = 'Linked'
-                if desc not in desc_state or \
-                   desc_state[desc] == 'Linked':
+                if desc in desc_state:
+                    msg = 'Bad link'
+                else:
                     is_error = False
                 desc_state[desc] = state
                 parent = line.get_field(-1)
-                linked[parent].add(desc)
+                if parent in linked:
+                    linked[parent].add(desc)
             elif 'Deregistered' in line:
                 state = 'Deregistered'
-                if desc_state.get(desc, None) == 'Registered':
+                if desc not in desc_state:
+                    msg = 'Not registered'
+                elif desc_state.get(desc, None) == 'Registered':
                     del desc_state[desc]
                     is_error = False
-                elif desc_state.get(desc, None) == 'Linked':
-                    msg = 'Linked RPC'
+                else:
+                    msg = desc_state[desc]
                 if desc in linked:
                     for child in linked[desc]:
                         del desc_state[child]
@@ -562,9 +567,11 @@ class RpcTrace(common_methods.ColorizedOutput):
                 output_table.append([desc,
                                      '{} (Error)'.format(state),
                                      line.function,
-                                     msg])
+                                     msg,
+                                     '{}: {}'.format(line.index,
+                                                     line.get_msg())])
             else:
-                output_table.append([desc, state, line.function, msg])
+                output_table.append([desc, state, line.function, None, None])
 
         if output_table:
             self.table_output(output_table,
@@ -572,7 +579,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                               headers=['Descriptor',
                                        'State',
                                        'Function',
-                                       'Message'])
+                                       'Message',
+                                       'Line'])
 
         #check if all descriptors are deregistered
         for d, state in desc_state.items():

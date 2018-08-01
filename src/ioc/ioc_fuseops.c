@@ -203,6 +203,8 @@ int iof_is_mode_supported(uint8_t flags)
 static void ioc_fuse_destroy(void *userdata)
 {
 	IOF_TRACE_INFO(userdata, "destroy callback");
+	IOF_TRACE_DOWN(userdata);
+	D_FREE(userdata);
 }
 
 struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t flags)

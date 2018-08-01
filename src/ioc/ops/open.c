@@ -77,12 +77,12 @@ ioc_open_ll_cb(const struct crt_cb_info *cb_info)
 	req = handle->open_req;
 	handle->open_req = 0;
 
-	IOF_FUSE_REPLY_OPEN(req, fi);
+	IOF_FUSE_REPLY_OPEN(handle, req, fi);
 
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(handle->open_req, ret);
+	IOC_REPLY_ERR_RAW(handle, handle->open_req, ret);
 	iof_pool_release(handle->fs_handle->fh_pool, handle);
 }
 
@@ -123,8 +123,8 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	if (fi->flags & O_WRONLY || fi->flags & O_RDWR) {
 		if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-			IOF_TRACE_INFO("Attempt to modify "
-				       "Read-Only File System");
+			IOF_TRACE_INFO(fs_handle,
+				       "Attempt to modify Read-Only File System");
 			ret = EROFS;
 			goto out_err;
 		}
@@ -136,14 +136,13 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		goto out_err;
 	}
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
-	IOF_TRACE_UP(req, handle, "open_fuse_req");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req = req;
 	handle->inode_no = ino;
 
 	in = crt_req_get(handle->open_rpc);
-	IOF_TRACE_LINK(handle->open_rpc, req, "open_file_rpc");
+	IOF_TRACE_LINK(handle->open_rpc, handle, "open_file_rpc");
 
 	/* Find the GAH of the file to open */
 	rc = find_gah(fs_handle, ino, &in->gah);
@@ -151,7 +150,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 		D_GOTO(out_err, ret = rc);
 
 	in->flags = fi->flags;
-	IOF_TRACE_INFO(req, "flags 0%o", fi->flags);
+	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
 
 	crt_req_addref(handle->open_rpc);
 	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
@@ -166,7 +165,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	return;
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+	IOC_REPLY_ERR_RAW(handle, req, ret);
 
 	if (handle)
 		iof_pool_release(fs_handle->fh_pool, handle);
