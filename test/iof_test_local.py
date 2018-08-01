@@ -1347,7 +1347,7 @@ class Testlocal(unittest.TestCase,
             if 'iofmod' in possible:
                 continue
 
-            if possible.startswith('test_failover'):
+            if possible.startswith('test_failover_'):
                 continue
 
             obj = getattr(self, possible)
@@ -1419,11 +1419,14 @@ if __name__ == '__main__':
     ioil_path = os.path.join(iof_root, 'lib')
 
     tests = []
-    for a_test in dir(Testlocal):
+    for a_test in sorted(dir(Testlocal)):
         if not a_test.startswith('test_'):
             continue
 
         tests.append(a_test[5:])
+
+    use_go = True
+    skip_failover = False
 
     test_help = "A test to run (%s) or a utest argument" % ', '.join(tests)
     parser = argparse.ArgumentParser(description='Run local iof tests')
@@ -1443,8 +1446,12 @@ if __name__ == '__main__':
                         help='Set the CaRT log mask')
     parser.add_argument('--internals-tracing', action='store_true', help='Turn '
                         'on internals path testing w/ RPC/Descriptor tracing')
+    parser.add_argument('--instance-per-test', action='store_true',
+                        help='Run each test in clean instance')
     parser.add_argument('--fixed-path', action='store_true',
                         help='Use fixed paths for import/export')
+    parser.add_argument('--skip-failover', action='store_true',
+                        help="Skip the failover tests")
     args = parser.parse_args()
 
     if args.internals_tracing:
@@ -1461,6 +1468,10 @@ if __name__ == '__main__':
         os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
     if args.fixed_path:
         use_fixed_paths = True
+    if args.instance_per_test:
+        use_go = False
+    if args.skip_failover:
+        skip_failover = True
 
     if args.mask:
         os.environ['D_LOG_MASK'] = args.mask
@@ -1491,10 +1502,15 @@ if __name__ == '__main__':
         # a new IOF instance per test.
         # This allows reduced speed for most tests, however a full test run
         # to also include the failover tests.
-        tests_to_run.append('Testlocal.go')
+        if use_go:
+            tests_to_run.append('Testlocal.go')
         for ptest in sorted(dir(Testlocal)):
-            if not ptest.startswith('test_failover'):
+            if not callable(getattr(Testlocal, ptest)):
                 continue
-            tests_to_run.append('Testlocal.%s' % ptest)
+            if not skip_failover and ptest.startswith('test_failover_'):
+                tests_to_run.append('Testlocal.%s' % ptest)
+            if not use_go and ptest.startswith('test_') \
+               and not ptest.startswith('test_failover_'):
+                tests_to_run.append('Testlocal.%s' % ptest)
 
     unittest.main(defaultTest=tests_to_run, argv=uargs)
