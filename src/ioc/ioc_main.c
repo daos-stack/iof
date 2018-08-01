@@ -1221,17 +1221,20 @@ fh_release(void *arg)
 	D_FREE(fh->ie);
 }
 
-static void
-common_init(void *arg, void *handle)
-{
-	struct common_req *req = arg;
+#define COMMON_INIT(type)						\
+	static void type##_common_init(void *arg, void *handle)		\
+	{								\
+		struct common_req *req = arg;				\
+		IOC_REQUEST_INIT(&req->request, handle);		\
+		req->opcode = FS_TO_OP(req->request.fsh, type);		\
+	}
+COMMON_INIT(getattr);
+COMMON_INIT(setattr);
+COMMON_INIT(close);
 
-	IOC_REQUEST_INIT(&req->request, handle);
-}
-
-/* Reset and prepare for use a getfattr descriptor */
+/* Reset and prepare for use a common descriptor */
 static bool
-gh_reset(void *arg)
+common_reset(void *arg)
 {
 	struct common_req *req = arg;
 	int rc;
@@ -1245,35 +1248,7 @@ gh_reset(void *arg)
 	}
 
 	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->request.fsh, getattr),
-			    &req->request.rpc);
-	if (rc || !req->request.rpc) {
-		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
-		return false;
-	}
-	crt_req_addref(req->request.rpc);
-
-	IOC_REQUEST_RESET(&req->request);
-
-	return true;
-}
-
-/* Reset and prepare for use a getfattr descriptor */
-static bool
-close_reset(void *arg)
-{
-	struct common_req *req = arg;
-	int rc;
-
-	if (req->request.rpc) {
-		crt_req_decref(req->request.rpc);
-		crt_req_decref(req->request.rpc);
-		req->request.rpc = NULL;
-	}
-
-	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(req->request.fsh, close),
-			    &req->request.rpc);
+			    req->opcode, &req->request.rpc);
 	if (rc || !req->request.rpc) {
 		IOF_TRACE_ERROR(req, "Could not create request, rc = %d", rc);
 		return false;
@@ -1295,7 +1270,7 @@ common_release(void *arg)
 	crt_req_decref(req->request.rpc);
 }
 
-#define entry_init(type)						\
+#define ENTRY_INIT(type)						\
 	static void type##_entry_init(void *arg, void *handle)		\
 	{								\
 		struct entry_req *req = arg;				\
@@ -1304,9 +1279,9 @@ common_release(void *arg)
 		req->dest = NULL;					\
 		req->ie = NULL;						\
 	}
-entry_init(lookup);
-entry_init(mkdir);
-entry_init(symlink);
+ENTRY_INIT(lookup);
+ENTRY_INIT(mkdir);
+ENTRY_INIT(symlink);
 
 static bool
 entry_reset(void *arg)
@@ -1844,15 +1819,9 @@ initialize_projection(struct iof_state *iof_state,
 				  .release = fh_release,
 				  POOL_TYPE_INIT(iof_file_handle, fh_of_list)};
 
-	struct iof_pool_reg fgt = {.init = common_init,
-				   .reset = gh_reset,
-				   .release = common_release,
-				   POOL_TYPE_INIT(common_req, list)};
-
-	struct iof_pool_reg ct = {.init = common_init,
-				  .reset = close_reset,
-				  .release = common_release,
-				  POOL_TYPE_INIT(common_req, list)};
+	struct iof_pool_reg common_t = {.reset = common_reset,
+					.release = common_release,
+					POOL_TYPE_INIT(common_req, list)};
 
 	struct iof_pool_reg entry_t = {.reset = entry_reset,
 				       .release = entry_release,
@@ -2143,11 +2112,18 @@ initialize_projection(struct iof_state *iof_state,
 	if (!fs_handle->dh_pool)
 		D_GOTO(err, 0);
 
-	fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &fgt);
+	common_t.init = getattr_common_init;
+	fs_handle->fgh_pool = iof_pool_register(&fs_handle->pool, &common_t);
 	if (!fs_handle->fgh_pool)
 		D_GOTO(err, 0);
 
-	fs_handle->close_pool = iof_pool_register(&fs_handle->pool, &ct);
+	common_t.init = setattr_common_init;
+	fs_handle->fsh_pool = iof_pool_register(&fs_handle->pool, &common_t);
+	if (!fs_handle->fsh_pool)
+		D_GOTO(err, 0);
+
+	common_t.init = close_common_init;
+	fs_handle->close_pool = iof_pool_register(&fs_handle->pool, &common_t);
 	if (!fs_handle->close_pool)
 		D_GOTO(err, 0);
 

@@ -214,6 +214,7 @@ struct iof_projection_info {
 	struct iof_pool			pool;
 	struct iof_pool_type		*dh_pool;
 	struct iof_pool_type		*fgh_pool;
+	struct iof_pool_type		*fsh_pool;
 	struct iof_pool_type		*close_pool;
 	struct iof_pool_type		*lookup_pool;
 	struct iof_pool_type		*mkdir_pool;
@@ -358,8 +359,14 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 
 #define IOF_FUSE_REPLY_ERR(req, status)			\
 	do {						\
-		IOC_REPLY_ERR_RAW(req, req, status);	\
+		IOC_REPLY_ERR_RAW(req, (req), status);	\
 		IOF_TRACE_DOWN(req);			\
+	} while (0)
+
+#define IOC_REPLY_ERR(ioc_req, status)					\
+	do {								\
+		IOC_REPLY_ERR_RAW(ioc_req, (ioc_req)->req, status);	\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOF_FUSE_REPLY_ZERO(req)					\
@@ -374,16 +381,16 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
-#define IOF_FUSE_REPLY_ATTR(req, attr)					\
+#define IOC_REPLY_ATTR(ioc_req, attr)					\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning attr");			\
-		__rc = fuse_reply_attr(req, attr, 0);			\
+		IOF_TRACE_DEBUG(ioc_req, "Returning attr");		\
+		__rc = fuse_reply_attr(ioc_req->req, attr, 0);		\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(ioc_req,			\
 					"fuse_reply_attr returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOF_FUSE_REPLY_WRITE(req, bytes)				\
@@ -765,13 +772,13 @@ struct iof_file_handle {
 
 /** Common request type.
  *
- * Used for getattr and close only.
+ * Used for getattr, setattr and close only.
  *
- * TODO: Rename this to something more specific.
  */
 struct common_req {
-	struct ioc_request		request;
 	d_list_t			list;
+	struct ioc_request		request;
+	crt_opcode_t			opcode;
 };
 
 /** Callback structure for inode migrate RPC.
