@@ -2064,6 +2064,7 @@ initialize_projection(struct iof_state *iof_state,
 		REGISTER_STAT(rename);
 		REGISTER_STAT(write);
 		REGISTER_STAT(fsync);
+		REGISTER_STAT(setattr);
 		REGISTER_STAT64(write_bytes);
 	}
 

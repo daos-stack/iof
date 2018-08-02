@@ -45,6 +45,7 @@ are invoked on both simple and multi-node launch
 
 import os
 import subprocess
+import tabulate
 import logging
 import tempfile
 import unittest
@@ -254,12 +255,12 @@ class InternalsPathFramework(ColorizedOutput):
             with open(os.path.join(projs_dir, proj, 'mount_point'), 'r') as f:
                 mount_point = f.read().strip()
 
-            stats_list = os.listdir(stats_dir)
+            stats_list = sorted(os.listdir(stats_dir))
             cnss_stats.append(mount_point)
             cnss_stats.append(stats_list)
             for s in stats_list:
                 with open(os.path.join(stats_dir, s), 'r') as g:
-                    stats_calls = g.read()
+                    stats_calls = int(g.read())
                     stats.append(stats_calls)
             cnss_stats.append(stats)
             ret_stats.append(cnss_stats)
@@ -270,21 +271,21 @@ class InternalsPathFramework(ColorizedOutput):
     def delta_cnss_stats(self, d, mnt):
         """Computes the delta of initial and final CNSS stats/FUSE callbacks for
         each IOF projection and displays non-zero results"""
-        if d['len_init_{0}'.format(mnt)] == d['len_final_{0}'.format(mnt)]:
-            d['delta_cstats_{0}'.format(mnt)] = list(map(operator.sub,
-                                                         d['final_cstats_{0}'.\
-                                                         format(mnt)],
-                                                         d['init_cstats_{0}'.\
-                                                         format(mnt)]))
-            self.normal_output('Dumping stats for filesystem {0}: '.\
-                               format(mnt))
+        stats = []
 
-            for i in range(len(d['stats_list_{0}'.format(mnt)])):
-                if d['delta_cstats_{0}'.format(mnt)][i] != 0:
-                    self.normal_output('{0}: {1}'.format(d['stats_list_{0}'.\
-                                                         format(mnt)][i],
-                                                         d['delta_cstats_{0}'.\
-                                                         format(mnt)][i]))
+        d['delta_cstats_{0}'.format(mnt)] = list(map(operator.sub,
+                                                     d['final_{0}'.\
+                                                       format(mnt)],
+                                                     d['init_{0}'.\
+                                                       format(mnt)]))
+        for i in range(len(d['stats_list_{0}'.format(mnt)])):
+            if d['delta_cstats_{0}'.format(mnt)][i] != 0:
+                stats.append([d['stats_list_{0}'.format(mnt)][i],
+                              float(d['delta_cstats_{0}'.format(mnt)][i])])
+        if not stats:
+            return
+        self.normal_output('stats delta for {0}: '.format(mnt))
+        self.normal_output(tabulate.tabulate(stats, floatfmt=",.0f"))
 
     def compare_projection_dir(self, mount_dirs, ionss_dirs, ionss_node):
         """Compare contents of projection directory on CN with the original

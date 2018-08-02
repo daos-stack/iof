@@ -122,9 +122,7 @@ class Testlocal(unittest.TestCase,
     test_method = 'pyunit'
     export_dirs = []
     mount_dirs = []
-    init_cstats = []
-    final_cstats = []
-    d = {}
+    cnss_stats = {}
     ionss_config_file = None
     log_path = None
     internals_tracing = False
@@ -168,7 +166,7 @@ class Testlocal(unittest.TestCase,
             method = method[5:]
         return os.path.join(parts[1], method)
 
-    def internals_path_testing_setup(self):
+    def testing_setup(self):
         """Call all methods for internals path testing framework. pyunit will
         call this during setUp() of each test, go method will call this
         only once per run"""
@@ -183,12 +181,8 @@ class Testlocal(unittest.TestCase,
         ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
         for projection_stats in ret_stats:
             mnt = projection_stats[0]
-            self.d["stats_list_{0}".format(mnt)] = projection_stats[1]
-            self.init_cstats = projection_stats[2]
-            self.d["init_cstats_{0}".format(mnt)] = \
-                   list(map(int, self.init_cstats))
-            self.d["len_init_{0}".format(mnt)] = \
-                   len(list(self.d["init_cstats_{0}".format(mnt)]))
+            self.cnss_stats["stats_list_{0}".format(mnt)] = projection_stats[1]
+            self.cnss_stats["init_{0}".format(mnt)] = projection_stats[2]
 
 #pylint: disable=too-many-branches
 #pylint: disable=too-many-locals
@@ -371,9 +365,8 @@ class Testlocal(unittest.TestCase,
 
         self.mount_dirs = common_methods.import_list()
 
-        if self.internals_tracing:
-            if self.test_method == 'pyunit':
-                self.internals_path_testing_setup()
+        if self.test_method == 'pyunit':
+            self.testing_setup()
 #pylint: enable=too-many-branches
 
     def mark_log(self, msg):
@@ -390,7 +383,7 @@ class Testlocal(unittest.TestCase,
         self.wfd.flush()
         os.fsync(self.wfd.fileno())
 
-    def internals_path_testing_teardown(self):
+    def testing_teardown(self):
         """Call all methods for internals path testing framework.
         pyunit will call this during tearDown() of each test,
         go method will call this only once per run"""
@@ -399,14 +392,10 @@ class Testlocal(unittest.TestCase,
         ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
         for projection_stats in ret_stats:
             mnt = projection_stats[0]
-            self.final_cstats = projection_stats[2]
-            self.d["final_cstats_{0}".format(mnt)] = \
-                   list(map(int, self.final_cstats))
-            self.d["len_final_{0}".format(mnt)] = \
-                   len(list(self.d["final_cstats_{0}".format(mnt)]))
 
-            #CNSS Stats Delta
-            self.delta_cnss_stats(self.d, mnt)
+            self.cnss_stats["final_{0}".format(mnt)] = projection_stats[2]
+
+            self.delta_cnss_stats(self.cnss_stats, mnt)
 
         # Compare projection and FS
         # error with using rsync to compare '/usr' directory
@@ -466,9 +455,8 @@ class Testlocal(unittest.TestCase,
 
         self.wfd.close()
 
-        if self.internals_tracing:
-            if self.test_method == 'pyunit':
-                self.internals_path_testing_teardown()
+        if self.test_method == 'pyunit':
+            self.testing_teardown()
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
@@ -1369,12 +1357,11 @@ class Testlocal(unittest.TestCase,
             subtest_count += 1
             with self.subTest(possible[5:]):
                 self.mark_log('Starting test %s' % possible)
-                if self.internals_tracing:
-                    self.internals_path_testing_setup()
+
+                self.testing_setup()
                 obj()
 
-                if self.internals_tracing:
-                    self.internals_path_testing_teardown()
+                self.testing_teardown()
                 self.mark_log('Finished test %s, cleaning up' % possible)
                 self.clean_export_dir()
 
@@ -1462,7 +1449,6 @@ if __name__ == '__main__':
 
     if args.internals_tracing:
         os.environ['INTERNALS_TRACING'] = 'yes'
-        os.environ['TR_REDIRECT_OUTPUT'] = 'yes'
 
     if args.valgrind:
         os.environ['TR_USE_VALGRIND'] = 'memcheck-native'
