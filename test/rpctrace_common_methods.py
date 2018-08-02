@@ -41,7 +41,6 @@ Methods associated to RPC tracing for error debuging.
 """
 
 import os
-from collections import Counter
 import tabulate
 import common_methods
 import iof_cart_logparse
@@ -58,10 +57,6 @@ class RpcTrace(common_methods.ColorizedOutput):
     cnss_plugin/plugin_entry/cnss_info"""
 
     rpc_dict = {}
-    """dictionary maps rpc to 'alloc/submit/sent/dealloc' state"""
-    op_state_list = []
-    """list entries (opcode, rpc state)"""
-    rpc_op_dict = {}
     """dictionary maps rpc to opcode"""
     trace_dict = {}
     """dictionary maps descriptor to descriptor type and parent"""
@@ -88,7 +83,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.lf = iof_cart_logparse.IofLogIter(self.input_file)
 
-    def _rpc_error_state_tracing(self, rpc, rpc_state, opcode):
+    def _rpc_error_state_tracing(self, rpc, rpc_state):
         """Error checking for rpc state"""
 
         # Returns a tuple of (State, Extra string)
@@ -117,117 +112,12 @@ class RpcTrace(common_methods.ColorizedOutput):
                 status = 'WARN'
                 message = "no alloc'd state registered"
 
-            self.rpc_op_dict[rpc] = opcode
 
         if rpc_state == self.DEALLOC_STATE:
             del self.rpc_dict[rpc]
-            del self.rpc_op_dict[rpc]
         else:
             self.rpc_dict[rpc] = rpc_state
         return (status, message)
-
-    def _rpc_tabulate(self):
-        """Use tabulate pkg to formulate table of opcodes and RPC states"""
-        op_table = []
-        alloc_table = []
-        dealloc_table = []
-        submit_table = []
-        sent_table = []
-        errors = []
-
-        (op_table, alloc_table, dealloc_table, sent_table, submit_table,
-         errors) = self._rpc_tabulate_populate_lists()
-
-        #Error checking and tabulate method called to create table outputs
-
-        #check list lengths to make sure all RPC states are correct and
-        #acounted for
-        length = len(op_table)
-        if any(len(l) != length for l in [alloc_table, submit_table, sent_table,
-                                          dealloc_table]):
-            errors.append('ERROR: Lengths of RPC state lists are not the same')
-
-        #check if alloc'd and dealloc'd state transition totals are equal
-        zipped_list = list(zip(op_table, alloc_table, dealloc_table))
-        for x in zipped_list:
-            if x[1] != x[2]:
-                errors.append('ERROR: Opcode {0}: Alloc\'d Total = {1}, '
-                              'Dealloc\'d Total = {2}'.format(x[0], x[1], x[2]))
-
-        table = zip(op_table, alloc_table, submit_table, sent_table,
-                    dealloc_table)
-        headers = ['OPCODE']
-        headers.extend(self.STATES)
-        return (tabulate.tabulate(table, headers=headers), errors)
-
-    def _rpc_tabulate_populate_lists(self):
-        """Create and populate lists for all RPC states for table ouput of
-        Opcode vs State Transition Counts"""
-        op_table = []
-        alloc_table = []
-        dealloc_table = []
-        submit_table = []
-        sent_table = []
-        errors = []
-        alloc_total = 0
-        dealloc_total = 0
-        submit_total = 0
-        sent_total = 0
-
-        #create a dictionary of opcode and number of state types present
-        newlist = [i[0] for i in sorted(Counter(self.op_state_list))]
-        count_list = {}
-        for value, count in sorted(Counter(newlist).items()):
-            count_list[value] = count
-
-        for (op, state), count in sorted(Counter(self.op_state_list).items()):
-            if op not in op_table or op == op_table[-1]:
-                if op not in op_table:
-                    op_table.append(op)
-
-                if state == self.ALLOC_STATE:
-                    alloc_table.append(count)
-                    alloc_total += 1
-                elif state == self.DEALLOC_STATE:
-                    dealloc_table.append(count)
-                    dealloc_total += 1
-                elif state == self.SUBMIT_STATE:
-                    submit_table.append(count)
-                    submit_total += 1
-                elif state == self.SENT_STATE:
-                    sent_table.append(count)
-                    sent_total += 1
-
-                if op == op_table[-1]:
-                    #"end" is determined by how many state types are present
-                    #per opcode (states are sorted)
-                    #(4 = ALLOC, DEALLOC, SENT, SUBMIT) - end state is submit
-                    #(2 = ALLOC, DEALLOC) - end state is dealloc
-                    if (state == self.SUBMIT_STATE and \
-                        count_list[op] == 4) or \
-                       (state == self.DEALLOC_STATE and \
-                        count_list[op] == 2):
-
-                        #zero out blank table entries and reset counters
-                        if alloc_total == 0:
-                            alloc_table.append(alloc_total)
-                        if dealloc_total == 0:
-                            dealloc_table.append(dealloc_total)
-                        if submit_total == 0:
-                            submit_table.append(submit_total)
-                        if sent_total == 0:
-                            sent_table.append(sent_total)
-                        alloc_total = 0
-                        dealloc_total = 0
-                        submit_total = 0
-                        sent_total = 0
-
-            else:
-                errors.append('ERROR: RPC {0} found but does not match previous'
-                              ' opcode {1}'.format(op, op_table[-1]))
-
-        return (op_table, alloc_table, dealloc_table, sent_table, submit_table,
-                errors)
 
     def rpc_reporting(self, index_multiprocess=None):
         """RPC reporting for RPC state machine"""
@@ -247,11 +137,35 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self._rpc_reporting_pid(pids[0])
 
+    def _rpc_tabulate(self, op_state_counters):
+        """Use tabulate pkg to formulate table of opcodes and RPC states"""
+
+        table = []
+        errors = []
+        for (op, counts) in sorted(op_state_counters.items()):
+            table.append([op,
+                          counts[self.ALLOC_STATE],
+                          counts[self.SUBMIT_STATE],
+                          counts[self.SENT_STATE],
+                          counts[self.DEALLOC_STATE]])
+            if counts[self.ALLOC_STATE] != counts[self.DEALLOC_STATE]:
+                errors.append("ERROR: Opcode {0}: Alloc'd Total = {1}, "
+                              "Dealloc'd Total = {2}". \
+                              format(op,
+                                     counts[self.ALLOC_STATE],
+                                     counts[self.DEALLOC_STATE]))
+
+        headers = ['OPCODE']
+        headers.extend(self.STATES)
+        return (tabulate.tabulate(table, headers=headers), errors)
+
     def _rpc_reporting_pid(self, pid_to_trace):
         """RPC reporting for RPC state machine, for mutiprocesses"""
         self.rpc_dict = {}
-        self.op_state_list = []
-        self.rpc_op_dict = {}
+        op_state_counters = {}
+
+        # Use to convert from descriptor to opcode.
+        current_opcodes = {}
 
         self.normal_output('\nCaRT RPC Reporting:\nLogfile: {0}, '
                            'PID: {1}\n'.format(self.input_file,
@@ -262,7 +176,6 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.lf.reset(pid=pid_to_trace)
         for line in self.lf:
             rpc_state = None
-            rpc = None
             opcode = None
             fields = None
 
@@ -273,10 +186,6 @@ class RpcTrace(common_methods.ColorizedOutput):
                 opcode = fields[10][:-2]
             elif line.endswith('), decref to 0.'):
                 rpc_state = self.DEALLOC_STATE
-                fields = line.split()
-                opcode = fields[10][:-2]
-            #opcode not printed in submitted/sent log messages;
-            #use rpc_op_dict{} to store RPC and opcode
             elif line.endswith('submitted.'):
                 rpc_state = self.SUBMIT_STATE
             elif line.endswith(' sent.'):
@@ -288,15 +197,25 @@ class RpcTrace(common_methods.ColorizedOutput):
                 fields = line.split()
 
             rpc = fields[8]
-            if opcode is None:
-                opcode = self.rpc_op_dict.get(rpc, None)
 
-            self.op_state_list.append((opcode, rpc_state))
-            (state, extra) = self._rpc_error_state_tracing(rpc,
-                                                           rpc_state,
-                                                           opcode)
-            function_name = fields[6]
+            if rpc_state == self.ALLOC_STATE:
+                current_opcodes[rpc] = opcode
+            else:
+                opcode = current_opcodes[rpc]
+            if rpc_state == self.DEALLOC_STATE:
+                del current_opcodes[rpc]
+
+            if opcode not in op_state_counters:
+                op_state_counters[opcode] = {self.ALLOC_STATE :0,
+                                             self.DEALLOC_STATE: 0,
+                                             self.SENT_STATE:0,
+                                             self.SUBMIT_STATE:0}
+            op_state_counters[opcode][rpc_state] += 1
+
+            (state, extra) = self._rpc_error_state_tracing(rpc, rpc_state)
+
             if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
+                function_name = fields[6]
                 ort.append([state,
                             rpc,
                             rpc_state,
@@ -315,14 +234,13 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.normal_output(str_out)
             self.normal_output('')
 
-        output_rpcs = []
-        output_rpcs.append('Opcode State Transition Tally:')
-        (ret_str, errors) = self._rpc_tabulate()
+        (ret_str, errors) = self._rpc_tabulate(op_state_counters)
+
+        output_rpcs = ['Opcode State Transition Tally:']
         output_rpcs.append(ret_str)
         output_rpcs.extend(errors)
 
         self.list_output(output_rpcs)
-
 
     #************ Descriptor Tracing Methods (IOF_TRACE macros) **********
 
@@ -420,9 +338,8 @@ class RpcTrace(common_methods.ColorizedOutput):
             while yet_to_trace:
                 #start the trace at the next alias (or first descriptor if first
                 #run thru
-                trace = yet_to_trace[0]
+                trace = yet_to_trace.pop(0)
                 traces_for_log_dump.append(trace)
-                yet_to_trace.remove(trace)
                 #append an extra line
                 output.append(' ')
                 while trace in self.trace_dict:
@@ -457,9 +374,11 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return traces_for_log_dump
 
-    def _rpc_trace_output_logdump(self, traces_for_log_dump):
+    def _rpc_trace_output_logdump(self, descriptor):
         """Prints all log messages relating to the given descriptor or any
            pointer in the descriptor's hierarchy"""
+
+        traces_for_log_dump = self._rpc_trace_output_hierarchy(descriptor)
         descriptors = []
         if traces_for_log_dump:
             #the descriptor for which to start tracing
@@ -566,7 +485,6 @@ class RpcTrace(common_methods.ColorizedOutput):
            log messages related to descriptor"""
         missing_links = []
         output = []
-        traces_for_log_dump = []
         self.normal_output('\n{0:<30}{1:<30}{2:<30}'.format('Descriptor',
                                                             'Type', 'Parent'))
         self.normal_output('{0:<30}{1:<30}{2:<30}'.format('----------', '----',
@@ -611,11 +529,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                               format(k, type_field, v_output))
         self.list_output(output)
 
-        #Hierarchy for given descriptor
-        traces_for_log_dump = self._rpc_trace_output_hierarchy(descriptor)
-
         #Log dump for descriptor hierarchy
-        self._rpc_trace_output_logdump(traces_for_log_dump)
+        self._rpc_trace_output_logdump(descriptor)
 
         return missing_links
 
