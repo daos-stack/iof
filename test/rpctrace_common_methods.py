@@ -293,54 +293,39 @@ class RpcTrace(common_methods.ColorizedOutput):
             else:
                 self.error_output('Descriptor {0} is not present'.format(index))
 
+    def _desc_is_rpc(self, descriptor):
+        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
+        desc_is_rpc = bool(descriptor not in self.trace_dict and \
+                           [item for sublist in rpc_type_list \
+                            for item in sublist if item[0] == descriptor])
+        return desc_is_rpc
+
     def _rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
         output = []
         #append all descriptors/rpcs in hierarchy for log dump
         traces_for_log_dump = []
-        trace = descriptor
         #checking if descriptor is an rpc, in which case it is only linked
         #to other descriptors with TRACE
-        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
-        desc_is_rpc = bool(descriptor not in self.trace_dict and \
-                           [item for sublist in rpc_type_list \
-                            for item in sublist if item[0] == descriptor])
+        desc_is_rpc = self._desc_is_rpc(descriptor)
 
         if desc_is_rpc: #tracing an rpc
             output.append('No hierarchy available - descriptor is an RPC')
-            traces_for_log_dump.append(trace)
+            traces_for_log_dump.append(descriptor)
         else:
-            #list of all alias descriptors whose path has not been traced
-            yet_to_trace = [trace]
-            while yet_to_trace:
-                #start the trace at the next alias (or first descriptor if first
-                #run thru
-                trace = yet_to_trace.pop(0)
+            trace = descriptor
+            #append an extra line
+            output.append('')
+            while trace != "root":
                 traces_for_log_dump.append(trace)
-                #append an extra line
-                output.append('')
-                while trace in self.trace_dict:
-                    #check if descriptor has registered alias(es)
-                    alias_parents = [x[1] for x in self.trace_dict[trace]]
-                    aliases = [x[0] for x in self.trace_dict[trace]]
-                    #even if descriptor is not an alias, aliases[] will still
-                    #contain one value of the descriptor type
-                    if not aliases:
-                        continue
-                    trace_type = aliases[0]
-                    aliases.remove(trace_type)
-                    output.append('{0}: {1}'.format(trace_type, trace))
-                    #print out all linked rpcs
-                    for i in self.desc_dict[trace]:
-                        traces_for_log_dump.append(i[0])
-                        output.append('\t{0} {1}'.format(i[1], i[0]))
-                    trace = alias_parents[0]
-                    traces_for_log_dump.append(trace)
-                    alias_parents.remove(trace)
-                    for x, i in enumerate(aliases):
-                        output.append('\t(alias) {0} linked to {1}'.\
-                                      format(aliases[x], alias_parents[x]))
-                        yet_to_trace.append(alias_parents[x])
+                (trace_type, parent) = self.desc_table[trace]
+                output.append('{0}: {1}'.format(trace_type, trace))
+                for (desc, name) in self.desc_dict[trace]:
+                    traces_for_log_dump.append(desc)
+                    output.append('\t{0} {1}'.format(name, desc))
+                trace = parent
+
+            traces_for_log_dump.append(trace)
 
         if not output:
             self.error_output('Descriptor {0} not currently registered or '
@@ -377,10 +362,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         #checking if descriptor is an rpc, in which case it is only linked
         #to other descriptors with TRACE
-        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
-        desc_is_rpc = bool(trace not in self.trace_dict and \
-                           [item for sublist in rpc_type_list \
-                            for item in sublist if item[0] == trace])
+
+        desc_is_rpc = self._desc_is_rpc(descriptor)
 
         output = []
         output.append('\nLog dump for descriptor hierarchy ({0}):'\
