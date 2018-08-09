@@ -254,6 +254,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self._descriptor_error_state_tracing()
 
+        parser = iof_cart_logparse.IofLogIter(self.input_file)
+
         self.lf.reset(trace_only=True)
         for line in self.lf:
             if "Registered new" not in line:
@@ -292,7 +294,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             obj_type = obj_type_l[1:-1]
             #find index of descriptor in order to append alias
             #to correct index in the chance it is reused in the dict
-            index = self._find_reused_descriptor_index(line)
+            index = self._find_reused_descriptor_index(parser, line)
             if index in self.trace_dict:
                 self.trace_dict.setdefault(index, []).\
                     append((obj_type, parent))
@@ -310,7 +312,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             rpc_type = fields[9]
             #find index of descriptor in order to append rpc
             #to correct index in the chance it is reused in the dict
-            index = self._find_reused_descriptor_index(line)
+            index = self._find_reused_descriptor_index(parser, line)
             if index in self.desc_dict:
                 self.desc_dict[index].append((rpc, rpc_type))
             else:
@@ -610,7 +612,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.error_output('{0}:{1} not deregistered from state'.\
                               format(d, state))
 
-    def _find_reused_descriptor_index(self, log_line):
+    def _find_reused_descriptor_index(self, parser, log_line):
         """Iterate over the log file given the line where the descriptor is
         created to find the position count of the descriptor (suffix appended to
         descriptor key in dict for reused descriptors)
@@ -629,37 +631,15 @@ class RpcTrace(common_methods.ColorizedOutput):
         if len(reused_descs) == 1:
             return descriptor
 
-        with open(self.input_file, 'r') as f:
-            for line in f:
-                if log_line != line.strip():
-                    continue
-                fields = line.split()
-                if "Link" in line:
-                    descriptor = fields[-1]
-                else:
-                    descriptor = fields[7].strip().split('(')[1].strip().\
-                                 split(')')[0]
-                reused_descs = [v for k, v in self.trace_dict.items() \
-                                if descriptor in k]
-                if len(reused_descs) > 1:
-                    for nxtline in f:
-                        if 'TRACE' in nxtline and 'Registered new' in  nxtline:
-                            fields = nxtline.strip().split()
-                            new_obj = fields[7].strip().split('(')[1].\
-                                      strip().split(')')[0]
-                            if new_obj == descriptor:
-                                position_desc_cnt += 1
+        parser.reset(trace_only=True, index=log_line.index)
+        for line in parser:
+            if 'Registered new' in line and line.descriptor == descriptor:
+                position_desc_cnt += 1
 
-                pos = len(reused_descs) - position_desc_cnt - 1
-                if pos > 0:
-                    descriptor = '{0}_{1}'.\
-                                 format(descriptor,
-                                        len(reused_descs) - \
-                                        position_desc_cnt - 1)
-                return descriptor
-
-        self.error_output('Reused descriptor index not found')
-        return None
+        pos = len(reused_descs) - position_desc_cnt - 1
+        if pos < 1:
+            return descriptor
+        return '{0}_{1}'.format(descriptor, pos)
 
     def descriptor_to_trace(self):
         """Find the file handle to use for descriptor tracing:
