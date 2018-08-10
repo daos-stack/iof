@@ -45,6 +45,11 @@ from collections import OrderedDict
 import common_methods
 import iof_cart_logparse
 
+# CaRT Error numbers to convert to strings.
+C_ERRNOS = {0: '-DER_SUCCESS',
+            -1011: '-DER_TIMEDOUT',
+            -1032: '-DER_EVICTED'}
+
 # pylint: disable=too-many-locals
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
@@ -68,7 +73,7 @@ class RpcTrace(common_methods.ColorizedOutput):
     DEALLOC_STATE = 'DEALLOCATED'
     SUBMIT_STATE = 'SUBMITTED'
     SENT_STATE = 'SENT'
-    STATES = [ALLOC_STATE, SUBMIT_STATE, SENT_STATE, DEALLOC_STATE]
+    COMPLETED_STATE = 'COMPLETED'
     VERBOSE_STATE_TRANSITIONS = False
     VERBOSE_LOG = True
 
@@ -99,7 +104,13 @@ class RpcTrace(common_methods.ColorizedOutput):
                  (self.rpc_dict[rpc] == self.ALLOC_STATE):
                 status = 'SUCCESS'
             elif (rpc_state == self.SENT_STATE) and \
-                 (self.rpc_dict[rpc] == self.SUBMIT_STATE):
+                 ((self.rpc_dict[rpc] == self.SUBMIT_STATE) or \
+                  (self.rpc_dict[rpc] == self.COMPLETED_STATE)):
+                status = 'SUCCESS'
+            elif (rpc_state == self.COMPLETED_STATE) and \
+                 ((self.rpc_dict[rpc] == self.SENT_STATE) or \
+                  (self.rpc_dict[rpc] == self.SUBMIT_STATE) or \
+                  (self.rpc_dict[rpc] == self.ALLOC_STATE)):
                 status = 'SUCCESS'
             else:
                 status = 'ERROR'
@@ -140,6 +151,8 @@ class RpcTrace(common_methods.ColorizedOutput):
         """RPC reporting for RPC state machine, for mutiprocesses"""
         self.rpc_dict = {}
         op_state_counters = {}
+        c_states = {}
+        c_state_names = set()
 
         # Use to convert from descriptor to opcode.
         current_opcodes = {}
@@ -154,6 +167,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         for line in self.lf:
             rpc_state = None
             opcode = None
+            rpc = None
 
             if line.endswith('allocated.') or \
                line.endswith('allocated per RPC request received.'):
@@ -165,10 +179,26 @@ class RpcTrace(common_methods.ColorizedOutput):
                 rpc_state = self.SUBMIT_STATE
             elif line.endswith(' sent.'):
                 rpc_state = self.SENT_STATE
+            elif 'Invoking RPC callback' in line:
+                rpc = line.get_field(6)
+                rpc_state = self.COMPLETED_STATE
+                result = line.get_field(-1).rstrip('.')
+                result = C_ERRNOS.get(int(result), result)
+                c_state_names.add(result)
+                opcode = current_opcodes[rpc]
+                try:
+                    c_states[opcode][result] += 1
+                except KeyError:
+                    try:
+                        c_states[opcode][result] = 1
+                    except KeyError:
+                        c_states[opcode] = {}
+                        c_states[opcode][result] = 1
             else:
                 continue
 
-            rpc = line.get_field(3)
+            if not rpc:
+                rpc = line.get_field(3)
 
             if rpc_state == self.ALLOC_STATE:
                 current_opcodes[rpc] = opcode
@@ -181,6 +211,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 op_state_counters[opcode] = {self.ALLOC_STATE :0,
                                              self.DEALLOC_STATE: 0,
                                              self.SENT_STATE:0,
+                                             self.COMPLETED_STATE:0,
                                              self.SUBMIT_STATE:0}
             op_state_counters[opcode][rpc_state] += 1
 
@@ -206,22 +237,54 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         table = []
         errors = []
+        names = sorted(c_state_names)
+        if names:
+            try:
+                names.remove('-DER_SUCCESS')
+            except ValueError:
+                pass
+            names.insert(0, '-DER_SUCCESS')
+        headers = ['OPCODE',
+                   self.ALLOC_STATE,
+                   self.SUBMIT_STATE,
+                   self.SENT_STATE,
+                   self.COMPLETED_STATE,
+                   self.DEALLOC_STATE]
+
+        for state in names:
+            headers.append(state)
         for (op, counts) in sorted(op_state_counters.items()):
-            table.append([op,
-                          counts[self.ALLOC_STATE],
-                          counts[self.SUBMIT_STATE],
-                          counts[self.SENT_STATE],
-                          counts[self.DEALLOC_STATE]])
+            row = [op,
+                   counts[self.ALLOC_STATE],
+                   counts[self.SUBMIT_STATE],
+                   counts[self.SENT_STATE],
+                   counts[self.COMPLETED_STATE],
+                   counts[self.DEALLOC_STATE]]
+            for state in names:
+                try:
+                    row.append(c_states[op].get(state, ''))
+                except KeyError:
+                    row.append('')
+            table.append(row)
             if counts[self.ALLOC_STATE] != counts[self.DEALLOC_STATE]:
                 errors.append("ERROR: Opcode {}: Alloc'd Total = {}, "
                               "Dealloc'd Total = {}". \
                               format(op,
                                      counts[self.ALLOC_STATE],
                                      counts[self.DEALLOC_STATE]))
+            # Sent can be more than completed because of corpcs but shouldn't
+            # be less
+            if counts[self.SENT_STATE] > counts[self.COMPLETED_STATE]:
+                errors.append("ERROR: Opcode {0}: sent Total = {1}, "
+                              "Completed Total = {2}". \
+                              format(op,
+                                     counts[self.SENT_STATE],
+                                     counts[self.COMPLETED_STATE]))
 
         self.table_output(table,
                           title='Opcode State Transition Tally',
-                          headers=['OPCODE'] + self.STATES)
+                          headers=headers,
+                          stralign='right')
 
         if errors:
             self.list_output(errors)
