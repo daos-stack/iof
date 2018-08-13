@@ -166,6 +166,21 @@ class ColorizedOutput():
             elif prefix == 'WARN:':
                 self.logger.info(Fore.YELLOW + output + Fore.RESET)
 
+    def table_output(self, table, **kwargs):
+        """Write a table to the logfile
+        Accepts all the same options as tabulate itself, plus a title to be
+        output before the table itself.
+        """
+        if not self.stream:
+            return
+        if 'title' in kwargs:
+            self.stream.write('{}:\n'.format(kwargs['title']))
+            del kwargs['title']
+        output = tabulate.tabulate(table, **kwargs)
+        self.stream.write(output)
+        self.stream.write('\n')
+        self.stream.write('\n')
+
 class InternalsPathFramework(ColorizedOutput):
     """Contains all methods relating to internals path testing"""
 

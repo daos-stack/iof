@@ -105,14 +105,6 @@
 		"%s:%d TRACE: %s(%p) Registered new '%s' from %p\n",	\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
-/* Create an alias for an already registered descriptor with a new
- * type and parent
- */
-#define IOF_TRACE_ALIAS(ptr, parent, type)				\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d TRACE: %s(%p) Alias '%s' from %p\n",		\
-		__FILE__, __LINE__, __func__, ptr, type, parent)
-
 /* Link an RPC to a descriptor */
 #define IOF_TRACE_LINK(ptr, parent, type)				\
 	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\

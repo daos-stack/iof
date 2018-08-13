@@ -101,9 +101,12 @@ class IofLogLine():
 
     def to_str(self, mark=False):
         """Convert the object to a string"""
+        idx = 46
         if mark:
-            return '***** %s *****' % self.line
-        return self.line
+            return '{}** {}'.format(self.line[:idx],
+                                    self.line[idx:])
+        return '{}   {}'.format(self.line[:idx],
+                                self.line[idx:])
 
     def __contains__(self, item):
         idx = self.msg.find(item)
@@ -143,7 +146,6 @@ class IofLogIter():
     def __init__(self, fname):
         """Load a file, and check how many processes have written to it"""
 
-        pids = []
         fd = open(fname, 'r')
         self._data = []
         index = 0
