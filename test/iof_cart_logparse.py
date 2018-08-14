@@ -66,7 +66,7 @@ class IofLogRaw():
     for example mercury logs being sent to the same file.
     """
     def __init__(self, line):
-        self.line = line.strip('\n')
+        self.line = line.rstrip('\n')
         self.trace = False
 
     def to_str(self):
@@ -88,37 +88,36 @@ class IofLogLine():
     index is the line in the file, starting at 1.
     """
     def __init__(self, line, index, fields):
-        self.line = line.strip('\n')
+        self._line = line.rstrip('\n')
         self.pid = int(fields[2][5:-1])
         self.index = index
         try:
             self.level = LOG_LEVELS[fields[4]]
         except KeyError:
             raise InvalidLogFile(fields[4])
-        self.fields = fields
-        self.msg = ' '.join(self.fields[5:])
+        self._msg = ' '.join(fields[5:])
         self.trace = bool(fields[6] == 'TRACE:')
+        self._desc_part = fields[7]
 
     def to_str(self, mark=False):
         """Convert the object to a string"""
-        idx = 46
+        idx = len(self._line) - len(self._msg)
         if mark:
-            return '{}** {}'.format(self.line[:idx],
-                                    self.line[idx:])
-        return '{}   {}'.format(self.line[:idx],
-                                self.line[idx:])
+            return '{}** {}'.format(self._line[:idx],
+                                    self._msg)
+        return '{}   {}'.format(self._line[:idx],
+                                self._msg)
 
     def __contains__(self, item):
-        idx = self.msg.find(item)
+        idx = self._msg.find(item)
         if idx != -1:
             return True
         return False
 
     def __getattr__(self, attr):
         if attr == 'descriptor':
-            part = self.fields[7]
-            start_idx = part.find('(')
-            desc = part[start_idx+1:-1]
+            start_idx = self._desc_part.find('(')
+            desc = self._desc_part[start_idx+1:-1]
             if desc == '(nil)':
                 return ''
             return desc
@@ -130,11 +129,11 @@ class IofLogLine():
         This only matches on the actual string part of the message, not the
         timestamp/pid/faculty parts.
         """
-        return self.msg.endswith(item)
+        return self._msg.endswith(item)
 
     def split(self):
         """Allow for line.split() to work"""
-        return self.fields
+        return self._line.split()
 
 class IofLogIter():
     """Class for parsing CaRT log files

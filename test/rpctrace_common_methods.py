@@ -105,7 +105,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 status = 'SUCCESS'
             else:
                 status = 'ERROR'
-                message = 'previous state: {0}'.format(self.rpc_dict[rpc])
+                message = 'previous state: {}'.format(self.rpc_dict[rpc])
         else:
             if rpc_state == self.ALLOC_STATE:
                 status = 'SUCCESS'
@@ -146,9 +146,9 @@ class RpcTrace(common_methods.ColorizedOutput):
         # Use to convert from descriptor to opcode.
         current_opcodes = {}
 
-        self.normal_output('CaRT RPC Reporting:\nLogfile: {0}, '
-                           'PID: {1}\n'.format(self.input_file,
-                                               pid_to_trace))
+        self.normal_output('CaRT RPC Reporting:\nLogfile: {}, '
+                           'PID: {}\n'.format(self.input_file,
+                                              pid_to_trace))
 
         ort = []
 
@@ -221,8 +221,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                           counts[self.SENT_STATE],
                           counts[self.DEALLOC_STATE]])
             if counts[self.ALLOC_STATE] != counts[self.DEALLOC_STATE]:
-                errors.append("ERROR: Opcode {0}: Alloc'd Total = {1}, "
-                              "Dealloc'd Total = {2}". \
+                errors.append("ERROR: Opcode {}: Alloc'd Total = {}, "
+                              "Dealloc'd Total = {}". \
                               format(op,
                                      counts[self.ALLOC_STATE],
                                      counts[self.DEALLOC_STATE]))
@@ -247,7 +247,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.trace_dict = {}
         self.desc_dict = {}
         self.normal_output('IOF Descriptor/RPC Tracing:\n'
-                           'Logfile: {0}'.format(self.input_file))
+                           'Logfile: {}'.format(self.input_file))
 
         reuse_table = {}
         self._descriptor_error_state_tracing()
@@ -291,7 +291,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             if index in self.desc_dict:
                 self.desc_dict[index].append((line.descriptor, rpc_type))
             else:
-                self.error_output('Descriptor {0} is not present'.format(index))
+                self.error_output('Descriptor {} is not present'.format(index))
 
     def _desc_is_rpc(self, descriptor):
         rpc_type_list = [v for (k, v) in self.desc_dict.items()]
@@ -319,19 +319,19 @@ class RpcTrace(common_methods.ColorizedOutput):
             while trace != "root":
                 traces_for_log_dump.append(trace)
                 (trace_type, parent) = self.desc_table[trace]
-                output.append('{0}: {1}'.format(trace_type, trace))
+                output.append('{}: {}'.format(trace_type, trace))
                 for (desc, name) in self.desc_dict[trace]:
                     traces_for_log_dump.append(desc)
-                    output.append('\t{0} {1}'.format(name, desc))
+                    output.append('\t{} {}'.format(name, desc))
                 trace = parent
 
             traces_for_log_dump.append(trace)
 
         if not output:
-            self.error_output('Descriptor {0} not currently registered or '
+            self.error_output('Descriptor {} not currently registered or '
                               'linked'.format(descriptor))
         else:
-            output.insert(0, '\nDescriptor Hierarchy ({0}):'.format(descriptor))
+            output.insert(0, '\nDescriptor Hierarchy ({}):'.format(descriptor))
             self.list_output(output)
 
         return traces_for_log_dump
@@ -365,9 +365,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         desc_is_rpc = self._desc_is_rpc(descriptor)
 
-        output = []
-        output.append('\nLog dump for descriptor hierarchy ({0}):'\
-                      .format(trace))
+        self.log_output('\nLog dump for descriptor hierarchy ({}):'\
+                        .format(trace))
 
         self.lf.reset(raw=True)
         for line in self.lf:
@@ -375,50 +374,46 @@ class RpcTrace(common_methods.ColorizedOutput):
             if desc_is_rpc: #tracing an rpc
                 if line.trace:
                     if line.descriptor == desc:
-                        output.append(line.to_str(mark=True))
+                        self.log_output(line.to_str(mark=True))
                         desc_log_marked = True
             elif line.trace and 'Registered new' in line:
                 if line.descriptor != desc:
                     #print the remaining non-relevant log messages
-                    output.append(line.to_str())
+                    self.log_output(line.to_str())
                     continue
                 if location is None:#tracing a unique descriptor
-                    output.append(line.to_str(mark=True))
+                    self.log_output(line.to_str(mark=True))
                     for nxtline in self.lf:
                         #start log dump after "registered" log
                         desc_log_marked = False
                         if nxtline.trace:
                             if nxtline.descriptor in descriptors:
-                                output.append(nxtline.to_str(mark=True))
+                                self.log_output(nxtline.to_str(mark=True))
                                 desc_log_marked = True
                         if not desc_log_marked and self.VERBOSE_LOG:
                             #print the remaining non-relevant log messages
-                            output.append(nxtline.to_str())
-                    self.list_output(output)
+                            self.log_output(nxtline.to_str())
                     return
                 #start the log dump where the specific reused descriptor
                 #is registered, logging will include all instances of
                 #this descriptor after
                 if position_desc_cnt == location:
-                    output.append(line.to_str(mark=True))
+                    self.log_output(line.to_str(mark=True))
                     for nxtline in self.lf:
                         desc_log_marked = False
                         if nxtline.trace:
                             if nxtline.descriptor in descriptors:
-                                output.append(nxtline.to_str(mark=True))
+                                self.log_output(nxtline.to_str(mark=True))
                                 desc_log_marked = True
                         if not desc_log_marked and self.VERBOSE_LOG:
                             #print the remaining non-relevant log mesgs
-                            output.append(nxtline.to_str())
-                    self.list_output(output)
+                            self.log_output(nxtline.to_str())
                     return
                 position_desc_cnt += 1
 
             if not desc_log_marked and self.VERBOSE_LOG:
                 #print the remaining non-relevant log messages
-                output.append(line.to_str())
-
-        self.list_output(output)
+                self.log_output(line.to_str())
 
     def rpc_trace_output(self, descriptor):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
@@ -479,7 +474,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             if 'Registered new' in line:
                 state = 'Registered'
                 if desc in self.desc_state:
-                    res = ('ERROR', state, 'previous state: {0}' \
+                    res = ('ERROR', state, 'previous state: {}' \
                            .format(self.desc_state[desc]))
                 else:
                     res = ('SUCCESS', state)
@@ -511,7 +506,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
                 if res[0] != 'SUCCESS':
                     self.have_errors = True
-                desc = '{0}: {1}'.format(res[0], desc)
+                desc = '{}: {}'.format(res[0], desc)
                 if len(res) == 2:
                     output.append('{0:<30}{1:<20}{2}()'.format(desc,
                                                                res[1],
@@ -533,14 +528,14 @@ class RpcTrace(common_methods.ColorizedOutput):
         #check if all descriptors are deregistered
         for d in list(self.desc_state):
             if self.desc_state.get(d, None) == 'Registered':
-                self.error_output('{0} is not Deregistered'.format(d))
+                self.error_output('{} is not Deregistered'.format(d))
             elif self.desc_state.get(d, None) == 'Linked':
                 #currently no "unlinked" state, CaRT RPC debugging is done
                 #prior to this
                 del self.desc_state[d]
         #final check to make sure all registered descriptors are deleted
         for d, state in self.desc_state.items():
-            self.error_output('{0}:{1} not deregistered from state'.\
+            self.error_output('{}:{} not deregistered from state'.\
                               format(d, state))
 
     def descriptor_to_trace(self):
@@ -554,7 +549,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.lf.reset(trace_only=True, level='WARN')
         for line in self.lf:
             descriptor = line.descriptor
-            self.warning_output('Tracing descriptor {0} with error/warning'. \
+            self.warning_output('Tracing descriptor {} with error/warning'. \
                                 format(descriptor))
             reused_descs = [v for k, v in self.trace_dict.items() \
                             if descriptor in k]
@@ -566,7 +561,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
             pos = len(reused_descs) - position_desc_cnt - 1
             if pos > 0:
-                descriptor = '{0}_{1}'.\
+                descriptor = '{}_{}'.\
                              format(descriptor,
                                     len(reused_descs) - \
                                     position_desc_cnt - 1)

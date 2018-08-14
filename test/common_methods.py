@@ -117,7 +117,7 @@ class ColorizedOutput():
     def colour_output(self, colour, output, prefix=None):
         """Show output in colour"""
         if prefix:
-            prefix = '{0}: '.format(prefix)
+            prefix = '{}: '.format(prefix)
         else:
             prefix = ''
         if colour and COLORAMA:
@@ -126,7 +126,7 @@ class ColorizedOutput():
         else:
             self.logger.info(prefix + output)
         if self.stream:
-            self.stream.write("{0}{1}\n".format(prefix, output))
+            self.stream.write("{}{}\n".format(prefix, output))
 
     def success_output(self, output):
         """Green output to console, writes output to internals.out"""
@@ -145,13 +145,17 @@ class ColorizedOutput():
         """Normal output to console, writes output to internals.out"""
         self.colour_output(None, output)
 
+    def log_output(self, output):
+        """Writes output to file"""
+        if self.stream:
+            self.stream.write("{}\n".format(output))
+
     def list_output(self, output_list):
         """Writes entire list of strings to internals.out, only output
-        colorized warnings or errors to console by default,
-        otherwise if dump_to_console is set output entire list to console"""
+        colorized warnings or errors to console by default"""
         if self.stream:
             for item in output_list:
-                self.stream.write("{0}\n".format(item))
+                self.stream.write("{}\n".format(item))
         if not COLORAMA:
             return
         for item in output_list:
@@ -223,8 +227,8 @@ class InternalsPathFramework(ColorizedOutput):
                                      'psr_rank')
         with open(psr_rank_path, 'r') as h:
             psr_rank = h.read()
-        self.normal_output('IONSS count = {0}PSR rank = {1}'.format(ionss_count,
-                                                                    psr_rank))
+        self.normal_output('IONSS count = {}PSR rank = {}'.format(ionss_count,
+                                                                  psr_rank))
 
     def dump_failover_state(self):
         """Log the current failover state, and return list"""
@@ -245,8 +249,8 @@ class InternalsPathFramework(ColorizedOutput):
                 state = f.read().strip()
                 states.append(state)
 
-            self.normal_output("state for {0} is '{1}'".format(mount_point,
-                                                               state))
+            self.normal_output("state for {} is '{}'".format(mount_point,
+                                                             state))
         return states
 
     def dump_cnss_stats(self, ctrl_fs_dir):
@@ -285,18 +289,18 @@ class InternalsPathFramework(ColorizedOutput):
         each IOF projection and displays non-zero results"""
         stats = []
 
-        d['delta_cstats_{0}'.format(mnt)] = list(map(operator.sub,
-                                                     d['final_{0}'.\
-                                                       format(mnt)],
-                                                     d['init_{0}'.\
-                                                       format(mnt)]))
-        for i in range(len(d['stats_list_{0}'.format(mnt)])):
-            if d['delta_cstats_{0}'.format(mnt)][i] != 0:
-                stats.append([d['stats_list_{0}'.format(mnt)][i],
-                              float(d['delta_cstats_{0}'.format(mnt)][i])])
+        d['delta_cstats_{}'.format(mnt)] = list(map(operator.sub,
+                                                    d['final_{}'.\
+                                                      format(mnt)],
+                                                    d['init_{}'.\
+                                                      format(mnt)]))
+        for i in range(len(d['stats_list_{}'.format(mnt)])):
+            if d['delta_cstats_{}'.format(mnt)][i] != 0:
+                stats.append([d['stats_list_{}'.format(mnt)][i],
+                              float(d['delta_cstats_{}'.format(mnt)][i])])
         if not stats:
             return
-        self.normal_output('stats delta for {0}: '.format(mnt))
+        self.normal_output('stats delta for {}: '.format(mnt))
         self.normal_output(tabulate.tabulate(stats, floatfmt=",.0f"))
 
     def compare_projection_dir(self, mount_dirs, ionss_dirs, ionss_node):
@@ -317,9 +321,9 @@ class InternalsPathFramework(ColorizedOutput):
             mount_dir = os.path.join(mount_dirs[index], '')
             cmd = (['rsync', '-nvrc', '--links'])
             if ionss_node == 'single node':
-                ionss_path = '{0}'.format(idir)
+                ionss_path = idir
             else:
-                ionss_path = '{0}:{1}'.format(ionss_node, idir)
+                ionss_path = '{}:{}'.format(ionss_node, idir)
                 cmd.extend(['-e', 'ssh -o StrictHostKeyChecking=no '
                             '-o UserKnownHostsFile=/dev/null'])
             cmd.extend([mount_dir, ionss_path])
@@ -331,17 +335,17 @@ class InternalsPathFramework(ColorizedOutput):
             output, err = p1.communicate()
             err = err.decode('utf-8')
             if err != '':
-                self.error_output('{0}'.format(' '.join(cmd)))
-                self.error_output('{0}'.format(err))
+                self.error_output(' '.join(cmd))
+                self.error_output(err)
             else:
                 output = output.decode('ascii')
                 first_file = output.split("\n")[1]
                 if first_file == '':
-                    self.success_output('IOF projection:{0} matches I/O backend'
-                                        ' fs:{1}'.format(mount_dir, idir))
+                    self.success_output('IOF projection:{} matches I/O backend'
+                                        ' fs:{}'.format(mount_dir, idir))
                 else:
-                    self.error_output('IOF projection:{0} and backend '
-                                      'fs:{1} differ.'.format(mount_dir, idir))
+                    self.error_output('IOF projection:{} and backend '
+                                      'fs:{} differ.'.format(mount_dir, idir))
 
 class CnssChecks(iof_ionss_verify.IonssVerify,
                  iofcommontestsuite.CommonTestSuite,
