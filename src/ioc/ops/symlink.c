@@ -68,8 +68,6 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	if (rc)
 		D_GOTO(err, rc);
 
-	IOF_TRACE_INFO(req, "Inode Entry %p", &desc->ie->list);
-
 	strncpy(in->common.name.name, name, NAME_MAX);
 	desc->dest = strdup(link);
 	if (!desc->dest)

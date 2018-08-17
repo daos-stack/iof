@@ -66,7 +66,7 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 	if (!rlink)
 		return ENOENT;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	IOF_TRACE_INFO(ie, "Inode %lu " GAH_PRINT_STR, ie->stat.st_ino,
 		       GAH_PRINT_VAL(ie->gah));
@@ -117,7 +117,7 @@ find_inode(struct iof_projection_info *fs_handle, ino_t ino,
 	if (!rlink)
 		return ENOENT;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	if (!H_GAH_IS_VALID(ie)) {
 		d_hash_rec_decref(&fs_handle->inode_ht, rlink);

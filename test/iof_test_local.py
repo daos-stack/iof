@@ -1275,6 +1275,11 @@ class Testlocal(unittest.TestCase,
                   os.path.join(backend_dir, 'f5'))
         create_file(backend_dir, 'f7')
 
+        # Create a file which will be renamed before failover.
+        create_file(frontend_dir, 'f8')
+        os.rename(os.path.join(frontend_dir, 'f8'),
+                  os.path.join(frontend_dir, 'f9'))
+
         print(os.fstat(f1.fileno()))
         print(os.fstat(f2.fileno()))
         print(os.fstat(f4.fileno()))

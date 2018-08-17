@@ -66,7 +66,7 @@ static void ioc_getattr_result_fn(struct ioc_request *request)
 
 	if (request->ir_ht == RHS_INODE)
 		d_hash_rec_decref(&request->fsh->inode_ht,
-				  &request->ir_inode->list);
+				  &request->ir_inode->ie_htl);
 
 	iof_pool_release(request->fsh->POOL_NAME, desc);
 }

@@ -63,7 +63,7 @@ opendir_ll_cb(struct ioc_request *request)
 		dh->handle_valid = 1;
 		dh->ep = dh->open_req.fsh->proj.grp->psr_ep;
 		D_MUTEX_LOCK(&dh->open_req.fsh->od_lock);
-		d_list_add_tail(&dh->list, &dh->open_req.fsh->opendir_list);
+		d_list_add_tail(&dh->dh_od_list, &dh->open_req.fsh->opendir_list);
 		D_MUTEX_UNLOCK(&dh->open_req.fsh->od_lock);
 		fi.fh = (uint64_t)dh;
 		IOF_FUSE_REPLY_OPEN(request->req, fi);

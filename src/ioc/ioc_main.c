@@ -122,8 +122,15 @@ int ioc_simple_resend(struct ioc_request *request)
 	return iof_fs_send(request);
 }
 
+static void ih_addref(struct d_hash_table *htable, d_list_t *rlink);
+
 /*
  * inode_check() callback.  Called for every open inode as part of failover.
+ *
+ * If the inode is not to be used for failover add it to the inval list for
+ * later processing, and take a reference.  As this is called by the hash
+ * table traverse function we have to call ih_addref() directly here rather
+ * than c_hash_rec_addref() to avoid deadlock.
  */
 static int
 inode_check_cb(d_list_t *rlink, void *arg)
@@ -131,34 +138,20 @@ inode_check_cb(d_list_t *rlink, void *arg)
 	struct iof_projection_info *fs_handle = arg;
 	struct ioc_inode_entry *ie = container_of(rlink,
 						  struct ioc_inode_entry,
-						  list);
+						  ie_htl);
 
 	IOF_TRACE_INFO(ie,
 		       "check inode %lu parent %lu failover %s",
 		       ie->stat.st_ino, ie->parent, ie->failover ? "yes" : "no");
 
-	if (!ie->failover) {
-		int rc;
-
-		H_GAH_SET_INVALID(ie);
-
-		rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
-						      ie->parent,
-						      ie->name,
-						      strlen(ie->name));
-		IOF_TRACE_INFO(fs_handle,
-			       "inval returned %d", rc);
-
-		/* If there is a failure due to bad file descriptor then
-		 * no future calls will work so abort the traverse by
-		 * returning an error code here, otherwise keep trying
-		 * other inodes.
-		 */
-		if (rc == EBADF)
-			return -DER_INVAL;
-
+	if (ie->failover)
 		return -DER_SUCCESS;
-	}
+
+	H_GAH_SET_INVALID(ie);
+
+	d_list_add(&ie->ie_ie_list, &fs_handle->p_inval_list);
+
+	ih_addref(NULL, rlink);
 
 	return -DER_SUCCESS;
 }
@@ -187,7 +180,7 @@ static void mark_inode_tree(struct iof_projection_info *fs_handle,
 			return;
 		}
 
-		iep = container_of(rlink, struct ioc_inode_entry, list);
+		iep = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 		IOF_TRACE_DEBUG(fs_handle,
 				"Found %p for %lu %d",
@@ -230,7 +223,7 @@ static void mark_fh_inode(struct iof_file_handle *fh)
 				  "Unable to find inode %lu", fh->inode_no);
 		return;
 	}
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	d_list_add(&fh->fh_ino_list, &ie->ie_fh_list);
 	ie->failover = true;
@@ -258,7 +251,7 @@ static void mark_dh_inode(struct iof_dir_handle *dh)
 				  "Unable to find inode %lu", dh->inode_no);
 		return;
 	}
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	ie->failover = true;
 
@@ -289,13 +282,46 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 
 	if (oldref == 1) {
 		struct ioc_request *request, *r2;
+		struct ioc_inode_entry *ie, *ie2;
 
 		IOF_TRACE_INFO(fs_handle,
-			       "Failover complete, marking as on-line");
+			       "GAH migration complete, marking as on-line");
 
 		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 		fs_handle->failover_state = iof_failover_complete;
 
+		/* Now the gah_lock has been dropped, and fuse requests are
+		 * being processed again it's safe to start invalidating
+		 * inodes, so walk the inval list doing so.
+		 * This triggers a number of forget() callbacks from the kernel
+		 * so only call inval if the reference count > 1 to avoid
+		 * activity on already deleted inodes.
+		 */
+		d_list_for_each_entry_safe(ie, ie2, &fs_handle->p_inval_list,
+					   ie_ie_list) {
+			int ref = atomic_load_consume(&ie->ie_ref);
+
+			IOF_TRACE_INFO(ie,
+				       "Invalidating " GAH_PRINT_STR " ref %d",
+				       GAH_PRINT_VAL(ie->gah), ref);
+
+			if (ref > 1) {
+				int rc;
+
+				rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
+								      ie->parent,
+								      ie->name,
+								      strlen(ie->name));
+
+				IOF_TRACE_INFO(ie, "inval returned %d", rc);
+			}
+			d_list_del_init(&ie->ie_ie_list);
+			d_hash_rec_decref(&fs_handle->inode_ht, &ie->ie_htl);
+		}
+
+		/* Finally, start processing requests which need resending to
+		 * new ranks
+		 */
 		D_MUTEX_LOCK(&fs_handle->p_request_lock);
 		d_list_for_each_entry_safe(request, r2,
 					   &fs_handle->p_requests_pending,
@@ -311,6 +337,7 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 			}
 		}
 		D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
+		IOF_TRACE_INFO(fs_handle, "Failover complete");
 	}
 }
 
@@ -456,7 +483,7 @@ static void inode_check(struct iof_projection_info *fs_handle)
 	}
 	D_MUTEX_UNLOCK(&fs_handle->of_lock);
 	D_MUTEX_LOCK(&fs_handle->od_lock);
-	d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
+	d_list_for_each_entry(dh, &fs_handle->opendir_list, dh_od_list) {
 		IOF_TRACE_INFO(fs_handle,
 			       "Inspecting dir " GAH_PRINT_STR " %p",
 			       GAH_PRINT_VAL(dh->gah), dh);
@@ -464,10 +491,14 @@ static void inode_check(struct iof_projection_info *fs_handle)
 	}
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
+	/* Traverse the entire inode table, and add any not touched by
+	 * the above loops to the p_inval_list to be invalidated after
+	 * the gah_lock is dropped later
+	 */
 	rc = d_hash_table_traverse(&fs_handle->inode_ht, inode_check_cb,
 				   fs_handle);
-	IOF_TRACE_INFO(fs_handle,
-		       "traverse returned %d", rc);
+	IOF_TRACE_DEBUG(fs_handle,
+			"traverse returned %d", rc);
 
 	d_list_for_each_entry(ie, &fs_handle->p_ie_children, ie_ie_list)
 		imigrate_send(fs_handle, ie, NULL);
@@ -681,7 +712,7 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 		}
 		D_MUTEX_UNLOCK(&fs_handle->of_lock);
 		D_MUTEX_LOCK(&fs_handle->od_lock);
-		d_list_for_each_entry(dh, &fs_handle->opendir_list, list) {
+		d_list_for_each_entry(dh, &fs_handle->opendir_list, dh_od_list) {
 			if (dh->gah.root != rank)
 				continue;
 			IOF_TRACE_INFO(fs_handle,
@@ -1019,7 +1050,7 @@ static bool ih_key_cmp(struct d_hash_table *htable, d_list_t *rlink,
 	const struct ioc_inode_entry *ie;
 	const ino_t *ino = key;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	return *ino == ie->stat.st_ino;
 }
@@ -1029,8 +1060,8 @@ static void ih_addref(struct d_hash_table *htable, d_list_t *rlink)
 	struct ioc_inode_entry *ie;
 	int oldref;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
-	oldref = atomic_fetch_add(&ie->ref, 1);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
+	oldref = atomic_fetch_add(&ie->ie_ref, 1);
 	IOF_TRACE_DEBUG(ie, "addref to %u", oldref + 1);
 }
 
@@ -1039,8 +1070,8 @@ static bool ih_decref(struct d_hash_table *htable, d_list_t *rlink)
 	struct ioc_inode_entry *ie;
 	int oldref;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
-	oldref = atomic_fetch_sub(&ie->ref, 1);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
+	oldref = atomic_fetch_sub(&ie->ie_ref, 1);
 	IOF_TRACE_DEBUG(ie, "decref to %u", oldref - 1);
 	return oldref == 1;
 }
@@ -1050,7 +1081,7 @@ static void ih_free(struct d_hash_table *htable, d_list_t *rlink)
 	struct iof_projection_info *fs_handle = htable->ht_priv;
 	struct ioc_inode_entry *ie;
 
-	ie = container_of(rlink, struct ioc_inode_entry, list);
+	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	IOF_TRACE_DEBUG(ie, "%lu", ie->parent);
 	if (ie->parent)
@@ -1173,7 +1204,7 @@ fh_reset(void *arg)
 		D_ALLOC_PTR(fh->ie);
 		if (!fh->ie)
 			return false;
-		atomic_fetch_add(&fh->ie->ref, 1);
+		atomic_fetch_add(&fh->ie->ie_ref, 1);
 	}
 
 	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
@@ -1307,7 +1338,7 @@ entry_reset(void *arg)
 		D_ALLOC_PTR(req->ie);
 		if (!req->ie)
 			return false;
-		atomic_fetch_add(&req->ie->ref, 1);
+		atomic_fetch_add(&req->ie->ie_ref, 1);
 	}
 
 	/* Create a new RPC ready for later use.  Take an initial reference
@@ -1812,7 +1843,7 @@ initialize_projection(struct iof_state *iof_state,
 	struct iof_pool_reg pt = {.init = dh_init,
 				  .reset = dh_reset,
 				  .release = dh_release,
-				  POOL_TYPE_INIT(iof_dir_handle, list)};
+				  POOL_TYPE_INIT(iof_dir_handle, dh_od_list)};
 
 	struct iof_pool_reg fh = {.init = fh_init,
 				  .reset = fh_reset,
@@ -1911,6 +1942,8 @@ initialize_projection(struct iof_state *iof_state,
 	ret = D_MUTEX_INIT(&fs_handle->of_lock, NULL);
 	if (ret != 0)
 		D_GOTO(err, 0);
+
+	D_INIT_LIST_HEAD(&fs_handle->p_inval_list);
 
 	ret = D_MUTEX_INIT(&fs_handle->gah_lock, NULL);
 	if (ret != 0)
@@ -2339,7 +2372,7 @@ ino_flush(d_list_t *rlink, void *arg)
 	struct iof_projection_info *fs_handle = arg;
 	struct ioc_inode_entry *ie = container_of(rlink,
 						  struct ioc_inode_entry,
-						  list);
+						  ie_htl);
 	int rc;
 
 	/* Only evict entries that are direct children of the root, the kernel
@@ -2401,19 +2434,22 @@ static int iof_deregister_fuse(void *arg)
 	IOF_TRACE_INFO(fs_handle, "Draining inode table");
 	do {
 		struct ioc_inode_entry *ie;
+		uint ref;
 
 		rlink = d_hash_rec_first(&fs_handle->inode_ht);
 
 		if (!rlink)
 			break;
 
-		ie = container_of(rlink, struct ioc_inode_entry, list);
+		ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
-		IOF_TRACE_DEBUG(ie, "Dropping %d", ie->ref);
+		ref = atomic_load_consume(&ie->ie_ref);
 
-		refs += ie->ref;
+		IOF_TRACE_DEBUG(ie, "Dropping %d", ref);
+
+		refs += ref;
 		ie->parent = 0;
-		d_hash_rec_ndecref(&fs_handle->inode_ht, ie->ref, rlink);
+		d_hash_rec_ndecref(&fs_handle->inode_ht, ref, rlink);
 		handles++;
 	} while (rlink);
 
@@ -2431,7 +2467,7 @@ static int iof_deregister_fuse(void *arg)
 	 * or close()/releasedir() can race with this code.
 	 */
 	handles = 0;
-	d_list_for_each_entry_safe(dh, dh2, &fs_handle->opendir_list, list) {
+	d_list_for_each_entry_safe(dh, dh2, &fs_handle->opendir_list, dh_od_list) {
 		IOF_TRACE_INFO(fs_handle, "Closing directory " GAH_PRINT_STR
 			       " %p", GAH_PRINT_VAL(dh->gah), dh);
 		ioc_int_releasedir(dh);

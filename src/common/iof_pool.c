@@ -385,7 +385,6 @@ iof_pool_release(struct iof_pool_type *type, void *ptr)
 {
 	d_list_t *entry = ptr + type->reg.offset;
 
-	IOF_TRACE_DEBUG(ptr, "Releasing");
 	IOF_TRACE_DOWN(ptr);
 	D_MUTEX_LOCK(&type->lock);
 	type->pending_count++;

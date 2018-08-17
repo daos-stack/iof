@@ -96,9 +96,9 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
 				       &handle->ie->stat.st_ino,
 				       sizeof(handle->ie->stat.st_ino),
-				       &handle->ie->list);
+				       &handle->ie->ie_htl);
 
-	if (rlink == &handle->ie->list) {
+	if (rlink == &handle->ie->ie_htl) {
 		handle->ie = NULL;
 		IOF_TRACE_INFO(req, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));

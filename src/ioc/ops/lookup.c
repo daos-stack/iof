@@ -72,9 +72,9 @@ void iof_entry_cb(struct ioc_request *request)
 	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &desc->ie->stat.st_ino,
 				       sizeof(desc->ie->stat.st_ino),
-				       &desc->ie->list);
+				       &desc->ie->ie_htl);
 
-	if (rlink == &desc->ie->list) {
+	if (rlink == &desc->ie->ie_htl) {
 		desc->ie = NULL;
 		IOF_TRACE_INFO(request->req, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));

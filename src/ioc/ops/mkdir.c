@@ -67,8 +67,6 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	if (rc)
 		D_GOTO(err, rc);
 
-	IOF_TRACE_INFO(req, "Req %p ie %p", req, &desc->ie->list);
-
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;
 	desc->pool = fs_handle->mkdir_pool;

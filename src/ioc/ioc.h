@@ -239,6 +239,9 @@ struct iof_projection_info {
 	/** List of open file handles owned by FUSE */
 	d_list_t			openfile_list;
 
+	/** List of inodes to be invalidated on failover */
+	d_list_t			p_inval_list;
+
 	/** Held for any access/modification to a gah on any inode/file/dir */
 	pthread_mutex_t			gah_lock;
 
@@ -632,11 +635,14 @@ struct ioc_inode_entry {
 	 * All valid inodes are kept in a hash table, using the hash table
 	 * locking.
 	 */
-	d_list_t	list;
+	d_list_t	ie_htl;
 
 	/** List of inodes.
-	 * Populated during failover to be a list of inodes per parent
-	 * directory.
+	 * Populated during failover when sorting inodes for failover.
+	 * If a inode is to be failed over then it's used for a list of inodes
+	 * in the parent directory.
+	 * If a inode is not to be failed over then it's used to add to
+	 * p_inval_list for later processing.
 	 */
 	d_list_t	ie_ie_list;
 
@@ -653,7 +659,7 @@ struct ioc_inode_entry {
 	/** Reference counting for the inode.
 	 * Used by the hash table callbacks
 	 */
-	ATOMIC uint	ref;
+	ATOMIC uint	ie_ref;
 
 	/** Failover flag
 	 * Set to true during failover if this inode should be migrated
@@ -690,7 +696,7 @@ struct iof_dir_handle {
 	/** Endpoint for this directory handle */
 	crt_endpoint_t			ep;
 	/** List of directory handles */
-	d_list_t			list;
+	d_list_t			dh_od_list;
 };
 
 /**
