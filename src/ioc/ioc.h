@@ -95,8 +95,6 @@ struct iof_ctx {
 	crt_context_t			crt_ctx;
 	/** pthread identifier */
 	pthread_t			thread;
-	/** Object pool.  This is used on projections to flush on shutdown */
-	struct iof_pool			*pool;
 	/** Tracker to detect thread start */
 	struct iof_tracker		thread_start_tracker;
 	/** Tracker to signal thread stop */

@@ -1543,7 +1543,6 @@ static void *
 iof_thread(void *arg)
 {
 	struct iof_ctx	*iof_ctx = arg;
-	int		ctx_rc;
 	int		rc;
 
 	iof_tracker_signal(&iof_ctx->thread_start_tracker);
@@ -1568,38 +1567,6 @@ iof_thread(void *arg)
 		IOF_TRACE_ERROR(iof_ctx, "crt_progress error on shutdown "
 				"rc: %d", rc);
 
-	do {
-		/* If this context has a pool associated with it then reap
-		 * any descriptors with it so there are no pending RPCs when
-		 * we call context_destroy.
-		 */
-		if (iof_ctx->pool) {
-			bool active;
-
-			do {
-				ctx_rc = iof_progress_drain(iof_ctx);
-
-				active = iof_pool_reclaim(iof_ctx->pool);
-
-				if (!active)
-					break;
-
-				IOF_TRACE_WARNING(iof_ctx,
-						  "Active descriptors, waiting for one second");
-
-			} while (active && ctx_rc == -DER_SUCCESS);
-		} else {
-			ctx_rc = iof_progress_drain(iof_ctx);
-		}
-
-		rc = crt_context_destroy(iof_ctx->crt_ctx, false);
-		if (rc == -DER_BUSY)
-			IOF_TRACE_WARNING(iof_ctx, "RPCs in flight, waiting");
-		else if (rc != DER_SUCCESS)
-			IOF_TRACE_ERROR(iof_ctx, "Could not destroy context %d",
-					rc);
-	} while (rc == -DER_BUSY && ctx_rc == -DER_SUCCESS);
-
 	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
 	return (void *)(uintptr_t)rc;
 }
@@ -1621,6 +1588,10 @@ iof_thread_start(struct iof_ctx *iof_ctx)
 		IOF_TRACE_ERROR(iof_ctx, "Could not start progress thread");
 		return false;
 	}
+
+	rc = pthread_setname_np(iof_ctx->thread, "IOF thread");
+	if (rc != 0)
+		IOF_TRACE_ERROR(iof_ctx, "Could not set thread name");
 
 	iof_tracker_wait(&iof_ctx->thread_start_tracker);
 	return true;
@@ -1900,8 +1871,6 @@ initialize_projection(struct iof_state *iof_state,
 	fs_handle->flags = fs_info->flags;
 	fs_handle->proj.proto = iof_state->proto;
 	fs_handle->failover_state = iof_failover_running;
-	fs_handle->ctx.poll_interval = iof_state->iof_ctx.poll_interval;
-	fs_handle->ctx.callback_fn = iof_state->iof_ctx.callback_fn;
 	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private; "
 			"Access: Read-%s | Fail Over: %s",
 			fs_handle->flags & IOF_WRITEABLE
@@ -2077,20 +2046,21 @@ initialize_projection(struct iof_state *iof_state,
 	fs_handle->proj.grp = &group->grp;
 	fs_handle->proj.grp_id = group->grp.grp_id;
 
-	ret = crt_context_create(&fs_handle->ctx.crt_ctx);
+	ret = crt_context_create(&fs_handle->proj.crt_ctx);
 	if (ret) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create context");
 		D_GOTO(err, 0);
 	}
 
-	ret = crt_context_set_timeout(fs_handle->ctx.crt_ctx, 5);
+	ret = crt_context_set_timeout(fs_handle->proj.crt_ctx, 5);
 	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(iof_state, "Context timeout not set");
 		D_GOTO(err, 0);
 	}
 
-	fs_handle->proj.crt_ctx = fs_handle->ctx.crt_ctx;
-	fs_handle->ctx.pool = &fs_handle->pool;
+	fs_handle->ctx.crt_ctx		= fs_handle->proj.crt_ctx;
+	fs_handle->ctx.poll_interval	= iof_state->iof_ctx.poll_interval;
+	fs_handle->ctx.callback_fn	= iof_state->iof_ctx.callback_fn;
 
 	/* TODO: Much better error checking is required here, not least
 	 * terminating the thread if there are any failures in the rest of
@@ -2487,7 +2457,43 @@ static int iof_deregister_fuse(void *arg)
 
 	/* Stop the progress thread for this projection and delete the context
 	 */
-	iof_thread_stop(&fs_handle->ctx);
+
+	rc = iof_thread_stop(&fs_handle->ctx);
+	if (rc != 0)
+		IOF_TRACE_ERROR(fs_handle,
+				"thread stop returned %d", rc);
+
+	do {
+		/* If this context has a pool associated with it then reap
+		 * any descriptors with it so there are no pending RPCs when
+		 * we call context_destroy.
+		 */
+		bool active;
+
+		do {
+			rc = iof_progress_drain(&fs_handle->ctx);
+
+			active = iof_pool_reclaim(&fs_handle->pool);
+
+			if (!active)
+				break;
+
+			IOF_TRACE_INFO(fs_handle,
+					  "Active descriptors, waiting for one second");
+
+		} while (active && rc == -DER_SUCCESS);
+
+		rc = crt_context_destroy(fs_handle->proj.crt_ctx, false);
+		if (rc == -DER_BUSY)
+			IOF_TRACE_INFO(fs_handle, "RPCs in flight, waiting");
+		else if (rc != DER_SUCCESS)
+			IOF_TRACE_ERROR(fs_handle,
+					"Could not destroy context %d",
+					rc);
+	} while (rc == -DER_BUSY);
+
+	if (rc != -DER_SUCCESS)
+		IOF_TRACE_ERROR(fs_handle, "Count not destroy context");
 
 	iof_pool_destroy(&fs_handle->pool);
 
@@ -2551,7 +2557,7 @@ static void iof_finish(void *arg)
 	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
 
-	int ret;
+	int rc;
 	int i;
 	struct iof_tracker tracker;
 
@@ -2568,19 +2574,19 @@ static void iof_finish(void *arg)
 		}
 
 		/*send a detach RPC to IONSS*/
-		ret = crt_req_create(iof_state->iof_ctx.crt_ctx,
-				     &group->grp.psr_ep,
-				     DETACH_OP, &rpc);
-		if (ret || !rpc) {
+		rc = crt_req_create(iof_state->iof_ctx.crt_ctx,
+				    &group->grp.psr_ep,
+				    DETACH_OP, &rpc);
+		if (rc != -DER_SUCCESS || !rpc) {
 			IOF_TRACE_ERROR(iof_state,
 					"Could not create detach req rc = %d",
-					ret);
+					rc);
 			iof_tracker_signal(&tracker);
 			continue;
 		}
 
-		ret = crt_req_send(rpc, detach_cb, &tracker);
-		if (ret) {
+		rc = crt_req_send(rpc, detach_cb, &tracker);
+		if (rc != -DER_SUCCESS) {
 			IOF_TRACE_ERROR(iof_state, "Detach RPC not sent");
 			iof_tracker_signal(&tracker);
 		}
@@ -2600,14 +2606,27 @@ static void iof_finish(void *arg)
 		if (!group->crt_attached)
 			continue;
 
-		ret = crt_group_detach(group->grp.dest_grp);
-		if (ret)
+		rc = crt_group_detach(group->grp.dest_grp);
+		if (rc != -DER_SUCCESS)
 			IOF_TRACE_ERROR(iof_state, "crt_group_detach failed "
-					"with ret = %d", ret);
+					"with rc = %d", rc);
 	}
 
 	/* Stop progress thread */
-	iof_thread_stop(&iof_state->iof_ctx);
+	rc = iof_thread_stop(&iof_state->iof_ctx);
+	if (rc != 0)
+		IOF_TRACE_ERROR(iof_state,
+				"thread stop returned %d", rc);
+
+	rc = iof_progress_drain(&iof_state->iof_ctx);
+	if (rc != 0)
+		IOF_TRACE_ERROR(iof_state,
+				"could not drain context %d", rc);
+
+	rc = crt_context_destroy(iof_state->iof_ctx.crt_ctx, false);
+	if (rc != -DER_SUCCESS)
+		IOF_TRACE_ERROR(iof_state, "Could not destroy context %d",
+				rc);
 
 	IOF_TRACE_DOWN(&iof_state->iof_ctx);
 	IOF_TRACE_DOWN(iof_state);
