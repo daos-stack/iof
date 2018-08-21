@@ -316,14 +316,18 @@ class RpcTrace(common_methods.ColorizedOutput):
             trace = descriptor
             #append an extra line
             output.append('')
-            while trace != "root":
-                traces_for_log_dump.append(trace)
-                (trace_type, parent) = self.desc_table[trace]
-                output.append('{}: {}'.format(trace_type, trace))
-                for (desc, name) in self.desc_dict[trace]:
-                    traces_for_log_dump.append(desc)
-                    output.append('\t{} {}'.format(name, desc))
-                trace = parent
+            try:
+                while trace != "root":
+                    traces_for_log_dump.append(trace)
+                    (trace_type, parent) = self.desc_table[trace]
+                    output.append('{}: {}'.format(trace_type, trace))
+                    for (desc, name) in self.desc_dict[trace]:
+                        traces_for_log_dump.append(desc)
+                        output.append('\t{} {}'.format(name, desc))
+                    trace = parent
+            except KeyError:
+                self.error_output('Descriptor {} does not trace back to root'\
+                                  .format(descriptor))
 
             traces_for_log_dump.append(trace)
 
