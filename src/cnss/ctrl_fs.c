@@ -670,7 +670,7 @@ int ctrl_register_constant(struct ctrl_dir *dir, const char *name,
 	__sync_synchronize();
 	node->initialized = 1;
 
-	IOF_LOG_INFO("Registered %s as ctrl constant.  Value is %s (%d)",
+	IOF_LOG_INFO("Registered %s as ctrl constant. Value is %s (%d)",
 		     name, value, len);
 	return rc;
 }

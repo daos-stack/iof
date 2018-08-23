@@ -61,8 +61,6 @@ class RpcTrace(common_methods.ColorizedOutput):
     trace_dict = {}
     """dictionary maps descriptor to descriptor type and parent"""
     desc_dict = {}
-    """dictionary maps descriptor to RPC(s)"""
-    desc_state = {}
     """dictionary maps descriptor to 'registered/deregistered/linked' states
     w/ regard to IOF_TRACE macros"""
 
@@ -150,19 +148,17 @@ class RpcTrace(common_methods.ColorizedOutput):
                            'PID: {}\n'.format(self.input_file,
                                               pid_to_trace))
 
-        ort = []
+        output_table = []
 
         self.lf.reset(pid=pid_to_trace)
         for line in self.lf:
             rpc_state = None
             opcode = None
-            fields = None
 
             if line.endswith('allocated.') or \
                line.endswith('allocated per RPC request received.'):
                 rpc_state = self.ALLOC_STATE
-                fields = line.split()
-                opcode = fields[10][:-2]
+                opcode = line.get_field(5)[:-2]
             elif line.endswith('), decref to 0.'):
                 rpc_state = self.DEALLOC_STATE
             elif line.endswith('submitted.'):
@@ -172,10 +168,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             else:
                 continue
 
-            if fields is None:
-                fields = line.split()
-
-            rpc = fields[8]
+            rpc = line.get_field(3)
 
             if rpc_state == self.ALLOC_STATE:
                 current_opcodes[rpc] = opcode
@@ -194,16 +187,15 @@ class RpcTrace(common_methods.ColorizedOutput):
             (state, extra) = self._rpc_error_state_tracing(rpc, rpc_state)
 
             if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
-                function_name = fields[6]
-                ort.append([state,
-                            rpc,
-                            rpc_state,
-                            opcode,
-                            function_name,
-                            extra])
+                output_table.append([state,
+                                     rpc,
+                                     rpc_state,
+                                     opcode,
+                                     line.function,
+                                     extra])
 
-        if ort:
-            self.table_output(ort,
+        if output_table:
+            self.table_output(output_table,
                               title='RPC State Transitions:',
                               headers=['STATE',
                                        'RPC',
@@ -257,13 +249,12 @@ class RpcTrace(common_methods.ColorizedOutput):
             if "Registered new" in line:
 
                 #register a new descriptor/object in the log hierarchy
-                fields = line.split()
                 new_obj = line.descriptor
-                parent = fields[-1]
+                parent = line.get_field(-1)
 
                 if parent in reuse_table and reuse_table[parent] > 0:
                     parent = '{}_{}'.format(parent, reuse_table[parent])
-                obj_type = fields[-3][1:-1]
+                obj_type = line.get_field(-3)[1:-1]
 
                 if new_obj in reuse_table:
                     reuse_table[new_obj] += 1
@@ -279,9 +270,9 @@ class RpcTrace(common_methods.ColorizedOutput):
             if "Link" not in line:
                 continue
             #register RPCs tied to given handle
-            fields = line.split()
-            rpc = fields[-1]
-            rpc_type = fields[9][1:-1]
+
+            rpc = line.get_field(-1)
+            rpc_type = line.get_field(-3)[1:-1]
             #find index of descriptor in order to append rpc
             #to correct index in the chance it is reused in the dict
             if rpc in reuse_table and reuse_table[rpc] > 0:
@@ -463,9 +454,14 @@ class RpcTrace(common_methods.ColorizedOutput):
     def _descriptor_error_state_tracing(self):
         """Check for any descriptors that are not registered/deregistered"""
 
-        self.desc_state = {}
+        desc_state = OrderedDict()
+        # Maintain a list of parent->children relationships.  This is a dict of
+        # sets, using the parent as the key and the value is a set of children.
+        # When a descriptor is deleted then all child RPCs in the set are also
+        # removed from desc_state
+        linked = {}
 
-        output = []
+        output_table = []
 
         self.lf.reset(trace_only=True)
         for line in self.lf:
@@ -473,74 +469,68 @@ class RpcTrace(common_methods.ColorizedOutput):
             desc = line.descriptor
             if desc == '':
                 continue
-            res = None
+
+            msg = None
+            is_error = True
 
             if 'Registered new' in line:
                 state = 'Registered'
-                if desc in self.desc_state:
-                    res = ('ERROR', state, 'previous state: {}' \
-                           .format(self.desc_state[desc]))
+                if desc in desc_state:
+                    msg = 'previous state: {}'.format(desc_state[desc])
                 else:
-                    res = ('SUCCESS', state)
-                self.desc_state[desc] = state
+                    is_error = False
+                desc_state[desc] = state
+                linked[desc] = set()
             elif 'Link' in line:
                 state = 'Linked'
-                if self.desc_state.get(desc, None) == 'Linked' or \
-                   desc not in self.desc_state:
-                    res = ('SUCCESS', state)
-                else:
-                    res = ('ERROR', state)
-                self.desc_state[desc] = state
+                if desc not in desc_state or \
+                   desc_state[desc] == 'Linked':
+                    is_error = False
+                desc_state[desc] = state
+                parent = line.get_field(-1)
+                linked[parent].add(desc)
             elif 'Deregistered' in line:
                 state = 'Deregistered'
-                if self.desc_state.get(desc, None) == 'Registered':
-                    del self.desc_state[desc]
-                    res = ('SUCCESS', state)
-                elif self.desc_state.get(desc, None) == 'Linked':
-                    res = ('ERROR', state, 'Linked RPC')
-                else:
-                    res = ('ERROR', state)
-            if not res:
+                if desc_state.get(desc, None) == 'Registered':
+                    del desc_state[desc]
+                    is_error = False
+                elif desc_state.get(desc, None) == 'Linked':
+                    msg = 'Linked RPC'
+                for child in linked[desc]:
+                    del desc_state[child]
+                del linked[desc]
+            else:
                 continue
 
-            fields = line.split()
-            part = fields[7]
-            start_idx = part.find('(')
-            function_name = part[:start_idx]
-            if self.VERBOSE_STATE_TRANSITIONS or res[0] != 'SUCCESS':
-                if res[0] != 'SUCCESS':
-                    self.have_errors = True
-                desc = '{}: {}'.format(res[0], desc)
-                if len(res) == 2:
-                    output.append('{0:<30}{1:<20}{2}()'.format(desc,
-                                                               res[1],
-                                                               function_name))
-                else:
-                    output.append('{0:<30}{1:<20}{2}() ({3})' \
-                                  .format(desc,
-                                          res[1],
-                                          function_name,
-                                          res[2]))
+            if is_error:
+                self.have_errors = True
 
-        if output:
-            self.normal_output('\nDescriptor State Transitions:')
-            self.normal_output('{0:<30}{1:<20}{2:<20}\n{3:<30}{4:<20}{5:<20}'.\
-                               format('Descriptor', 'State', 'Function',
-                                      '----------', '-----', '--------'))
-            self.list_output(output)
+            if not self.VERBOSE_STATE_TRANSITIONS and not is_error:
+                continue
+
+            if is_error:
+                output_table.append([desc,
+                                     '{} (Error)'.format(state),
+                                     line.function,
+                                     msg])
+            else:
+                output_table.append([desc, state, line.function, msg])
+
+        if output_table:
+            self.table_output(output_table,
+                              title='Descriptor State Transitions:',
+                              headers=['Descriptor',
+                                       'State',
+                                       'Function',
+                                       'Message'])
 
         #check if all descriptors are deregistered
-        for d in list(self.desc_state):
-            if self.desc_state.get(d, None) == 'Registered':
+        for d, state in desc_state.items():
+            if state == 'Registered':
                 self.error_output('{} is not Deregistered'.format(d))
-            elif self.desc_state.get(d, None) == 'Linked':
-                #currently no "unlinked" state, CaRT RPC debugging is done
-                #prior to this
-                del self.desc_state[d]
-        #final check to make sure all registered descriptors are deleted
-        for d, state in self.desc_state.items():
-            self.error_output('{}:{} not deregistered from state'.\
-                              format(d, state))
+            else:
+                self.error_output('{}:{} not Deregistered from state'.\
+                                  format(d, state))
 
     def descriptor_to_trace(self):
         """Find the file handle to use for descriptor tracing:

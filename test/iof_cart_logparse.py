@@ -76,6 +76,7 @@ class IofLogRaw():
         return self.line
 # pylint: enable=too-few-public-methods
 
+# pylint: disable=too-many-instance-attributes
 class IofLogLine():
     """Class for parsing CaRT log lines
 
@@ -87,41 +88,54 @@ class IofLogLine():
 
     index is the line in the file, starting at 1.
     """
-    def __init__(self, line, index, fields):
-        self._line = line.rstrip('\n')
+    def __init__(self, line, index):
+        fields = line.split()
+        # Work out the end of the fixed-width portion, and the beginning of the
+        # message.  The hostname and pid fields are both variable width
+        idx = 29 + len(fields[1]) + len(fields[2])
         self.pid = int(fields[2][5:-1])
+        self._preamble = line[:idx]
         self.index = index
         try:
             self.level = LOG_LEVELS[fields[4]]
         except KeyError:
             raise InvalidLogFile(fields[4])
-        self._msg = ' '.join(fields[5:])
-        self.trace = bool(fields[6] == 'TRACE:')
-        self._desc_part = fields[7]
+
+        self._fields = fields[5:]
+        # Handle old-style trace messages.
+        if self._fields[1] == 'TRACE:':
+            self.trace = True
+            self._fields.pop(1)
+        elif self._fields[1][-2:] == '()':
+            self.trace = False
+            self.function = self._fields[1][:-2]
+        elif self._fields[1][-1:] == ')':
+            self.trace = True
+        else:
+            self.trace = False
+
+        if self.trace:
+            fn_str = self._fields[1]
+            start_idx = fn_str.find('(')
+            self.function = fn_str[:start_idx]
+            desc = fn_str[start_idx+1:-1]
+            if desc == '(nil)':
+                self.descriptor = ''
+            else:
+                self.descriptor = desc
+        self._msg = ' '.join(self._fields)
 
     def to_str(self, mark=False):
         """Convert the object to a string"""
-        idx = len(self._line) - len(self._msg)
         if mark:
-            return '{}** {}'.format(self._line[:idx],
-                                    self._msg)
-        return '{}   {}'.format(self._line[:idx],
-                                self._msg)
+            return '{} ** {}'.format(self._preamble, self._msg)
+        return '{}    {}'.format(self._preamble, self._msg)
 
     def __contains__(self, item):
         idx = self._msg.find(item)
         if idx != -1:
             return True
         return False
-
-    def __getattr__(self, attr):
-        if attr == 'descriptor':
-            start_idx = self._desc_part.find('(')
-            desc = self._desc_part[start_idx+1:-1]
-            if desc == '(nil)':
-                return ''
-            return desc
-        raise AttributeError
 
     def endswith(self, item):
         """Mimic the str.endswith() function
@@ -131,9 +145,10 @@ class IofLogLine():
         """
         return self._msg.endswith(item)
 
-    def split(self):
-        """Allow for line.split() to work"""
-        return self._line.split()
+    def get_field(self, idx):
+        """Return a specific field from the line"""
+        return self._fields[idx]
+# pylint: enable=too-many-instance-attributes
 
 class IofLogIter():
     """Class for parsing CaRT log files
@@ -150,12 +165,12 @@ class IofLogIter():
         index = 0
         pids = set()
         for line in fd:
-            fields = line.split()
+            fields = line.split(maxsplit=8)
             index += 1
             if len(fields[0]) != 17 or len(fields) < 6:
                 self._data.append(IofLogRaw(line))
             else:
-                l_obj = IofLogLine(line, index, fields)
+                l_obj = IofLogLine(line, index)
                 pids.add(l_obj.pid)
                 self._data.append(l_obj)
         fd.close()

@@ -83,7 +83,7 @@
  */
 #define IOF_TRACE(ptr, fac, type, fmt, ...)		\
 	d_log(fac | DLOG_##type,			\
-		"%s:%d TRACE: %s(%p) " fmt "\n",	\
+		"%s:%d %s(%p) " fmt "\n",		\
 		__FILE__,  __LINE__, __func__, ptr,	\
 		## __VA_ARGS__)
 
@@ -102,25 +102,25 @@
 /* Register a descriptor with a parent and a type */
 #define IOF_TRACE_UP(ptr, parent, type)					\
 	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d TRACE: %s(%p) Registered new '%s' from %p\n",	\
+		"%s:%d %s(%p) Registered new '%s' from %p\n",		\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
 /* Link an RPC to a descriptor */
 #define IOF_TRACE_LINK(ptr, parent, type)				\
 	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d TRACE: %s(%p) Link '%s' to %p\n",		\
+		"%s:%d %s(%p) Link '%s' to %p\n",			\
 		__FILE__, __LINE__, __func__, ptr, type, parent)
 
 /* De-register a descriptor, including all aliases */
-#define IOF_TRACE_DOWN(ptr)						\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d TRACE: %s(%p) Deregistered\n",			\
+#define IOF_TRACE_DOWN(ptr)					\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,			\
+		"%s:%d %s(%p) Deregistered\n",			\
 		__FILE__, __LINE__, __func__, ptr)
 
 /* Register as root of hierarchy, used in place of IOF_TRACE_UP */
-#define IOF_TRACE_ROOT(ptr, type)				\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,			\
-		"%s:%d TRACE: %s(%p) Registered new '%s' as root\n",\
+#define IOF_TRACE_ROOT(ptr, type)					\
+	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
+		"%s:%d %s(%p) Registered new '%s' as root\n",		\
 		__FILE__, __LINE__, __func__, ptr, type)
 
 #if defined(__cplusplus)
