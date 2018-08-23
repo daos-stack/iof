@@ -398,11 +398,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	void *rcp = NULL;
 	int rc;
 
-	clock_gettime(CLOCK_REALTIME, &wait_time);
-
 	D_MUTEX_LOCK(&info->lock);
 
-	IOF_TRACE_DEBUG(info, "Unmounting FS: %s", info->mnt);
+	IOF_TRACE_DEBUG(plugin, "Unmounting FS: %s", info->mnt);
 
 #if 0
 	/* This will have already been called once */
@@ -411,7 +409,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 #endif
 
 	if (info->running) {
-		IOF_TRACE_DEBUG(info,
+		IOF_TRACE_DEBUG(plugin,
 				"Sending termination signal %s", info->mnt);
 
 		/*
@@ -434,22 +432,24 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	D_MUTEX_UNLOCK(&info->lock);
 
+	clock_gettime(CLOCK_REALTIME, &wait_time);
+
 	do {
-		IOF_TRACE_INFO(info, "Trying to join fuse thread");
+		IOF_TRACE_INFO(plugin, "Trying to join fuse thread");
 
 		wait_time.tv_sec++;
 
 		rc = pthread_timedjoin_np(info->thread, &rcp, &wait_time);
 
-		IOF_TRACE_INFO(info, "Join returned %d:'%s'", rc, strerror(rc));
+		IOF_TRACE_INFO(plugin,
+			       "Join returned %d:'%s'", rc, strerror(rc));
 
 		if (rc == ETIMEDOUT) {
 			if (info->session &&
 			    !fuse_session_exited(info->session))
-				IOF_TRACE_WARNING(info,
-						  "Session still running");
+				IOF_TRACE_INFO(plugin, "Session still running");
 
-			IOF_TRACE_INFO(info,
+			IOF_TRACE_INFO(plugin,
 				       "Thread still running, waking it up");
 
 			pthread_kill(info->thread, SIGUSR1);
@@ -458,14 +458,14 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	} while (rc == ETIMEDOUT);
 
 	if (rc)
-		IOF_TRACE_ERROR(info, "Final join returned %d:'%s'",
+		IOF_TRACE_ERROR(plugin, "Final join returned %d:'%s'",
 				rc, strerror(rc));
 
 	d_list_del(&info->entries);
 
 	rc = pthread_mutex_destroy(&info->lock);
 	if (rc != 0)
-		IOF_TRACE_ERROR(info,
+		IOF_TRACE_ERROR(plugin,
 				"Failed to destroy lock %d:'%s'",
 				rc, strerror(rc));
 
@@ -479,9 +479,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	}
 
 	if (info->session) {
-		IOF_TRACE_INFO(info, "destroying session %p", info->session);
+		IOF_TRACE_INFO(plugin, "destroying session %p", info->session);
 		fuse_session_destroy(info->session);
-		IOF_TRACE_INFO(info, "session destroyed");
+		IOF_TRACE_INFO(plugin, "session destroyed");
 	}
 
 	return rc;
