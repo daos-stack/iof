@@ -66,9 +66,9 @@ opendir_ll_cb(struct ioc_request *request)
 		d_list_add_tail(&dh->dh_od_list, &dh->open_req.fsh->opendir_list);
 		D_MUTEX_UNLOCK(&dh->open_req.fsh->od_lock);
 		fi.fh = (uint64_t)dh;
-		IOF_FUSE_REPLY_OPEN(request->req, fi);
+		IOC_REPLY_OPEN(request, fi);
 	} else {
-		IOF_FUSE_REPLY_ERR(request->req, request->rc);
+		IOC_REPLY_ERR(request, request->rc);
 		iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 	}
 }
@@ -86,8 +86,8 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	struct iof_gah_in		*in;
 	int rc;
 
-	IOF_TRACE_INFO(req, "ino %lu", ino);
-	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
+	IOF_TRACE_INFO(fs_handle, "ino %lu", ino);
+	IOC_REQ_INIT_REQ(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
@@ -106,5 +106,5 @@ err:
 	if (dh)
 		iof_pool_release(fs_handle->dh_pool, dh);
 
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 }

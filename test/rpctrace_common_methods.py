@@ -496,9 +496,10 @@ class RpcTrace(common_methods.ColorizedOutput):
                     is_error = False
                 elif desc_state.get(desc, None) == 'Linked':
                     msg = 'Linked RPC'
-                for child in linked[desc]:
-                    del desc_state[child]
-                del linked[desc]
+                if desc in linked:
+                    for child in linked[desc]:
+                        del desc_state[child]
+                    del linked[desc]
             else:
                 continue
 

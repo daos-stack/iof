@@ -59,9 +59,9 @@ static void closedir_ll_cb(struct ioc_request *request)
 		D_GOTO(out, 0);
 
 	if (request->rc == 0)
-		IOF_FUSE_REPLY_ZERO(request->req);
+		IOC_REPLY_ZERO(request);
 	else
-		IOF_FUSE_REPLY_ERR(request->req, request->rc);
+		IOC_REPLY_ERR(request, request->rc);
 out:
 	iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 }
@@ -83,12 +83,12 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	d_list_del(&dh->dh_od_list);
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
-	IOC_REQ_INIT_LL(dh, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(dh, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
 	if (!H_GAH_IS_VALID(dh)) {
-		IOF_TRACE_INFO(req, "Release with bad dh");
+		IOF_TRACE_INFO(dh, "Release with bad dh");
 
 		/* If the server has reported that the GAH is invalid
 		 * then do not send a RPC to close it.
@@ -101,9 +101,10 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 		D_GOTO(err, rc);
 	return;
 err:
+	IOF_TRACE_DOWN(&dh->close_req);
 	iof_pool_release(fs_handle->dh_pool, dh);
 	if (req)
-		IOF_FUSE_REPLY_ERR(req, rc);
+		IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 }
 
 void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,

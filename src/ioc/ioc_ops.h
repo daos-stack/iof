@@ -84,6 +84,8 @@
 	do {								\
 		IOC_REQ_INIT(src, fsh, api, in, rc);			\
 		if (rc)	{						\
+			if (src)					\
+				IOF_TRACE_UP(&(src)->REQ_NAME, src, TRACE_REQ);	\
 			break;						\
 		}							\
 		(src)->REQ_NAME.req = fuse_req;				\

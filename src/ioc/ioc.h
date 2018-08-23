@@ -384,6 +384,18 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
+#define IOC_REPLY_ZERO(ioc_req)					\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(ioc_req, "Returning 0");		\
+		__rc = fuse_reply_err((ioc_req)->req, 0);		\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(ioc_req,			\
+					"fuse_reply_err returned %d:%s", \
+					__rc, strerror(-__rc));		\
+		IOF_TRACE_DOWN(ioc_req);				\
+	} while (0)
+
 #define IOC_REPLY_ATTR(ioc_req, attr)					\
 	do {								\
 		int __rc;						\
@@ -418,6 +430,18 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 					"fuse_reply_open returned %d:%s", \
 					__rc, strerror(-__rc));		\
 		IOF_TRACE_DOWN(req);					\
+	} while (0)
+
+#define IOC_REPLY_OPEN(ioc_req, fi)					\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(ioc_req, "Returning open");		\
+		__rc = fuse_reply_open((ioc_req)->req, &fi);		\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(ioc_req,			\
+					"fuse_reply_open returned %d:%s", \
+					__rc, strerror(-__rc));		\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOF_FUSE_REPLY_CREATE(req, entry, fi)				\
@@ -673,12 +697,12 @@ struct ioc_inode_entry {
  * Describes a open directory, may be used for readdir() calls.
  */
 struct iof_dir_handle {
+	/** The GAH to use when accessing the directory */
+	struct ios_gah			gah;
 	/** Request for opening the directory */
 	struct ioc_request		open_req;
 	/** Request for closing the directory */
 	struct ioc_request		close_req;
-	/** The GAH to use when accessing the directory */
-	struct ios_gah			gah;
 	/** Any RPC reference held across readdir() calls */
 	crt_rpc_t			*rpc;
 	/** Pointer to any retreived data from readdir() RPCs */
