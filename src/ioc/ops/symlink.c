@@ -63,8 +63,8 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	struct iof_two_string_in	*in;
 	int rc;
 
-	IOF_TRACE_INFO(req, "Parent:%lu '%s'", parent, name);
-	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
+	IOF_TRACE_INFO(fs_handle, "Parent:%lu '%s'", parent, name);
+	IOC_REQ_INIT_REQ(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
@@ -88,7 +88,7 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 		D_GOTO(err, 0);
 	return;
 err:
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 	if (desc)
 		iof_pool_release(fs_handle->symlink_pool, desc);
 }

@@ -573,7 +573,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.lf.reset(trace_only=True)
         for line in self.lf:
-            if fuse_file in line:
+            if fuse_file in line and 'Registered new' in line:
                 return line.descriptor
         self.error_output('Descriptor not found to trace')
         return None

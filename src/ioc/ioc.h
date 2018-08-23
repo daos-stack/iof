@@ -388,7 +388,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 	do {								\
 		int __rc;						\
 		IOF_TRACE_DEBUG(ioc_req, "Returning attr");		\
-		__rc = fuse_reply_attr(ioc_req->req, attr, 0);		\
+		__rc = fuse_reply_attr((ioc_req)->req, attr, 0);	\
 		if (__rc != 0)						\
 			IOF_TRACE_ERROR(ioc_req,			\
 					"fuse_reply_attr returned %d:%s", \
@@ -432,16 +432,16 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
-#define IOF_FUSE_REPLY_ENTRY(req, entry)				\
+#define IOC_REPLY_ENTRY(ioc_req, entry)					\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning entry");		\
-		__rc = fuse_reply_entry(req, &entry);			\
+		IOF_TRACE_DEBUG(ioc_req, "Returning entry");		\
+		__rc = fuse_reply_entry((ioc_req)->req, &entry);	\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(ioc_req,			\
 					"fuse_reply_entry returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOF_FUSE_REPLY_STATFS(req, stat)				\
@@ -801,8 +801,8 @@ struct ioc_inode_migrate {
  * Request for all RPC types that can return a new inode.
  */
 struct entry_req {
-	struct ioc_request		request;
 	struct ioc_inode_entry		*ie;
+	struct ioc_request		request;
 	d_list_t			list;
 	crt_opcode_t			opcode;
 	struct iof_pool_type		*pool;

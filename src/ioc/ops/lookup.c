@@ -88,9 +88,9 @@ void iof_entry_cb(struct ioc_request *request)
 out:
 	if (request->rc) {
 		drop_ino_ref(fs_handle, desc->ie->parent);
-		IOF_FUSE_REPLY_ERR(request->req, request->rc);
+		IOC_REPLY_ERR(request, request->rc);
 	} else {
-		IOF_FUSE_REPLY_ENTRY(request->req, entry);
+		IOC_REPLY_ENTRY(request, entry);
 	}
 	iof_pool_release(desc->pool, desc);
 }
@@ -141,12 +141,12 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	struct iof_gah_string_in	*in;
 	int rc;
 
-	IOF_TRACE_INFO(req, "Parent:%lu '%s'", parent, name);
-	IOC_REQ_INIT_LL(desc, fs_handle, api, in, req, rc);
+	IOF_TRACE_INFO(fs_handle, "Parent:%lu '%s'", parent, name);
+	IOC_REQ_INIT_REQ(desc, fs_handle, api, in, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
-	IOF_TRACE_INFO(req, "ie %p", &desc->ie);
+	IOF_TRACE_INFO(desc, "ie %p", &desc->ie);
 
 	if (parent == 1) {
 		desc->request.ir_ht = RHS_ROOT;
@@ -172,5 +172,5 @@ err:
 	if (desc)
 		iof_pool_release(fs_handle->lookup_pool, desc);
 	drop_ino_ref(fs_handle, parent);
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 }
