@@ -50,10 +50,14 @@
 #define DEF_LOG_HANDLE iof_log_handle
 #endif
 
-#define IOF_LOG_FAC(fac, type, fmt, ...)				\
-	d_log(fac | DLOG_##type, "%s:%d %s() " fmt "\n",		\
-		__FILE__,  __LINE__, __func__,				\
-		## __VA_ARGS__)
+#define IOF_LOG_FAC(fac, type, fmt, ...)			\
+	do {							\
+		if (d_log_check((fac) | DLOG_##type))		\
+			d_log(d_log_check((fac) | DLOG_##type),	\
+				"%s:%d %s() " fmt "\n",		\
+				__FILE__,  __LINE__, __func__,	\
+				## __VA_ARGS__);		\
+	} while (0)
 
 #define IOF_LOG_WARNING(...)	\
 	IOF_LOG_FAC(DEF_LOG_HANDLE, WARN, __VA_ARGS__)
@@ -81,11 +85,14 @@
  * DEBUG/INFO, however just takes an extra argument for the
  * lowest-level descriptor to tie the logging message to.
  */
-#define IOF_TRACE(ptr, fac, type, fmt, ...)		\
-	d_log(fac | DLOG_##type,			\
-		"%s:%d %s(%p) " fmt "\n",		\
-		__FILE__,  __LINE__, __func__, ptr,	\
-		## __VA_ARGS__)
+#define IOF_TRACE(ptr, fac, type, fmt, ...)				\
+	do {								\
+		if (d_log_check((fac) | DLOG_##type))			\
+			d_log(d_log_check((fac) | DLOG_##type),		\
+				"%s:%d %s(%p) " fmt "\n",		\
+				__FILE__,  __LINE__, __func__, ptr,	\
+				## __VA_ARGS__);			\
+	} while (0)
 
 #define IOF_TRACE_WARNING(ptr, ...)			\
 	IOF_TRACE(ptr, DEF_LOG_HANDLE, WARN, __VA_ARGS__)
@@ -100,28 +107,24 @@
 	IOF_TRACE(ptr, DEF_LOG_HANDLE, INFO, __VA_ARGS__)
 
 /* Register a descriptor with a parent and a type */
-#define IOF_TRACE_UP(ptr, parent, type)					\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d %s(%p) Registered new '%s' from %p\n",		\
-		__FILE__, __LINE__, __func__, ptr, type, parent)
-
+#define IOF_TRACE_UP(ptr, parent, type)				\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
+		  "Registered new '%s' from %p", type, parent)
 /* Link an RPC to a descriptor */
-#define IOF_TRACE_LINK(ptr, parent, type)				\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d %s(%p) Link '%s' to %p\n",			\
-		__FILE__, __LINE__, __func__, ptr, type, parent)
+#define IOF_TRACE_LINK(ptr, parent, type)			\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
+		  "Link '%s' to %p", type, parent)
 
 /* De-register a descriptor, including all aliases */
 #define IOF_TRACE_DOWN(ptr)					\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,			\
-		"%s:%d %s(%p) Deregistered\n",			\
-		__FILE__, __LINE__, __func__, ptr)
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
+		"Deregistered")
 
 /* Register as root of hierarchy, used in place of IOF_TRACE_UP */
-#define IOF_TRACE_ROOT(ptr, type)					\
-	d_log(DEF_LOG_HANDLE | DLOG_DBG,				\
-		"%s:%d %s(%p) Registered new '%s' as root\n",		\
-		__FILE__, __LINE__, __func__, ptr, type)
+#define IOF_TRACE_ROOT(ptr, type)				\
+	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
+		  "Registered new '%s' as root", type)
+
 
 #if defined(__cplusplus)
 extern "C" {

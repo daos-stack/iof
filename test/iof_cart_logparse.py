@@ -167,7 +167,7 @@ class IofLogIter():
         for line in fd:
             fields = line.split(maxsplit=8)
             index += 1
-            if len(fields[0]) != 17 or len(fields) < 6:
+            if len(fields) < 6 or len(fields[0]) != 17:
                 self._data.append(IofLogRaw(line))
             else:
                 l_obj = IofLogLine(line, index)
