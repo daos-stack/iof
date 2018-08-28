@@ -56,6 +56,7 @@ import shutil
 import errno
 import getpass
 import signal
+import tabulate
 import subprocess
 import tempfile
 import yaml
@@ -943,11 +944,10 @@ class Testlocal(unittest.TestCase,
 
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_failover_off_readdir(self):
-        """Test failover readdir through iofmod
+        """Test failover readdir through iofmod"""
 
-        This tests a projection with failover disabled, after failover future
-        readdir calls should fail with EHOSTDOWN
-        """
+        # This tests a projection with failover disabled, after failover future
+        # readdir calls should fail with EHOSTDOWN
 
         dirname = os.path.join(self.cnss_prefix, 'usr')
 
@@ -1088,12 +1088,11 @@ class Testlocal(unittest.TestCase,
             time.sleep(1)
 
     def test_failover_fstat(self):
-        """Test open file migration during failover
+        """Test open file migration during failover"""
 
-        This test creates a file on the 'exp' projection export point,
-        then opens it via IOF, triggers failover and then tries to
-        call fstat on the file.
-        """
+        # This test creates a file on the 'exp' projection export point,
+        # then opens it via IOF, triggers failover and then tries to
+        # call fstat on the file.
 
         e_dir = os.path.join(self.export_dir, 'tdir')
         os.mkdir(e_dir)
@@ -1143,12 +1142,11 @@ class Testlocal(unittest.TestCase,
         return failed
 
     def test_failover_stat(self):
-        """Basic failover test
+        """Basic failover test"""
 
-        Launch IOF as normal, kill one IONSS process and then call stat
-        projection.  This should see EIO initially as the feature is not yet
-        complete however future requests should work correctly.
-        """
+        # Launch IOF as normal, kill one IONSS process and then call stat
+        # projection.  This should see EIO initially as the feature is not yet
+        # complete however future requests should work correctly.
 
         self.dump_failover_state()
         self.kill_ionss_proc()
@@ -1169,11 +1167,10 @@ class Testlocal(unittest.TestCase,
             self.fail('Failed with unexpected errno')
 
     def test_failover_off_stat(self):
-        """Non-failover test
+        """Non-failover test"""
 
-        Try accessing a filesystem after failure when failover is disabled.
-        This should return EHOSTDOWN in all cases.
-        """
+        # Try accessing a filesystem after failure when failover is disabled.
+        # This should return EHOSTDOWN in all cases.
         self.dump_failover_state()
         self.kill_ionss_proc()
 
@@ -1228,27 +1225,27 @@ class Testlocal(unittest.TestCase,
         return self.test_failover_unlink(subdir=True)
 
     def test_failover_many(self):
-        """Test failover with open files
+        """Test failover with open files"""
 
-        Test various permutations of failover:
-        - Open a file in the top-level directory.
-        - Open a file in a subdirectory.
-        - Make a subdirectory, create a file in it and unlink the file.
-        - Open a file in the top-level directory, them remove it on the backend
-        - Open a file in the top-level directory, then remove and replace with
-          alternate file on backend.
-        - Open a file, then close it.
-
-        After failover then try the following:
-        Try to stat each open file.
-        Try to stat each subdirectory which has open files.
-        Try to stat a untouched, but pre-existing subdirectory.
-        Try to stat the previously created subdirectory
-
-        Many of these cases are expected to fail currently (and removing the
-        file before failover always will) so the test is mostly to confirm the
-        code doesn't crash and to see progress on feature development.
-        """
+        # Test various permutations of failover:
+        # - Open a file in the top-level directory.
+        # - Open a file in a subdirectory.
+        # - Make a subdirectory, create a file in it and unlink the file.
+        # - Open a file in the top-level directory, them remove it on the
+        #   backend
+        # - Open a file in the top-level directory, then remove and replace with
+        #   alternate file on backend.
+        # - Open a file, then close it.
+        #
+        # After failover then try the following:
+        # Try to stat each open file.
+        # Try to stat each subdirectory which has open files.
+        # Try to stat a untouched, but pre-existing subdirectory.
+        # Try to stat the previously created subdirectory
+        #
+        # Many of these cases are expected to fail currently (and removing the
+        # file before failover always will) so the test is mostly to confirm the
+        # code doesn't crash and to see progress on feature development.
 
         frontend_dir = self.import_dir
         backend_dir = self.export_dir
@@ -1420,18 +1417,36 @@ if __name__ == '__main__':
         iof_root = jdata['PREFIX']
     ioil_path = os.path.join(iof_root, 'lib')
 
+    test_n = []
+    test_f = []
+
     tests = []
-    for a_test in sorted(dir(Testlocal)):
-        if not a_test.startswith('test_'):
+    for ptest in sorted(dir(Testlocal)):
+        if not ptest.startswith('test_'):
             continue
 
-        tests.append(a_test[5:])
+        t_obj = getattr(Testlocal, ptest)
+        if not callable(t_obj):
+            continue
+
+        tests.append(ptest[5:])
+        if ptest.startswith('test_failover_'):
+            test_f.append([ptest[5:], t_obj.__doc__])
+        else:
+            test_n.append([ptest[5:], t_obj.__doc__])
+
+    epilog_str = '\n'.join(['Available tests are:',
+                            tabulate.tabulate(test_n),
+                            tabulate.tabulate(test_f)])
 
     use_go = True
     skip_failover = False
 
     test_help = "A test to run (%s) or a utest argument" % ', '.join(tests)
-    parser = argparse.ArgumentParser(description='Run local iof tests')
+    parser = argparse.ArgumentParser(description='Run local iof tests',
+                                     epilog=epilog_str,
+                                     formatter_class=\
+                                     argparse.RawDescriptionHelpFormatter)
     parser.add_argument('tests', metavar='TEST', type=str,
                         help=test_help, nargs='*')
     parser.add_argument('--valgrind', action='store_true',

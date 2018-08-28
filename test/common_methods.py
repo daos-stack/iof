@@ -439,10 +439,9 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         os.close(fd)
 
     def test_file_copy(self):
-        """Copy a file into a projecton
+        """Copy a file into a projecton"""
 
-        Basic copy, using large I/O.  No permissions or metadata are used.
-        """
+        # Basic copy, using large I/O.  No permissions or metadata are used.
 
         filename = os.path.join(self.import_dir, 'ls')
 
@@ -489,10 +488,9 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
 
     @unittest.skip("Test not complete")
     def test_file_open(self):
-        """Open a file for reading
+        """Open a file for reading"""
 
-        This is supposed to fail, as the file doesn't exist.
-        """
+        # This is supposed to fail, as the file doesn't exist.
 
         filename = os.path.join(self.import_dir, 'non_exist_file')
 
@@ -581,12 +579,11 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         os.unlink(filename)
 
     def test_mkdir(self):
-        """Create a directory and check it exists
+        """Create a directory and check it exists"""
 
-        This test is also a bit of a nonsense as it makes a directory, however
-        it relies on mkdtemp() is get_unique() in order to launch, so if there
-        is a problem it'll be the setup which will fail, not the test.
-        """
+        # This test is also a bit of a nonsense as it makes a directory, however
+        # it relies on mkdtemp() is get_unique() in order to launch, so if there
+        # is a problem it'll be the setup which will fail, not the test.
 
         ndir = os.path.join(self.import_dir, 'new_dir')
 
@@ -643,10 +640,9 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
     # These methods have both multi node and iof_test_local component
 
     def test_file_copy_from(self):
-        """Copy a file into a projection
+        """Copy a file into a projection"""
 
-        Basic copy, using large I/O.  No permissions or metadata are used.
-        """
+        # Basic copy, using large I/O.  No permissions or metadata are used.
 
         if self.test_local:
             self.export_file_copy_from()
