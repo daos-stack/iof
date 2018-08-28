@@ -49,7 +49,7 @@
 static const struct ioc_request_api api = {
 	.on_send	= post_send,
 	.on_result	= iof_entry_cb,
-	.on_evict	= ioc_simple_resend
+	.on_evict	= ioc_simple_resend,
 };
 
 #define STAT_KEY symlink
@@ -64,9 +64,11 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Parent:%lu '%s'", parent, name);
-	IOC_REQ_INIT_REQ(desc, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(desc, fs_handle, api, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
+
+	in = crt_req_get(desc->request.rpc);
 
 	strncpy(in->common.name.name, name, NAME_MAX);
 	desc->dest = strdup(link);

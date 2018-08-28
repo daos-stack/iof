@@ -63,10 +63,11 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Parent:%lu '%s'", parent, name);
-	IOC_REQ_INIT_REQ(desc, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(desc, fs_handle, api, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
+	in = crt_req_get(desc->request.rpc);
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;
 	desc->pool = fs_handle->mkdir_pool;

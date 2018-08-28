@@ -503,8 +503,10 @@ struct ioc_request_api {
 	void	(*on_result)(struct ioc_request *req);
 	/** Called on eviction, can re-send to new rank */
 	int	(*on_evict)(struct ioc_request *req);
-	/** Called before sending */
-	int	(*on_presend)(struct ioc_request *req);
+	/** Offset of GAH in RPC input buffer */
+	off_t	gah_offset;
+	/** Set to true if gah_offset is set */
+	bool	have_gah;
 };
 
 enum ioc_request_state {
@@ -522,6 +524,8 @@ enum ioc_request_htype {
 	RHS_NONE,
 	RHS_ROOT,
 	RHS_INODE,
+	RHS_FILE,
+	RHS_DIR,
 };
 
 /**
@@ -554,10 +558,12 @@ struct ioc_request {
 	enum ioc_request_htype		ir_ht;
 
 	union {
-		/** Optional pointer to inode.
-		 * Only valid if ir_ht == RHS_INODE
+		/** Optional pointer to handle.
+		 * Which one of these to use is set by the ir_ht value
 		 */
-		struct ioc_inode_entry		*ir_inode;
+		struct ioc_inode_entry	*ir_inode;
+		struct iof_file_handle	*ir_file;
+		struct iof_dir_handle	*ir_dir;
 	};
 	/** List of requests.
 	 *

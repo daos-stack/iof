@@ -64,23 +64,11 @@ out_err:
 	D_FREE(request);
 }
 
-static int
-statfs_presend(struct ioc_request *request)
-{
-	struct iof_gah_in *in = crt_req_get(request->rpc);
-	int rc = 0;
-
-	D_MUTEX_LOCK(&request->fsh->gah_lock);
-	in->gah = request->fsh->gah;
-	D_MUTEX_UNLOCK(&request->fsh->gah_lock);
-
-	return rc;
-}
-
 static const struct ioc_request_api api = {
 	.on_result	= statfs_cb,
 	.on_evict	= ioc_simple_resend,
-	.on_presend	= statfs_presend,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 void
@@ -92,10 +80,6 @@ ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 	int ret;
 
 	STAT_ADD(fs_handle->stats, statfs);
-
-	if (FS_IS_OFFLINE(fs_handle)) {
-		D_GOTO(out_no_request, ret = fs_handle->offline_reason);
-	}
 
 	D_ALLOC_PTR(request);
 	if (!request) {

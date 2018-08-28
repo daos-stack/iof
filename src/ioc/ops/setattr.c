@@ -48,8 +48,6 @@
 
 #define STAT_KEY setattr
 
-#define DECL_NAME(a, CB) ioc_##a##_##CB##_fn
-
 static void ioc_setattr_result_fn(struct ioc_request *request)
 {
 	struct iof_attr_out *out = crt_reply_get(request->rpc);
@@ -71,34 +69,6 @@ static void ioc_setattr_result_fn(struct ioc_request *request)
 	iof_pool_release(request->fsh->POOL_NAME, desc);
 }
 
-static int ioc_setattr_presend_fn(struct ioc_request *request)
-{
-	struct iof_gah_in	*in = crt_req_get(request->rpc);
-	int rc = 0;
-
-	IOF_TRACE_DEBUG(request, "loading gah from %d %p", request->ir_ht,
-			request->ir_inode);
-
-	D_MUTEX_LOCK(&request->fsh->gah_lock);
-
-	if (request->ir_ht == RHS_ROOT) {
-		in->gah = request->fsh->gah;
-	} else {
-		D_ASSERT(request->ir_ht == RHS_INODE);
-		if (!H_GAH_IS_VALID(request->ir_inode))
-			D_GOTO(out, rc = EHOSTDOWN);
-
-		in->gah = request->ir_inode->gah;
-	}
-
-	IOF_TRACE_DEBUG(request, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-out:
-	D_MUTEX_UNLOCK(&request->fsh->gah_lock);
-
-	return rc;
-}
-
 static void ioc_fsetattr_result_fn(struct ioc_request *request)
 {
 	struct iof_attr_out *out = crt_reply_get(request->rpc);
@@ -116,15 +86,17 @@ static void ioc_fsetattr_result_fn(struct ioc_request *request)
 static const struct ioc_request_api setattr_api = {
 	.on_send	= post_send,
 	.on_result	= ioc_setattr_result_fn,
-	.on_presend	= ioc_setattr_presend_fn,
 	.on_evict	= ioc_simple_resend,
-
+	.gah_offset	= offsetof(struct iof_setattr_in, gah),
+	.have_gah	= true,
 };
 
 static const struct ioc_request_api fsetattr_api = {
 	.on_send	= post_send,
 	.on_result	= ioc_fsetattr_result_fn,
-	.on_evict	= ioc_simple_resend
+	.on_evict	= ioc_simple_resend,
+	.gah_offset	= offsetof(struct iof_setattr_in, gah),
+	.have_gah	= true,
 };
 
 void
@@ -143,18 +115,14 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 	IOF_TRACE_INFO(fs_handle, "inode %lu handle %p", ino, handle);
 
 	if (handle) {
-		IOC_REQ_INIT_REQ(desc, fs_handle, fsetattr_api, in, req, rc);
+		IOC_REQ_INIT_REQ(desc, fs_handle, fsetattr_api, req, rc);
 		if (rc)
 			D_GOTO(err, rc);
 
-		if (!F_GAH_IS_VALID(handle))
-			D_GOTO(err, rc = EIO);
-
-		D_MUTEX_LOCK(&fs_handle->gah_lock);
-		in->gah = handle->common.gah;
-		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+		desc->request.ir_ht = RHS_FILE;
+		desc->request.ir_file = handle;
 	} else {
-		IOC_REQ_INIT_REQ(desc, fs_handle, setattr_api, in, req, rc);
+		IOC_REQ_INIT_REQ(desc, fs_handle, setattr_api, req, rc);
 		if (rc)
 			D_GOTO(err, rc);
 
@@ -163,22 +131,25 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 		} else {
 			rc = find_inode(fs_handle, ino, &desc->request.ir_inode);
 
-			if (rc != 0)
+			if (rc != 0) {
+				IOF_TRACE_DOWN(&desc->request);
 				D_GOTO(err, 0);
+			}
 
 			desc->request.ir_ht = RHS_INODE;
 		}
 	}
 
+	in = crt_req_get(desc->request.rpc);
 	in->to_set = to_set;
-	memcpy(&in->stat, attr, sizeof(*attr));
+	in->stat = *attr;
 
 	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
 		D_GOTO(err, rc);
 	return;
 err:
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 	if (desc)
 		iof_pool_release(fs_handle->POOL_NAME, desc);
 }

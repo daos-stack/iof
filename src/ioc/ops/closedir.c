@@ -68,43 +68,37 @@ out:
 
 static const struct ioc_request_api api = {
 	.on_result	= closedir_ll_cb,
-	.on_evict	= ioc_simple_resend
+	.on_evict	= ioc_simple_resend,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 {
 	struct iof_projection_info *fs_handle = dh->open_req.fsh;
-	struct iof_gah_in *in;
 	int rc;
-
-	IOF_TRACE_INFO(req, GAH_PRINT_STR, GAH_PRINT_VAL(dh->gah));
 
 	D_MUTEX_LOCK(&fs_handle->od_lock);
 	d_list_del(&dh->dh_od_list);
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
-	IOC_REQ_INIT_REQ(dh, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(dh, fs_handle, api, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
-	if (!H_GAH_IS_VALID(dh)) {
-		IOF_TRACE_INFO(dh, "Release with bad dh");
-
-		/* If the server has reported that the GAH is invalid
-		 * then do not send a RPC to close it.
-		 */
-		D_GOTO(err, rc = EHOSTDOWN);
-	}
-	in->gah = dh->gah;
 	rc = iof_fs_send(&dh->close_req);
 	if (rc != 0)
 		D_GOTO(err, rc);
 	return;
 err:
-	IOF_TRACE_DOWN(&dh->close_req);
+	if (req) {
+		dh->close_req.req  = req;
+		IOC_REPLY_ERR(&dh->close_req, rc);
+	} else {
+		IOF_TRACE_DOWN(&dh->close_req);
+	}
 	iof_pool_release(fs_handle->dh_pool, dh);
-	if (req)
-		IOC_REPLY_ERR_RAW(fs_handle, req, rc);
+
 }
 
 void ioc_ll_releasedir(fuse_req_t req, fuse_ino_t ino,

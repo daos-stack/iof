@@ -95,40 +95,12 @@ out:
 	iof_pool_release(desc->pool, desc);
 }
 
-static int
-lookup_presend(struct ioc_request *request)
-{
-	struct iof_gah_string_in *in = crt_req_get(request->rpc);
-	int rc = 0;
-
-	IOF_TRACE_DEBUG(request, "loading gah from %d %p", request->ir_ht,
-			request->ir_inode);
-
-	D_MUTEX_LOCK(&request->fsh->gah_lock);
-
-	if (request->ir_ht == RHS_ROOT) {
-		in->gah = request->fsh->gah;
-	} else {
-		D_ASSERT(request->ir_ht == RHS_INODE);
-		if (!H_GAH_IS_VALID(request->ir_inode))
-			D_GOTO(out, rc = EHOSTDOWN);
-
-		in->gah = request->ir_inode->gah;
-	}
-
-	IOF_TRACE_DEBUG(request, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-out:
-	D_MUTEX_UNLOCK(&request->fsh->gah_lock);
-
-	return rc;
-}
-
 static const struct ioc_request_api api = {
 	.on_send	= post_send,
 	.on_result	= iof_entry_cb,
 	.on_evict	= ioc_simple_resend,
-	.on_presend	= lookup_presend,
+	.gah_offset	= offsetof(struct iof_gah_string_in, gah),
+	.have_gah	= true,
 };
 
 #define STAT_KEY lookup
@@ -142,7 +114,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "Parent:%lu '%s'", parent, name);
-	IOC_REQ_INIT_REQ(desc, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(desc, fs_handle, api, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
@@ -159,6 +131,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 		desc->request.ir_ht = RHS_INODE;
 	}
 
+	in = crt_req_get(desc->request.rpc);
 	strncpy(in->name.name, name, NAME_MAX);
 	strncpy(desc->ie->name, name, NAME_MAX);
 	desc->ie->parent = parent;

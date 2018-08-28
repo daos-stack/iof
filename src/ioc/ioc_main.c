@@ -838,16 +838,41 @@ int iof_fs_send(struct ioc_request *request)
 	struct iof_projection_info *fs_handle = request->fsh;
 	crt_endpoint_t ep;
 	int rc;
+	int ret;
 
-	/*
-	 * Call any on_presend function.  This is done here rather than
-	 * before calling fs_send() to allow retry to load updated GAH
-	 * values after failover.
-	 */
-	if (request->ir_api->on_presend) {
-		rc = request->ir_api->on_presend(request);
-		if (rc != 0)
-			return rc;
+	if (request->ir_api->have_gah) {
+		void *in = crt_req_get(request->rpc);
+		struct ios_gah *gah = in + request->ir_api->gah_offset;
+
+		IOF_TRACE_DEBUG(request,
+				"loading gah from %d %p", request->ir_ht,
+				request->ir_inode);
+
+		D_MUTEX_LOCK(&request->fsh->gah_lock);
+
+		switch (request->ir_ht) {
+		case RHS_ROOT:
+			*gah = request->fsh->gah;
+			break;
+		case RHS_INODE:
+			*gah = request->ir_inode->gah;
+			break;
+		case RHS_FILE:
+			*gah = request->ir_file->common.gah;
+			break;
+		case RHS_DIR:
+			*gah = request->ir_dir->gah;
+			break;
+		default:
+			IOF_TRACE_ERROR(request,
+					"Invalid request type %d",
+					request->ir_ht);
+			D_MUTEX_UNLOCK(&request->fsh->gah_lock);
+			D_GOTO(err, ret = EIO);
+		}
+
+		D_MUTEX_UNLOCK(&request->fsh->gah_lock);
+		IOF_TRACE_DEBUG(request, GAH_PRINT_STR, GAH_PRINT_VAL(*gah));
 	}
 
 	ep.ep_tag = 0;
@@ -856,30 +881,49 @@ int iof_fs_send(struct ioc_request *request)
 	/* Pick an appropiate rank, for most cases this is the root of the GAH
 	 * however if that is not known then send to the PSR
 	 */
-	if (request->ir_ht == RHS_INODE)
+	switch (request->ir_ht) {
+	case RHS_INODE:
+		if (!H_GAH_IS_VALID(request->ir_inode)) {
+			D_GOTO(err, ret = EHOSTDOWN);
+		}
 		ep.ep_rank = request->ir_inode->gah.root;
-	else if (request->ir_ht == RHS_ROOT)
+		break;
+	case RHS_FILE:
+		if (!F_GAH_IS_VALID(request->ir_file)) {
+			D_GOTO(err, ret = EHOSTDOWN);
+		}
+		ep.ep_rank = request->ir_file->common.gah.root;
+		break;
+	case RHS_DIR:
+		if (!H_GAH_IS_VALID(request->ir_dir)) {
+			D_GOTO(err, ret = EHOSTDOWN);
+		}
+		ep.ep_rank = request->ir_dir->gah.root;
+		break;
+	case RHS_ROOT:
+	default:
 		ep.ep_rank = fs_handle->gah.root;
-	else
-		ep.ep_rank = atomic_load_consume(&fs_handle->proj.grp->pri_srv_rank);
+	}
 
 	/* Defer clean up until the output is copied. */
 	crt_req_addref(request->rpc);
 	rc = crt_req_set_endpoint(request->rpc, &ep);
-	if (rc)
-		D_GOTO(err, 0);
+	if (rc) {
+		D_GOTO(err, ret = EIO);
+	}
 	IOF_TRACE_INFO(request, "Sending RPC to rank %d",
 		       request->rpc->cr_ep.ep_rank);
 	rc = crt_req_send(request->rpc, generic_cb, request);
-	if (rc)
-		D_GOTO(err, 0);
+	if (rc) {
+		D_GOTO(err, ret = EIO);
+	}
 	if (request->ir_api->on_send)
 		request->ir_api->on_send(request);
 	return 0;
 err:
-	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
-	crt_req_decref(request->rpc);
-	return EIO;
+	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", ret);
+
+	return ret;
 }
 
 static void
@@ -1143,6 +1187,9 @@ dh_reset(void *arg)
 
 	IOC_REQUEST_RESET(&dh->open_req);
 	IOC_REQUEST_RESET(&dh->close_req);
+
+	dh->close_req.ir_ht = RHS_DIR;
+	dh->close_req.ir_dir = dh;
 
 	return true;
 }

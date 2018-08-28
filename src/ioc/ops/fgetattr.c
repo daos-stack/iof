@@ -71,34 +71,6 @@ static void ioc_getattr_result_fn(struct ioc_request *request)
 	iof_pool_release(request->fsh->POOL_NAME, desc);
 }
 
-static int ioc_getattr_presend_fn(struct ioc_request *request)
-{
-	struct iof_gah_in	*in = crt_req_get(request->rpc);
-	int rc = 0;
-
-	IOF_TRACE_DEBUG(request, "loading gah from %d %p", request->ir_ht,
-			request->ir_inode);
-
-	D_MUTEX_LOCK(&request->fsh->gah_lock);
-
-	if (request->ir_ht == RHS_ROOT) {
-		in->gah = request->fsh->gah;
-	} else {
-		D_ASSERT(request->ir_ht == RHS_INODE);
-		if (!H_GAH_IS_VALID(request->ir_inode))
-			D_GOTO(out, rc = EHOSTDOWN);
-
-		in->gah = request->ir_inode->gah;
-	}
-
-	IOF_TRACE_DEBUG(request, GAH_PRINT_STR, GAH_PRINT_VAL(in->gah));
-
-out:
-	D_MUTEX_UNLOCK(&request->fsh->gah_lock);
-
-	return rc;
-}
-
 static void ioc_fsetattr_result_fn(struct ioc_request *request)
 {
 	struct iof_attr_out *out = crt_reply_get(request->rpc);
@@ -116,15 +88,17 @@ static void ioc_fsetattr_result_fn(struct ioc_request *request)
 static const struct ioc_request_api getattr_api = {
 	.on_send	= post_send,
 	.on_result	= ioc_getattr_result_fn,
-	.on_presend	= ioc_getattr_presend_fn,
 	.on_evict	= ioc_simple_resend,
-
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 static const struct ioc_request_api fgetattr_api = {
 	.on_send	= post_send,
 	.on_result	= ioc_fsetattr_result_fn,
-	.on_evict	= ioc_simple_resend
+	.on_evict	= ioc_simple_resend,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 void
@@ -133,7 +107,6 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
 	struct iof_file_handle		*handle = NULL;
 	struct TYPE_NAME		*desc = NULL;
-	struct iof_gah_in		*in;
 	int rc;
 
 	if (fi)
@@ -142,19 +115,15 @@ ioc_ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	IOF_TRACE_INFO(fs_handle, "inode %lu handle %p", ino, handle);
 
 	if (handle) {
-
-		if (!F_GAH_IS_VALID(handle))
-			D_GOTO(err, rc = EIO);
-
-		IOC_REQ_INIT_REQ(desc, fs_handle, fgetattr_api, in, req, rc);
+		IOC_REQ_INIT_REQ(desc, fs_handle, fgetattr_api, req, rc);
 		if (rc)
 			D_GOTO(err, rc);
 
-		D_MUTEX_LOCK(&fs_handle->gah_lock);
-		in->gah = handle->common.gah;
-		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+		desc->request.ir_ht = RHS_FILE;
+		desc->request.ir_file = handle;
+
 	} else {
-		IOC_REQ_INIT_REQ(desc, fs_handle, getattr_api, in, req, rc);
+		IOC_REQ_INIT_REQ(desc, fs_handle, getattr_api, req, rc);
 		if (rc)
 			D_GOTO(err, rc);
 

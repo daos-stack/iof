@@ -76,8 +76,11 @@ opendir_ll_cb(struct ioc_request *request)
 static const struct ioc_request_api api = {
 	.on_send	= post_send,
 	.on_result	= opendir_ll_cb,
-	.on_evict	= ioc_simple_resend
+	.on_evict	= ioc_simple_resend,
+	.gah_offset = offsetof(struct iof_gah_in, gah),
 };
+
+/* TODO: lots */
 
 void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
@@ -87,10 +90,11 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "ino %lu", ino);
-	IOC_REQ_INIT_REQ(dh, fs_handle, api, in, req, rc);
+	IOC_REQ_INIT_REQ(dh, fs_handle, api, req, rc);
 	if (rc)
 		D_GOTO(err, rc);
 
+	in = crt_req_get(dh->open_req.rpc);
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, ino, &in->gah);
 	if (rc != 0)
