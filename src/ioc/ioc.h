@@ -406,16 +406,15 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
-#define IOF_FUSE_REPLY_WRITE(req, bytes)				\
+#define IOC_REPLY_WRITE(handle, req, bytes)				\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning write(%zi)", bytes);	\
+		IOF_TRACE_DEBUG(handle, "Returning write(%zi)", bytes);	\
 		__rc = fuse_reply_write(req, bytes);			\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(handle,				\
 					"fuse_reply_attr returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
 	} while (0)
 
 #define IOF_FUSE_REPLY_OPEN(req, fi)					\

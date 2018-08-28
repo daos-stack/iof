@@ -51,7 +51,7 @@ write_cb(const struct crt_cb_info *cb_info)
 	int rc;
 
 	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(req, "Bad RPC reply %d", cb_info->cci_rc);
+		IOF_TRACE_INFO(wb, "Bad RPC reply %d", cb_info->cci_rc);
 		D_GOTO(hard_err, rc = EIO);
 	}
 
@@ -59,7 +59,7 @@ write_cb(const struct crt_cb_info *cb_info)
 		/* Convert the error types, out->err is a IOF error code
 		 * so translate it to a errno we can pass back to FUSE.
 		 */
-		IOF_TRACE_ERROR(req, "Error from target %d", out->err);
+		IOF_TRACE_ERROR(wb, "Error from target %d", out->err);
 
 		if (out->err == -DER_NONEXIST)
 			H_GAH_SET_INVALID(wb->handle);
@@ -71,7 +71,7 @@ write_cb(const struct crt_cb_info *cb_info)
 	if (out->rc)
 		D_GOTO(err, rc = out->rc);
 
-	IOF_FUSE_REPLY_WRITE(req, out->len);
+	IOC_REPLY_WRITE(wb, req, out->len);
 
 	STAT_ADD_COUNT(wb->fs_handle->stats, write_bytes, out->len);
 
@@ -87,7 +87,7 @@ hard_err:
 	if (in->data_bulk)
 		wb->failure = true;
 err:
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(wb, req, rc);
 
 	iof_pool_release(wb->fs_handle->write_pool, wb);
 }
@@ -99,11 +99,11 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 	struct iof_writex_in *in = crt_req_get(wb->rpc);
 	int rc;
 
-	IOF_TRACE_LINK(wb->rpc, wb->req, "writex_rpc");
+	IOF_TRACE_LINK(wb->rpc, wb, "writex_rpc");
 
 	rc = crt_req_set_endpoint(wb->rpc, &handle->common.ep);
 	if (rc) {
-		IOF_TRACE_ERROR(wb->req, "Could not set endpoint, rc = %d",
+		IOF_TRACE_ERROR(wb, "Could not set endpoint, rc = %d",
 				rc);
 		D_GOTO(err, rc = EIO);
 	}
@@ -132,7 +132,7 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 	return;
 
 err:
-	IOF_FUSE_REPLY_ERR(wb->req, rc);
+	IOC_REPLY_ERR_RAW(wb, wb->req, rc);
 	iof_pool_release(handle->fs_handle->write_pool, wb);
 }
 
@@ -159,9 +159,8 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 		D_GOTO(err, rc = ENOMEM);
 
 	IOF_TRACE_UP(wb, handle, "writebuf");
-	IOF_TRACE_UP(req, wb, "write_fuse_req");
 
-	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
+	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	wb->req = req;
@@ -173,7 +172,7 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 
 	return;
 err:
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(handle, req, rc);
 	if (wb)
 		iof_pool_release(handle->fs_handle->write_pool, wb);
 }
@@ -218,9 +217,8 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
 	IOF_TRACE_UP(wb, handle, "writebuf");
-	IOF_TRACE_UP(req, wb, "write_buf_fuse_req");
 
-	IOF_TRACE_INFO(req, "%#zx-%#zx " GAH_PRINT_STR, position,
+	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
 	wb->req = req;
@@ -236,7 +234,7 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 
 	return;
 err:
-	IOF_FUSE_REPLY_ERR(req, rc);
+	IOC_REPLY_ERR_RAW(handle, req, rc);
 	if (wb)
 		iof_pool_release(handle->fs_handle->write_pool, wb);
 }
