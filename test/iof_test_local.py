@@ -131,6 +131,18 @@ class Testlocal(unittest.TestCase,
     ionss_valgrind = False
     failover_test = False
 
+    @classmethod
+    def setUpClass(cls):
+
+        # Try to load the config from file, but do not abort if not found.
+        # This will add orterun to PATH, avoiding any pre-run setup, however
+        # still works with the run_test.sh script which sets the PATH
+        # from the yml file.
+        try:
+            iofcommontestsuite.load_config()
+        except FileNotFoundError:
+            pass
+
     def using_valgrind(self):
         """Check if any part of the test is running under valgrind"""
 
