@@ -1141,6 +1141,18 @@ class Testlocal(unittest.TestCase,
                     failed = True
         return failed
 
+    def test_failover_statfs(self):
+        """Invoke statfs"""
+
+        self.kill_ionss_proc()
+        test_dir = self.import_dir
+        try:
+            r = os.statvfs(test_dir)
+            print(r)
+        except OSError as e:
+            print('Failed with errno %d' % e.errno)
+            self.fail('Failed with errno %d' % e.errno)
+
     def test_failover_stat(self):
         """Basic failover test"""
 

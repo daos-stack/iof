@@ -41,71 +41,105 @@
 #include "log.h"
 
 static void
-statfs_ll_cb(const struct crt_cb_info *cb_info)
+statfs_cb(struct ioc_request *request)
 {
-	fuse_req_t req = cb_info->cci_arg;
-	struct iof_data_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_data_out *out = crt_reply_get(request->rpc);
 
-	if (cb_info->cci_rc != 0) {
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		return;
+	/* Drop the two refs that this code has taken, one from the
+	 * req_create() call and a second from addref
+	 */
+	crt_req_decref(request->rpc);
+	crt_req_decref(request->rpc);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc) {
+		D_GOTO(out_err, 0);
 	}
 
-	if (out->rc) {
-		IOF_FUSE_REPLY_ERR(req, out->rc);
-		return;
-	}
+	IOF_FUSE_REPLY_STATFS(request, out->data.iov_buf);
+	D_FREE(request);
+	return;
 
-	if (out->err || !out->data.iov_buf) {
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		return;
-	}
-
-	IOF_FUSE_REPLY_STATFS(req, out->data.iov_buf);
+out_err:
+	IOC_REPLY_ERR(request, request->rc);
+	D_FREE(request);
 }
+
+static int
+statfs_presend(struct ioc_request *request)
+{
+	struct iof_gah_in *in = crt_req_get(request->rpc);
+	int rc = 0;
+
+	D_MUTEX_LOCK(&request->fsh->gah_lock);
+	in->gah = request->fsh->gah;
+	D_MUTEX_UNLOCK(&request->fsh->gah_lock);
+
+	return rc;
+}
+
+static const struct ioc_request_api api = {
+	.on_result	= statfs_cb,
+	.on_evict	= ioc_simple_resend,
+	.on_presend	= statfs_presend,
+};
 
 void
 ioc_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 {
-	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_gah_in *in;
-	crt_rpc_t *rpc = NULL;
+	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct ioc_request		*request;
 	int rc;
 	int ret;
-
-	IOF_TRACE_UP(req, fs_handle, "statfs");
 
 	STAT_ADD(fs_handle->stats, statfs);
 
 	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
+		D_GOTO(out_no_request, ret = fs_handle->offline_reason);
 	}
 
-	IOF_TRACE_INFO(fs_handle, "statfs %lu", ino);
-
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, statfs), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %d",
-			      rc);
-		ret = EIO;
-		goto out_err;
+	D_ALLOC_PTR(request);
+	if (!request) {
+		D_GOTO(out_no_request, ret = ENOMEM);
 	}
 
-	in = crt_req_get(rpc);
-	in->gah = fs_handle->gah;
+	IOC_REQUEST_INIT(request, fs_handle);
+	IOC_REQUEST_RESET(request);
 
-	rc = crt_req_send(rpc, statfs_ll_cb, req);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+	IOF_TRACE_UP(request, fs_handle, "statfs");
+	IOF_TRACE_INFO(request, "statfs %lu", ino);
+
+	request->req = req;
+	request->ir_api = &api;
+	request->ir_ht = RHS_ROOT;
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(fs_handle, statfs), &request->rpc);
+	if (rc || !request->rpc) {
+		IOF_TRACE_ERROR(request,
+				"Could not create request, rc = %d",
+				rc);
+		D_GOTO(out_err, ret = EIO);
+	}
+
+	/* Add a second ref as that's what the iof_fs_send() function
+	 * expects.  In the case of failover the RPC might be completed,
+	 * and a copy made the the RPC seen in statfs_cb might not be
+	 * the same one as seen here.
+	 */
+	crt_req_addref(request->rpc);
+
+	rc = iof_fs_send(request);
+	if (rc != 0) {
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	return;
 
+out_no_request:
+	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
+	return;
+
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+	IOC_REPLY_ERR(request, ret);
+	D_FREE(request);
 }

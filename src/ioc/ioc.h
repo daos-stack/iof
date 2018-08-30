@@ -466,16 +466,16 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
-#define IOF_FUSE_REPLY_STATFS(req, stat)				\
+#define IOF_FUSE_REPLY_STATFS(ioc_req, stat)				\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning statfs");		\
-		__rc = fuse_reply_statfs(req, stat);			\
+		IOF_TRACE_DEBUG(ioc_req, "Returning statfs");		\
+		__rc = fuse_reply_statfs((ioc_req)->req, stat);		\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(ioc_req,			\
 					"fuse_reply_statfs returned %d:%s", \
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOF_FUSE_REPLY_IOCTL(req, gah_info, size)			\
