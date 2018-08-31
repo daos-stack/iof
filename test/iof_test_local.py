@@ -120,7 +120,6 @@ class Testlocal(unittest.TestCase,
     crt_phy_addr = ""
     ofi_interface = ""
     test_local = True
-    test_method = 'pyunit'
     export_dirs = []
     mount_dirs = []
     cnss_stats = {}
@@ -167,24 +166,6 @@ class Testlocal(unittest.TestCase,
             method = method[5:]
         return os.path.join(parts[1], method)
 
-    def testing_setup(self):
-        """Call all methods for internals path testing framework. pyunit will
-        call this during setUp() of each test, go method will call this
-        only once per run"""
-
-        #Verify FUSE Mount
-        self.verify_mount(self.mount_dirs)
-
-        #Verify IONSS
-        self.verify_ionss(common_methods.CTRL_DIR)
-
-        #Initial CNSS stats
-        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
-        for projection_stats in ret_stats:
-            mnt = projection_stats[0]
-            self.cnss_stats["stats_list_{0}".format(mnt)] = projection_stats[1]
-            self.cnss_stats["init_{0}".format(mnt)] = projection_stats[2]
-
 #pylint: disable=too-many-branches
 #pylint: disable=too-many-locals
     def setUp(self):
@@ -196,9 +177,6 @@ class Testlocal(unittest.TestCase,
             self.logger.addHandler(__ch)
 
         self.logger.info('\nStarting for %s', self.id())
-
-        if self.id() == '__main__.Testlocal.go':
-            self.test_method = 'go'
 
         # If valgrind is requested for a failover test then enable it on the
         # cnss only.  Running the ionss under valgrind for the failover tests
@@ -366,8 +344,19 @@ class Testlocal(unittest.TestCase,
 
         self.mount_dirs = common_methods.import_list()
 
-        if self.test_method == 'pyunit':
-            self.testing_setup()
+        self.verify_mount(self.mount_dirs)
+
+        #Verify IONSS
+        self.verify_ionss(common_methods.CTRL_DIR)
+
+        #Initial CNSS stats
+        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
+        for projection_stats in ret_stats:
+            mnt = projection_stats[0]
+            self.cnss_stats["stats_list_{0}".format(mnt)] = projection_stats[1]
+            self.cnss_stats["init_{0}".format(mnt)] = projection_stats[2]
+
+        self.mark_log('Starting test {}'.format(self.id()))
 #pylint: enable=too-many-branches
 
     def mark_log(self, msg):
@@ -383,25 +372,6 @@ class Testlocal(unittest.TestCase,
         self.wfd.write(msg)
         self.wfd.flush()
         os.fsync(self.wfd.fileno())
-
-    def testing_teardown(self):
-        """Call all methods for internals path testing framework.
-        pyunit will call this during tearDown() of each test,
-        go method will call this only once per run"""
-
-        #Final CNSS stats
-        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
-        for projection_stats in ret_stats:
-            mnt = projection_stats[0]
-
-            self.cnss_stats["final_{0}".format(mnt)] = projection_stats[2]
-
-            self.delta_cnss_stats(self.cnss_stats, mnt)
-
-        # Compare projection and FS
-        # error with using rsync to compare '/usr' directory
-        self.compare_projection_dir(self.mount_dirs, self.export_dirs,
-                                    'single node')
 
     def rpc_descriptor_tracing(self):
         """RPC tracing runs at the end of each test"""
@@ -444,17 +414,30 @@ class Testlocal(unittest.TestCase,
         if not self.failover_test and rank_log.have_errors:
             self.fail("IONSS log has integrity errors")
 
-
-
     def tearDown(self):
         """tear down the test"""
 
         self.dump_failover_state()
 
+        self.mark_log('Finished test {}, cleaning up'.format(self.id()))
+
         self.wfd.close()
 
-        if self.test_method == 'pyunit':
-            self.testing_teardown()
+        self.clean_export_dir()
+
+        #Final CNSS stats
+        ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
+        for projection_stats in ret_stats:
+            mnt = projection_stats[0]
+
+            self.cnss_stats["final_{0}".format(mnt)] = projection_stats[2]
+
+            self.delta_cnss_stats(self.cnss_stats, mnt)
+
+        # Compare projection and FS
+        # error with using rsync to compare '/usr' directory
+        self.compare_projection_dir(self.mount_dirs, self.export_dirs,
+                                    'single node')
 
         # Firstly try and shutdown the filesystems cleanly
         if self.is_running():
@@ -1367,14 +1350,8 @@ class Testlocal(unittest.TestCase,
 
             subtest_count += 1
             with self.subTest(possible[5:]):
-                self.mark_log('Starting test %s' % possible)
 
-                self.testing_setup()
                 obj()
-
-                self.testing_teardown()
-                self.mark_log('Finished test %s, cleaning up' % possible)
-                self.clean_export_dir()
 
         if have_iofmod:
             subtest_count += self.test_iofmod()
