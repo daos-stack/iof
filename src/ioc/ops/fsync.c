@@ -40,56 +40,74 @@
 #include "ioc.h"
 #include "log.h"
 
+static const struct ioc_request_api api = {
+	.on_result	= ioc_gen_cb,
+	.on_evict	= ioc_simple_resend,
+	.have_gah	= true,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+};
+
 void
 ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 	     struct fuse_file_info *fi)
 {
-	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
-	struct iof_file_handle *handle = (struct iof_file_handle *)fi->fh;
-	struct iof_gah_in *in;
-	crt_rpc_t *rpc = NULL;
+	struct iof_file_handle		*handle = (struct iof_file_handle *)fi->fh;
+	struct iof_projection_info	*fs_handle = handle->fs_handle;
+	struct ioc_request		*request;
 	crt_opcode_t opcode;
 	int rc;
+	int ret;
 
 	STAT_ADD(fs_handle->stats, fsync);
 
-	IOF_TRACE_UP(req, handle, "fsync");
-
-	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(out, rc = fs_handle->offline_reason);
-
 	if (!IOF_IS_WRITEABLE(fs_handle->flags))
-		D_GOTO(out, rc = EROFS);
+		D_GOTO(out_no_request, ret = EROFS);
 
 	IOF_TRACE_INFO(handle);
 
-	/* If the server has reported that the GAH is invalid then do not try to
-	 * do anything with it.
-	 */
-	if (!F_GAH_IS_VALID(handle))
-		D_GOTO(out, rc = EIO);
+	D_ALLOC_PTR(request);
+	if (!request) {
+		D_GOTO(out_no_request, ret = ENOMEM);
+	}
+
+	IOC_REQUEST_INIT(request, fs_handle);
+	IOC_REQUEST_RESET(request);
+
+	IOF_TRACE_UP(request, fs_handle, "fsync");
+	IOF_TRACE_INFO(request, "fsync %lu", ino);
+
+	request->req = req;
+	request->ir_api = &api;
+	request->ir_ht = RHS_FILE;
+	request->ir_file = handle;
 
 	if (datasync)
 		opcode = FS_TO_OP(fs_handle, fdatasync);
 	else
 		opcode = FS_TO_OP(fs_handle, fsync);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx, &handle->common.ep, opcode,
-			    &rpc);
-	if (rc || !rpc)
-		D_GOTO(out, rc = EIO);
+	rc = crt_req_create(fs_handle->proj.crt_ctx, NULL, opcode,
+			    &request->rpc);
+	if (rc || !request->rpc) {
+		IOF_TRACE_ERROR(request,
+				"Could not create request, rc = %d",
+				rc);
+		D_GOTO(out_err, ret = EIO);
+	}
+	crt_req_addref(request->rpc);
 
-	in = crt_req_get(rpc);
-	D_MUTEX_LOCK(&fs_handle->gah_lock);
-	in->gah = handle->common.gah;
-	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
-
-	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
-	if (rc)
-		D_GOTO(out, rc = EIO);
+	rc = iof_fs_send(request);
+	if (rc != 0) {
+		D_GOTO(out_err, ret = EIO);
+	}
 
 	return;
-out:
 
-	IOF_FUSE_REPLY_ERR(req, rc);
+out_no_request:
+	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
+	return;
+
+out_err:
+	IOC_REPLY_ERR(request, ret);
+	D_FREE(request);
 }

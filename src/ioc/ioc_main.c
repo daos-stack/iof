@@ -89,6 +89,26 @@ out_err:
 		IOF_FUSE_REPLY_ERR(req, ret);
 }
 
+void ioc_gen_cb(struct ioc_request *request)
+{
+	struct iof_status_out *out = crt_reply_get(request->rpc);
+
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc) {
+		IOC_REPLY_ERR(request, request->rc);
+		D_GOTO(out, 0);
+	}
+
+	IOC_REPLY_ZERO(request);
+
+out:
+	/* Clean up the two refs this code holds on the rpc */
+	crt_req_decref(request->rpc);
+	crt_req_decref(request->rpc);
+
+	D_FREE(request);
+}
+
 int ioc_simple_resend(struct ioc_request *request)
 {
 	struct iof_projection_info *fs_handle = request->fsh;

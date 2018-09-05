@@ -860,6 +860,8 @@ int ioc_simple_resend(struct ioc_request *request);
 
 void ioc_ll_gen_cb(const struct crt_cb_info *);
 
+void ioc_gen_cb(struct ioc_request *);
+
 void ioc_ll_lookup(fuse_req_t, fuse_ino_t, const char *);
 
 void ioc_ll_forget(fuse_req_t, fuse_ino_t, uint64_t);
