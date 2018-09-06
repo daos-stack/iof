@@ -181,7 +181,6 @@ class IofLogIter():
 
         self._pid = None
         self._trace_only = False
-        self._level = LOG_LEVELS['DBUG']
         self._raw = False
         self._pids = sorted(pids)
 
@@ -206,9 +205,6 @@ class IofLogIter():
             if self._pid and line.pid != self._pid:
                 continue
 
-            if not self._raw and line.level > self._level:
-                continue
-
             return line
 
     def get_pids(self):
@@ -219,14 +215,12 @@ class IofLogIter():
     def reset(self,
               pid=None,
               trace_only=False,
-              level='DBUG',
               raw=False,
               index=1):
         """Rewind file iterator, and set options
 
         If pid is set the the iterator will only return lines matchine the pid
         If trace_only is True then the iterator will only return trace lines.
-        If level is set then only return lines of at least level severity
         if raw is set then all lines in the file are returned, even non-log
         lines.
         Index is the line number in the file to start from.
@@ -240,6 +234,5 @@ class IofLogIter():
         else:
             self._pid = None
         self._trace_only = trace_only
-        self._level = LOG_LEVELS[level]
         self._raw = raw
 # pylint: enable=too-many-arguments

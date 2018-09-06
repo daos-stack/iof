@@ -541,8 +541,19 @@ class RpcTrace(common_methods.ColorizedOutput):
         position_desc_cnt = 0
         fuse_file = os.path.join('src', 'ioc', 'ops')
 
-        self.lf.reset(trace_only=True, level='WARN')
+        fuse_desc = None
+
+        self.lf.reset(trace_only=True)
         for line in self.lf:
+
+            # Make a note of the first fuse descriptor seen.
+            if not fuse_desc and fuse_file in line and 'Registered new' in line:
+                fuse_desc = line.descriptor
+
+            # Skip over any log lines less important than Warnings.
+            if line.level > iof_cart_logparse.LOG_LEVELS['WARN']:
+                continue
+
             descriptor = line.descriptor
             self.warning_output('Tracing descriptor {} with error/warning'. \
                                 format(descriptor))
@@ -562,9 +573,6 @@ class RpcTrace(common_methods.ColorizedOutput):
                                     position_desc_cnt - 1)
             return descriptor
 
-        self.lf.reset(trace_only=True)
-        for line in self.lf:
-            if fuse_file in line and 'Registered new' in line:
-                return line.descriptor
-        self.error_output('Descriptor not found to trace')
-        return None
+        if not fuse_desc:
+            self.error_output('Descriptor not found to trace')
+        return fuse_desc
