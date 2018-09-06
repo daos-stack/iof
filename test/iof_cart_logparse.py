@@ -42,6 +42,8 @@ IofLogLine class definition.
 This provides a way of querying CaRT logfiles for processing.
 """
 
+import os
+
 class InvalidPid(Exception):
     """Exception to be raised when invalid pid is requested"""
     pass
@@ -148,7 +150,6 @@ class IofLogLine():
     def get_field(self, idx):
         """Return a specific field from the line"""
         return self._fields[idx]
-# pylint: enable=too-many-instance-attributes
 
 class IofLogIter():
     """Class for parsing CaRT log files
@@ -160,20 +161,34 @@ class IofLogIter():
     def __init__(self, fname):
         """Load a file, and check how many processes have written to it"""
 
-        fd = open(fname, 'r')
+        # Depending on file size either pre-read entire file into memory,
+        # or do a first pass checking the pid list.  This allows the same
+        # iterator to work fast if the file can be kept in memory, or the
+        # same, bug slower if it needs to be re-read each time.
+        self._fd = open(fname, 'r')
         self._data = []
         index = 0
         pids = set()
-        for line in fd:
+
+        i = os.fstat(self._fd.fileno())
+        self.__from_file = bool(i.st_size > (1024*1024*20))
+        self.__index = 0
+
+        for line in self._fd:
             fields = line.split(maxsplit=8)
             index += 1
-            if len(fields) < 6 or len(fields[0]) != 17:
-                self._data.append(IofLogRaw(line))
-            else:
+            if self.__from_file:
+                if len(fields) < 6 or len(fields[0]) != 17:
+                    continue
                 l_obj = IofLogLine(line, index)
                 pids.add(l_obj.pid)
-                self._data.append(l_obj)
-        fd.close()
+            else:
+                if len(fields) < 6 or len(fields[0]) != 17:
+                    self._data.append(IofLogRaw(line))
+                else:
+                    l_obj = IofLogLine(line, index)
+                    pids.add(l_obj.pid)
+                    self._data.append(l_obj)
 
         # Offset into the file when iterating.  This is an array index, and is
         # based from zero, as opposed to line index which is based from 1.
@@ -184,17 +199,36 @@ class IofLogIter():
         self._raw = False
         self._pids = sorted(pids)
 
+    def __del__(self):
+        self._fd.close()
+
     def __iter__(self):
         return self
+
+    def __lnext(self):
+        """Helper function for __next__"""
+
+        if self.__from_file:
+            line = self._fd.readline()
+            if not line:
+                raise StopIteration
+            self.__index += 1
+            fields = line.split(maxsplit=8)
+            if len(fields) < 6 or len(fields[0]) != 17:
+                return IofLogRaw(line)
+            return IofLogLine(line, self.__index)
+
+        try:
+            line = self._data[self._offset]
+        except IndexError:
+            raise StopIteration
+        self._offset += 1
+        return line
 
     def __next__(self):
 
         while True:
-            try:
-                line = self._data[self._offset]
-            except IndexError:
-                raise StopIteration
-            self._offset += 1
+            line = self.__lnext()
 
             if not self._raw and isinstance(line, IofLogRaw):
                 continue
@@ -225,7 +259,12 @@ class IofLogIter():
         lines.
         Index is the line number in the file to start from.
         """
-        self._offset = index - 1
+
+        if self.__from_file:
+            self._fd.seek(0)
+            self.__index = 0
+        else:
+            self._offset = index - 1
 
         if pid is not None:
             if pid not in self._pids:
@@ -236,3 +275,4 @@ class IofLogIter():
         self._trace_only = trace_only
         self._raw = raw
 # pylint: enable=too-many-arguments
+# pylint: enable=too-many-instance-attributes
