@@ -56,6 +56,7 @@ DESIRED_FLAGS = ['-Wdeclaration-after-statement',
                  '-Wno-ignored-attributes',
                  '-Wunknown-warning-option',
                  '-Wno-gnu-designator',
+                 '-Wshadow',
                  '-Wno-gnu-zero-variadic-macro-arguments']
 
 def save_build_info(env, prereqs, platform):

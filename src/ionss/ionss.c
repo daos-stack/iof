@@ -1692,7 +1692,7 @@ out:
 	do {								\
 		uint64_t xtlen = (in)->xtvec.xt_len;			\
 		size_t bulk_len;					\
-		int rc;							\
+		int _rc;						\
 		if ((in)->data.iov_len > max_iov_write_size) {		\
 			out->err = -DER_MISC;				\
 			break;						\
@@ -1703,9 +1703,9 @@ out:
 		}							\
 		if ((in)->bulk_len == 0) /*no bulk */			\
 			break;						\
-		rc = crt_bulk_get_len((in)->data_bulk, &bulk_len);	\
-		if (rc != 0) {						\
-			out->err = rc;					\
+		_rc = crt_bulk_get_len((in)->data_bulk, &bulk_len);	\
+		if (_rc != 0) {						\
+			out->err = _rc;					\
 			break;						\
 		}							\
 		if ((in)->bulk_len > bulk_len) {			\
@@ -2088,7 +2088,6 @@ static void iof_setattr_handler(crt_rpc_t *rpc)
 		struct stat st_pre;
 		struct timespec tv[2] = {0};
 		struct timespec now;
-		int rc;
 
 		rc = clock_gettime(CLOCK_REALTIME, &now);
 		if (rc)
