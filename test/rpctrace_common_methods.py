@@ -62,8 +62,6 @@ class RpcTrace(common_methods.ColorizedOutput):
     cnss_plugin/plugin_entry/cnss_info"""
 
     rpc_dict = {}
-    """dictionary maps rpc to opcode"""
-    trace_dict = {}
     """dictionary maps descriptor to descriptor type and parent"""
     desc_dict = {}
     """dictionary maps descriptor to 'registered/deregistered/linked' states
@@ -86,6 +84,8 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.lf = iof_cart_logparse.IofLogIter(self.input_file)
         self.desc_table = None
+        self._to_trace = None
+        self._to_trace_fuse = None
 
     def _rpc_error_state_tracing(self, rpc, rpc_state):
         """Error checking for rpc state"""
@@ -295,11 +295,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         """Parses twice thru log to create a hierarchy of descriptors and also
            a dict storing all RPCs tied to a descriptor"""
 
-        # desc_table and trace_dict contain the same information, however the
-        # way it is presented is different.  The code should be moving away
-        # from trace_dict where possible
         self.desc_table = OrderedDict()
-        self.trace_dict = {}
         self.desc_dict = {}
         self.normal_output('IOF Descriptor/RPC Tracing:\n'
                            'Logfile: {}'.format(self.input_file))
@@ -307,9 +303,27 @@ class RpcTrace(common_methods.ColorizedOutput):
         reuse_table = {}
         self._descriptor_error_state_tracing()
 
+        fuse_file = os.path.join('src', 'ioc', 'ops')
+        to_trace = None
+        to_trace_fuse = None
+
         self.lf.reset(trace_only=True)
         for line in self.lf:
+
+            if not to_trace and \
+               (line.level <= iof_cart_logparse.LOG_LEVELS['WARN']):
+                reuse_count = reuse_table.get(line.descriptor, 0)
+                # Is this correct?  Need a logfile which tests this.
+                if reuse_count > 0:
+                    assert False
+                    to_trace = "{}_{}".format(line.descriptor, reuse_count)
+                else:
+                    to_trace = line.descriptor
+
             if "Registered new" in line:
+
+                if not to_trace and not to_trace_fuse and fuse_file in line:
+                    to_trace_fuse = line.descriptor
 
                 #register a new descriptor/object in the log hierarchy
                 new_obj = line.descriptor
@@ -325,8 +339,6 @@ class RpcTrace(common_methods.ColorizedOutput):
                 else:
                     reuse_table[new_obj] = 0
 
-                self.trace_dict.setdefault(new_obj, []).append((obj_type,
-                                                                parent))
                 self.desc_table[new_obj] = (obj_type, parent)
                 self.desc_dict[new_obj] = []
 
@@ -347,43 +359,32 @@ class RpcTrace(common_methods.ColorizedOutput):
             else:
                 self.error_output('Descriptor {} is not present'.format(index))
 
-    def _desc_is_rpc(self, descriptor):
-        rpc_type_list = [v for (k, v) in self.desc_dict.items()]
-        desc_is_rpc = bool(descriptor not in self.trace_dict and \
-                           [item for sublist in rpc_type_list \
-                            for item in sublist if item[0] == descriptor])
-        return desc_is_rpc
+        self._to_trace = to_trace
+        self._to_trace_fuse = to_trace_fuse
 
     def _rpc_trace_output_hierarchy(self, descriptor):
         """Prints full TRACE hierarchy for a given descriptor"""
         output = []
         #append all descriptors/rpcs in hierarchy for log dump
         traces_for_log_dump = []
-        #checking if descriptor is an rpc, in which case it is only linked
-        #to other descriptors with TRACE
-        desc_is_rpc = self._desc_is_rpc(descriptor)
 
-        if desc_is_rpc: #tracing an rpc
-            output.append('No hierarchy available - descriptor is an RPC')
-            traces_for_log_dump.append(descriptor)
-        else:
-            trace = descriptor
-            #append an extra line
-            output.append('')
-            try:
-                while trace != "root":
-                    traces_for_log_dump.append(trace)
-                    (trace_type, parent) = self.desc_table[trace]
-                    output.append('{}: {}'.format(trace_type, trace))
-                    for (desc, name) in self.desc_dict[trace]:
-                        traces_for_log_dump.append(desc)
-                        output.append('\t{} {}'.format(name, desc))
-                    trace = parent
-            except KeyError:
-                self.error_output('Descriptor {} does not trace back to root'\
-                                  .format(descriptor))
+        trace = descriptor
+        #append an extra line
+        output.append('')
+        try:
+            while trace != "root":
+                traces_for_log_dump.append(trace)
+                (trace_type, parent) = self.desc_table[trace]
+                output.append('{}: {}'.format(trace_type, trace))
+                for (desc, name) in self.desc_dict[trace]:
+                    traces_for_log_dump.append(desc)
+                    output.append('\t{} {}'.format(name, desc))
+                trace = parent
+        except KeyError:
+            self.error_output('Descriptor {} does not trace back to root'\
+                              .format(descriptor))
 
-            traces_for_log_dump.append(trace)
+        traces_for_log_dump.append(trace)
 
         if not output:
             self.error_output('Descriptor {} not currently registered or '
@@ -418,55 +419,40 @@ class RpcTrace(common_methods.ColorizedOutput):
             descriptors.append(d.split('_')[0])
         desc = descriptors[0] #the first descriptor w/o suffix
 
-        #checking if descriptor is an rpc, in which case it is only linked
-        #to other descriptors with TRACE
-
-        desc_is_rpc = self._desc_is_rpc(descriptor)
-
         self.log_output('\nLog dump for descriptor hierarchy ({}):'\
                         .format(trace))
 
+        # Set after something interesting happens, and means the remainder
+        # of the file should just be logged.
+        drain_file = False
+
         self.lf.reset(raw=True)
         for line in self.lf:
+
+            if drain_file:
+                if line.trace and line.descriptor in descriptors:
+                    self.log_output(line.to_str(mark=True))
+                elif self.VERBOSE_LOG:
+                    self.log_output(line.to_str())
+                continue
+
             desc_log_marked = False
-            if desc_is_rpc: #tracing an rpc
-                if line.trace:
-                    if line.descriptor == desc:
-                        self.log_output(line.to_str(mark=True))
-                        desc_log_marked = True
-            elif line.trace and 'Registered new' in line:
+            if line.trace and 'Registered new' in line:
                 if line.descriptor != desc:
                     #print the remaining non-relevant log messages
                     self.log_output(line.to_str())
                     continue
                 if location is None:#tracing a unique descriptor
                     self.log_output(line.to_str(mark=True))
-                    for nxtline in self.lf:
-                        #start log dump after "registered" log
-                        desc_log_marked = False
-                        if nxtline.trace:
-                            if nxtline.descriptor in descriptors:
-                                self.log_output(nxtline.to_str(mark=True))
-                                desc_log_marked = True
-                        if not desc_log_marked and self.VERBOSE_LOG:
-                            #print the remaining non-relevant log messages
-                            self.log_output(nxtline.to_str())
-                    return
+                    drain_file = True
+                    continue
                 #start the log dump where the specific reused descriptor
                 #is registered, logging will include all instances of
                 #this descriptor after
                 if position_desc_cnt == location:
                     self.log_output(line.to_str(mark=True))
-                    for nxtline in self.lf:
-                        desc_log_marked = False
-                        if nxtline.trace:
-                            if nxtline.descriptor in descriptors:
-                                self.log_output(nxtline.to_str(mark=True))
-                                desc_log_marked = True
-                        if not desc_log_marked and self.VERBOSE_LOG:
-                            #print the remaining non-relevant log mesgs
-                            self.log_output(nxtline.to_str())
-                    return
+                    drain_file = True
+                    continue
                 position_desc_cnt += 1
 
             if not desc_log_marked and self.VERBOSE_LOG:
@@ -600,42 +586,14 @@ class RpcTrace(common_methods.ColorizedOutput):
         """Find the file handle to use for descriptor tracing:
         if an error or warning is found in trace logs, use that descriptor,
         otherwise use first fuse op instance in logs"""
-        descriptor = None
-        position_desc_cnt = 0
-        fuse_file = os.path.join('src', 'ioc', 'ops')
 
-        fuse_desc = None
-
-        self.lf.reset(trace_only=True)
-        for line in self.lf:
-
-            # Make a note of the first fuse descriptor seen.
-            if not fuse_desc and fuse_file in line and 'Registered new' in line:
-                fuse_desc = line.descriptor
-
-            # Skip over any log lines less important than Warnings.
-            if line.level > iof_cart_logparse.LOG_LEVELS['WARN']:
-                continue
-
-            descriptor = line.descriptor
+        if self._to_trace:
             self.warning_output('Tracing descriptor {} with error/warning'. \
-                                format(descriptor))
-            reused_descs = [v for k, v in self.trace_dict.items() \
-                            if descriptor in k]
-            if len(reused_descs) > 1:
-                for nxtline in self.lf:
-                    if 'Registered new' in nxtline:
-                        if nxtline.descriptor == descriptor:
-                            position_desc_cnt += 1
+                                format(self._to_trace))
+            return self._to_trace
 
-            pos = len(reused_descs) - position_desc_cnt - 1
-            if pos > 0:
-                descriptor = '{}_{}'.\
-                             format(descriptor,
-                                    len(reused_descs) - \
-                                    position_desc_cnt - 1)
-            return descriptor
+        if self._to_trace_fuse:
+            return self._to_trace_fuse
 
-        if not fuse_desc:
-            self.error_output('Descriptor not found to trace')
-        return fuse_desc
+        self.error_output('Descriptor not found to trace')
+        return None
