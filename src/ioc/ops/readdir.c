@@ -310,7 +310,7 @@ ioc_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t offset,
 	 * process any more requests at this stage.
 	 */
 	if (!dir_handle->handle_valid)
-		D_GOTO(out_err, ret = EIO);
+		D_GOTO(out_err, ret = EHOSTDOWN);
 
 	D_ALLOC(buf, size);
 	if (!buf)

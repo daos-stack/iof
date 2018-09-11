@@ -253,75 +253,79 @@ static void gah_addref(struct iof_projection_info *fs_handle)
  */
 static void gah_decref(struct iof_projection_info *fs_handle)
 {
+	struct ioc_request *request;
+	struct ioc_inode_entry *ie;
 	int oldref;
 
 	oldref = atomic_fetch_sub(&fs_handle->p_gah_update_count, 1);
 	IOF_TRACE_DEBUG(fs_handle, "decref to %u", oldref - 1);
 
-	if (oldref == 1) {
-		struct ioc_request *request;
-		struct ioc_inode_entry *ie;
+	if (oldref != 1) {
+		return;
+	}
 
-		IOF_TRACE_INFO(fs_handle,
-			       "GAH migration complete, marking as on-line");
+	IOF_TRACE_INFO(fs_handle,
+		       "GAH migration complete, marking as on-line");
 
-		D_MUTEX_UNLOCK(&fs_handle->gah_lock);
-		fs_handle->failover_state = iof_failover_complete;
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+	fs_handle->failover_state = iof_failover_complete;
 
-		/* Now the gah_lock has been dropped, and fuse requests are
-		 * being processed again it's safe to start invalidating
-		 * inodes, so walk the inval list doing so.
-		 * This triggers a number of forget() callbacks from the kernel
-		 * so only call inval if the reference count > 1 to avoid
-		 * activity on already deleted inodes.
-		 */
-		while ((ie = d_list_pop_entry(&fs_handle->p_inval_list,
-					      struct ioc_inode_entry,
-					      ie_ie_list))) {
-			int ref = atomic_load_consume(&ie->ie_ref);
-			int drop_count = 1;
+	/* Now the gah_lock has been dropped, and fuse requests are
+	 * being processed again it's safe to start invalidating
+	 * inodes, so walk the inval list doing so.
+	 * This triggers a number of forget() callbacks from the kernel
+	 * so only call inval if the reference count > 1 to avoid
+	 * activity on already deleted inodes.
+	 */
+	while ((ie = d_list_pop_entry(&fs_handle->p_inval_list,
+				      struct ioc_inode_entry,
+				      ie_ie_list))) {
+		int ref = atomic_load_consume(&ie->ie_ref);
+		int drop_count = 1;
 
-			IOF_TRACE_INFO(ie,
-				       "Invalidating " GAH_PRINT_STR " ref %d",
-				       GAH_PRINT_VAL(ie->gah), ref);
 
-			if (ref > 1) {
-				int rc;
+		IOF_TRACE_INFO(ie,
+			       "Invalidating " GAH_PRINT_STR " ref %d",
+			       GAH_PRINT_VAL(ie->gah), ref);
 
-				rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
-								      ie->parent,
-								      ie->name,
-								      strlen(ie->name));
-
-				IOF_TRACE_INFO(ie, "inval returned %d", rc);
-				if (rc == -ENOENT) {
-					drop_count += ref - 1;
-				}
-			}
-			d_hash_rec_ndecref(&fs_handle->inode_ht,
-					   drop_count,
-					   &ie->ie_htl);
-		}
-
-		/* Finally, start processing requests which need resending to
-		 * new ranks
-		 */
-		D_MUTEX_LOCK(&fs_handle->p_request_lock);
-		while ((request = d_list_pop_entry(&fs_handle->p_requests_pending,
-						   struct ioc_request,
-						   ir_list))) {
+		if (ref > 1) {
 			int rc;
 
-			rc = ioc_simple_resend(request);
-			if (rc != 0) {
-				request->rc = rc;
-				if (request->ir_api->on_result)
-					request->ir_api->on_result(request);
+			rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
+							      ie->parent,
+							      ie->name,
+							      strlen(ie->name));
+
+			IOF_TRACE_INFO(ie, "inval returned %d", rc);
+			if (rc == -ENOENT) {
+				drop_count += ref - 1;
 			}
+
 		}
-		D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
-		IOF_TRACE_INFO(fs_handle, "Failover complete");
+		d_hash_rec_ndecref(&fs_handle->inode_ht,
+				   drop_count,
+				   &ie->ie_htl);
+
 	}
+
+	/* Finally, start processing requests which need resending to
+	 * new ranks
+	 */
+	D_MUTEX_LOCK(&fs_handle->p_request_lock);
+	while ((request = d_list_pop_entry(&fs_handle->p_requests_pending,
+					   struct ioc_request,
+					   ir_list))) {
+		int rc;
+
+		rc = ioc_simple_resend(request);
+		if (rc != 0) {
+			request->rc = rc;
+			if (request->ir_api->on_result)
+				request->ir_api->on_result(request);
+		}
+	}
+	D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
+	IOF_TRACE_INFO(fs_handle, "Failover complete");
 }
 
 static void imigrate_cb(const struct crt_cb_info *cb_info);
@@ -882,6 +886,9 @@ int iof_fs_send(struct ioc_request *request)
 		break;
 	case RHS_DIR:
 		if (!H_GAH_IS_VALID(request->ir_dir)) {
+			D_GOTO(err, ret = EHOSTDOWN);
+		}
+		if (!request->ir_dir->handle_valid) {
 			D_GOTO(err, ret = EHOSTDOWN);
 		}
 		ep.ep_rank = request->ir_dir->gah.root;
@@ -1890,7 +1897,8 @@ initialize_projection(struct iof_state *iof_state,
 		return false;
 
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
-	IOF_TRACE_UP(&fs_handle->ctx, fs_handle, "iof_ctx");
+	IOF_TRACE_UP(&fs_handle->ctx[0], fs_handle, "iof_ctx[0]");
+	IOF_TRACE_UP(&fs_handle->ctx[1], fs_handle, "iof_ctx[1]");
 
 	ret = iof_pool_init(&fs_handle->pool, fs_handle);
 	if (ret != -DER_SUCCESS)
@@ -2089,15 +2097,24 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
-	fs_handle->ctx.crt_ctx		= fs_handle->proj.crt_ctx;
-	fs_handle->ctx.poll_interval	= iof_state->iof_ctx.poll_interval;
-	fs_handle->ctx.callback_fn	= iof_state->iof_ctx.callback_fn;
+	fs_handle->ctx[0].crt_ctx	= fs_handle->proj.crt_ctx;
+	fs_handle->ctx[0].poll_interval	= iof_state->iof_ctx.poll_interval;
+	fs_handle->ctx[0].callback_fn	= iof_state->iof_ctx.callback_fn;
+
+	fs_handle->ctx[1].crt_ctx	= fs_handle->proj.crt_ctx;
+	fs_handle->ctx[1].poll_interval	= iof_state->iof_ctx.poll_interval;
+	fs_handle->ctx[1].callback_fn	= iof_state->iof_ctx.callback_fn;
 
 	/* TODO: Much better error checking is required here, not least
 	 * terminating the thread if there are any failures in the rest of
 	 * this function
 	 */
-	if (!iof_thread_start(&fs_handle->ctx)) {
+	if (!iof_thread_start(&fs_handle->ctx[0])) {
+		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
+		D_GOTO(err, 0);
+	}
+
+	if (!iof_thread_start(&fs_handle->ctx[1])) {
 		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
 		D_GOTO(err, 0);
 	}
@@ -2497,10 +2514,15 @@ static int iof_deregister_fuse(void *arg)
 	/* Stop the progress thread for this projection and delete the context
 	 */
 
-	rc = iof_thread_stop(&fs_handle->ctx);
+	rc = iof_thread_stop(&fs_handle->ctx[0]);
 	if (rc != 0)
 		IOF_TRACE_ERROR(fs_handle,
-				"thread stop returned %d", rc);
+				"thread[0] stop returned %d", rc);
+
+	rc = iof_thread_stop(&fs_handle->ctx[1]);
+	if (rc != 0)
+		IOF_TRACE_ERROR(fs_handle,
+				"thread[1] stop returned %d", rc);
 
 	do {
 		/* If this context has a pool associated with it then reap
@@ -2510,7 +2532,7 @@ static int iof_deregister_fuse(void *arg)
 		bool active;
 
 		do {
-			rc = iof_progress_drain(&fs_handle->ctx);
+			rc = iof_progress_drain(&fs_handle->ctx[0]);
 
 			active = iof_pool_reclaim(&fs_handle->pool);
 
@@ -2568,7 +2590,8 @@ static int iof_deregister_fuse(void *arg)
 		rcp = rc;
 	}
 
-	IOF_TRACE_DOWN(&fs_handle->ctx);
+	IOF_TRACE_DOWN(&fs_handle->ctx[0]);
+	IOF_TRACE_DOWN(&fs_handle->ctx[1]);
 	d_list_del_init(&fs_handle->link);
 
 	D_FREE(fs_handle->mount_point);

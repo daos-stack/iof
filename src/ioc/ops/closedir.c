@@ -52,6 +52,7 @@ static void closedir_ll_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out	= crt_reply_get(request->rpc);
 	struct TYPE_NAME *dh		= CONTAINER(request);
+	struct iof_projection_info *fs_handle = dh->open_req.fsh;
 
 	IOC_REQUEST_RESOLVE(request, out);
 
@@ -63,6 +64,11 @@ static void closedir_ll_cb(struct ioc_request *request)
 	else
 		IOC_REPLY_ERR(request, request->rc);
 out:
+
+	D_MUTEX_LOCK(&fs_handle->od_lock);
+	d_list_del_init(&dh->dh_od_list);
+	D_MUTEX_UNLOCK(&fs_handle->od_lock);
+
 	iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 }
 
@@ -76,10 +82,6 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 {
 	struct iof_projection_info *fs_handle = dh->open_req.fsh;
 	int rc;
-
-	D_MUTEX_LOCK(&fs_handle->od_lock);
-	d_list_del_init(&dh->dh_od_list);
-	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
 	IOC_REQ_INIT_REQ(dh, fs_handle, api, req, rc);
 	if (rc)
@@ -96,6 +98,11 @@ err:
 	} else {
 		IOF_TRACE_DOWN(&dh->close_req);
 	}
+
+	D_MUTEX_LOCK(&fs_handle->od_lock);
+	d_list_del_init(&dh->dh_od_list);
+	D_MUTEX_UNLOCK(&fs_handle->od_lock);
+
 	iof_pool_release(fs_handle->dh_pool, dh);
 
 }
