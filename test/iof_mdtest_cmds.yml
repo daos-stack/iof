@@ -52,7 +52,7 @@ execStrategy:
       exe:        "{IOF_OMPI_BIN}mpirun -N {MPI_TASKS}"
       type:       exe
       parameters: "{mdtest_exe} -d {CNSS_PREFIX}/FS_2/{nodename} \
-                   -i 150 -I 5 -u"
+                   -i 75 -I 5 -u"
 
     # Remove the test directory, i.e. value of "{CNSS_PREFIX}/FS_2/{nodename}".
     - name:       "iof_rmdir"
