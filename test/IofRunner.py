@@ -31,7 +31,6 @@ Unmount and remove the CNSS and IONSS dirs
 
 import os
 import subprocess
-import shlex
 import logging
 import getpass
 import tempfile
@@ -119,26 +118,25 @@ class IofRunner():
                 "TestIOF: Failed to create the IONSS config. Error code: %d\n",
                 procrtn)
 
-    def add_prefix_logdir(self):
+    def _add_prefix_logdir(self):
         """Add the log directory to the prefix"""
         ompi_bin = self.test_info.get_defaultENV('IOF_OMPI_BIN')
         log_path = os.path.join(self.dir_path, "ionss")
         os.makedirs(log_path, exist_ok=True)
-        if self.test_info.get_defaultENV('TR_USE_URI'):
-            dvmfile = " --ompi-server file:%s " % \
-                      self.test_info.get_defaultENV('TR_USE_URI')
-        else:
-            dvmfile = " "
+
+        cmd = [os.path.join(ompi_bin, 'orterun'),
+               '--mca', 'btl', 'self,tcp',
+               '--output-filename', log_path]
         if getpass.getuser() == "root":
-            allow_root = " --allow-run-as-root"
-        else:
-            allow_root = ""
-        cmdstr = "%sorterun%s--output-filename %s%s" % \
-                 (ompi_bin, dvmfile, log_path, allow_root)
+            cmd.append('--allow-run-as-root')
 
-        return cmdstr
+        dvm_file = self.test_info.get_defaultENV('TR_USE_URI')
+        if dvm_file:
+            cmd.extend(['--ompi-server',
+                        'file:{}'.format(dvm_file)])
+        return cmd
 
-    def add_server(self):
+    def _add_server(self):
         """Create the server prefix"""
         ion = self.test_info.get_defaultENV('IOF_TEST_ION')
 
@@ -146,21 +144,15 @@ class IofRunner():
         #can access it.
         self.test_info.set_passToConfig('IOF_TEST_ION', ion)
         if ion:
-            local_ion = " -H %s -N 1 " % (ion)
-        else:
-            local_ion = " -np 1"
+            return ['-H', ion, '-N', '1']
+        return ['-np', '1']
 
-        return local_ion
-
-    def add_client(self):
+    def _add_client(self):
         """Create the client prefix"""
         cn = self.test_info.get_defaultENV('IOF_TEST_CN')
         if cn:
-            local_cn = " -H %s -N 1 " % (cn)
-        else:
-            local_cn = " -np 1 "
-
-        return local_cn
+            return ['-H', cn, '-N', '1']
+        return ['-np', '1']
 
     def setup_env(self):
         """setup environment variablies"""
@@ -174,33 +166,37 @@ class IofRunner():
     def launch_process(self):
         """Launch the CNSS and IONSS processes"""
         self.logger.info("Testnss: Launch the CNSS and IONSS processes")
-        pass_env = " -x CRT_PHY_ADDR_STR -x OFI_INTERFACE" + \
-                   " -x CNSS_PREFIX -x D_LOG_MASK"
+        envs = ['CRT_PHY_ADDR_STR', 'OFI_INTERFACE', 'D_LOG_MASK']
         self.setup_env()
         self.proc = None
         self.create_cnss_dir()
         self.manage_ionss_dir()
-        cmd = self.add_prefix_logdir()
-        ionss = self.add_server()
-        cnss = self.add_client()
+        cmd = self._add_prefix_logdir()
         test_path = self.test_info.get_defaultENV('IOF_TEST_BIN')
-        ion_env = " -x ION_TEMPDIR"
-        local_server = "%s%s%s %s/ionss --config=%s" % \
-                        (pass_env, ion_env, ionss, test_path,
-                         self.test_info.get_passToConfig("ION_CONFIG"))
-        local_client = "%s%s %s/cnss :" % \
-                        (pass_env, cnss, test_path)
-        cmdstr = cmd + local_client + local_server
-        self.logger.info("Testionss: %s", cmdstr)
+
         logfileout = os.path.join(self.dir_path, "iofRunner.out")
         logfileerr = os.path.join(self.dir_path, "iofRunner.err")
-        cmdarg = shlex.split(cmdstr)
+        cmd.extend(['-x', 'CNSS_PREFIX'])
+        for e in envs:
+            cmd.extend(['-x', e])
+        cmd.extend(self._add_client())
+        cmd.append(os.path.join(test_path, 'cnss'))
+        cmd.append(':')
+        cmd.extend(['-x', 'ION_TEMPDIR'])
+        for e in envs:
+            cmd.extend(['-x', e])
+        cmd.extend(self._add_server())
+        cmd.append(os.path.join(test_path, 'ionss'))
+        cmd.append('--config={}' \
+                   .format(self.test_info.get_passToConfig("ION_CONFIG")))
+        cmdstr = ' '.join(cmd)
+        self.logger.info("Testionss: %s", cmdstr)
         with open(logfileout, mode='w') as outfile, \
             open(logfileerr, mode='w') as errfile:
             outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
                 ("=" * 40), cmdstr, ("=" * 40)))
             outfile.flush()
-            self.proc = subprocess.Popen(cmdarg,
+            self.proc = subprocess.Popen(cmd,
                                          stdin=subprocess.DEVNULL,
                                          stdout=outfile,
                                          stderr=errfile)

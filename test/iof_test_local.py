@@ -311,6 +311,7 @@ class Testlocal(unittest.TestCase,
             self.internals_tracing = False
 
         cmd = [orterun,
+               '--mca', 'btl', 'self,tcp',
                '--output-filename', self.log_path]
 
         if getpass.getuser() == 'root':
