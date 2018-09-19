@@ -42,34 +42,29 @@
 #include "ios_gah.h"
 
 static void
-read_bulk_cb(const struct crt_cb_info *cb_info)
+read_bulk_cb(struct ioc_request *request)
 {
-	struct iof_rb *rb = cb_info->cci_arg;
-	struct iof_readx_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_rb *rb = container_of(request, struct iof_rb, rb_req);
+	struct iof_readx_out *out = crt_reply_get(request->rpc);
 	int rc = 0;
 	size_t bytes_read = 0;
 	void *buff = NULL;
-
-	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(rb, "Bad RPC reply %d", cb_info->cci_rc);
-		rb->failure = true;
-		D_GOTO(out, rc = EIO);
-	}
 
 	if (out->err) {
 		IOF_TRACE_ERROR(rb, "Error from target %d", out->err);
 		rb->failure = true;
 		if (out->err == -DER_NONEXIST)
-			H_GAH_SET_INVALID(rb->handle);
-		D_GOTO(out, rc = EIO);
+			H_GAH_SET_INVALID(request->ir_file);
+		D_GOTO(out, request->rc = EIO);
 	}
 
-	if (out->rc)
-		D_GOTO(out, rc = out->rc);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc)
+		D_GOTO(out, 0);
 
 	if (out->iov_len > 0) {
 		if (out->data.iov_len != out->iov_len)
-			D_GOTO(out, rc = EIO);
+			D_GOTO(out, request->rc = EIO);
 		buff = out->data.iov_buf;
 		bytes_read = out->data.iov_len;
 	} else if (out->bulk_len > 0) {
@@ -78,10 +73,10 @@ read_bulk_cb(const struct crt_cb_info *cb_info)
 	}
 
 out:
-	if (rc) {
-		IOC_REPLY_ERR_RAW(rb, rb->req, rc);
+	if (request->rc) {
+		IOC_REPLY_ERR(request, request->rc);
 	} else {
-		STAT_ADD_COUNT(rb->fs_handle->stats, read_bytes, bytes_read);
+		STAT_ADD_COUNT(request->fsh->stats, read_bytes, bytes_read);
 
 		/* It's not clear without benchmarking which approach is better
 		 * here, fuse_reply_buf() is a small wrapper around writev()
@@ -91,8 +86,8 @@ out:
 		 * For now it's easy to pick between them, and both of them are
 		 * passing valgrind tests.
 		 */
-		if (rb->fs_handle->flags & IOF_FUSE_READ_BUF) {
-			rc = fuse_reply_buf(rb->req, buff, bytes_read);
+		if (request->fsh->flags & IOF_FUSE_READ_BUF) {
+			rc = fuse_reply_buf(request->req, buff, bytes_read);
 			if (rc != 0)
 				IOF_TRACE_ERROR(rb,
 						"fuse_reply_buf returned %d:%s",
@@ -101,7 +96,7 @@ out:
 		} else {
 			rb->fbuf.buf[0].size = bytes_read;
 			rb->fbuf.buf[0].mem = buff;
-			rc = fuse_reply_data(rb->req, &rb->fbuf, 0);
+			rc = fuse_reply_data(request->req, &rb->fbuf, 0);
 			if (rc != 0)
 				IOF_TRACE_ERROR(rb,
 						"fuse_reply_data returned %d:%s",
@@ -111,56 +106,27 @@ out:
 	iof_pool_release(rb->pt, rb);
 }
 
-static void
-ioc_read_bulk(struct iof_rb *rb, size_t len, off_t position,
-	      struct iof_file_handle *handle)
-{
-	struct iof_readx_in *in = crt_req_get(rb->rpc);
-	int rc;
-
-	rc = crt_req_set_endpoint(rb->rpc, &handle->common.ep);
-	if (rc)
-		D_GOTO(out_err, rc = EIO);
-
-	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
-	in->gah = handle->common.gah;
-	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
-	in->xtvec.xt_off = position;
-	in->xtvec.xt_len = len;
-	in->data_bulk = rb->lb.handle;
-	IOF_TRACE_LINK(rb->rpc, rb, "read_bulk_rpc");
-
-	crt_req_addref(rb->rpc);
-	rc = crt_req_send(rb->rpc, read_bulk_cb, rb);
-	if (rc) {
-		crt_req_decref(rb->rpc);
-		D_GOTO(out_err, rc = EIO);
-	}
-
-	iof_pool_restock(rb->pt);
-	return;
-
-out_err:
-	IOC_REPLY_ERR_RAW(rb, rb->req, rc);
-	iof_pool_release(rb->pt, rb);
-}
+static const struct ioc_request_api api = {
+	.on_result	= read_bulk_cb,
+	.on_evict	= ioc_simple_resend,
+	.gah_offset	= offsetof(struct iof_readx_in, gah),
+	.have_gah	= true,
+};
 
 void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		 off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (void *)fi->fh;
 	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_readx_in *in;
 	struct iof_pool_type *pt;
 	struct iof_rb *rb = NULL;
 	int rc;
 
-	STAT_ADD(handle->fs_handle->stats, read);
+	STAT_ADD(fs_handle->stats, read);
 
 	IOF_TRACE_INFO(handle, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
-
-	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(out_err, rc = fs_handle->offline_reason);
 
 	if (len <= 4096)
 		pt = fs_handle->rb_pool_page;
@@ -170,14 +136,28 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 	rb = iof_pool_acquire(pt);
 	if (!rb)
 		D_GOTO(out_err, rc = ENOMEM);
+
 	IOF_TRACE_UP(rb, handle, "readbuf");
 
-	rb->req = req;
-	rb->handle = handle;
+	rb->rb_req.req = req;
+	rb->rb_req.ir_api = &api;
+	rb->rb_req.ir_file = handle;
 	rb->pt = pt;
 
-	ioc_read_bulk(rb, len, position, handle);
+	in = crt_req_get(rb->rb_req.rpc);
 
+	in->xtvec.xt_off = position;
+	in->xtvec.xt_len = len;
+	in->data_bulk = rb->lb.handle;
+	IOF_TRACE_LINK(rb->rb_req.rpc, rb, "read_bulk_rpc");
+
+	rc = iof_fs_send(&rb->rb_req);
+	if (rc != 0) {
+		IOC_REPLY_ERR(&rb->rb_req, rc);
+		iof_pool_release(pt, rb);
+	}
+
+	iof_pool_restock(pt);
 	return;
 
 out_err:

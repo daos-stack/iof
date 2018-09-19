@@ -1447,11 +1447,10 @@ rb_page_init(void *arg, void *handle)
 {
 	struct iof_rb *rb = arg;
 
-	rb->fs_handle = handle;
+	IOC_REQUEST_INIT(&rb->rb_req, handle);
 	rb->buf_size = 4096;
 	rb->fbuf.count = 1;
 	rb->fbuf.buf[0].fd = -1;
-	rb->rpc = NULL;
 	rb->failure = false;
 	rb->lb.buf = NULL;
 }
@@ -1462,7 +1461,7 @@ rb_large_init(void *arg, void *handle)
 	struct iof_rb *rb = arg;
 
 	rb_page_init(arg, handle);
-	rb->buf_size = rb->fs_handle->max_read;
+	rb->buf_size = rb->rb_req.fsh->max_read;
 }
 
 static bool
@@ -1471,12 +1470,13 @@ rb_reset(void *arg)
 	struct iof_rb *rb = arg;
 	int rc;
 
-	rb->req = 0;
+	IOC_REQUEST_RESET(&rb->rb_req);
+	rb->rb_req.ir_ht = RHS_FILE;
 
-	if (rb->rpc) {
-		crt_req_decref(rb->rpc);
-		crt_req_decref(rb->rpc);
-		rb->rpc = NULL;
+	if (rb->rb_req.rpc) {
+		crt_req_decref(rb->rb_req.rpc);
+		crt_req_decref(rb->rb_req.rpc);
+		rb->rb_req.rpc = NULL;
 	}
 
 	if (rb->failure) {
@@ -1485,20 +1485,20 @@ rb_reset(void *arg)
 	}
 
 	if (!rb->lb.buf) {
-		IOF_BULK_ALLOC(rb->fs_handle->proj.crt_ctx, rb, lb,
+		IOF_BULK_ALLOC(rb->rb_req.fsh->proj.crt_ctx, rb, lb,
 			       rb->buf_size, false);
 		if (!rb->lb.buf)
 			return false;
 	}
 
-	rc = crt_req_create(rb->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(rb->fs_handle, readx), &rb->rpc);
-	if (rc || !rb->rpc) {
+	rc = crt_req_create(rb->rb_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(rb->rb_req.fsh, readx), &rb->rb_req.rpc);
+	if (rc || !rb->rb_req.rpc) {
 		IOF_TRACE_ERROR(rb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(rb, lb);
 		return false;
 	}
-	crt_req_addref(rb->rpc);
+	crt_req_addref(rb->rb_req.rpc);
 
 	return true;
 }
@@ -1510,8 +1510,8 @@ rb_release(void *arg)
 
 	IOF_BULK_FREE(rb, lb);
 
-	crt_req_decref(rb->rpc);
-	crt_req_decref(rb->rpc);
+	crt_req_decref(rb->rb_req.rpc);
+	crt_req_decref(rb->rb_req.rpc);
 }
 
 static void
@@ -1898,12 +1898,12 @@ initialize_projection(struct iof_state *iof_state,
 	struct iof_pool_reg rb_page = {.init = rb_page_init,
 				       .reset = rb_reset,
 				       .release = rb_release,
-				       POOL_TYPE_INIT(iof_rb, list)};
+				       POOL_TYPE_INIT(iof_rb, rb_req.ir_list)};
 
 	struct iof_pool_reg rb_large = {.init = rb_large_init,
 					.reset = rb_reset,
 					.release = rb_release,
-					POOL_TYPE_INIT(iof_rb, list)};
+					POOL_TYPE_INIT(iof_rb, rb_req.ir_list)};
 
 	struct iof_pool_reg wb = {.init = wb_init,
 				  .reset = wb_reset,

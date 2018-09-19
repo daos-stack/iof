@@ -155,20 +155,6 @@ struct iof_group_info {
 	bool				iof_registered;
 };
 
-/** Read buffer descriptor */
-struct iof_rb {
-	d_list_t			list;
-	struct iof_projection_info	*fs_handle;
-	struct iof_file_handle		*handle;
-	struct fuse_bufvec		fbuf;
-	struct iof_local_bulk		lb;
-	crt_rpc_t			*rpc;
-	fuse_req_t			req;
-	struct iof_pool_type		*pt;
-	size_t				buf_size;
-	bool				failure;
-};
-
 /** Write buffer descriptor */
 struct iof_wb {
 	d_list_t			list;
@@ -798,6 +784,16 @@ struct iof_file_handle {
 					GAH_PRINT_VAL((OH)->gah));	\
 			_rc;						\
 		})
+
+/** Read buffer descriptor */
+struct iof_rb {
+	struct ioc_request		rb_req;
+	struct fuse_bufvec		fbuf;
+	struct iof_local_bulk		lb;
+	struct iof_pool_type		*pt;
+	size_t				buf_size;
+	bool				failure;
+};
 
 /** Common request type.
  *
