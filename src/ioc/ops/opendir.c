@@ -44,7 +44,6 @@
 #define REQ_NAME open_req
 #define POOL_NAME dh_pool
 #define TYPE_NAME iof_dir_handle
-#define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
 #define STAT_KEY opendir
@@ -74,7 +73,6 @@ opendir_ll_cb(struct ioc_request *request)
 }
 
 static const struct ioc_request_api api = {
-	.on_send	= post_send,
 	.on_result	= opendir_ll_cb,
 	.on_evict	= ioc_simple_resend,
 	.gah_offset = offsetof(struct iof_gah_in, gah),

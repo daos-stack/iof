@@ -495,8 +495,6 @@ struct ioc_request;
  * Set of callbacks invoked during the lifetime of a request.
  */
 struct ioc_request_api {
-	/** Called after RPC has been sent */
-	void	(*on_send)(struct ioc_request *req);
 	/** Called once, per request with the result */
 	void	(*on_result)(struct ioc_request *req);
 	/** Called on eviction, can re-send to new rank */

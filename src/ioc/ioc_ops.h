@@ -101,11 +101,4 @@
 
 #define CONTAINER(req) container_of(req, struct TYPE_NAME, REQ_NAME)
 
-#ifdef RESTOCK_ON_SEND
-static void post_send(struct ioc_request *req)
-{
-	iof_pool_restock(req->fsh->POOL_NAME);
-}
-#endif
-
 #endif

@@ -43,11 +43,9 @@
 #define REQ_NAME request
 #define POOL_NAME symlink_pool
 #define TYPE_NAME entry_req
-#define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
 static const struct ioc_request_api api = {
-	.on_send	= post_send,
 	.on_result	= iof_entry_cb,
 	.on_evict	= ioc_simple_resend,
 };

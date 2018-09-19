@@ -938,8 +938,6 @@ int iof_fs_send(struct ioc_request *request)
 	if (rc) {
 		D_GOTO(err, ret = EIO);
 	}
-	if (request->ir_api->on_send)
-		request->ir_api->on_send(request);
 	return 0;
 err:
 	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", ret);

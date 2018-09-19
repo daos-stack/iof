@@ -44,7 +44,6 @@
 #define REQ_NAME request
 #define POOL_NAME lookup_pool
 #define TYPE_NAME entry_req
-#define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
 void iof_entry_cb(struct ioc_request *request)
@@ -97,7 +96,6 @@ out:
 }
 
 static const struct ioc_request_api api = {
-	.on_send	= post_send,
 	.on_result	= iof_entry_cb,
 	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_string_in, gah),

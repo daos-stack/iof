@@ -44,7 +44,6 @@
 #define TYPE_NAME common_req
 #define REQ_NAME request
 #define STAT_KEY release
-#define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
 /* Find a GAH from a inode, return 0 if found */
@@ -158,7 +157,6 @@ static void ie_close_cb(struct ioc_request *request)
 }
 
 static const struct ioc_request_api api = {
-	.on_send	= post_send,
 	.on_result	= ie_close_cb,
 };
 

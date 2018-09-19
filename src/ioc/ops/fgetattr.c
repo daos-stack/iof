@@ -43,7 +43,6 @@
 #define REQ_NAME request
 #define POOL_NAME fgh_pool
 #define TYPE_NAME common_req
-#define RESTOCK_ON_SEND
 #include "ioc_ops.h"
 
 #define STAT_KEY getattr
@@ -86,7 +85,6 @@ static void ioc_fsetattr_result_fn(struct ioc_request *request)
 }
 
 static const struct ioc_request_api getattr_api = {
-	.on_send	= post_send,
 	.on_result	= ioc_getattr_result_fn,
 	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
@@ -94,7 +92,6 @@ static const struct ioc_request_api getattr_api = {
 };
 
 static const struct ioc_request_api fgetattr_api = {
-	.on_send	= post_send,
 	.on_result	= ioc_fsetattr_result_fn,
 	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
