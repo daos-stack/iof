@@ -1169,6 +1169,24 @@ dh_init(void *arg, void *handle)
 	dh->rpc = NULL;
 }
 
+/* Reset a RPC in a re-usable descriptor.  If the RPC pointer is valid
+ * then drop the two references and zero the pointer.
+ */
+#define CHECK_AND_RESET_RPC(HANDLE, RPC)			\
+	do {							\
+		if ((HANDLE)->RPC) {				\
+			crt_req_decref((HANDLE)->RPC);		\
+			crt_req_decref((HANDLE)->RPC);		\
+			(HANDLE)->RPC = NULL;			\
+		}						\
+	} while (0)
+
+/* As CHECK_AND_RESET_RPC but take a ioc_request as the second option
+ * and work on the RPC in the request
+ */
+#define CHECK_AND_RESET_RRPC(HANDLE, REQUEST)			\
+	CHECK_AND_RESET_RPC(HANDLE, REQUEST.rpc)
+
 static bool
 dh_reset(void *arg)
 {
@@ -1246,23 +1264,9 @@ fh_reset(void *arg)
 	struct iof_file_handle *fh = arg;
 	int rc;
 
-	if (fh->open_rpc) {
-		crt_req_decref(fh->open_rpc);
-		crt_req_decref(fh->open_rpc);
-		fh->open_rpc = NULL;
-	}
-
-	if (fh->creat_rpc) {
-		crt_req_decref(fh->creat_rpc);
-		crt_req_decref(fh->creat_rpc);
-		fh->creat_rpc = NULL;
-	}
-
-	if (fh->release_rpc) {
-		crt_req_decref(fh->release_rpc);
-		crt_req_decref(fh->release_rpc);
-		fh->release_rpc = NULL;
-	}
+	CHECK_AND_RESET_RPC(fh, open_rpc);
+	CHECK_AND_RESET_RPC(fh, creat_rpc);
+	CHECK_AND_RESET_RPC(fh, release_rpc);
 
 	fh->common.ep = fh->fs_handle->proj.grp->psr_ep;
 
@@ -1338,11 +1342,7 @@ common_reset(void *arg)
 
 	req->request.req = NULL;
 
-	if (req->request.rpc) {
-		crt_req_decref(req->request.rpc);
-		crt_req_decref(req->request.rpc);
-		req->request.rpc = NULL;
-	}
+	CHECK_AND_RESET_RRPC(req, request);
 
 	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
 			    req->opcode, &req->request.rpc);
@@ -1389,11 +1389,7 @@ entry_reset(void *arg)
 	/* If this descriptor has previously been used the destroy the
 	 * existing RPC
 	 */
-	if (req->request.rpc) {
-		crt_req_decref(req->request.rpc);
-		crt_req_decref(req->request.rpc);
-		req->request.rpc = NULL;
-	}
+	CHECK_AND_RESET_RRPC(req, request);
 
 	/* Free any destination string on this descriptor.  This is only used
 	 * for symlink to store the link target whilst the RPC is being sent
@@ -1473,11 +1469,7 @@ rb_reset(void *arg)
 	IOC_REQUEST_RESET(&rb->rb_req);
 	rb->rb_req.ir_ht = RHS_FILE;
 
-	if (rb->rb_req.rpc) {
-		crt_req_decref(rb->rb_req.rpc);
-		crt_req_decref(rb->rb_req.rpc);
-		rb->rb_req.rpc = NULL;
-	}
+	CHECK_AND_RESET_RRPC(rb, rb_req);
 
 	if (rb->failure) {
 		IOF_BULK_FREE(rb, lb);
@@ -1519,8 +1511,7 @@ wb_init(void *arg, void *handle)
 {
 	struct iof_wb *wb = arg;
 
-	wb->fs_handle = handle;
-	wb->rpc = NULL;
+	IOC_REQUEST_INIT(&wb->wb_req, handle);
 	wb->failure = false;
 	wb->lb.buf = NULL;
 }
@@ -1531,13 +1522,10 @@ wb_reset(void *arg)
 	struct iof_wb *wb = arg;
 	int rc;
 
-	wb->req = 0;
+	IOC_REQUEST_RESET(&wb->wb_req);
+	wb->wb_req.ir_ht = RHS_FILE;
 
-	if (wb->rpc) {
-		crt_req_decref(wb->rpc);
-		crt_req_decref(wb->rpc);
-		wb->rpc = NULL;
-	}
+	CHECK_AND_RESET_RRPC(wb, wb_req);
 
 	if (wb->failure) {
 		IOF_BULK_FREE(wb, lb);
@@ -1545,20 +1533,20 @@ wb_reset(void *arg)
 	}
 
 	if (!wb->lb.buf) {
-		IOF_BULK_ALLOC(wb->fs_handle->proj.crt_ctx, wb, lb,
-			       wb->fs_handle->proj.max_write, true);
+		IOF_BULK_ALLOC(wb->wb_req.fsh->proj.crt_ctx, wb, lb,
+			       wb->wb_req.fsh->proj.max_write, true);
 		if (!wb->lb.buf)
 			return false;
 	}
 
-	rc = crt_req_create(wb->fs_handle->proj.crt_ctx, NULL,
-			    FS_TO_OP(wb->fs_handle, writex), &wb->rpc);
-	if (rc || !wb->rpc) {
+	rc = crt_req_create(wb->wb_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(wb->wb_req.fsh, writex), &wb->wb_req.rpc);
+	if (rc || !wb->wb_req.rpc) {
 		IOF_TRACE_ERROR(wb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(wb, lb);
 		return false;
 	}
-	crt_req_addref(wb->rpc);
+	crt_req_addref(wb->wb_req.rpc);
 
 	return true;
 }
@@ -1568,8 +1556,8 @@ wb_release(void *arg)
 {
 	struct iof_wb *wb = arg;
 
-	crt_req_decref(wb->rpc);
-	crt_req_decref(wb->rpc);
+	crt_req_decref(wb->wb_req.rpc);
+	crt_req_decref(wb->wb_req.rpc);
 
 	IOF_BULK_FREE(wb, lb);
 }
@@ -1908,7 +1896,7 @@ initialize_projection(struct iof_state *iof_state,
 	struct iof_pool_reg wb = {.init = wb_init,
 				  .reset = wb_reset,
 				  .release = wb_release,
-				  POOL_TYPE_INIT(iof_wb, list)};
+				  POOL_TYPE_INIT(iof_wb, wb_req.ir_list)};
 
 	cb = iof_state->cb;
 

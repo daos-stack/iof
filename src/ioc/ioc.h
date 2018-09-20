@@ -155,17 +155,6 @@ struct iof_group_info {
 	bool				iof_registered;
 };
 
-/** Write buffer descriptor */
-struct iof_wb {
-	d_list_t			list;
-	struct iof_projection_info	*fs_handle;
-	struct iof_file_handle		*handle;
-	struct iof_local_bulk		lb;
-	crt_rpc_t			*rpc;
-	fuse_req_t			req;
-	bool				failure;
-};
-
 enum iof_failover_state {
 	iof_failover_running,
 	iof_failover_offline,
@@ -792,6 +781,13 @@ struct iof_rb {
 	struct iof_local_bulk		lb;
 	struct iof_pool_type		*pt;
 	size_t				buf_size;
+	bool				failure;
+};
+
+/** Write buffer descriptor */
+struct iof_wb {
+	struct ioc_request		wb_req;
+	struct iof_local_bulk		lb;
 	bool				failure;
 };
 

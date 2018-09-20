@@ -42,18 +42,11 @@
 #include "ios_gah.h"
 
 static void
-write_cb(const struct crt_cb_info *cb_info)
+write_cb(struct ioc_request *request)
 {
-	struct iof_wb		*wb = cb_info->cci_arg;
-	struct iof_writex_out	*out = crt_reply_get(cb_info->cci_rpc);
-	struct iof_writex_in	*in = crt_req_get(wb->rpc);
-	fuse_req_t		req = wb->req;
-	int rc;
-
-	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(wb, "Bad RPC reply %d", cb_info->cci_rc);
-		D_GOTO(hard_err, rc = EIO);
-	}
+	struct iof_wb		*wb = container_of(request, struct iof_wb, wb_req);
+	struct iof_writex_out	*out = crt_reply_get(request->rpc);
+	struct iof_writex_in	*in = crt_req_get(request->rpc);
 
 	if (out->err) {
 		/* Convert the error types, out->err is a IOF error code
@@ -61,59 +54,50 @@ write_cb(const struct crt_cb_info *cb_info)
 		 */
 		IOF_TRACE_ERROR(wb, "Error from target %d", out->err);
 
+		if (in->data_bulk)
+			wb->failure = true;
 		if (out->err == -DER_NONEXIST)
-			H_GAH_SET_INVALID(wb->handle);
+			H_GAH_SET_INVALID(wb->wb_req.ir_file);
 
-		D_GOTO(hard_err, rc = EIO);
+		D_GOTO(err, request->rc = EIO);
 		return;
 	}
 
-	if (out->rc)
-		D_GOTO(err, rc = out->rc);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc)
+		D_GOTO(err, 0);
 
-	IOC_REPLY_WRITE(wb, req, out->len);
+	IOC_REPLY_WRITE(wb, request->req, out->len);
 
-	STAT_ADD_COUNT(wb->fs_handle->stats, write_bytes, out->len);
+	STAT_ADD_COUNT(request->fsh->stats, write_bytes, out->len);
 
-	iof_pool_release(wb->fs_handle->write_pool, wb);
+	iof_pool_release(request->fsh->write_pool, wb);
 
 	return;
 
-hard_err:
-	/* This is overly cautious however if there is any non-I/O error
-	 * returned after submitting the RPC then recreate the bulk handle
-	 * before reuse.
-	 */
-	if (in->data_bulk)
-		wb->failure = true;
 err:
-	IOC_REPLY_ERR_RAW(wb, req, rc);
+	IOC_REPLY_ERR(request, request->rc);
 
-	iof_pool_release(wb->fs_handle->write_pool, wb);
+	iof_pool_release(request->fsh->write_pool, wb);
 }
 
+static const struct ioc_request_api api = {
+	.on_result = write_cb,
+	.on_evict = ioc_simple_resend,
+	.gah_offset = offsetof(struct iof_writex_in, gah),
+	.have_gah = true,
+};
+
 static void
-ioc_writex(size_t len, off_t position, struct iof_wb *wb,
-	   struct iof_file_handle *handle)
+ioc_writex(size_t len, off_t position, struct iof_wb *wb)
 {
-	struct iof_writex_in *in = crt_req_get(wb->rpc);
+	struct iof_writex_in *in = crt_req_get(wb->wb_req.rpc);
 	int rc;
 
-	IOF_TRACE_LINK(wb->rpc, wb, "writex_rpc");
-
-	rc = crt_req_set_endpoint(wb->rpc, &handle->common.ep);
-	if (rc) {
-		IOF_TRACE_ERROR(wb, "Could not set endpoint, rc = %d",
-				rc);
-		D_GOTO(err, rc = EIO);
-	}
-
-	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
-	in->gah = handle->common.gah;
-	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
+	IOF_TRACE_LINK(wb->wb_req.rpc, wb, "writex_rpc");
 
 	in->xtvec.xt_len = len;
-	if (len <= handle->fs_handle->proj.max_iov_write) {
+	if (len <= wb->wb_req.fsh->proj.max_iov_write) {
 		d_iov_set(&in->data, wb->lb.buf, len);
 	} else {
 		in->bulk_len = len;
@@ -121,19 +105,18 @@ ioc_writex(size_t len, off_t position, struct iof_wb *wb,
 	}
 
 	in->xtvec.xt_off = position;
+	wb->wb_req.ir_api = &api;
 
-	crt_req_addref(wb->rpc);
-	rc = crt_req_send(wb->rpc, write_cb, wb);
+	rc = iof_fs_send(&wb->wb_req);
 	if (rc) {
-		crt_req_decref(wb->rpc);
 		D_GOTO(err, rc = EIO);
 	}
 
 	return;
 
 err:
-	IOC_REPLY_ERR_RAW(wb, wb->req, rc);
-	iof_pool_release(handle->fs_handle->write_pool, wb);
+	IOC_REPLY_ERR_RAW(wb, wb->wb_req.req, rc);
+	iof_pool_release(wb->wb_req.fsh->write_pool, wb);
 }
 
 void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
@@ -145,15 +128,6 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 
 	STAT_ADD(handle->fs_handle->stats, write);
 
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		D_GOTO(err, rc = handle->fs_handle->offline_reason);
-
-	/* If the server has reported that the GAH is invalid then do not try
-	 * and use it.
-	 */
-	if (!F_GAH_IS_VALID(handle))
-		D_GOTO(err, rc = EIO);
-
 	wb = iof_pool_acquire(handle->fs_handle->write_pool);
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
@@ -163,18 +137,16 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
-	wb->req = req;
-	wb->handle = handle;
+	wb->wb_req.req = req;
+	wb->wb_req.ir_file = handle;
 
 	memcpy(wb->lb.buf, buff, len);
 
-	ioc_writex(len, position, wb, handle);
+	ioc_writex(len, position, wb);
 
 	return;
 err:
 	IOC_REPLY_ERR_RAW(handle, req, rc);
-	if (wb)
-		iof_pool_release(handle->fs_handle->write_pool, wb);
 }
 
 /*
@@ -194,15 +166,6 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 
 	STAT_ADD(handle->fs_handle->stats, write);
 
-	if (FS_IS_OFFLINE(handle->fs_handle))
-		D_GOTO(err, rc = handle->fs_handle->offline_reason);
-
-	/* If the server has reported that the GAH is invalid then do not try
-	 * and use it.
-	 */
-	if (!F_GAH_IS_VALID(handle))
-		D_GOTO(err, rc = EIO);
-
 	/* Check for buffer count being 1.  According to the documentation this
 	 * will always be the case, and if it isn't then our code will be using
 	 * the wrong value for len
@@ -221,8 +184,8 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	IOF_TRACE_INFO(wb, "%#zx-%#zx " GAH_PRINT_STR, position,
 		       position + len - 1, GAH_PRINT_VAL(handle->common.gah));
 
-	wb->req = req;
-	wb->handle = handle;
+	wb->wb_req.req = req;
+	wb->wb_req.ir_file = handle;
 
 	dst.buf[0].size = len;
 	dst.buf[0].mem = wb->lb.buf;
@@ -230,7 +193,7 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	if (rc != len)
 		D_GOTO(err, rc = EIO);
 
-	ioc_writex(len, position, wb, handle);
+	ioc_writex(len, position, wb);
 
 	return;
 err:
