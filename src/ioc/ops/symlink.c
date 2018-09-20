@@ -69,7 +69,7 @@ ioc_ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
 	in = crt_req_get(desc->request.rpc);
 
 	strncpy(in->common.name.name, name, NAME_MAX);
-	desc->dest = strdup(link);
+	D_STRNDUP(desc->dest, link, 4096);
 	if (!desc->dest)
 		D_GOTO(err, rc = ENOMEM);
 	in->oldpath = desc->dest;

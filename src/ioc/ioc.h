@@ -499,7 +499,7 @@ enum ioc_request_state {
 
 /** The type of any handle stored in the request.
  *
- * If set to other than RHS_NONE then the GAH from the appropiate
+ * If set to other than RHS_NONE then the GAH from the appropriate
  * pointer type will be used, rather than the PSR.
  */
 enum ioc_request_htype {

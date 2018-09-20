@@ -1295,8 +1295,7 @@ int ctrl_fs_start(const char *prefix)
 		}
 	}
 
-	ctrl_fs.prefix = strdup(prefix);
-
+	D_STRNDUP(ctrl_fs.prefix, prefix, 1024);
 	if (ctrl_fs.prefix == NULL) {
 		IOF_LOG_ERROR("Could not allocate memory for ctrl fs");
 		ctrl_fs.startup_rc = -ENOMEM;

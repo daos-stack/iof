@@ -158,6 +158,30 @@ class IofLogLine():
         including the filename"""
         return ' '.join(self._fields[1:])
 
+    def get_anon_msg(self):
+        """Return the message part of a line, stripping up to and
+        including the filename but removing pointers"""
+
+        # As get_msg, but try and remove specific information from the message,
+        # This is so that large volumes of logs can be amalgamated and reduced
+        # a common set for easier reporting.  Specifically the trace pointer,
+        # fid/revision of GAH values and other pointers are removed.
+        #
+        # These can then be fed back as source-level comments to the source-code
+        # without creating too much output.
+
+        fields = []
+        for entry in self._fields[2:]:
+            if entry.startswith('Gah('):
+                (root, _, _) = entry[4:-1].split('.')
+                fields.append('Gah({}.-.-)'.format(root))
+            elif entry.startswith('0x'):
+                fields.append('0x...')
+            else:
+                fields.append(entry)
+
+        return '{}() {}'.format(self.function, ' '.join(fields))
+
     def endswith(self, item):
         """Mimic the str.endswith() function
 

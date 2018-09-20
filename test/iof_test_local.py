@@ -62,6 +62,7 @@ import tempfile
 import yaml
 import logging
 import unittest
+from collections import OrderedDict
 #pylint: disable=import-error
 #pylint: disable=no-name-in-module
 from distutils.spawn import find_executable
@@ -105,14 +106,24 @@ def create_file(directory, fname):
     fd = open(os.path.join(directory, fname), mode='w')
     fd.close()
 
+# Use a global variable here so show_line can remember previously reported
+# error lines.
+shown_logs = set()
+
 def show_line(line, sev, msg):
     """Output a log line in gcc error format"""
 
-    print("{}:{}:1: {}: {} '{}'".format(line.filename,
+    # Only report each individual line once.
+
+    log = "{}:{}:1: {}: {} '{}'".format(line.filename,
                                         line.lineno,
                                         sev,
                                         msg,
-                                        line.get_msg()))
+                                        line.get_anon_msg())
+    if log in shown_logs:
+        return
+    print(log)
+    shown_logs.add(log)
 
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
@@ -482,17 +493,23 @@ class Testlocal(unittest.TestCase,
 
         self._check_log()
 
-#pylint: disable=too-many-branches
     def _check_log(self):
         """Check cnss log file for consistency"""
+        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
 
-        active_desc = set()
-        active_desc.add('root')
+        self.check_log_file(cnss_logfile)
+
+#pylint: disable=too-many-branches,no-self-use
+    def check_log_file(self, log_file):
+        """Check a single log file for consistency"""
+
+        active_desc = {}
+        active_desc['root'] = None
         err_count = 0
 
-        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
-        cl = iof_cart_logparse.IofLogIter(cnss_logfile)
-        cl.reset(trace_only=True)
+        regions = OrderedDict()
+
+        cl = iof_cart_logparse.IofLogIter(log_file)
         error_files = set()
 
         # This is a list of files which are known to have unresolved errors, so
@@ -501,42 +518,88 @@ class Testlocal(unittest.TestCase,
 
         have_debug = False
 
+        cl.reset()
         for line in cl:
-            if not have_debug and \
-               line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
-                have_debug = True
-            desc = line.descriptor
-            if 'Registered new' in line:
-                if desc in active_desc:
-                    show_line(line, 'error', 'invalid add')
-                    err_count += 1
-                if line.parent not in active_desc:
-                    show_line(line, 'error', 'add with bad parent')
-                    err_count += 1
-                active_desc.add(desc)
-            elif 'Link' in line:
-                parent = line.parent
-                if parent not in active_desc:
-                    show_line(line, 'error', 'link with bad parent')
-                    err_count += 1
-                desc = parent
-            elif 'Deregistered' in line:
-                if desc not in active_desc:
-                    show_line(line, 'error', 'invalid remove')
-                    err_count += 1
-                active_desc.remove(desc)
+
+            if line.trace:
+                if not have_debug and \
+                   line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
+                    have_debug = True
+                desc = line.descriptor
+                if 'Registered new' in line:
+                    if desc in active_desc:
+                        show_line(line, 'error', 'invalid add')
+                        err_count += 1
+                    if line.parent not in active_desc:
+                        show_line(line, 'error', 'add with bad parent')
+                        err_count += 1
+                    active_desc[desc] = line
+                elif 'Link' in line:
+                    parent = line.parent
+                    if parent not in active_desc:
+                        show_line(line, 'error', 'link with bad parent')
+                        err_count += 1
+                    desc = parent
+                elif 'Deregistered' in line:
+                    if desc not in active_desc:
+                        show_line(line, 'error', 'invalid remove')
+                        err_count += 1
+                    del active_desc[desc]
+                else:
+                    if desc not in active_desc and \
+                       have_debug and line.filename not in error_files_ok:
+                        show_line(line, 'error', 'inactive desc')
+                        error_files.add(line.filename)
+                        err_count += 1
+            else:
+                m = line.get_field(2)
+                if m.startswith('alloc('):
+                    pointer = line.get_field(-1).rstrip('.')
+                    regions[pointer] = line
+                elif m == 'free':
+                    pointer = line.get_field(-1).rstrip('.')
+                    if pointer in regions:
+                        del regions[pointer]
+                    elif pointer != '(nil)':
+                        show_line(line, 'error', 'free of unknown memory')
+                elif m == 'realloc':
+                    new_pointer = line.get_field(6)
+                    regions[new_pointer] = line
+                    old_pointer = line.get_field(-1)[:-2].split(':')[-1]
+                    if old_pointer not in (new_pointer, '(nil)'):
+                        if old_pointer in regions:
+                            del regions[old_pointer]
+                        else:
+                            show_line(line, 'error',
+                                      'realloc of unknown memory')
+        del active_desc['root']
+
+        if not have_debug:
+            print('DEBUG not enabled, No log consistency checking possible')
+
+        # Special case the fuse arg values as these are allocated by IOF
+        # but freed by fuse itself.
+        # Skip over CaRT issues for now to get this landed, we can enable them
+        # once this is stable.
+        lost_memory = False
+        for (_, line) in regions.items():
+            if line.function == 'initialize_projection':
                 continue
-            if desc not in active_desc:
-                if have_debug and line.filename not in error_files_ok:
-                    show_line(line, 'error', 'inactive desc')
-                    error_files.add(line.filename)
-                    err_count += 1
-        active_desc.remove('root')
+            if line.filename.startswith('src/cart/'):
+                continue
+            show_line(line, 'error', 'memory not freed')
+            lost_memory = True
+
         if active_desc:
+            for (_, line) in active_desc.items():
+                show_line(line, 'error', 'desc not deregistered')
             raise Exception('Active descriptors at end of log file')
         if error_files or err_count:
             raise Exception('Errors detected in log file')
-#pylint: enable=too-many-branches
+        if lost_memory:
+            raise Exception('Not all memory allocations freed')
+
+#pylint: enable=too-many-branches,no-self-use
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:

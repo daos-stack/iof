@@ -312,7 +312,7 @@ register_fuse(void *arg,
 	/* TODO: The plugin should provide the sub-directory only, not the
 	 * entire mount point and this function should add the cnss_prefix
 	 */
-	info->mnt = strdup(mnt);
+	D_STRNDUP(info->mnt, mnt, 1024);
 	if (!info->mnt)
 		goto cleanup_no_mutex;
 

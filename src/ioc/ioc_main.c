@@ -899,7 +899,7 @@ int iof_fs_send(struct ioc_request *request)
 	ep.ep_tag = 0;
 	ep.ep_grp = fs_handle->proj.grp->dest_grp;
 
-	/* Pick an appropiate rank, for most cases this is the root of the GAH
+	/* Pick an appropriate rank, for most cases this is the root of the GAH
 	 * however if that is not known then send to the PSR
 	 */
 	switch (request->ir_ht) {
@@ -1708,7 +1708,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	iof_state->num_groups = num_groups;
 
 	group = &iof_state->groups[0];
-	group->grp_name = strdup(IOF_DEFAULT_SET);
+	D_STRNDUP(group->grp_name, IOF_DEFAULT_SET, 128);
 	if (group->grp_name == NULL) {
 		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
 				"IONSS");
