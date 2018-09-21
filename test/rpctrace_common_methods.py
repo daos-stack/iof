@@ -54,24 +54,35 @@ C_ERRNOS = {0: '-DER_SUCCESS',
 # pylint: disable=too-many-statements
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-instance-attributes
-# pylint: disable=too-many-nested-blocks
 class RpcTrace(common_methods.ColorizedOutput):
     """RPC tracing methods
     RPC = CaRT Priv
     Descriptor = handle/iof_pol_type/iof_pool/iof_projection_info/iof_state/
     cnss_plugin/plugin_entry/cnss_info"""
 
-    rpc_dict = {}
-    """dictionary maps descriptor to descriptor type and parent"""
+    #dictionary maps descriptor to descriptor type and parent
     desc_dict = {}
-    """dictionary maps descriptor to 'registered/deregistered/linked' states
-    w/ regard to IOF_TRACE macros"""
 
     ALLOC_STATE = 'ALLOCATED'
     DEALLOC_STATE = 'DEALLOCATED'
     SUBMIT_STATE = 'SUBMITTED'
     SENT_STATE = 'SENT'
     COMPLETED_STATE = 'COMPLETED'
+
+    # A list of allowed descriptor state transitions, the key is the new
+    # state, the value is a list of previous states which are expected.
+    STATE_CHANGE_TABLE = {ALLOC_STATE: (DEALLOC_STATE),
+                          DEALLOC_STATE: (ALLOC_STATE,
+                                          SUBMIT_STATE,
+                                          SENT_STATE,
+                                          COMPLETED_STATE),
+                          SUBMIT_STATE: (ALLOC_STATE),
+                          SENT_STATE: (SUBMIT_STATE,
+                                       COMPLETED_STATE),
+                          COMPLETED_STATE: (SENT_STATE,
+                                            SUBMIT_STATE,
+                                            ALLOC_STATE)}
+
     VERBOSE_STATE_TRANSITIONS = False
     VERBOSE_LOG = True
 
@@ -86,48 +97,6 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.desc_table = None
         self._to_trace = None
         self._to_trace_fuse = None
-
-    def _rpc_error_state_tracing(self, rpc, rpc_state):
-        """Error checking for rpc state"""
-
-        # Returns a tuple of (State, Extra string)
-        status = None
-        message = None
-        if rpc in self.rpc_dict:
-            if (rpc_state == self.ALLOC_STATE) and \
-               (self.rpc_dict[rpc] == self.DEALLOC_STATE):
-                status = 'SUCCESS'
-            elif (rpc_state == self.DEALLOC_STATE) and \
-                 (self.rpc_dict[rpc] != self.DEALLOC_STATE):
-                status = 'SUCCESS'
-            elif (rpc_state == self.SUBMIT_STATE) and \
-                 (self.rpc_dict[rpc] == self.ALLOC_STATE):
-                status = 'SUCCESS'
-            elif (rpc_state == self.SENT_STATE) and \
-                 ((self.rpc_dict[rpc] == self.SUBMIT_STATE) or \
-                  (self.rpc_dict[rpc] == self.COMPLETED_STATE)):
-                status = 'SUCCESS'
-            elif (rpc_state == self.COMPLETED_STATE) and \
-                 ((self.rpc_dict[rpc] == self.SENT_STATE) or \
-                  (self.rpc_dict[rpc] == self.SUBMIT_STATE) or \
-                  (self.rpc_dict[rpc] == self.ALLOC_STATE)):
-                status = 'SUCCESS'
-            else:
-                status = 'ERROR'
-                message = 'previous state: {}'.format(self.rpc_dict[rpc])
-        else:
-            if rpc_state == self.ALLOC_STATE:
-                status = 'SUCCESS'
-            else:
-                status = 'WARN'
-                message = "no alloc'd state registered"
-
-
-        if rpc_state == self.DEALLOC_STATE:
-            del self.rpc_dict[rpc]
-        else:
-            self.rpc_dict[rpc] = rpc_state
-        return (status, message)
 
     def rpc_reporting(self, index_multiprocess=None):
         """RPC reporting for RPC state machine"""
@@ -147,9 +116,34 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self._rpc_reporting_pid(pids[0])
 
+    def _rpc_error_state_tracing(self, rpc_dict, rpc, rpc_state):
+        """Error checking for rpc state"""
+
+        # Returns a tuple of (State, Extra string)
+        status = None
+        message = None
+        if rpc in rpc_dict:
+            if rpc_dict[rpc] in self.STATE_CHANGE_TABLE[rpc_state]:
+                status = 'SUCCESS'
+            else:
+                status = 'ERROR'
+                message = 'previous state: {}'.format(rpc_dict[rpc])
+
+        elif rpc_state == self.ALLOC_STATE:
+            status = 'SUCCESS'
+        else:
+            status = 'WARN'
+            message = "no alloc'd state registered"
+
+        if rpc_state == self.DEALLOC_STATE:
+            del rpc_dict[rpc]
+        else:
+            rpc_dict[rpc] = rpc_state
+        return (status, message)
+
     def _rpc_reporting_pid(self, pid_to_trace):
         """RPC reporting for RPC state machine, for mutiprocesses"""
-        self.rpc_dict = {}
+        rpc_dict = {}
         op_state_counters = {}
         c_states = {}
         c_state_names = set()
@@ -163,8 +157,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         output_table = []
 
-        self.lf.reset(pid=pid_to_trace)
-        for line in self.lf:
+        for line in self.lf.new_iter(pid=pid_to_trace):
             rpc_state = None
             opcode = None
             rpc = None
@@ -179,7 +172,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 rpc_state = self.SUBMIT_STATE
             elif line.endswith(' sent.'):
                 rpc_state = self.SENT_STATE
-            elif 'Invoking RPC callback' in line:
+            elif line.is_callback():
                 rpc = line.get_field(6)
                 rpc_state = self.COMPLETED_STATE
                 result = line.get_field(-1).rstrip('.')
@@ -215,7 +208,9 @@ class RpcTrace(common_methods.ColorizedOutput):
                                              self.SUBMIT_STATE:0}
             op_state_counters[opcode][rpc_state] += 1
 
-            (state, extra) = self._rpc_error_state_tracing(rpc, rpc_state)
+            (state, extra) = self._rpc_error_state_tracing(rpc_dict,
+                                                           rpc,
+                                                           rpc_state)
 
             if self.VERBOSE_STATE_TRANSITIONS or state != 'SUCCESS':
                 output_table.append([state,
@@ -275,8 +270,8 @@ class RpcTrace(common_methods.ColorizedOutput):
             # Sent can be more than completed because of corpcs but shouldn't
             # be less
             if counts[self.SENT_STATE] > counts[self.COMPLETED_STATE]:
-                errors.append("ERROR: Opcode {0}: sent Total = {1}, "
-                              "Completed Total = {2}". \
+                errors.append("ERROR: Opcode {}: sent Total = {}, "
+                              "Completed Total = {}". \
                               format(op,
                                      counts[self.SENT_STATE],
                                      counts[self.COMPLETED_STATE]))
@@ -290,6 +285,94 @@ class RpcTrace(common_methods.ColorizedOutput):
             self.list_output(errors)
 
     #************ Descriptor Tracing Methods (IOF_TRACE macros) **********
+
+    def _descriptor_error_state_tracing(self):
+        """Check for any descriptors that are not registered/deregistered"""
+
+        desc_state = OrderedDict()
+        # Maintain a list of parent->children relationships.  This is a dict of
+        # sets, using the parent as the key and the value is a set of children.
+        # When a descriptor is deleted then all child RPCs in the set are also
+        # removed from desc_state
+        linked = {}
+
+        output_table = []
+
+        for line in self.lf.new_iter(trace_only=True):
+            state = None
+            desc = line.descriptor
+            if desc == '':
+                continue
+
+            msg = None
+            is_error = True
+
+            if line.is_new():
+                state = 'Registered'
+                if desc in desc_state:
+                    msg = 'previous state: {}'.format(desc_state[desc])
+                else:
+                    is_error = False
+                desc_state[desc] = state
+                linked[desc] = set()
+            if line.is_link():
+                state = 'Linked'
+                if desc in desc_state:
+                    msg = 'Bad link'
+                else:
+                    is_error = False
+                desc_state[desc] = state
+                parent = line.parent
+                if parent in linked:
+                    linked[parent].add(desc)
+            elif line.is_dereg():
+                state = 'Deregistered'
+                if desc not in desc_state:
+                    msg = 'Not registered'
+                elif desc_state.get(desc, None) == 'Registered':
+                    del desc_state[desc]
+                    is_error = False
+                else:
+                    msg = desc_state[desc]
+                if desc in linked:
+                    for child in linked[desc]:
+                        del desc_state[child]
+                    del linked[desc]
+            else:
+                continue
+
+            if is_error:
+                self.have_errors = True
+
+            if not self.VERBOSE_STATE_TRANSITIONS and not is_error:
+                continue
+
+            if is_error:
+                output_table.append([desc,
+                                     '{} (Error)'.format(state),
+                                     line.function,
+                                     msg,
+                                     '{}: {}'.format(line.index,
+                                                     line.get_msg())])
+            else:
+                output_table.append([desc, state, line.function, None, None])
+
+        if output_table:
+            self.table_output(output_table,
+                              title='Descriptor State Transitions:',
+                              headers=['Descriptor',
+                                       'State',
+                                       'Function',
+                                       'Message',
+                                       'Line'])
+
+        #check if all descriptors are deregistered
+        for d, state in desc_state.items():
+            if state == 'Registered':
+                self.error_output('{} is not Deregistered'.format(d))
+            else:
+                self.error_output('{}:{} not Deregistered from state'.\
+                                  format(d, state))
 
     def descriptor_rpc_trace(self):
         """Parses twice thru log to create a hierarchy of descriptors and also
@@ -307,8 +390,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         to_trace = None
         to_trace_fuse = None
 
-        self.lf.reset(trace_only=True)
-        for line in self.lf:
+        for line in self.lf.new_iter(trace_only=True):
 
             if not to_trace and \
                (line.level <= iof_cart_logparse.LOG_LEVELS['WARN']):
@@ -320,7 +402,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 else:
                     to_trace = line.descriptor
 
-            if "Registered new" in line:
+            if line.is_new():
 
                 if not to_trace and \
                    not to_trace_fuse and fuse_file in line.filename:
@@ -328,7 +410,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
                 #register a new descriptor/object in the log hierarchy
                 new_obj = line.descriptor
-                parent = line.get_field(-1)
+                parent = line.parent
 
                 if parent in reuse_table and reuse_table[parent] > 0:
                     parent = '{}_{}'.format(parent, reuse_table[parent])
@@ -343,22 +425,23 @@ class RpcTrace(common_methods.ColorizedOutput):
                 self.desc_table[new_obj] = (obj_type, parent)
                 self.desc_dict[new_obj] = []
 
-            if "Link" not in line:
+            if not line.is_link():
                 continue
-            #register RPCs tied to given handle
 
-            rpc = line.get_field(-1)
-            rpc_type = line.get_field(-3)[1:-1]
-            #find index of descriptor in order to append rpc
-            #to correct index in the chance it is reused in the dict
-            if rpc in reuse_table and reuse_table[rpc] > 0:
-                index = '{}_{}'.format(rpc, reuse_table[rpc])
+            # register RPCs tied to given handle
+            # Link lines are a little odd in the log file in that they are
+            # the wrong way round, line.parent is the descriptor and
+            # line.descriptor is the new RPC.
+
+            desc = line.parent
+
+            if desc in reuse_table and reuse_table[desc] > 0:
+                desc = '{}_{}'.format(desc, reuse_table[desc])
+            if desc in self.desc_dict:
+                self.desc_dict[desc].append((line.descriptor,
+                                             line.get_field(-3)[1:-1]))
             else:
-                index = rpc
-            if index in self.desc_dict:
-                self.desc_dict[index].append((line.descriptor, rpc_type))
-            else:
-                self.error_output('Descriptor {} is not present'.format(index))
+                self.error_output('Descriptor {} is not present'.format(desc))
 
         self._to_trace = to_trace
         self._to_trace_fuse = to_trace_fuse
@@ -427,8 +510,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         # of the file should just be logged.
         drain_file = False
 
-        self.lf.reset(raw=True)
-        for line in self.lf:
+        for line in self.lf.new_iter(raw=True):
 
             if drain_file:
                 if line.trace and line.descriptor in descriptors:
@@ -438,10 +520,11 @@ class RpcTrace(common_methods.ColorizedOutput):
                 continue
 
             desc_log_marked = False
-            if line.trace and 'Registered new' in line:
+            if line.is_new():
                 if line.descriptor != desc:
                     #print the remaining non-relevant log messages
-                    self.log_output(line.to_str())
+                    if self.VERBOSE_LOG:
+                        self.log_output(line.to_str())
                     continue
                 if location is None:#tracing a unique descriptor
                     self.log_output(line.to_str(mark=True))
@@ -501,103 +584,14 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         return missing_links
 
-    def _descriptor_error_state_tracing(self):
-        """Check for any descriptors that are not registered/deregistered"""
-
-        desc_state = OrderedDict()
-        # Maintain a list of parent->children relationships.  This is a dict of
-        # sets, using the parent as the key and the value is a set of children.
-        # When a descriptor is deleted then all child RPCs in the set are also
-        # removed from desc_state
-        linked = {}
-
-        output_table = []
-
-        self.lf.reset(trace_only=True)
-        for line in self.lf:
-            state = None
-            desc = line.descriptor
-            if desc == '':
-                continue
-
-            msg = None
-            is_error = True
-
-            if 'Registered new' in line:
-                state = 'Registered'
-                if desc in desc_state:
-                    msg = 'previous state: {}'.format(desc_state[desc])
-                else:
-                    is_error = False
-                desc_state[desc] = state
-                linked[desc] = set()
-            elif 'Link' in line:
-                state = 'Linked'
-                if desc in desc_state:
-                    msg = 'Bad link'
-                else:
-                    is_error = False
-                desc_state[desc] = state
-                parent = line.get_field(-1)
-                if parent in linked:
-                    linked[parent].add(desc)
-            elif 'Deregistered' in line:
-                state = 'Deregistered'
-                if desc not in desc_state:
-                    msg = 'Not registered'
-                elif desc_state.get(desc, None) == 'Registered':
-                    del desc_state[desc]
-                    is_error = False
-                else:
-                    msg = desc_state[desc]
-                if desc in linked:
-                    for child in linked[desc]:
-                        del desc_state[child]
-                    del linked[desc]
-            else:
-                continue
-
-            if is_error:
-                self.have_errors = True
-
-            if not self.VERBOSE_STATE_TRANSITIONS and not is_error:
-                continue
-
-            if is_error:
-                output_table.append([desc,
-                                     '{} (Error)'.format(state),
-                                     line.function,
-                                     msg,
-                                     '{}: {}'.format(line.index,
-                                                     line.get_msg())])
-            else:
-                output_table.append([desc, state, line.function, None, None])
-
-        if output_table:
-            self.table_output(output_table,
-                              title='Descriptor State Transitions:',
-                              headers=['Descriptor',
-                                       'State',
-                                       'Function',
-                                       'Message',
-                                       'Line'])
-
-        #check if all descriptors are deregistered
-        for d, state in desc_state.items():
-            if state == 'Registered':
-                self.error_output('{} is not Deregistered'.format(d))
-            else:
-                self.error_output('{}:{} not Deregistered from state'.\
-                                  format(d, state))
-
     def descriptor_to_trace(self):
         """Find the file handle to use for descriptor tracing:
         if an error or warning is found in trace logs, use that descriptor,
         otherwise use first fuse op instance in logs"""
 
         if self._to_trace:
-            self.warning_output('Tracing descriptor {} with error/warning'. \
-                                format(self._to_trace))
+            self.normal_output('Tracing descriptor {} with error/warning'. \
+                               format(self._to_trace))
             return self._to_trace
 
         if self._to_trace_fuse:

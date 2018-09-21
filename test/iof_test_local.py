@@ -387,8 +387,8 @@ class Testlocal(unittest.TestCase,
         ret_stats = self.dump_cnss_stats(common_methods.CTRL_DIR)
         for projection_stats in ret_stats:
             mnt = projection_stats[0]
-            self.cnss_stats["stats_list_{0}".format(mnt)] = projection_stats[1]
-            self.cnss_stats["init_{0}".format(mnt)] = projection_stats[2]
+            self.cnss_stats["stats_list_{}".format(mnt)] = projection_stats[1]
+            self.cnss_stats["init_{}".format(mnt)] = projection_stats[2]
 
         self.mark_log('Starting test {}'.format(self.id()))
 #pylint: enable=too-many-branches
@@ -464,7 +464,7 @@ class Testlocal(unittest.TestCase,
         for projection_stats in ret_stats:
             mnt = projection_stats[0]
 
-            self.cnss_stats["final_{0}".format(mnt)] = projection_stats[2]
+            self.cnss_stats["final_{}".format(mnt)] = projection_stats[2]
 
             self.delta_cnss_stats(self.cnss_stats, mnt)
 
@@ -489,7 +489,7 @@ class Testlocal(unittest.TestCase,
 
         self.cleanup(procrtn)
 
-        self.normal_output("Ending {0}".format(self.id()))
+        self.normal_output("Ending {}".format(self.id()))
 
         self._check_log()
 
@@ -518,15 +518,14 @@ class Testlocal(unittest.TestCase,
 
         have_debug = False
 
-        cl.reset()
-        for line in cl:
+        for line in cl.new_iter(trace_only=True):
 
             if line.trace:
                 if not have_debug and \
                    line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
                     have_debug = True
                 desc = line.descriptor
-                if 'Registered new' in line:
+                if line.is_new():
                     if desc in active_desc:
                         show_line(line, 'error', 'invalid add')
                         err_count += 1
@@ -534,13 +533,13 @@ class Testlocal(unittest.TestCase,
                         show_line(line, 'error', 'add with bad parent')
                         err_count += 1
                     active_desc[desc] = line
-                elif 'Link' in line:
+                if line.is_link():
                     parent = line.parent
                     if parent not in active_desc:
                         show_line(line, 'error', 'link with bad parent')
                         err_count += 1
                     desc = parent
-                elif 'Deregistered' in line:
+                if line.is_dereg():
                     if desc not in active_desc:
                         show_line(line, 'error', 'invalid remove')
                         err_count += 1
@@ -611,9 +610,9 @@ class Testlocal(unittest.TestCase,
             proc_count += self.ionss_count
         for c_file_idx in range(range_start, proc_count):
             file_in = os.path.join(self.log_path,
-                                   'callgrind-{0}.in'.format(c_file_idx))
+                                   'callgrind-{}.in'.format(c_file_idx))
             file_out = os.path.join(self.log_path,
-                                    'callgrind-{0}.out'.format(c_file_idx))
+                                    'callgrind-{}.out'.format(c_file_idx))
             cmd = ['callgrind_annotate', '--auto=yes', file_in]
             with open(file_out, 'w') as f:
                 subprocess.call(cmd, timeout=180, stdout=f)
@@ -632,7 +631,7 @@ class Testlocal(unittest.TestCase,
             os.rmdir(mp)
 
         # Finally, remove any temporary files created.
-        os.unlink("%s/IONSS.attach_info_tmp" % self.cnss_prefix)
+        os.unlink(os.path.join(self.cnss_prefix, 'IONSS.attach_info_tmp'))
         os.unlink(self.ionss_config_file)
         os.rmdir(self.cnss_prefix)
         shutil.rmtree(self.export_dir)
@@ -665,7 +664,7 @@ class Testlocal(unittest.TestCase,
             self.error_output("Job completed with valgrind errors")
             self.fail("Job completed with valgrind errors")
         elif procrtn != 0:
-            self.error_output("Non-zero exit code from orterun {0}".\
+            self.error_output("Non-zero exit code from orterun {}".\
                                format(procrtn))
             self.fail("Non-zero exit code from orterun %d" % procrtn)
 
@@ -1447,14 +1446,14 @@ class Testlocal(unittest.TestCase,
         files = os.listdir(idir)
         for e in files:
             ep = os.path.join(idir, e)
-            self.normal_output('Cleaning up {0}'.format(ep))
+            self.normal_output('Cleaning up {}'.format(ep))
             if os.path.isfile(ep) or os.path.islink(ep):
                 os.unlink(ep)
             elif os.path.isdir(ep):
                 shutil.rmtree(ep)
         files = os.listdir(idir)
         if files:
-            self.error_output('Test left some files {0}'.format(files))
+            self.error_output('Test left some files {}'.format(files))
             self.fail('Test left some files %s' % files)
 
     def go(self):
@@ -1500,7 +1499,7 @@ class Testlocal(unittest.TestCase,
         if have_iofmod:
             subtest_count += self.test_iofmod()
 
-        self.normal_output("Ran {0} subtests".format(subtest_count))
+        self.normal_output("Ran {} subtests".format(subtest_count))
 
 def local_launch(ioil_dir):
     """Launch a local filesystem for interactive use"""

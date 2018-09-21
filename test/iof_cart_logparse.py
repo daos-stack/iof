@@ -133,18 +133,12 @@ class IofLogLine():
             return '{} ** {}'.format(self._preamble, self._msg)
         return '{}    {}'.format(self._preamble, self._msg)
 
-    def __contains__(self, item):
-        idx = self._msg.find(item)
-        if idx != -1:
-            return True
-        return False
-
     def __getattr__(self, attr):
         if attr == 'parent':
             if self._fields[2] == 'Registered':
-                return self._fields[12-6]
+                return self._fields[6]
             if self._fields[2] == 'Link':
-                return self._fields[11-6]
+                return self._fields[5]
         if attr == 'filename':
             (filename, _) = self._fields[0].split(':')
             return filename
@@ -193,6 +187,38 @@ class IofLogLine():
     def get_field(self, idx):
         """Return a specific field from the line"""
         return self._fields[idx]
+
+    def _is_type(self, text, trace=True):
+        """Checks for text in a log message
+
+        Retuns True if the line starts with the text provided
+        """
+        if trace and not self.trace:
+            return False
+
+        # Check that the contents of two arrays are equal, using text as is and
+        # selecting only the correct entries of the fields array.
+        return text == self._fields[2:2+len(text)]
+
+    def is_new(self):
+        """Returns True if line is new descriptor"""
+
+        return self._is_type(['Registered', 'new'])
+
+    def is_dereg(self):
+        """Returns true if line is descriptor deregister"""
+
+        return self._is_type(['Deregistered'])
+
+    def is_callback(self):
+        """Returns true if line is RPC callback"""
+
+        return self._is_type(['Invoking', 'RPC', 'callback'], trace=False)
+
+    def is_link(self):
+        """Returns True if line is Link descriptor"""
+
+        return self._is_type(['Link'])
 
 class IofLogIter():
     """Class for parsing CaRT log files
@@ -247,7 +273,34 @@ class IofLogIter():
         if self._fd:
             self._fd.close()
 
-    def __iter__(self):
+    def new_iter(self,
+                 pid=None,
+                 trace_only=False,
+                 raw=False):
+        """Rewind file iterator, and set options
+
+        If pid is set the the iterator will only return lines matching the pid
+        If trace_only is True then the iterator will only return trace lines.
+        if raw is set then all lines in the file are returned, even non-log
+        lines.
+        """
+
+        if pid is not None:
+            if pid not in self._pids:
+                raise InvalidPid
+            self._pid = pid
+        else:
+            self._pid = None
+        self._trace_only = trace_only
+        self._raw = raw
+        return iter(self)
+
+    def __iter__(self, pid=None):
+        if self.__from_file:
+            self._fd.seek(0)
+            self.__index = 0
+        else:
+            self._offset = 0
         return self
 
     def __lnext(self):
@@ -289,35 +342,4 @@ class IofLogIter():
     def get_pids(self):
         """Return an array of pids appearing in the file"""
         return self._pids
-
-# pylint: disable=too-many-arguments
-    def reset(self,
-              pid=None,
-              trace_only=False,
-              raw=False,
-              index=1):
-        """Rewind file iterator, and set options
-
-        If pid is set the the iterator will only return lines matchine the pid
-        If trace_only is True then the iterator will only return trace lines.
-        if raw is set then all lines in the file are returned, even non-log
-        lines.
-        Index is the line number in the file to start from.
-        """
-
-        if self.__from_file:
-            self._fd.seek(0)
-            self.__index = 0
-        else:
-            self._offset = index - 1
-
-        if pid is not None:
-            if pid not in self._pids:
-                raise InvalidPid
-            self._pid = pid
-        else:
-            self._pid = None
-        self._trace_only = trace_only
-        self._raw = raw
-# pylint: enable=too-many-arguments
 # pylint: enable=too-many-instance-attributes
