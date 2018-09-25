@@ -43,16 +43,16 @@
 
 void ioc_release_priv(fuse_req_t req, struct iof_file_handle *handle)
 {
-	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->open_req.fsh;
 	struct iof_gah_in *in;
 	int ret = EIO;
 	int rc;
 
 	STAT_ADD(fs_handle->stats, release);
 
-	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
+	D_MUTEX_LOCK(&fs_handle->of_lock);
 	d_list_del(&handle->fh_of_list);
-	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
+	D_MUTEX_UNLOCK(&fs_handle->of_lock);
 
 	if (req) {
 		IOF_TRACE_UP(req, handle, "release_fuse_req");

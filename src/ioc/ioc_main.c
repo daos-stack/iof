@@ -235,11 +235,11 @@ static void mark_fh_inode(struct iof_file_handle *fh)
 	struct ioc_inode_entry *ie;
 	d_list_t *rlink;
 
-	rlink = d_hash_rec_find(&fh->fs_handle->inode_ht,
+	rlink = d_hash_rec_find(&fh->open_req.fsh->inode_ht,
 				&fh->inode_no, sizeof(fh->inode_no));
 
 	if (!rlink) {
-		IOF_TRACE_WARNING(fh->fs_handle,
+		IOF_TRACE_WARNING(fh,
 				  "Unable to find inode %lu", fh->inode_no);
 		return;
 	}
@@ -248,9 +248,9 @@ static void mark_fh_inode(struct iof_file_handle *fh)
 	d_list_add(&fh->fh_ino_list, &ie->ie_fh_list);
 	ie->failover = true;
 
-	mark_inode_tree(fh->fs_handle, ie);
+	mark_inode_tree(fh->open_req.fsh, ie);
 	/* Drop the reference taken by rec_find() */
-	d_hash_rec_decref(&fh->fs_handle->inode_ht, rlink);
+	d_hash_rec_decref(&fh->open_req.fsh->inode_ht, rlink);
 }
 
 /* Process open directory handle for failover.
@@ -1250,8 +1250,7 @@ fh_init(void *arg, void *handle)
 {
 	struct iof_file_handle *fh = arg;
 
-	fh->fs_handle = handle;
-	fh->open_rpc = NULL;
+	IOC_REQUEST_INIT(&fh->open_req, handle);
 	fh->creat_rpc = NULL;
 	fh->release_rpc = NULL;
 	fh->ie = NULL;
@@ -1263,11 +1262,15 @@ fh_reset(void *arg)
 	struct iof_file_handle *fh = arg;
 	int rc;
 
-	CHECK_AND_RESET_RPC(fh, open_rpc);
+	IOC_REQUEST_RESET(&fh->open_req);
+	fh->open_req.ir_ht = RHS_INODE;
+
+	CHECK_AND_RESET_RRPC(fh, open_req);
 	CHECK_AND_RESET_RPC(fh, creat_rpc);
 	CHECK_AND_RESET_RPC(fh, release_rpc);
 
-	fh->common.ep = fh->fs_handle->proj.grp->psr_ep;
+	/* Used by creat but not open */
+	fh->common.ep = fh->open_req.fsh->proj.grp->psr_ep;
 
 	if (!fh->ie) {
 		D_ALLOC_PTR(fh->ie);
@@ -1276,31 +1279,31 @@ fh_reset(void *arg)
 		atomic_fetch_add(&fh->ie->ie_ref, 1);
 	}
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
-			    FS_TO_OP(fh->fs_handle, open), &fh->open_rpc);
-	if (rc || !fh->open_rpc) {
+	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(fh->open_req.fsh, open), &fh->open_req.rpc);
+	if (rc || !fh->open_req.rpc) {
 		D_FREE(fh->ie);
 		return false;
 	}
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
-			    FS_TO_OP(fh->fs_handle, create), &fh->creat_rpc);
+	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, &fh->common.ep,
+			    FS_TO_OP(fh->open_req.fsh, create), &fh->creat_rpc);
 	if (rc || !fh->creat_rpc) {
 		D_FREE(fh->ie);
-		crt_req_decref(fh->open_rpc);
+		crt_req_decref(fh->open_req.rpc);
 		return false;
 	}
 
-	rc = crt_req_create(fh->fs_handle->proj.crt_ctx, &fh->common.ep,
-			    FS_TO_OP(fh->fs_handle, close), &fh->release_rpc);
+	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, &fh->common.ep,
+			    FS_TO_OP(fh->open_req.fsh, close), &fh->release_rpc);
 	if (rc || !fh->release_rpc) {
 		D_FREE(fh->ie);
-		crt_req_decref(fh->open_rpc);
+		crt_req_decref(fh->open_req.rpc);
 		crt_req_decref(fh->creat_rpc);
 		return false;
 	}
 
-	crt_req_addref(fh->open_rpc);
+	crt_req_addref(fh->open_req.rpc);
 	crt_req_addref(fh->creat_rpc);
 	crt_req_addref(fh->release_rpc);
 	D_INIT_LIST_HEAD(&fh->fh_ino_list);
@@ -1312,8 +1315,8 @@ fh_release(void *arg)
 {
 	struct iof_file_handle *fh = arg;
 
-	crt_req_decref(fh->open_rpc);
-	crt_req_decref(fh->open_rpc);
+	crt_req_decref(fh->open_req.rpc);
+	crt_req_decref(fh->open_req.rpc);
 	crt_req_decref(fh->creat_rpc);
 	crt_req_decref(fh->creat_rpc);
 	crt_req_decref(fh->release_rpc);

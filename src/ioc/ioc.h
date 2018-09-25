@@ -392,17 +392,6 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 					__rc, strerror(-__rc));		\
 	} while (0)
 
-#define IOF_FUSE_REPLY_OPEN(handle, req, fi)				\
-	do {								\
-		int __rc;						\
-		IOF_TRACE_DEBUG(handle, "Returning open");		\
-		__rc = fuse_reply_open(req, &(fi));			\
-		if (__rc != 0)						\
-			IOF_TRACE_ERROR(handle,				\
-					"fuse_reply_open returned %d:%s", \
-					__rc, strerror(-__rc));		\
-	} while (0)
-
 #define IOC_REPLY_OPEN(ioc_req, fi)					\
 	do {								\
 		int __rc;						\
@@ -701,8 +690,6 @@ struct iof_dir_handle {
  * Describes a file open for reading/writing.
  */
 struct iof_file_handle {
-	/** The projection this file belongs to */
-	struct iof_projection_info	*fs_handle;
 	/** Common information for file handle, contains GAH and EP
 	 * information.  This is shared between CNSS and IL code to allow
 	 * use of some common code.
@@ -713,8 +700,9 @@ struct iof_file_handle {
 	 * ionss returning -DER_NONEXIST or by ionss failure
 	 */
 	ATOMIC int			gah_ok;
-	/** Open RPC, precreated */
-	crt_rpc_t			*open_rpc;
+
+	/* Open request, with precreated RPC */
+	struct ioc_request		open_req;
 	/** Create RPC, precreated */
 	crt_rpc_t			*creat_rpc;
 	/** Release RPC, precreated */
@@ -731,10 +719,6 @@ struct iof_file_handle {
 	 * the file handle is in use then this field will be NULL.
 	 */
 	struct ioc_inode_entry		*ie;
-	/** Fuse req for open/create command.  Used by the RPC callback
-	 * function to reply to a FUSE request
-	 */
-	fuse_req_t			open_req;
 };
 
 /* GAH ok manipulation macros. gah_ok is defined as a int but we're

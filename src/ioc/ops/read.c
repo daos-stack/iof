@@ -116,7 +116,7 @@ void ioc_ll_read(fuse_req_t req, fuse_ino_t ino, size_t len,
 		 off_t position, struct fuse_file_info *fi)
 {
 	struct iof_file_handle *handle = (void *)fi->fh;
-	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->open_req.fsh;
 	struct iof_readx_in *in;
 	struct iof_pool_type *pt;
 	struct iof_rb *rb = NULL;

@@ -51,7 +51,7 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 	     struct fuse_file_info *fi)
 {
 	struct iof_file_handle		*handle = (struct iof_file_handle *)fi->fh;
-	struct iof_projection_info	*fs_handle = handle->fs_handle;
+	struct iof_projection_info	*fs_handle = handle->open_req.fsh;
 	struct ioc_request		*request;
 	crt_opcode_t opcode;
 	int rc;

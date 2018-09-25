@@ -125,9 +125,9 @@ void ioc_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buff, size_t len,
 	struct iof_wb *wb = NULL;
 	int rc;
 
-	STAT_ADD(handle->fs_handle->stats, write);
+	STAT_ADD(handle->open_req.fsh->stats, write);
 
-	wb = iof_pool_acquire(handle->fs_handle->write_pool);
+	wb = iof_pool_acquire(handle->open_req.fsh->write_pool);
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
 
@@ -163,7 +163,7 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	struct fuse_bufvec dst = { .count = 1 };
 	int rc;
 
-	STAT_ADD(handle->fs_handle->stats, write);
+	STAT_ADD(handle->open_req.fsh->stats, write);
 
 	/* Check for buffer count being 1.  According to the documentation this
 	 * will always be the case, and if it isn't then our code will be using
@@ -175,7 +175,7 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 	IOF_TRACE_INFO(handle, "Count %zi [0].flags %#x",
 		       bufv->count, bufv->buf[0].flags);
 
-	wb = iof_pool_acquire(handle->fs_handle->write_pool);
+	wb = iof_pool_acquire(handle->open_req.fsh->write_pool);
 	if (!wb)
 		D_GOTO(err, rc = ENOMEM);
 	IOF_TRACE_UP(wb, handle, "writebuf");
@@ -198,5 +198,5 @@ void ioc_ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
 err:
 	IOC_REPLY_ERR_RAW(handle, req, rc);
 	if (wb)
-		iof_pool_release(handle->fs_handle->write_pool, wb);
+		iof_pool_release(handle->open_req.fsh->write_pool, wb);
 }

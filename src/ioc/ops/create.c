@@ -44,13 +44,14 @@
 static void
 ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 {
-	struct iof_file_handle	*handle = cb_info->cci_arg;
-	struct iof_create_out	*out = crt_reply_get(cb_info->cci_rpc);
-	struct fuse_file_info	fi = {0};
-	struct fuse_entry_param entry = {0};
-	d_list_t		*rlink;
-	fuse_req_t		req;
-	int			ret = EIO;
+	struct iof_file_handle		*handle = cb_info->cci_arg;
+	struct iof_projection_info	*fs_handle = handle->open_req.fsh;
+	struct iof_create_out		*out = crt_reply_get(cb_info->cci_rpc);
+	struct fuse_file_info		fi = {0};
+	struct fuse_entry_param		entry = {0};
+	d_list_t	*rlink;
+	fuse_req_t	req;
+	int		ret = EIO;
 
 	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
 			cb_info->cci_rc, out->rc, out->err);
@@ -66,10 +67,9 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 
 	/* Create a new FI descriptor from the RPC reply */
 
-	/* Reply to the create request with the GAH from the create call
-	 */
+	/* Reply to the create request with the GAH from the create call */
 
-	memcpy(&entry.attr, &out->stat, sizeof(struct stat));
+	entry.attr = out->stat;
 	entry.generation = 1;
 	entry.ino = entry.attr.st_ino;
 
@@ -78,11 +78,10 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	H_GAH_SET_VALID(handle);
 	handle->inode_no = entry.ino;
 
-	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
-	d_list_add_tail(&handle->fh_of_list, &handle->fs_handle->openfile_list);
-	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
-	req = handle->open_req;
-	handle->open_req = 0;
+	D_MUTEX_LOCK(&fs_handle->of_lock);
+	d_list_add_tail(&handle->fh_of_list, &fs_handle->openfile_list);
+	D_MUTEX_UNLOCK(&fs_handle->of_lock);
+	req = handle->open_req.req;
 
 	/* Populate the inode table with the GAH from the duplicate file
 	 * so that it can still be accessed after the file is closed
@@ -93,8 +92,8 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	D_INIT_LIST_HEAD(&handle->ie->ie_ie_children);
 	D_INIT_LIST_HEAD(&handle->ie->ie_ie_list);
 	H_GAH_SET_VALID(handle->ie);
-	IOF_TRACE_UP(handle->ie, handle->fs_handle, "inode");
-	rlink = d_hash_rec_find_insert(&handle->fs_handle->inode_ht,
+	IOF_TRACE_UP(handle->ie, fs_handle, "inode");
+	rlink = d_hash_rec_find_insert(&fs_handle->inode_ht,
 				       &handle->ie->stat.st_ino,
 				       sizeof(handle->ie->stat.st_ino),
 				       &handle->ie->ie_htl);
@@ -122,17 +121,17 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 		IOF_TRACE_INFO(req, "Existing file rlink %p %lu "
 			       GAH_PRINT_STR, rlink, entry.ino,
 			       GAH_PRINT_VAL(out->gah));
-		drop_ino_ref(handle->fs_handle, handle->ie->parent);
-		ie_close(handle->fs_handle, handle->ie);
+		drop_ino_ref(fs_handle, handle->ie->parent);
+		ie_close(fs_handle, handle->ie);
 	}
 
 	IOF_FUSE_REPLY_CREATE(req, entry, fi);
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(handle->open_req, ret);
-	drop_ino_ref(handle->fs_handle, handle->ie->parent);
-	iof_pool_release(handle->fs_handle->fh_pool, handle);
+	IOF_FUSE_REPLY_ERR(handle->open_req.req, ret);
+	drop_ino_ref(fs_handle, handle->ie->parent);
+	iof_pool_release(fs_handle->fh_pool, handle);
 }
 
 void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -188,7 +187,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	IOF_TRACE_UP(req, handle, "create_fuse_req");
 
 	handle->common.projection = &fs_handle->proj;
-	handle->open_req = req;
+	handle->open_req.req = req;
 
 	IOF_TRACE_INFO(req, "file '%s' flags 0%o mode 0%o", name, fi->flags,
 		       mode);

@@ -42,26 +42,20 @@
 #include "ios_gah.h"
 
 static void
-ioc_open_ll_cb(const struct crt_cb_info *cb_info)
+ioc_open_ll_cb(struct ioc_request *request)
 {
-	struct iof_file_handle	*handle = cb_info->cci_arg;
-	struct iof_open_out	*out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_file_handle	*handle = container_of(request, struct iof_file_handle, open_req);
+	struct iof_open_out	*out = crt_reply_get(request->rpc);
 	struct fuse_file_info	fi = {0};
-	fuse_req_t		req;
-	int			ret = EIO;
 
 	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
-			cb_info->cci_rc, out->rc, out->err);
+			request->rc, out->rc, out->err);
 
-	if (cb_info->cci_rc != 0)
-		goto out_err;
+	d_hash_rec_decref(&request->fsh->inode_ht,
+			  &request->ir_inode->ie_htl);
 
-	if (out->rc) {
-		ret = out->rc;
-		goto out_err;
-	}
-
-	if (out->err)
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc != 0)
 		goto out_err;
 
 	/* Create a new FI descriptor and use it to point to
@@ -70,36 +64,35 @@ ioc_open_ll_cb(const struct crt_cb_info *cb_info)
 
 	fi.fh = (uint64_t)handle;
 	handle->common.gah = out->gah;
+	handle->common.ep = request->rpc->cr_ep;
 	H_GAH_SET_VALID(handle);
-	D_MUTEX_LOCK(&handle->fs_handle->of_lock);
-	d_list_add_tail(&handle->fh_of_list, &handle->fs_handle->openfile_list);
-	D_MUTEX_UNLOCK(&handle->fs_handle->of_lock);
-	req = handle->open_req;
-	handle->open_req = 0;
+	D_MUTEX_LOCK(&request->fsh->of_lock);
+	d_list_add_tail(&handle->fh_of_list, &request->fsh->openfile_list);
+	D_MUTEX_UNLOCK(&request->fsh->of_lock);
 
-	IOF_FUSE_REPLY_OPEN(handle, req, fi);
+	IOC_REPLY_OPEN(&handle->open_req, fi);
 
 	return;
 
 out_err:
-	IOC_REPLY_ERR_RAW(handle, handle->open_req, ret);
-	iof_pool_release(handle->fs_handle->fh_pool, handle);
+	IOC_REPLY_ERR(request, request->rc);
+	iof_pool_release(request->fsh->fh_pool, handle);
 }
+
+static const struct ioc_request_api api = {
+	.on_result = ioc_open_ll_cb,
+	.gah_offset = offsetof(struct iof_open_in, gah),
+	.have_gah = true,
+};
 
 void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
 	struct iof_file_handle *handle = NULL;
 	struct iof_open_in *in;
-	int ret = EIO;
 	int rc;
 
 	STAT_ADD(fs_handle->stats, open);
-
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
-	}
 
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
@@ -108,8 +101,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	if (!(fi->flags & LARGEFILE)) {
 		IOF_TRACE_INFO(fs_handle, "O_LARGEFILE required 0%o",
 			       fi->flags);
-		ret = ENOTSUP;
-		goto out_err;
+		D_GOTO(out_err, rc = ENOTSUP);
 	}
 
 	/* Check for flags that do not make sense in this context.
@@ -117,46 +109,43 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	if (fi->flags & IOF_UNSUPPORTED_OPEN_FLAGS) {
 		IOF_TRACE_INFO(fs_handle, "unsupported flag requested 0%o",
 			       fi->flags);
-		ret = ENOTSUP;
-		goto out_err;
+		D_GOTO(out_err, rc = ENOTSUP);
 	}
 
 	if (fi->flags & O_WRONLY || fi->flags & O_RDWR) {
 		if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 			IOF_TRACE_INFO(fs_handle,
 				       "Attempt to modify Read-Only File System");
-			ret = EROFS;
-			goto out_err;
+			D_GOTO(out_err, rc = EROFS);
 		}
 	}
 
 	handle = iof_pool_acquire(fs_handle->fh_pool);
 	if (!handle) {
-		ret = ENOMEM;
-		goto out_err;
+		D_GOTO(out_err, rc = ENOMEM);
 	}
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
+	IOF_TRACE_UP(&handle->open_req, handle, "open_req");
+	IOF_TRACE_LINK(handle->open_req.rpc, handle, "open_file_rpc");
 
 	handle->common.projection = &fs_handle->proj;
-	handle->open_req = req;
+	handle->open_req.req = req;
+	handle->open_req.ir_api = &api;
 	handle->inode_no = ino;
 
-	in = crt_req_get(handle->open_rpc);
-	IOF_TRACE_LINK(handle->open_rpc, handle, "open_file_rpc");
+	in = crt_req_get(handle->open_req.rpc);
 
-	/* Find the GAH of the file to open */
-	rc = find_gah(fs_handle, ino, &in->gah);
+	/* Find the INODE of the file to open */
+	rc = find_inode(fs_handle, ino, &handle->open_req.ir_inode);
 	if (rc != 0)
-		D_GOTO(out_err, ret = rc);
+		D_GOTO(out_err, 0);
 
 	in->flags = fi->flags;
 	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
 
-	crt_req_addref(handle->open_rpc);
-	rc = crt_req_send(handle->open_rpc, ioc_open_ll_cb, handle);
+	rc = iof_fs_send(&handle->open_req);
 	if (rc) {
-		crt_req_decref(handle->open_rpc);
-		D_GOTO(out_err, ret = EIO);
+		D_GOTO(out_err, rc = EIO);
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
@@ -165,7 +154,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 
 	return;
 out_err:
-	IOC_REPLY_ERR_RAW(handle, req, ret);
+	IOC_REPLY_ERR_RAW(handle, req, rc);
 
 	if (handle)
 		iof_pool_release(fs_handle->fh_pool, handle);

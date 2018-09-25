@@ -48,7 +48,9 @@ static void
 handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
 		 struct iof_gah_info *gah_info)
 {
-	STAT_ADD(handle->fs_handle->stats, il_ioctl);
+	struct iof_projection_info *fs_handle = handle->open_req.fsh;
+
+	STAT_ADD(fs_handle->stats, il_ioctl);
 
 	/* IOF_IOCTL_GAH has size of gah embedded.  FUSE should have
 	 * allocated that many bytes in data
@@ -56,14 +58,14 @@ handle_gah_ioctl(int cmd, struct iof_file_handle *handle,
 	IOF_TRACE_INFO(handle, "Requested " GAH_PRINT_STR " fs_id=%d,"
 		       " cli_fs_id=%d",
 		       GAH_PRINT_VAL(handle->common.gah),
-		       handle->fs_handle->fs_id,
-		       handle->fs_handle->proj.cli_fs_id);
+		       fs_handle->fs_id,
+		       fs_handle->proj.cli_fs_id);
 	gah_info->version = IOF_IOCTL_VERSION;
-	D_MUTEX_LOCK(&handle->fs_handle->gah_lock);
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	gah_info->gah = handle->common.gah;
-	D_MUTEX_UNLOCK(&handle->fs_handle->gah_lock);
+	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 	gah_info->cnss_id = getpid();
-	gah_info->cli_fs_id = handle->fs_handle->proj.cli_fs_id;
+	gah_info->cli_fs_id = fs_handle->proj.cli_fs_id;
 }
 
 void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
@@ -71,14 +73,14 @@ void ioc_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg,
 		  const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
 	struct iof_file_handle *handle = (void *)fi->fh;
-	struct iof_projection_info *fs_handle = handle->fs_handle;
+	struct iof_projection_info *fs_handle = handle->open_req.fsh;
 	struct iof_gah_info gah_info = {0};
 	int ret = EIO;
 
 	IOF_TRACE_INFO(handle, "ioctl cmd=%#x " GAH_PRINT_STR, cmd,
 		       GAH_PRINT_VAL(handle->common.gah));
 
-	STAT_ADD(handle->fs_handle->stats, ioctl);
+	STAT_ADD(fs_handle->stats, ioctl);
 
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(out_err, ret = fs_handle->offline_reason);
