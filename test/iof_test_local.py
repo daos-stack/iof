@@ -518,7 +518,7 @@ class Testlocal(unittest.TestCase,
 
         have_debug = False
 
-        for line in cl.new_iter(trace_only=True):
+        for line in cl.new_iter():
 
             if line.trace:
                 if not have_debug and \
@@ -583,8 +583,6 @@ class Testlocal(unittest.TestCase,
         lost_memory = False
         for (_, line) in regions.items():
             if line.function == 'initialize_projection':
-                continue
-            if line.filename.startswith('src/cart/'):
                 continue
             show_line(line, 'error', 'memory not freed')
             lost_memory = True
