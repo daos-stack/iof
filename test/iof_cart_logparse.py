@@ -220,6 +220,55 @@ class IofLogLine():
 
         return self._is_type(['Link'])
 
+class StateIter():
+    """Helper class for IofLogIter to add a statefull iterator.
+
+    Implement a new iterator() for IofLogIter() that tracks descriptors
+    and adds two new attributes, pdesc and pparent which are the local
+    descriptor with the reuse-count appended.
+    """
+    def __init__(self, li):
+        self.reuse_table = {}
+        self.active_desc = {}
+        self.li = li
+        self._l = None
+
+    def __iter__(self):
+        self.reuse_table = {}
+        self.active_desc = {}
+        self._l = iter(self.li)
+        return self
+
+    def __next__(self):
+        line = next(self._l)
+
+        if not line.trace:
+            return line
+
+        if line.is_new():
+            if line.descriptor in self.reuse_table:
+                self.reuse_table[line.descriptor] += 1
+                line.pdesc = '{}_{}'.format(line.descriptor,
+                                            self.reuse_table[line.descriptor])
+            else:
+                self.reuse_table[line.descriptor] = 0
+                line.pdesc = line.descriptor
+            self.active_desc[line.descriptor] = line.pdesc
+            line.pparent = self.active_desc.get(line.parent, line.parent)
+        else:
+            if line.is_link():
+                line.pdesc = line.descriptor
+            else:
+                line.pdesc = self.active_desc.get(line.descriptor,
+                                                  line.descriptor)
+
+            if line.is_link():
+                line.pparent = self.active_desc.get(line.parent, line.parent)
+
+        if line.is_dereg() and line.descriptor in self.active_desc:
+            del self.active_desc[line.descriptor]
+        return line
+
 class IofLogIter():
     """Class for parsing CaRT log files
 
@@ -275,6 +324,7 @@ class IofLogIter():
 
     def new_iter(self,
                  pid=None,
+                 stateful=False,
                  trace_only=False,
                  raw=False):
         """Rewind file iterator, and set options
@@ -293,7 +343,13 @@ class IofLogIter():
             self._pid = None
         self._trace_only = trace_only
         self._raw = raw
-        return iter(self)
+
+        if stateful:
+            if not pid:
+                raise InvalidPid
+            return StateIter(self)
+
+        return self
 
     def __iter__(self, pid=None):
         if self.__from_file:
@@ -332,6 +388,9 @@ class IofLogIter():
                 continue
 
             if self._trace_only and not line.trace:
+                continue
+
+            if isinstance(line, IofLogRaw) and self._pid:
                 continue
 
             if self._pid and line.pid != self._pid:
