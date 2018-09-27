@@ -393,6 +393,12 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
     cnss_prefix = None
     test_local = None
 
+    # Does this test leave the inode hash table in a inconsistent state. If
+    # a test sets this to True then the hash table consistency check will
+    # not be run on the logs after the test completes.  This logic should be
+    # removed once the bug is fixed.
+    htable_bug = False
+
     @staticmethod
     def get_unique(parent):
         """Return a unique identifer for this user of the projection
@@ -549,6 +555,8 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
 
     def test_file_rename(self):
         """Write to a file"""
+
+        self.htable_bug = True
 
         filename = os.path.join(self.import_dir, 'c_file')
 
@@ -832,6 +840,9 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         """Test mdtest"""
         icount = 10
         iiters = 3
+
+        self.htable_bug = True
+
         (rtn, elapsed) = self.run_mdtest(count=icount, iters=iiters)
         if rtn != 0:
             self.fail("Mdtest test_failed, rc = %d" % rtn)

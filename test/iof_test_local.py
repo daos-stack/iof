@@ -518,7 +518,14 @@ class Testlocal(unittest.TestCase,
 
         # This is a list of files which are known to have unresolved errors, so
         # ignore them for now.
-        error_files_ok = ['src/common/iof_bulk.c']
+        error_files_ok = ('src/common/iof_bulk.c')
+
+        # This is a list of functions where any warning or error is promoted to
+        # a test failure.
+        strict_functions = ('iof_deregister_fuse')
+
+        if self.htable_bug:
+            strict_functions = ()
 
         have_debug = False
 
@@ -526,6 +533,17 @@ class Testlocal(unittest.TestCase,
         non_trace_lines = 0
 
         for line in cl.new_iter(pid=pid):
+            try:
+                # Not all log lines contain a function so catch that case
+                # here and do not abort.
+                if line.function in strict_functions and \
+                   line.level <= iof_cart_logparse.LOG_LEVELS['WARN']:
+                    err_count += 1
+                    show_line(line, 'error',
+                              'warning in strict file in {}'.format(self.id()))
+                    raise Exception
+            except AttributeError:
+                pass
             if line.trace:
                 trace_lines += 1
                 if not have_debug and \
@@ -1251,6 +1269,22 @@ class Testlocal(unittest.TestCase,
             print("Loop %d" % i)
             fs = os.fstat(fd)
             print(fs)
+        os.close(fd)
+
+    def test_failover_fd_leak(self):
+        """Test failover with open files"""
+
+        # Check that files are correctly present in the inode hash table
+        # after failover.  There is currently a bug here, so add a test
+        # to check for that, but disable it via the htable_bug so that the
+        # check can be enabled for other tests.
+
+        self.htable_bug = True
+        ffile = os.path.join(self.import_dir, 'tfile')
+        fd = os.open(ffile, os.O_CREAT)
+        os.fstat(fd)
+        self.kill_ionss_proc()
+        os.fstat(fd)
 
     def ft_stat_helper(self, fsid, outcomes):
         """Helper function for trying stat on projection
@@ -1375,6 +1409,9 @@ class Testlocal(unittest.TestCase,
 
     def test_failover_unlink_subdir(self):
         """"Test unlink failover when the files are in a subdirectory"""
+
+        self.htable_bug = True
+
         return self.test_failover_unlink(subdir=True)
 
     def test_failover_many(self):

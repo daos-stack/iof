@@ -279,6 +279,7 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 					      struct ioc_inode_entry,
 					      ie_ie_list))) {
 			int ref = atomic_load_consume(&ie->ie_ref);
+			int drop_count = 1;
 
 			IOF_TRACE_INFO(ie,
 				       "Invalidating " GAH_PRINT_STR " ref %d",
@@ -293,8 +294,13 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 								      strlen(ie->name));
 
 				IOF_TRACE_INFO(ie, "inval returned %d", rc);
+				if (rc == -ENOENT) {
+					drop_count += ref - 1;
+				}
 			}
-			d_hash_rec_decref(&fs_handle->inode_ht, &ie->ie_htl);
+			d_hash_rec_ndecref(&fs_handle->inode_ht,
+					   drop_count,
+					   &ie->ie_htl);
 		}
 
 		/* Finally, start processing requests which need resending to
@@ -2376,7 +2382,7 @@ ino_flush(d_list_t *rlink, void *arg)
 					      ie->parent,
 					      ie->name,
 					      strlen(ie->name));
-	if (rc != 0 && rc != -ENOENT)
+	if (rc != 0)
 		IOF_TRACE_WARNING(fs_handle,
 				  "%lu %lu '%s': %d %s",
 				  ie->parent, ie->stat.st_ino, ie->name, rc,
@@ -2444,8 +2450,15 @@ static int iof_deregister_fuse(void *arg)
 		handles++;
 	} while (rlink);
 
-	IOF_TRACE_INFO(fs_handle, "dropped %lu refs on %u handles",
-		       refs, handles);
+	if (handles) {
+		IOF_TRACE_WARNING(fs_handle,
+				  "dropped %lu refs on %u inodes",
+				  refs, handles);
+	} else {
+		IOF_TRACE_INFO(fs_handle,
+			       "dropped %lu refs on %u inodes",
+			       refs, handles);
+	}
 
 	rc = d_hash_table_destroy_inplace(&fs_handle->inode_ht, false);
 	if (rc) {

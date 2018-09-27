@@ -298,7 +298,7 @@ register_fuse(void *arg,
 	rc = mkdir(mnt, 0755);
 	if (rc != 0 && errno != EEXIST) {
 		IOF_TRACE_ERROR(plugin,
-				"Could not create directory %s for import",
+				"Could not create directory '%s' for import",
 				mnt);
 		return false;
 	}
@@ -354,7 +354,7 @@ register_fuse(void *arg,
 	}
 
 	IOF_TRACE_DEBUG(plugin,
-			"Registered a fuse mount point at : %s", info->mnt);
+			"Registered a fuse mount point at : '%s'", info->mnt);
 	IOF_TRACE_DEBUG(plugin,
 			"Private data %p threaded %u", private_data, info->mt);
 
@@ -400,7 +400,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	D_MUTEX_LOCK(&info->lock);
 
-	IOF_TRACE_DEBUG(plugin, "Unmounting FS: %s", info->mnt);
+	IOF_TRACE_DEBUG(plugin, "Unmounting FS: '%s'", info->mnt);
 
 #if 0
 	/* This will have already been called once */
@@ -408,9 +408,18 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		plugin->fns->flush_fuse(info->private_data);
 #endif
 
+	/* Add a short delay to allow the flush time to work, by sleeping
+	 * here it allows time for the forget calls to work through from
+	 * the kernel.
+	 *
+	 * A better approach would be to add counters for open inodes and
+	 * check that here instead.
+	 */
+	sleep(1);
+
 	if (info->running) {
 		IOF_TRACE_DEBUG(plugin,
-				"Sending termination signal %s", info->mnt);
+				"Sending termination signal '%s'", info->mnt);
 
 		/*
 		 * If the FUSE thread is in the filesystem servicing requests
@@ -458,7 +467,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	} while (rc == ETIMEDOUT);
 
 	if (rc)
-		IOF_TRACE_ERROR(plugin, "Final join returned %d:'%s'",
+		IOF_TRACE_ERROR(plugin, "Final join returned %d:%s",
 				rc, strerror(rc));
 
 	d_list_del_init(&info->entries);
@@ -466,7 +475,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	rc = pthread_mutex_destroy(&info->lock);
 	if (rc != 0)
 		IOF_TRACE_ERROR(plugin,
-				"Failed to destroy lock %d:'%s'",
+				"Failed to destroy lock %d:%s",
 				rc, strerror(rc));
 
 	rc = (uintptr_t)rcp;
