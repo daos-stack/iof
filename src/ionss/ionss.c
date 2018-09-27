@@ -1273,10 +1273,8 @@ void iof_read_check_and_send(struct ios_projection *projection)
 		return;
 	}
 
-	rrd = d_list_entry(projection->read_list.next,
-			   struct ionss_io_req_desc, list);
-
-	d_list_del(&rrd->list);
+	rrd = d_list_pop_entry(&projection->read_list,
+			       struct ionss_io_req_desc, list);
 
 	IOF_TRACE_UP(ard, rrd->handle, "ard");
 	IOF_TRACE_DEBUG(ard, "Submiting new read (%d/%d)",
@@ -1754,10 +1752,8 @@ void iof_write_check_and_send(struct ios_projection *projection)
 		return;
 	}
 
-	wrd = d_list_entry(projection->write_list.next,
-			   struct ionss_io_req_desc, list);
-
-	d_list_del(&wrd->list);
+	wrd = d_list_pop_entry(&projection->write_list,
+			       struct ionss_io_req_desc, list);
 
 	IOF_TRACE_UP(awd, wrd->handle, "awd");
 	IOF_TRACE_DEBUG(awd, "Submiting new write (%d/%d)",

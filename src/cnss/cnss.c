@@ -461,7 +461,7 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		IOF_TRACE_ERROR(plugin, "Final join returned %d:'%s'",
 				rc, strerror(rc));
 
-	d_list_del(&info->entries);
+	d_list_del_init(&info->entries);
 
 	rc = pthread_mutex_destroy(&info->lock);
 	if (rc != 0)
@@ -930,10 +930,9 @@ shutdown_cart:
 		ret = 1;
 	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
 
-	d_list_for_each_entry_safe(entry, entry2, &cnss_info->plugins, list) {
-
-		d_list_del(&entry->list);
-
+	while ((entry = d_list_pop_entry(&cnss_info->plugins,
+					 struct plugin_entry,
+					 list))) {
 		if (entry->dl_handle)
 			dlclose(entry->dl_handle);
 		IOF_TRACE_DOWN(entry);

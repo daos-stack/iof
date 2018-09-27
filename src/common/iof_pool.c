@@ -87,7 +87,7 @@ iof_pool_init(struct iof_pool *pool, void *arg)
 void
 iof_pool_destroy(struct iof_pool *pool)
 {
-	struct iof_pool_type *type, *tnext;
+	struct iof_pool_type *type;
 	int rc;
 	bool in_use;
 
@@ -102,7 +102,9 @@ iof_pool_destroy(struct iof_pool *pool)
 	if (in_use)
 		IOF_TRACE_WARNING(pool, "Pool has active objects");
 
-	d_list_for_each_entry_safe(type, tnext, &pool->list, type_list) {
+	while ((type = d_list_pop_entry(&pool->list,
+					struct iof_pool_type,
+					type_list))) {
 		if (type->count != 0)
 			IOF_TRACE_WARNING(type,
 					  "Freeing type with active objects");
@@ -112,7 +114,6 @@ iof_pool_destroy(struct iof_pool *pool)
 					"Failed to destroy lock %d %s",
 					rc, strerror(rc));
 		IOF_TRACE_DOWN(type);
-		d_list_del(&type->type_list);
 		D_FREE(type);
 	}
 	rc = pthread_mutex_destroy(&pool->lock);

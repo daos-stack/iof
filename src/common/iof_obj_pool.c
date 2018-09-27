@@ -140,9 +140,7 @@ int obj_pool_initialize(obj_pool_t *pool, size_t obj_size)
 int obj_pool_destroy(obj_pool_t *pool)
 {
 	struct pool_entry *block;
-	struct pool_entry *tmpblock;
 	struct tpv_data *tpv;
-	struct tpv_data *tmptpv;
 	struct obj_pool *real_pool = (struct obj_pool *)pool;
 
 	if (pool == NULL)
@@ -155,19 +153,20 @@ int obj_pool_destroy(obj_pool_t *pool)
 
 	pthread_key_delete(real_pool->key);
 
-	d_list_for_each_entry_safe(block, tmpblock,
-				   &real_pool->allocated_blocks, link) {
-		d_list_del(&block->link);
+	while ((block = d_list_pop_entry(&real_pool->allocated_blocks,
+					 struct pool_entry,
+					 link))) {
 		D_FREE(block);
 	}
-	d_list_for_each_entry_safe(tpv, tmptpv,
-				   &real_pool->tpv_list, link) {
-		d_list_for_each_entry_safe(block, tmpblock,
-					   &tpv->allocated_blocks, link) {
-			d_list_del(&block->link);
+
+	while ((tpv = d_list_pop_entry(&real_pool->tpv_list,
+				       struct tpv_data,
+				       link))) {
+		while ((block = d_list_pop_entry(&tpv->allocated_blocks,
+						 struct pool_entry,
+						 link))) {
 			D_FREE(block);
 		}
-		d_list_del(&tpv->link);
 		D_FREE(tpv);
 	}
 
@@ -219,10 +218,10 @@ static int get_new_entry(struct pool_entry **entry, struct obj_pool *pool)
 		return rc;
 	}
 
-	if (!d_list_empty(&tpv_data->free_entries)) {
-		*entry = d_list_entry(tpv_data->free_entries.next,
-				      struct pool_entry, link);
-		d_list_del(tpv_data->free_entries.next);
+	*entry = d_list_pop_entry(&tpv_data->free_entries,
+				  struct pool_entry,
+				  link);
+	if (*entry) {
 		goto zero;
 	}
 

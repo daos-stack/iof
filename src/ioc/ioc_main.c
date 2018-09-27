@@ -301,8 +301,8 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 	IOF_TRACE_DEBUG(fs_handle, "decref to %u", oldref - 1);
 
 	if (oldref == 1) {
-		struct ioc_request *request, *r2;
-		struct ioc_inode_entry *ie, *ie2;
+		struct ioc_request *request;
+		struct ioc_inode_entry *ie;
 
 		IOF_TRACE_INFO(fs_handle,
 			       "GAH migration complete, marking as on-line");
@@ -317,8 +317,9 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 		 * so only call inval if the reference count > 1 to avoid
 		 * activity on already deleted inodes.
 		 */
-		d_list_for_each_entry_safe(ie, ie2, &fs_handle->p_inval_list,
-					   ie_ie_list) {
+		while ((ie = d_list_pop_entry(&fs_handle->p_inval_list,
+					      struct ioc_inode_entry,
+					      ie_ie_list))) {
 			int ref = atomic_load_consume(&ie->ie_ref);
 
 			IOF_TRACE_INFO(ie,
@@ -335,7 +336,6 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 
 				IOF_TRACE_INFO(ie, "inval returned %d", rc);
 			}
-			d_list_del_init(&ie->ie_ie_list);
 			d_hash_rec_decref(&fs_handle->inode_ht, &ie->ie_htl);
 		}
 
@@ -343,12 +343,11 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 		 * new ranks
 		 */
 		D_MUTEX_LOCK(&fs_handle->p_request_lock);
-		d_list_for_each_entry_safe(request, r2,
-					   &fs_handle->p_requests_pending,
-					   ir_list) {
+		while ((request = d_list_pop_entry(&fs_handle->p_requests_pending,
+						   struct ioc_request,
+						   ir_list))) {
 			int rc;
 
-			d_list_del(&request->ir_list);
 			rc = ioc_simple_resend(request);
 			if (rc != 0) {
 				request->rc = rc;
@@ -2591,7 +2590,7 @@ static int iof_deregister_fuse(void *arg)
 	}
 
 	IOF_TRACE_DOWN(&fs_handle->ctx);
-	d_list_del(&fs_handle->link);
+	d_list_del_init(&fs_handle->link);
 
 	D_FREE(fs_handle->mount_point);
 

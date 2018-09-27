@@ -78,7 +78,7 @@ void ioc_releasedir_priv(fuse_req_t req, struct iof_dir_handle *dh)
 	int rc;
 
 	D_MUTEX_LOCK(&fs_handle->od_lock);
-	d_list_del(&dh->dh_od_list);
+	d_list_del_init(&dh->dh_od_list);
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
 	IOC_REQ_INIT_REQ(dh, fs_handle, api, req, rc);

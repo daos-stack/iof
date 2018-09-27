@@ -534,13 +534,12 @@ struct ioc_request {
 };
 
 /** Initialise a request.  To be called once per request */
-#define IOC_REQUEST_INIT(REQUEST, FSH)		\
-	do {					\
-		(REQUEST)->fsh = FSH;		\
-		(REQUEST)->rpc = NULL;		\
-		(REQUEST)->ir_rs = RS_INIT;	\
-		(REQUEST)->ir_list.prev = NULL;	\
-		(REQUEST)->ir_list.next = NULL;	\
+#define IOC_REQUEST_INIT(REQUEST, FSH)			\
+	do {						\
+		(REQUEST)->fsh = FSH;			\
+		(REQUEST)->rpc = NULL;			\
+		(REQUEST)->ir_rs = RS_INIT;		\
+		D_INIT_LIST_HEAD(&(REQUEST)->ir_list);	\
 	} while (0)
 
 /** Reset a request for re-use.  To be called before each use */

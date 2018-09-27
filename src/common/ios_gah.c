@@ -210,8 +210,7 @@ int ios_gah_allocate_base(struct ios_gah_store *gah_store,
 	}
 
 	/* take one gah from the head of the list */
-	ent = d_list_entry(gah_store->free_list.next, struct ios_gah_ent, list);
-	d_list_del(&ent->list);
+	ent = d_list_pop_entry(&gah_store->free_list, struct ios_gah_ent, list);
 
 	ent->in_use = true;
 	ent->arg = arg;
