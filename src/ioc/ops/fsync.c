@@ -42,7 +42,6 @@
 
 static const struct ioc_request_api api = {
 	.on_result	= ioc_gen_cb,
-	.on_evict	= ioc_simple_resend,
 	.have_gah	= true,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
 };

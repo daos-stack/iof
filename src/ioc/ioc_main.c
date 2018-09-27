@@ -349,7 +349,7 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 			int rc;
 
 			d_list_del(&request->ir_list);
-			rc = request->ir_api->on_evict(request);
+			rc = ioc_simple_resend(request);
 			if (rc != 0) {
 				request->rc = rc;
 				if (request->ir_api->on_result)
@@ -802,7 +802,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	request->ir_rs = RS_LIVE;
 
 	/* No Error */
-	if (!cb_info->cci_rc) {
+	if (cb_info->cci_rc == -DER_SUCCESS) {
 		IOF_TRACE_DEBUG(request,
 				"cci_rc %d -%s",
 				cb_info->cci_rc,
@@ -826,20 +826,19 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 		D_GOTO(done, request->rc = EIO);
 	}
 
-	if (request->ir_api->on_evict) {
-		if (fs_handle->failover_state == iof_failover_in_progress) {
-			/* Add to list for deferred execution */
-			D_MUTEX_LOCK(&fs_handle->p_request_lock);
-			d_list_add_tail(&request->ir_list,
-					&fs_handle->p_requests_pending);
-			D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
-		} else {
-			rc = request->ir_api->on_evict(request);
-			if (rc != 0)
-				D_GOTO(done, request->rc = rc);
-		}
-		return;
+	if (fs_handle->failover_state == iof_failover_in_progress) {
+		/* Add to list for deferred execution */
+		D_MUTEX_LOCK(&fs_handle->p_request_lock);
+		d_list_add_tail(&request->ir_list,
+				&fs_handle->p_requests_pending);
+		D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
+	} else {
+		rc = ioc_simple_resend(request);
+		if (rc != 0)
+			D_GOTO(done, request->rc = rc);
 	}
+	return;
+
 done:
 	if (request->ir_api->on_result)
 		request->ir_api->on_result(request);

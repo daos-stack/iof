@@ -74,7 +74,6 @@ opendir_ll_cb(struct ioc_request *request)
 
 static const struct ioc_request_api api = {
 	.on_result	= opendir_ll_cb,
-	.on_evict	= ioc_simple_resend,
 	.gah_offset = offsetof(struct iof_gah_in, gah),
 };
 

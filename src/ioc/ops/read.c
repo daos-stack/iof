@@ -108,7 +108,6 @@ out:
 
 static const struct ioc_request_api api = {
 	.on_result	= read_bulk_cb,
-	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_readx_in, gah),
 	.have_gah	= true,
 };

@@ -83,7 +83,6 @@ err:
 
 static const struct ioc_request_api api = {
 	.on_result = write_cb,
-	.on_evict = ioc_simple_resend,
 	.gah_offset = offsetof(struct iof_writex_in, gah),
 	.have_gah = true,
 };

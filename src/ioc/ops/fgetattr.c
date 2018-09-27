@@ -86,14 +86,12 @@ static void ioc_fsetattr_result_fn(struct ioc_request *request)
 
 static const struct ioc_request_api getattr_api = {
 	.on_result	= ioc_getattr_result_fn,
-	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
 	.have_gah	= true,
 };
 
 static const struct ioc_request_api fgetattr_api = {
 	.on_result	= ioc_fsetattr_result_fn,
-	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
 	.have_gah	= true,
 };

@@ -472,8 +472,6 @@ struct ioc_request;
 struct ioc_request_api {
 	/** Called once, per request with the result */
 	void	(*on_result)(struct ioc_request *req);
-	/** Called on eviction, can re-send to new rank */
-	int	(*on_evict)(struct ioc_request *req);
 	/** Offset of GAH in RPC input buffer */
 	off_t	gah_offset;
 	/** Set to true if gah_offset is set */

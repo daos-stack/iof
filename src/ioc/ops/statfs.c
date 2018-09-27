@@ -66,7 +66,6 @@ out_err:
 
 static const struct ioc_request_api api = {
 	.on_result	= statfs_cb,
-	.on_evict	= ioc_simple_resend,
 	.gah_offset	= offsetof(struct iof_gah_in, gah),
 	.have_gah	= true,
 };

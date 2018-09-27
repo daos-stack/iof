@@ -47,7 +47,6 @@
 
 static const struct ioc_request_api api = {
 	.on_result	= iof_entry_cb,
-	.on_evict	= ioc_simple_resend
 };
 
 #define STAT_KEY mkdir
