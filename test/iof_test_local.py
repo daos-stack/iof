@@ -311,7 +311,7 @@ class Testlocal(unittest.TestCase,
         itracing = os.getenv("INTERNALS_TRACING", "no")
         if itracing == "yes":
             self.internals_tracing = True
-            default_log_mask = "DEBUG,MEM=WARN,CTRL=WARN,PMIX=INFO,GRP=INFO"
+            default_log_mask = "DEBUG,CTRL=WARN"
         self.log_mask = os.getenv("D_LOG_MASK", default_log_mask)
         self.crt_phy_addr = os.getenv("CRT_PHY_ADDR_STR", "ofi+sockets")
         self.ofi_interface = os.getenv("OFI_INTERFACE", "lo")
@@ -499,9 +499,24 @@ class Testlocal(unittest.TestCase,
 
         self.check_log_file(cnss_logfile)
 
+        # Don't check the server log files on failover, as inherently
+        # they'll be incomplete.
+        if self.failover_test:
+            return
+        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
+
+        self.check_log_file(ionss_logfile)
+
 #pylint: disable=too-many-branches,no-self-use
     def check_log_file(self, log_file):
         """Check a single log file for consistency"""
+
+        cl = iof_cart_logparse.IofLogIter(log_file)
+        for pid in cl.get_pids():
+            self._check_pid_from_log_file(cl, pid)
+
+    def _check_pid_from_log_file(self, cl, pid):
+        """Check a pid from a single log file for consistency"""
 
         active_desc = {}
         active_desc['root'] = None
@@ -509,7 +524,6 @@ class Testlocal(unittest.TestCase,
 
         regions = OrderedDict()
 
-        cl = iof_cart_logparse.IofLogIter(log_file)
         error_files = set()
 
         # This is a list of files which are known to have unresolved errors, so
@@ -518,9 +532,12 @@ class Testlocal(unittest.TestCase,
 
         have_debug = False
 
-        for line in cl.new_iter():
+        trace_lines = 0
+        non_trace_lines = 0
 
+        for line in cl.new_iter(pid=pid):
             if line.trace:
+                trace_lines += 1
                 if not have_debug and \
                    line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
                     have_debug = True
@@ -540,10 +557,11 @@ class Testlocal(unittest.TestCase,
                         err_count += 1
                     desc = parent
                 if line.is_dereg():
-                    if desc not in active_desc:
+                    if desc in active_desc:
+                        del active_desc[desc]
+                    else:
                         show_line(line, 'error', 'invalid remove')
                         err_count += 1
-                    del active_desc[desc]
                 else:
                     if desc not in active_desc and \
                        have_debug and line.filename not in error_files_ok:
@@ -551,6 +569,7 @@ class Testlocal(unittest.TestCase,
                         error_files.add(line.filename)
                         err_count += 1
             else:
+                non_trace_lines += 1
                 m = line.get_field(2)
                 if m.startswith('alloc('):
                     pointer = line.get_field(-1).rstrip('.')
@@ -575,6 +594,14 @@ class Testlocal(unittest.TestCase,
 
         if not have_debug:
             print('DEBUG not enabled, No log consistency checking possible')
+
+        total_lines = trace_lines + non_trace_lines
+        percent_trace = trace_lines / total_lines * 100
+
+        print("Pid {}, {} lines total, {} trace ({:.2f}%)".format(pid,
+                                                                  total_lines,
+                                                                  trace_lines,
+                                                                  percent_trace))
 
         # Special case the fuse arg values as these are allocated by IOF
         # but freed by fuse itself.

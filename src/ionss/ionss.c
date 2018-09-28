@@ -339,6 +339,8 @@ iof_opendir_handler(crt_rpc_t *rpc)
 		D_GOTO(out, out->err = -DER_NOMEM);
 	}
 
+	IOF_TRACE_UP(local_handle, parent, "open_directory");
+
 	local_handle->projection = parent->projection;
 	local_handle->fd = fd;
 	local_handle->h_dir = fdopendir(local_handle->fd);
@@ -588,8 +590,10 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		IOF_LOG_DEBUG("Closing %p", handle->h_dir);
 		rc = closedir(handle->h_dir);
 		if (rc != 0)
-			IOF_LOG_DEBUG("Failed to close directory %p",
-				      handle->h_dir);
+			IOF_TRACE_DEBUG(handle,
+					"Failed to close directory %p",
+					handle->h_dir);
+		IOF_TRACE_DOWN(handle);
 		D_FREE(handle);
 	}
 
@@ -604,7 +608,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
 		if ((FLAGS) & (MODE))				\
-			IOF_LOG_DEBUG("%p " #MODE, HANDLE);	\
+			IOF_TRACE_DEBUG(HANDLE, #MODE);		\
 		FLAGS &= ~MODE;					\
 	} while (0)
 
@@ -636,7 +640,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		LOG_MODE((HANDLE), _flag, O_SYNC);			\
 		LOG_MODE((HANDLE), _flag, O_TRUNC);			\
 		if (_flag)						\
-			IOF_LOG_ERROR("%p Flags 0%o", (HANDLE), _flag);	\
+			IOF_TRACE_ERROR(HANDLE, "Flags 0%o", _flag);	\
 		} while (0)
 
 /* Dump the file mode to the logfile
@@ -648,7 +652,7 @@ iof_closedir_handler(crt_rpc_t *rpc)
 		LOG_MODE((HANDLE), _flag, S_ISGID);			\
 		LOG_MODE((HANDLE), _flag, S_ISVTX);			\
 		if (_flag)						\
-			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
+			IOF_TRACE_ERROR(HANDLE, "Mode 0%o", _flag);	\
 	} while (0)
 
 /* Check for an entry in the hash table, and return a handle if found, will
@@ -967,7 +971,7 @@ iof_open_handler(crt_rpc_t *rpc)
 
 out:
 
-	LOG_FLAGS(rpc, in->flags);
+	LOG_FLAGS(parent, in->flags);
 
 	IOF_TRACE_INFO(parent, GAH_PRINT_STR " result err %d rc %d",
 		       GAH_PRINT_VAL(in->gah), out->err, out->rc);
@@ -1005,7 +1009,7 @@ iof_create_handler(crt_rpc_t *rpc)
 	if (out->err || out->rc)
 		goto out;
 
-	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o",
+	IOF_TRACE_DEBUG(parent, "path '%s' flags 0%o mode 0%o",
 			in->common.name.name, in->flags, in->mode);
 
 	errno = 0;
@@ -1036,14 +1040,14 @@ iof_create_handler(crt_rpc_t *rpc)
 	find_and_insert_create(parent->projection, fd, ifd, &mf, &imf, out);
 
 out:
-	IOF_TRACE_DEBUG(rpc, "path %s flags 0%o mode 0%o 0%o",
+	IOF_TRACE_DEBUG(parent, "path '%s' flags 0%o mode 0%o 0%o",
 			in->common.name.name,
 			in->flags, in->mode & S_IFREG, in->mode & ~S_IFREG);
 
-	LOG_FLAGS(rpc, in->flags);
-	LOG_MODES(rpc, in->mode);
+	LOG_FLAGS(parent, in->flags);
+	LOG_MODES(parent, in->mode);
 
-	IOF_TRACE_INFO(rpc, "path %s result err %d rc %d",
+	IOF_TRACE_INFO(parent, "path '%s' result err %d rc %d",
 		       in->common.name.name, out->err, out->rc);
 
 	rc = crt_reply_send(rpc);
@@ -1058,8 +1062,6 @@ out:
 	}
 
 	D_FREE(path);
-
-	IOF_TRACE_DOWN(rpc);
 }
 
 static void
@@ -1543,11 +1545,13 @@ iof_rename_handler(crt_rpc_t *rpc)
 
 out:
 	if (out->rc == ENOTSUP)
-		IOF_TRACE_WARNING(rpc, "old %s new %s flags %d err %d rc %d",
+		IOF_TRACE_WARNING(old_parent,
+				  "old '%s' new '%s' flags %d err %d rc %d",
 				  in->old_name.name, in->new_name.name,
 				  in->flags, out->err, out->rc);
 	else
-		IOF_TRACE_DEBUG(rpc, "old %s new %s flags %d err %d rc %d",
+		IOF_TRACE_DEBUG(old_parent,
+				"old '%s' new '%s' flags %d err %d rc %d",
 				in->old_name.name, in->new_name.name,
 				in->flags, out->err, out->rc);
 
@@ -1588,8 +1592,9 @@ iof_symlink_handler(crt_rpc_t *rpc)
 
 out:
 	lookup_common(rpc, &in->common, out, parent);
-	IOF_LOG_DEBUG("newpath %s oldpath %s result err %d rc %d",
-		      in->common.name.name, in->oldpath, out->err, out->rc);
+	IOF_TRACE_DEBUG(parent,
+			"newpath '%s' oldpath '%s' result err %d rc %d",
+			in->common.name.name, in->oldpath, out->err, out->rc);
 }
 
 static void
@@ -2693,6 +2698,8 @@ int main(int argc, char **argv)
 	if (parse_config(config_file, &base))
 		exit(1);
 
+	IOF_TRACE_ROOT(&base, "ionss");
+
 	base.callback_fn = base.progress_callback ? check_shutdown : NULL;
 
 	/* The ionss holds open a fd for every inode it knows about so is heavy
@@ -2761,6 +2768,8 @@ int main(int argc, char **argv)
 							  clist)};
 		int fd;
 		int rc;
+
+		IOF_TRACE_UP(projection, &base, "projection");
 
 		ret = iof_pool_init(&projection->pool, projection);
 		if (ret != -DER_SUCCESS) {
@@ -3019,6 +3028,8 @@ cleanup:
 		D_FREE(projection->mount_path);
 
 		iof_pool_destroy(&projection->pool);
+
+		IOF_TRACE_DOWN(projection);
 	}
 
 	D_RWLOCK_DESTROY(&base.gah_rwlock);
@@ -3063,7 +3074,8 @@ cleanup:
 	 */
 	memset(&base, 0, sizeof(base));
 
-	IOF_LOG_INFO("Exiting with status %d", -exit_rc);
+	IOF_TRACE_INFO(&base, "Exiting with status %d", -exit_rc);
+	IOF_TRACE_DOWN(&base);
 
 	iof_log_close();
 

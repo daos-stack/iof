@@ -63,6 +63,8 @@ int ios_fh_alloc(struct ios_projection *projection,
 		return -DER_NOMEM;
 	}
 
+	IOF_TRACE_UP(fh, projection, "file_handle");
+
 	*fhp = fh;
 
 	D_RWLOCK_UNLOCK(&base->gah_rwlock);

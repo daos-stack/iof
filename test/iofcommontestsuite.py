@@ -109,12 +109,9 @@ def valgrind_iof_supp_file():
 def valgrind_cart_supp_file():
     """Return the path of the CaRT memcheck suppression file"""
 
-    print(CART_PREFIX)
     cart_prefix = os.getenv('IOF_CART_PREFIX', CART_PREFIX)
     if not cart_prefix:
         return None
-
-    print(cart_prefix)
 
     crt_suppressfile = os.path.join(cart_prefix,
                                     'etc',
