@@ -517,7 +517,7 @@ class Testlocal(unittest.TestCase,
 
         self.check_log_file(ionss_logfile)
 
-#pylint: disable=too-many-branches,no-self-use
+
     def check_log_file(self, log_file):
         """Check a single log file for consistency"""
 
@@ -525,6 +525,7 @@ class Testlocal(unittest.TestCase,
         for pid in cl.get_pids():
             self._check_pid_from_log_file(cl, pid)
 
+#pylint: disable=too-many-branches,no-self-use,too-many-nested-blocks
     def _check_pid_from_log_file(self, cl, pid):
         """Check a pid from a single log file for consistency"""
 
@@ -545,6 +546,19 @@ class Testlocal(unittest.TestCase,
         # This is a list of files which are known to have unresolved errors, so
         # ignore them for now.
         error_files_ok = ('src/common/iof_bulk.c')
+
+        # List of known free locations where there may be a mismatch, this is a
+        # dict of functions, each with a unordered list of variables that are
+        # freed by the function.
+        # Typically this is where memory is allocated in one file, and freed in
+        # another.
+        mismatch_free_ok = {'crt_plugin_fini': ('timeout_cb_priv',
+                                                'cb_priv',
+                                                'prog_cb_priv',
+                                                'event_cb_priv'),
+                            'crt_finalize': ('crt_gdata.cg_addr'),
+                            'crt_rpc_priv_free': ('rpc_priv'),
+                            'crt_init_opt': ('crt_gdata.cg_addr')}
 
         # This is a list of functions where any warning or error is promoted to
         # a test failure.
@@ -628,6 +642,21 @@ class Testlocal(unittest.TestCase,
                 elif line.is_free():
                     pointer = line.get_field(-1).rstrip('.')
                     if pointer in regions:
+                        if line.mask != regions[pointer].mask:
+                            var = line.get_field(3).strip("'")
+                            if line.function in mismatch_free_ok and \
+                               var in mismatch_free_ok[line.function]:
+                                pass
+                            else:
+                                show_line(regions[pointer], 'warning',
+                                          'mask mismatch in alloc/free')
+                                show_line(line, 'warning',
+                                          'mask mismatch in alloc/free')
+                        if line.level != regions[pointer].level:
+                            show_line(regions[pointer], 'warning',
+                                      'level mismatch in alloc/free')
+                            show_line(line, 'warning',
+                                      'level mismatch in alloc/free')
                         memsize.subtract(regions[pointer].calloc_size())
                         del regions[pointer]
                     elif pointer != '(nil)':
@@ -684,8 +713,7 @@ class Testlocal(unittest.TestCase,
             raise Exception('Errors detected in log file')
         if lost_memory:
             raise Exception('Not all memory allocations freed')
-
-#pylint: enable=too-many-branches,no-self-use
+#pylint: enable=too-many-branches,no-self-use,too-many-nested-blocks
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:
