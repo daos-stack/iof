@@ -45,11 +45,6 @@
 #include "ios_gah.h"
 #include "iof_ext.h"
 
-/* IOF Registration op codes for RPC's*/
-
-#define QUERY_PSR_OP	(0x201)
-#define DETACH_OP	(0x202)
-
 #define IOF_DEFAULT_SET "IONSS"
 
 /*
@@ -315,8 +310,6 @@ struct iof_setattr_in {
 
 extern struct crt_req_format QUERY_RPC_FMT;
 
-#define IOF_PROTO_BASE 0x01000000
-
 #define DEF_RPC_TYPE(TYPE) IOF_OPI_##TYPE
 
 #define IOF_RPCS_LIST					\
@@ -349,6 +342,12 @@ enum {
 
 #undef X
 
-int iof_register(struct crt_proto_format **proto, crt_rpc_cb_t handlers[]);
+int
+iof_register(struct crt_proto_format **proto,
+	     crt_rpc_cb_t handlers[]);
+
+int
+iof_signon_register(struct crt_proto_format **proto,
+		    crt_rpc_cb_t handlers[]);
 
 #endif

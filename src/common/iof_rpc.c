@@ -39,7 +39,8 @@
 #include "iof_common.h"
 #include "log.h"
 
-/*input/output format for RPC's*/
+#define IOF_PROTO_WRITE_BASE 0x01000000
+#define IOF_PROTO_SIGNON_BASE 0x02000000
 
 /*
  * Re-use the CMF_UUID type when using a GAH as they are both 128 bit types
@@ -245,38 +246,76 @@ IOF_RPCS_LIST
 		.prf_req_fmt = &IOF_CRF_##a,	\
 	},
 
-static struct crt_proto_rpc_format iof_rpc_types[] = {
+static struct crt_proto_rpc_format iof_write_rpc_types[] = {
 	IOF_RPCS_LIST
 };
 
 #undef X
 
-static struct crt_proto_format iof_protocol_registry = {
-	.cpf_name = "IOF_PRIVATE",
+static struct crt_proto_rpc_format iof_signon_rpc_types[] = {
+	{
+		.prf_req_fmt = &QUERY_RPC_FMT,
+	},
+	{
+		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,
+	}
+};
+
+static struct crt_proto_format iof_signon_registry = {
+	.cpf_name = "IOF_HANDSHAKE",
+	.cpf_ver = 1,
+	.cpf_count = ARRAY_SIZE(iof_signon_rpc_types),
+	.cpf_prf = iof_signon_rpc_types,
+	.cpf_base = IOF_PROTO_SIGNON_BASE,
+};
+
+static struct crt_proto_format iof_write_registry = {
+	.cpf_name = "IOF_WRITE",
 	.cpf_ver = 2,
-	.cpf_count = ARRAY_SIZE(iof_rpc_types),
-	.cpf_prf = iof_rpc_types,
-	.cpf_base = IOF_PROTO_BASE,
+	.cpf_count = ARRAY_SIZE(iof_write_rpc_types),
+	.cpf_prf = iof_write_rpc_types,
+	.cpf_base = IOF_PROTO_WRITE_BASE,
 };
 
 /* Bulk register a RPC type
  *
  * If there is a failure then register what is possible, and return
  * the first error that occurred.
+ *
+ * On the origin side the handlers array can be NULL, as no RPCs are expected
+ * to be received.
+ * On the target side proto can be NULL, as no RPCs are sent, so the opcodes
+ * are not requried.
  */
-int iof_register(struct crt_proto_format **proto, crt_rpc_cb_t handlers[])
+int iof_core_register(struct crt_proto_format *reg,
+		      struct crt_proto_format **proto,
+		      crt_rpc_cb_t handlers[])
 {
 	int rc;
 	int i;
 
 	if (handlers)
-		for (i = 0; i < iof_protocol_registry.cpf_count; i++)
-			iof_protocol_registry.cpf_prf[i].prf_hdlr = handlers[i];
+		for (i = 0; i < reg->cpf_count; i++)
+			reg->cpf_prf[i].prf_hdlr = handlers[i];
 
-	rc = crt_proto_register(&iof_protocol_registry);
+	rc = crt_proto_register(reg);
 
 	if (proto && rc == -DER_SUCCESS)
-		*proto = &iof_protocol_registry;
+		*proto = reg;
 
 	return rc;
+}
+
+int
+iof_register(struct crt_proto_format **proto,
+	     crt_rpc_cb_t handlers[])
+{
+	return iof_core_register(&iof_write_registry, proto, handlers);
+}
+
+int
+iof_signon_register(struct crt_proto_format **proto,
+		    crt_rpc_cb_t handlers[])
+{
+	return iof_core_register(&iof_signon_registry, proto, handlers);
 }

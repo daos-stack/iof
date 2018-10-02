@@ -114,6 +114,8 @@ struct iof_ctx {
 struct iof_state {
 	/** Callback to CNSS plugin */
 	struct cnss_plugin_cb		*cb;
+	/** CaRT RPC protocol used for handshake */
+	struct crt_proto_format		*handshake_proto;
 	/** CaRT RPC protocol used */
 	struct crt_proto_format		*proto;
 	/** iof_ctx for state */

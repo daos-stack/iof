@@ -2188,16 +2188,11 @@ out:
 
 #define X(a, b, c) iof_##a##_handler,
 
-static crt_rpc_cb_t handlers[] = {
+static crt_rpc_cb_t write_handlers[] = {
 	IOF_RPCS_LIST
 };
 
 #undef X
-
-static int iof_register_handlers(void)
-{
-	return iof_register(NULL, handlers);
-}
 
 /*
  * Process filesystem query from CNSS
@@ -2222,24 +2217,14 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	atomic_fetch_add(&cnss_count, 1);
 }
 
+static crt_rpc_cb_t signon_handlers[] = {
+	iof_query_handler,
+	cnss_detach_handler,
+};
+
 int ionss_register(void)
 {
 	int ret;
-
-	ret = crt_rpc_srv_register(QUERY_PSR_OP, CRT_RPC_FEAT_NO_TIMEOUT,
-				   &QUERY_RPC_FMT, iof_query_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Cannot register query RPC, ret = %d", ret);
-		return ret;
-	}
-
-	ret = crt_rpc_srv_register(DETACH_OP, CRT_RPC_FEAT_NO_TIMEOUT,
-				   NULL, cnss_detach_handler);
-	if (ret) {
-		IOF_LOG_ERROR("Cannot register CNSS detach"
-				" RPC, ret = %d", ret);
-		return ret;
-	}
 
 	ret = crt_rpc_srv_register(SHUTDOWN_BCAST_OP,
 				   CRT_RPC_FEAT_NO_TIMEOUT,
@@ -2257,11 +2242,21 @@ int ionss_register(void)
 		return ret;
 	}
 
-	ret = iof_register_handlers();
-	if (ret)
+	ret = iof_register(NULL, write_handlers);
+	if (ret) {
 		IOF_LOG_ERROR("RPC server handler registration failed,"
 			      " ret = %d", ret);
-	return ret;
+		return ret;
+	}
+
+	ret = iof_signon_register(NULL, signon_handlers);
+	if (ret) {
+		IOF_LOG_ERROR("RPC signon handler registration failed,"
+			      " ret = %d", ret);
+		return ret;
+	}
+
+	return 0;
 }
 
 static int check_shutdown(void *arg)
@@ -2647,6 +2642,7 @@ int main(int argc, char **argv)
 	char *config_file = NULL;
 	int i;
 	int ret;
+	int exit_rc = -DER_SUCCESS;
 	int err;
 	int c;
 	struct rlimit rlim = {0};
@@ -2705,7 +2701,7 @@ int main(int argc, char **argv)
 	 */
 	ret = getrlimit(RLIMIT_NOFILE, &rlim);
 	if (ret)
-		D_GOTO(cleanup, ret = -DER_MISC);
+		D_GOTO(cleanup, exit_rc = -DER_MISC);
 
 	if (rlim.rlim_cur != rlim.rlim_max) {
 		IOF_LOG_INFO("Set rlimit from %lu to %lu",
@@ -2715,13 +2711,12 @@ int main(int argc, char **argv)
 
 		ret = setrlimit(RLIMIT_NOFILE, &rlim);
 		if (ret)
-			D_GOTO(cleanup, ret = -DER_MISC);
+			D_GOTO(cleanup, exit_rc = -DER_MISC);
 	}
 
 	D_ALLOC_ARRAY(base.fs_list, base.projection_count);
 	if (!base.fs_list) {
-		ret = -DER_NOMEM;
-		goto cleanup;
+		D_GOTO(cleanup, exit_rc = -DER_NOMEM);
 	}
 
 	IOF_LOG_INFO("Projecting %d exports", base.projection_count);
@@ -2730,14 +2725,13 @@ int main(int argc, char **argv)
 	ret = crt_init(base.group_name, CRT_FLAG_BIT_SERVER);
 	if (ret) {
 		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
-		goto cleanup;
+		D_GOTO(cleanup, exit_rc = ret);
 	}
 
 	base.primary_group = crt_group_lookup(base.group_name);
 	if (base.primary_group == NULL) {
 		IOF_LOG_ERROR("Failed to look up primary group");
-		ret = 1;
-		goto cleanup;
+		D_GOTO(cleanup, exit_rc = -DER_NONEXIST);
 	}
 	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
 	crt_group_rank(base.primary_group, &base.my_rank);
@@ -2770,8 +2764,7 @@ int main(int argc, char **argv)
 
 		ret = iof_pool_init(&projection->pool, projection);
 		if (ret != -DER_SUCCESS) {
-			err = 1;
-			goto cleanup;
+			D_GOTO(cleanup, exit_rc = ret);
 		}
 
 		fd = open(projection->full_path,
@@ -2855,20 +2848,20 @@ int main(int argc, char **argv)
 		projection->id = i;
 	}
 	if (err) {
-		ret = 1;
-		goto cleanup;
+		D_GOTO(cleanup, exit_rc = -DER_MISC);
 	}
 
 	ret = filesystem_lookup();
 	if (ret) {
 		IOF_LOG_ERROR("File System look up failed with ret = %d", ret);
+		D_GOTO(cleanup, exit_rc = -DER_MISC);
 		goto cleanup;
 	}
 
 	ret = crt_context_create(&base.crt_ctx);
 	if (ret) {
 		IOF_LOG_ERROR("Could not create context");
-		goto cleanup;
+		D_GOTO(cleanup, exit_rc = ret);
 	}
 
 	for (i = 0; i < base.projection_count; i++) {
@@ -2951,7 +2944,7 @@ int main(int argc, char **argv)
 
 	ret = ionss_register();
 	if (ret)
-		D_GOTO(cleanup, ret);
+		D_GOTO(cleanup, exit_rc = ret);
 
 	shutdown = 0;
 
@@ -2973,8 +2966,7 @@ int main(int argc, char **argv)
 
 		D_ALLOC_ARRAY(progress_tids, base.thread_count);
 		if (!progress_tids) {
-			ret = 1;
-			goto cleanup;
+			D_GOTO(cleanup, exit_rc = -DER_NOMEM);
 		}
 		for (thread = 0; thread < base.thread_count; thread++) {
 			IOF_LOG_INFO("Starting thread %d", thread);
@@ -3032,8 +3024,12 @@ cleanup:
 	D_RWLOCK_DESTROY(&base.gah_rwlock);
 
 	ret = crt_context_destroy(base.crt_ctx, 0);
-	if (ret)
+	if (ret) {
 		IOF_LOG_ERROR("Could not destroy context");
+		if (exit_rc == -DER_SUCCESS) {
+			exit_rc = ret;
+		}
+	}
 
 	D_FREE(base.projection_array);
 
@@ -3045,23 +3041,31 @@ cleanup:
 	 */
 
 	ret = crt_finalize();
-	if (ret)
+	if (ret) {
 		IOF_LOG_ERROR("Could not finalize cart");
+		if (exit_rc == -DER_SUCCESS) {
+			exit_rc = ret;
+		}
+	}
 
 	D_FREE(base.fs_list);
 
 	ret = ios_gah_destroy(base.gs);
-	if (ret)
+	if (ret) {
 		IOF_LOG_ERROR("Could not close GAH pool");
+		if (exit_rc == -DER_SUCCESS) {
+			exit_rc = ret;
+		}
+	}
 
 	/* Memset base to zero to delete any dangling memory references so that
 	 * valgrind can better detect lost memory
 	 */
 	memset(&base, 0, sizeof(base));
 
-	IOF_LOG_INFO("Exiting with status %d", ret);
+	IOF_LOG_INFO("Exiting with status %d", -exit_rc);
 
 	iof_log_close();
 
-	return ret;
+	return -exit_rc;
 }

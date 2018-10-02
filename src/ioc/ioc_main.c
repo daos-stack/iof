@@ -762,7 +762,10 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	 *
 	 */
 	rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &g->grp.psr_ep,
-			    QUERY_PSR_OP, &rpc);
+			CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
+				iof_state->handshake_proto->cpf_ver,
+				0),
+			&rpc);
 	if (rc != -DER_SUCCESS) {
 		set_all_offline(iof_state, EHOSTDOWN, true);
 		return;
@@ -969,9 +972,11 @@ get_info(struct iof_state *iof_state, struct iof_group_info *group,
 	*query_rpc = NULL;
 
 	iof_tracker_init(&reply.tracker, 1);
-
 	rc = crt_req_create(iof_state->iof_ctx.crt_ctx, &group->grp.psr_ep,
-			    QUERY_PSR_OP, &rpc);
+			CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
+				iof_state->handshake_proto->cpf_ver,
+				0),
+			&rpc);
 	if (rc != -DER_SUCCESS || !rpc) {
 		IOF_TRACE_ERROR(iof_state,
 				"failed to create query rpc request, rc = %d",
@@ -1766,18 +1771,11 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = crt_rpc_register(QUERY_PSR_OP, 0, &QUERY_RPC_FMT);
+	ret = iof_signon_register(&iof_state->handshake_proto, NULL);
 	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "Query rpc registration failed with "
-				"ret: %d", ret);
-		return 1;
-	}
-
-	ret = crt_rpc_register(DETACH_OP, CRT_RPC_FEAT_NO_TIMEOUT, NULL);
-	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "Detach registration failed with "
-				"ret: %d", ret);
-		return 1;
+		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
+				"with ret: %d", ret);
+		return ret;
 	}
 
 	ret = iof_register(&iof_state->proto, NULL);
@@ -2629,8 +2627,11 @@ static void iof_finish(void *arg)
 
 		/*send a detach RPC to IONSS*/
 		rc = crt_req_create(iof_state->iof_ctx.crt_ctx,
-				    &group->grp.psr_ep,
-				    DETACH_OP, &rpc);
+				&group->grp.psr_ep,
+				CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
+					iof_state->handshake_proto->cpf_ver,
+					1),
+				&rpc);
 		if (rc != -DER_SUCCESS || !rpc) {
 			IOF_TRACE_ERROR(iof_state,
 					"Could not create detach req rc = %d",
