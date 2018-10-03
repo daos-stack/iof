@@ -42,28 +42,22 @@
 #include "ios_gah.h"
 
 static void
-ioc_create_ll_cb(const struct crt_cb_info *cb_info)
+ioc_create_ll_cb(struct ioc_request *request)
 {
-	struct iof_file_handle		*handle = cb_info->cci_arg;
-	struct iof_projection_info	*fs_handle = handle->open_req.fsh;
-	struct iof_create_out		*out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_file_handle		*handle = container_of(request, struct iof_file_handle, creat_req);
+	struct iof_projection_info	*fs_handle = request->fsh;
+	struct iof_create_out		*out = crt_reply_get(request->rpc);
 	struct fuse_file_info		fi = {0};
 	struct fuse_entry_param		entry = {0};
 	d_list_t	*rlink;
-	fuse_req_t	req;
-	int		ret = EIO;
 
 	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
-			cb_info->cci_rc, out->rc, out->err);
+			request->rc, out->rc, out->err);
 
-	if (cb_info->cci_rc != 0)
-		D_GOTO(out_err, ret = EIO);
-
-	if (out->rc)
-		D_GOTO(out_err, ret = out->rc);
-
-	if (out->err)
-		D_GOTO(out_err, ret = EIO);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc != 0) {
+		D_GOTO(out_err, 0);
+	}
 
 	/* Create a new FI descriptor from the RPC reply */
 
@@ -77,11 +71,11 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 	handle->common.gah = out->gah;
 	H_GAH_SET_VALID(handle);
 	handle->inode_no = entry.ino;
+	handle->common.ep = request->rpc->cr_ep;
 
 	D_MUTEX_LOCK(&fs_handle->of_lock);
 	d_list_add_tail(&handle->fh_of_list, &fs_handle->openfile_list);
 	D_MUTEX_UNLOCK(&fs_handle->of_lock);
-	req = handle->open_req.req;
 
 	/* Populate the inode table with the GAH from the duplicate file
 	 * so that it can still be accessed after the file is closed
@@ -100,7 +94,7 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 
 	if (rlink == &handle->ie->ie_htl) {
 		handle->ie = NULL;
-		IOF_TRACE_INFO(req, "New file %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(handle, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 	} else {
 		/* This is an interesting, but not impossible case, although it
@@ -118,21 +112,26 @@ ioc_create_ll_cb(const struct crt_cb_info *cb_info)
 		 * the file, so even if it had been unlinked it would still
 		 * exist and thus the inode was unlikely to be reused.
 		 */
-		IOF_TRACE_INFO(req, "Existing file rlink %p %lu "
+		IOF_TRACE_INFO(request, "Existing file rlink %p %lu "
 			       GAH_PRINT_STR, rlink, entry.ino,
 			       GAH_PRINT_VAL(out->gah));
 		drop_ino_ref(fs_handle, handle->ie->parent);
 		ie_close(fs_handle, handle->ie);
 	}
 
-	IOF_FUSE_REPLY_CREATE(req, entry, fi);
+	IOC_REPLY_CREATE(request, entry, fi);
 	return;
 
 out_err:
-	IOF_FUSE_REPLY_ERR(handle->open_req.req, ret);
+	IOC_REPLY_ERR(request, request->rc);
 	drop_ino_ref(fs_handle, handle->ie->parent);
 	iof_pool_release(fs_handle->fh_pool, handle);
 }
+
+static const struct ioc_request_api api = {
+	.on_result = ioc_create_ll_cb,
+	.gah_offset = offsetof(struct iof_create_in, common.gah),
+};
 
 void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 		   mode_t mode, struct fuse_file_info *fi)
@@ -140,13 +139,9 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
 	struct iof_file_handle *handle = NULL;
 	struct iof_create_in *in;
-	int ret;
 	int rc;
 
 	STAT_ADD(fs_handle->stats, create);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(out_err, ret = fs_handle->offline_reason);
 
 	/* O_LARGEFILE should always be set on 64 bit systems, and in fact is
 	 * defined to 0 so IOF defines LARGEFILE to the value that O_LARGEFILE
@@ -155,7 +150,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	if (!(fi->flags & LARGEFILE)) {
 		IOF_TRACE_INFO(req, "O_LARGEFILE required 0%o",
 			       fi->flags);
-		D_GOTO(out_err, ret = ENOTSUP);
+		D_GOTO(out_err, rc = ENOTSUP);
 	}
 
 	/* Check for flags that do not make sense in this context.
@@ -163,42 +158,43 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	if (fi->flags & IOF_UNSUPPORTED_CREATE_FLAGS) {
 		IOF_TRACE_INFO(req, "unsupported flag requested 0%o",
 			       fi->flags);
-		D_GOTO(out_err, ret = ENOTSUP);
+		D_GOTO(out_err, rc = ENOTSUP);
 	}
 
 	/* Check that only the flag for a regular file is specified */
 	if ((mode & S_IFMT) != S_IFREG) {
 		IOF_TRACE_INFO(req, "unsupported mode requested 0%o",
 			       mode);
-		D_GOTO(out_err, ret = ENOTSUP);
+		D_GOTO(out_err, rc = ENOTSUP);
 	}
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_TRACE_INFO(req, "Attempt to modify Read-Only File "
 			       "System");
-		D_GOTO(out_err, ret = EROFS);
+		D_GOTO(out_err, rc = EROFS);
 	}
 
 	handle = iof_pool_acquire(fs_handle->fh_pool);
 	if (!handle)
-		D_GOTO(out_err, ret = ENOMEM);
+		D_GOTO(out_err, rc = ENOMEM);
 
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
-	IOF_TRACE_UP(req, handle, "create_fuse_req");
+	IOF_TRACE_UP(&handle->creat_req, handle, "creat_req");
+	IOF_TRACE_LINK(handle->creat_req.rpc, &handle->creat_req, "creat_file_rpc");
 
 	handle->common.projection = &fs_handle->proj;
-	handle->open_req.req = req;
+	handle->creat_req.req = req;
+	handle->creat_req.ir_api = &api;
 
-	IOF_TRACE_INFO(req, "file '%s' flags 0%o mode 0%o", name, fi->flags,
+	IOF_TRACE_INFO(handle, "file '%s' flags 0%o mode 0%o", name, fi->flags,
 		       mode);
 
-	in = crt_req_get(handle->creat_rpc);
-	IOF_TRACE_LINK(handle->creat_rpc, req, "create_file_rpc");
+	in = crt_req_get(handle->creat_req.rpc);
 
 	/* Find the GAH of the parent */
 	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
 	if (rc != 0)
-		D_GOTO(out_err, ret = rc);
+		D_GOTO(out_err, 0);
 
 	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;
@@ -207,12 +203,9 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	strncpy(handle->ie->name, name, NAME_MAX);
 	handle->ie->parent = parent;
 
-	crt_req_addref(handle->creat_rpc);
-	rc = crt_req_send(handle->creat_rpc, ioc_create_ll_cb, handle);
+	rc = iof_fs_send(&handle->creat_req);
 	if (rc) {
-		crt_req_decref(handle->creat_rpc);
-		drop_ino_ref(fs_handle, parent);
-		D_GOTO(out_err, ret = EIO);
+		D_GOTO(out_err, rc = EIO);
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
@@ -222,8 +215,10 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 	return;
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+	IOC_REPLY_ERR_RAW(handle, req, rc);
 
-	if (handle)
+	if (handle) {
+		IOF_TRACE_DOWN(&handle->creat_req);
 		iof_pool_release(fs_handle->fh_pool, handle);
+	}
 }

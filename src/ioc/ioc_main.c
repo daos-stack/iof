@@ -929,13 +929,14 @@ int iof_fs_send(struct ioc_request *request)
 	}
 
 	/* Defer clean up until the output is copied. */
-	crt_req_addref(request->rpc);
 	rc = crt_req_set_endpoint(request->rpc, &ep);
 	if (rc) {
 		D_GOTO(err, ret = EIO);
 	}
 	IOF_TRACE_INFO(request, "Sending RPC to rank %d",
 		       request->rpc->cr_ep.ep_rank);
+
+	crt_req_addref(request->rpc);
 	rc = crt_req_send(request->rpc, generic_cb, request);
 	if (rc) {
 		D_GOTO(err, ret = EIO);
@@ -1256,7 +1257,7 @@ fh_init(void *arg, void *handle)
 	struct iof_file_handle *fh = arg;
 
 	IOC_REQUEST_INIT(&fh->open_req, handle);
-	fh->creat_rpc = NULL;
+	IOC_REQUEST_INIT(&fh->creat_req, handle);
 	fh->release_rpc = NULL;
 	fh->ie = NULL;
 }
@@ -1268,10 +1269,14 @@ fh_reset(void *arg)
 	int rc;
 
 	IOC_REQUEST_RESET(&fh->open_req);
+	CHECK_AND_RESET_RRPC(fh, open_req);
+
 	fh->open_req.ir_ht = RHS_INODE;
 
-	CHECK_AND_RESET_RRPC(fh, open_req);
-	CHECK_AND_RESET_RPC(fh, creat_rpc);
+	IOC_REQUEST_RESET(&fh->creat_req);
+	CHECK_AND_RESET_RRPC(fh, creat_req);
+	fh->creat_req.ir_ht = RHS_NONE;
+
 	CHECK_AND_RESET_RPC(fh, release_rpc);
 
 	/* Used by creat but not open */
@@ -1291,9 +1296,9 @@ fh_reset(void *arg)
 		return false;
 	}
 
-	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, &fh->common.ep,
-			    FS_TO_OP(fh->open_req.fsh, create), &fh->creat_rpc);
-	if (rc || !fh->creat_rpc) {
+	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(fh->open_req.fsh, create), &fh->creat_req.rpc);
+	if (rc || !fh->creat_req.rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_req.rpc);
 		return false;
@@ -1304,12 +1309,12 @@ fh_reset(void *arg)
 	if (rc || !fh->release_rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_req.rpc);
-		crt_req_decref(fh->creat_rpc);
+		crt_req_decref(fh->creat_req.rpc);
 		return false;
 	}
 
 	crt_req_addref(fh->open_req.rpc);
-	crt_req_addref(fh->creat_rpc);
+	crt_req_addref(fh->creat_req.rpc);
 	crt_req_addref(fh->release_rpc);
 	D_INIT_LIST_HEAD(&fh->fh_ino_list);
 	return true;
@@ -1322,8 +1327,8 @@ fh_release(void *arg)
 
 	crt_req_decref(fh->open_req.rpc);
 	crt_req_decref(fh->open_req.rpc);
-	crt_req_decref(fh->creat_rpc);
-	crt_req_decref(fh->creat_rpc);
+	crt_req_decref(fh->creat_req.rpc);
+	crt_req_decref(fh->creat_req.rpc);
 	crt_req_decref(fh->release_rpc);
 	crt_req_decref(fh->release_rpc);
 	D_FREE(fh->ie);
@@ -1349,6 +1354,7 @@ common_reset(void *arg)
 
 	req->request.req = NULL;
 
+	IOC_REQUEST_RESET(&req->request);
 	CHECK_AND_RESET_RRPC(req, request);
 
 	rc = crt_req_create(req->request.fsh->proj.crt_ctx, NULL,
@@ -1358,8 +1364,6 @@ common_reset(void *arg)
 		return false;
 	}
 	crt_req_addref(req->request.rpc);
-
-	IOC_REQUEST_RESET(&req->request);
 
 	return true;
 }
@@ -1393,9 +1397,10 @@ entry_reset(void *arg)
 	struct entry_req *req = arg;
 	int rc;
 
-	/* If this descriptor has previously been used the destroy the
+	/* If this descriptor has previously been used then destroy the
 	 * existing RPC
 	 */
+	IOC_REQUEST_RESET(&req->request);
 	CHECK_AND_RESET_RRPC(req, request);
 
 	/* Free any destination string on this descriptor.  This is only used
@@ -1428,8 +1433,6 @@ entry_reset(void *arg)
 		return false;
 	}
 	crt_req_addref(req->request.rpc);
-
-	IOC_REQUEST_RESET(&req->request);
 
 	return true;
 }
@@ -1474,9 +1477,9 @@ rb_reset(void *arg)
 	int rc;
 
 	IOC_REQUEST_RESET(&rb->rb_req);
-	rb->rb_req.ir_ht = RHS_FILE;
-
 	CHECK_AND_RESET_RRPC(rb, rb_req);
+
+	rb->rb_req.ir_ht = RHS_FILE;
 
 	if (rb->failure) {
 		IOF_BULK_FREE(rb, lb);
@@ -1530,9 +1533,9 @@ wb_reset(void *arg)
 	int rc;
 
 	IOC_REQUEST_RESET(&wb->wb_req);
-	wb->wb_req.ir_ht = RHS_FILE;
-
 	CHECK_AND_RESET_RRPC(wb, wb_req);
+
+	wb->wb_req.ir_ht = RHS_FILE;
 
 	if (wb->failure) {
 		IOF_BULK_FREE(wb, lb);

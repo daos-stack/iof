@@ -55,8 +55,9 @@ ioc_open_ll_cb(struct ioc_request *request)
 			  &request->ir_inode->ie_htl);
 
 	IOC_REQUEST_RESOLVE(request, out);
-	if (request->rc != 0)
-		goto out_err;
+	if (request->rc != 0) {
+		D_GOTO(out_err, 0);
+	}
 
 	/* Create a new FI descriptor and use it to point to
 	 * our local handle
@@ -126,7 +127,7 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	}
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
 	IOF_TRACE_UP(&handle->open_req, handle, "open_req");
-	IOF_TRACE_LINK(handle->open_req.rpc, handle, "open_file_rpc");
+	IOF_TRACE_LINK(handle->open_req.rpc, &handle->open_req, "open_file_rpc");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req.req = req;

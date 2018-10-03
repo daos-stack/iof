@@ -47,6 +47,7 @@ import iof_cart_logparse
 
 # CaRT Error numbers to convert to strings.
 C_ERRNOS = {0: '-DER_SUCCESS',
+            -1006: 'DER_UNREACH',
             -1011: '-DER_TIMEDOUT',
             -1032: '-DER_EVICTED'}
 

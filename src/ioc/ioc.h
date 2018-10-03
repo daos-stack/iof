@@ -406,16 +406,16 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
-#define IOF_FUSE_REPLY_CREATE(req, entry, fi)				\
+#define IOC_REPLY_CREATE(ioc_req, entry, fi)				\
 	do {								\
 		int __rc;						\
-		IOF_TRACE_DEBUG(req, "Returning create");		\
-		__rc = fuse_reply_create(req, &entry, &fi);		\
+		IOF_TRACE_DEBUG(ioc_req, "Returning create");		\
+		__rc = fuse_reply_create((ioc_req)->req, &entry, &fi);	\
 		if (__rc != 0)						\
-			IOF_TRACE_ERROR(req,				\
+			IOF_TRACE_ERROR(ioc_req,			\
 					"fuse_reply_create returned %d:%s",\
 					__rc, strerror(-__rc));		\
-		IOF_TRACE_DOWN(req);					\
+		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
 #define IOC_REPLY_ENTRY(ioc_req, entry)					\
@@ -703,10 +703,10 @@ struct iof_file_handle {
 	 */
 	ATOMIC int			gah_ok;
 
-	/* Open request, with precreated RPC */
+	/** Open request, with precreated RPC */
 	struct ioc_request		open_req;
-	/** Create RPC, precreated */
-	crt_rpc_t			*creat_rpc;
+	/** Create request, with precreated RPC */
+	struct ioc_request		creat_req;
 	/** Release RPC, precreated */
 	crt_rpc_t			*release_rpc;
 	/** List of open files, stored in fs_handle->openfile_list */

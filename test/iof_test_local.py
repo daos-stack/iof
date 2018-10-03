@@ -485,7 +485,14 @@ class Testlocal(unittest.TestCase,
             procrtn = self.common_stop_process(self.proc)
 
         if self.internals_tracing:
-            self.rpc_descriptor_tracing()
+            # If the internals tracing reports errors then also call the log
+            # check, so both are available.  Due to the magic of stacking
+            # exceptions this prints a reasonable output on stdout on failure.
+            try:
+                self.rpc_descriptor_tracing()
+            except AssertionError:
+                self._check_log()
+                raise
 
         self.cleanup(procrtn)
 
