@@ -707,8 +707,8 @@ struct iof_file_handle {
 	struct ioc_request		open_req;
 	/** Create request, with precreated RPC */
 	struct ioc_request		creat_req;
-	/** Release RPC, precreated */
-	crt_rpc_t			*release_rpc;
+	/* Release request, with precreated RPC */
+	struct ioc_request		release_req;
 	/** List of open files, stored in fs_handle->openfile_list */
 	d_list_t			fh_of_list;
 

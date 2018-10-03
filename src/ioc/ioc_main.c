@@ -1258,7 +1258,7 @@ fh_init(void *arg, void *handle)
 
 	IOC_REQUEST_INIT(&fh->open_req, handle);
 	IOC_REQUEST_INIT(&fh->creat_req, handle);
-	fh->release_rpc = NULL;
+	IOC_REQUEST_INIT(&fh->release_req, handle);
 	fh->ie = NULL;
 }
 
@@ -1275,9 +1275,14 @@ fh_reset(void *arg)
 
 	IOC_REQUEST_RESET(&fh->creat_req);
 	CHECK_AND_RESET_RRPC(fh, creat_req);
+
 	fh->creat_req.ir_ht = RHS_NONE;
 
-	CHECK_AND_RESET_RPC(fh, release_rpc);
+	IOC_REQUEST_RESET(&fh->release_req);
+	CHECK_AND_RESET_RRPC(fh, release_req);
+
+	fh->release_req.ir_ht = RHS_FILE;
+	fh->release_req.ir_file = fh;
 
 	/* Used by creat but not open */
 	fh->common.ep = fh->open_req.fsh->proj.grp->psr_ep;
@@ -1304,9 +1309,9 @@ fh_reset(void *arg)
 		return false;
 	}
 
-	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, &fh->common.ep,
-			    FS_TO_OP(fh->open_req.fsh, close), &fh->release_rpc);
-	if (rc || !fh->release_rpc) {
+	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
+			    FS_TO_OP(fh->open_req.fsh, close), &fh->release_req.rpc);
+	if (rc || !fh->release_req.rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_req.rpc);
 		crt_req_decref(fh->creat_req.rpc);
@@ -1315,7 +1320,7 @@ fh_reset(void *arg)
 
 	crt_req_addref(fh->open_req.rpc);
 	crt_req_addref(fh->creat_req.rpc);
-	crt_req_addref(fh->release_rpc);
+	crt_req_addref(fh->release_req.rpc);
 	D_INIT_LIST_HEAD(&fh->fh_ino_list);
 	return true;
 }
@@ -1329,8 +1334,8 @@ fh_release(void *arg)
 	crt_req_decref(fh->open_req.rpc);
 	crt_req_decref(fh->creat_req.rpc);
 	crt_req_decref(fh->creat_req.rpc);
-	crt_req_decref(fh->release_rpc);
-	crt_req_decref(fh->release_rpc);
+	crt_req_decref(fh->release_req.rpc);
+	crt_req_decref(fh->release_req.rpc);
 	D_FREE(fh->ie);
 }
 

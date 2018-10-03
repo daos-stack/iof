@@ -171,14 +171,16 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	if (FS_IS_OFFLINE(fs_handle))
 		D_GOTO(err, rc = fs_handle->offline_reason);
 
-	D_MUTEX_LOCK(&fs_handle->gah_lock);
-
+	D_MUTEX_LOCK(&fs_handle->of_lock);
 	/* Check that all files opened for this inode have been released */
 	d_list_for_each_entry_safe(fh, fh2, &ie->ie_fh_list, fh_ino_list) {
 		IOF_TRACE_WARNING(ie, "open file %p", fh);
 		d_list_del_init(&fh->fh_ino_list);
 	}
+	D_MUTEX_UNLOCK(&fs_handle->of_lock);
 
+
+	D_MUTEX_LOCK(&fs_handle->gah_lock);
 	d_list_for_each_entry_safe(iec, ie2, &ie->ie_ie_children, ie_ie_list) {
 		IOF_TRACE_WARNING(ie, "child inode %p", iec);
 		d_list_del_init(&iec->ie_ie_list);
