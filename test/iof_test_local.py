@@ -603,12 +603,12 @@ class Testlocal(unittest.TestCase,
             print('DEBUG not enabled, No log consistency checking possible')
 
         total_lines = trace_lines + non_trace_lines
-        percent_trace = trace_lines / total_lines * 100
+        p_trace = trace_lines / total_lines * 100
 
         print("Pid {}, {} lines total, {} trace ({:.2f}%)".format(pid,
                                                                   total_lines,
                                                                   trace_lines,
-                                                                  percent_trace))
+                                                                  p_trace))
 
         # Special case the fuse arg values as these are allocated by IOF
         # but freed by fuse itself.
