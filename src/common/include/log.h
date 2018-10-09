@@ -41,35 +41,39 @@
 #include <stdio.h>
 
 #include <inttypes.h>
-#include <gurt/dlog.h>
+
+extern int iof_log_handle;
+#ifndef D_LOGFAC
+#define D_LOGFAC iof_log_handle
+#endif
+
+#include <gurt/debug.h>
 
 /* Allow changing the default so these macros can be
  * used by files that don't log to the default facility
  */
-#ifndef DEF_LOG_HANDLE
-#define DEF_LOG_HANDLE iof_log_handle
-#endif
 
-#define IOF_LOG_FAC(fac, type, fmt, ...)			\
-	do {							\
-		if (d_log_check((fac) | DLOG_##type))		\
-			d_log(d_log_check((fac) | DLOG_##type),	\
-				"%s:%d %s() " fmt "\n",		\
-				__FILE__,  __LINE__, __func__,	\
-				## __VA_ARGS__);		\
-	} while (0)
 
-#define IOF_LOG_WARNING(...)	\
-	IOF_LOG_FAC(DEF_LOG_HANDLE, WARN, __VA_ARGS__)
+#define IOF_LOG_WARNING(fmt, ...)	\
+	D_WARN(fmt "\n", ## __VA_ARGS__)
 
-#define IOF_LOG_ERROR(...)	\
-	IOF_LOG_FAC(DEF_LOG_HANDLE, ERR, __VA_ARGS__)
+#define IOF_LOG_ERROR(fmt, ...)		\
+	D_ERROR(fmt "\n", ## __VA_ARGS__)
 
-#define IOF_LOG_DEBUG(...)	\
-	IOF_LOG_FAC(DEF_LOG_HANDLE, DBG, __VA_ARGS__)
+#define IOF_LOG_DEBUG(fmt, ...)	\
+	D_DEBUG(DB_ANY, fmt "\n", ## __VA_ARGS__)
 
-#define IOF_LOG_INFO(...)	\
-	IOF_LOG_FAC(DEF_LOG_HANDLE, INFO, __VA_ARGS__)
+#define IOF_LOG_INFO(fmt, ...)		\
+	D_INFO(fmt "\n", ## __VA_ARGS__)
+
+/* A couple of helper functions so we can append '\n'
+ * without changing all of instances of the macros
+ */
+#define IOF_TRACE_HELPER(func, ptr, fmt, ...) \
+	func(ptr, fmt "\n", ## __VA_ARGS__)
+
+#define IOF_TRACE_DEBUG_HELPER(func, ptr, fmt, ...) \
+	D_TRACE_DEBUG(DB_ANY, ptr, fmt "\n", ## __VA_ARGS__)
 
 /* IOF_TRACE marcos defined for tracing descriptors and RPCs
  * in the logs. UP() is used to register a new descriptor -
@@ -85,53 +89,34 @@
  * DEBUG/INFO, however just takes an extra argument for the
  * lowest-level descriptor to tie the logging message to.
  */
-#define IOF_TRACE(ptr, fac, type, fmt, ...)				\
-	do {								\
-		if (d_log_check((fac) | DLOG_##type))			\
-			d_log(d_log_check((fac) | DLOG_##type),		\
-				"%s:%d %s(%p) " fmt "\n",		\
-				__FILE__,  __LINE__, __func__, ptr,	\
-				## __VA_ARGS__);			\
-	} while (0)
-
 #define IOF_TRACE_WARNING(ptr, ...)			\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, WARN, __VA_ARGS__)
+	IOF_TRACE_HELPER(D_TRACE_WARN, ptr, "" __VA_ARGS__)
 
 #define IOF_TRACE_ERROR(ptr, ...)			\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, ERR, __VA_ARGS__)
+	IOF_TRACE_HELPER(D_TRACE_ERROR, ptr, "" __VA_ARGS__)
 
 #define IOF_TRACE_DEBUG(ptr, ...)			\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG, __VA_ARGS__)
+	IOF_TRACE_DEBUG_HELPER(DB_ANY, ptr, "" __VA_ARGS__)
 
 #define IOF_TRACE_INFO(ptr, ...)			\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, INFO, __VA_ARGS__)
+	IOF_TRACE_HELPER(D_TRACE_INFO, ptr, "" __VA_ARGS__)
 
 /* Register a descriptor with a parent and a type */
-#define IOF_TRACE_UP(ptr, parent, type)				\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
-		  "Registered new '%s' from %p", type, parent)
+#define IOF_TRACE_UP(ptr, parent, type)					\
+	D_TRACE_DEBUG(DB_ANY, ptr, "Registered new '%s' from %p\n",	\
+		      type, parent)
 
 /* Link an RPC to a descriptor */
 #define IOF_TRACE_LINK(ptr, parent, type)			\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
-		  "Link '%s' to %p", type, parent)
+	D_TRACE_DEBUG(DB_ANY, ptr, "Link '%s' to %p\n", type, parent)
 
 /* De-register a descriptor, including all aliases */
 #define IOF_TRACE_DOWN(ptr)					\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
-		"Deregistered")
+	D_TRACE_DEBUG(DB_ANY, ptr, "Deregistered\n")
 
 /* Register as root of hierarchy, used in place of IOF_TRACE_UP */
 #define IOF_TRACE_ROOT(ptr, type)				\
-	IOF_TRACE(ptr, DEF_LOG_HANDLE, DBG,			\
-		  "Registered new '%s' as root", type)
-
-
-#if defined(__cplusplus)
-extern "C" {
-#endif
-
-extern int iof_log_handle;
+	D_TRACE_DEBUG(DB_ANY, ptr, "Registered new '%s' as root\n", type)
 
 /* Initialize a log facility.   Pass NULL as log handle to initialize
  * the default facilility.  If the user never initializes the default
@@ -142,7 +127,4 @@ void iof_log_init(const char *shortname, const char *longname,
 /* Close a the log for a log facility */
 void iof_log_close(void);
 
-#if defined(__cplusplus)
-}
-#endif
 #endif /* __LOG_H__ */

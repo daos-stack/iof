@@ -111,7 +111,7 @@ static int shutdown_write_cb(uint64_t value, void *arg)
 static int write_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/
-	d_log(DEF_LOG_HANDLE | DLOG_INFO, "%s\n", buf);
+	d_log(D_LOGFAC | DLOG_INFO, "%s\n", buf);
 
 	return 0;
 }
@@ -119,7 +119,7 @@ static int write_log_write_cb(const char *buf, void *arg)
 static int dump_log_write_cb(const char *buf, void *arg)
 {
 	/* Printing as %s in order to prevent interpreting buf symbols*/
-	d_log(DEF_LOG_HANDLE | DLOG_INFO, "%s\n", buf);
+	d_log(D_LOGFAC | DLOG_INFO, "%s\n", buf);
 
 	return cnss_dump_log(arg);
 }

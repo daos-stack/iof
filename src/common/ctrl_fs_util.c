@@ -48,7 +48,10 @@
 #include <errno.h>
 #include <libgen.h>
 #include <stdarg.h>
-#define DEF_LOG_FAC log_handle
+
+static int log_handle;
+
+#define D_LOGFAC log_handle
 #include "iof_atomic.h"
 #include "log.h"
 #include "iof_mntent.h"
@@ -57,7 +60,6 @@
 static char *cnss_prefix;
 static int ctrl_fd = -1;
 static int cnss_id = -1;
-static int log_handle;
 static ATOMIC int init_count;
 static int init_rc;
 static pthread_once_t initialize_flag = PTHREAD_ONCE_INIT;
@@ -205,7 +207,7 @@ int iof_ctrl_write_strf(const char *path, const char *format, ...)
 	va_start(ap, format);
 	ret = vfprintf(fp, format, ap);
 	va_end(ap);
-	flags = d_log_check(DEF_LOG_HANDLE | DLOG_INFO);
+	flags = d_log_check(D_LOGFAC | DLOG_INFO);
 	if (flags != 0) {
 		va_start(ap, format);
 		d_vlog(flags, format, ap);

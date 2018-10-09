@@ -40,6 +40,10 @@
 #include <sys/queue.h>
 #include <sys/xattr.h>
 
+static int ctrl_log_handle;
+
+#define D_LOGFAC ctrl_log_handle
+
 #include <gurt/common.h>
 
 #ifdef __APPLE__
@@ -50,12 +54,9 @@
 
 # include <fuse3/fuse.h>
 
-#define DEF_LOG_HANDLE ctrl_log_handle
 #include "log.h"
 #include "ctrl_fs.h"
 #include "iof_ctrl_util.h"
-
-static int ctrl_log_handle;
 
 enum {
 	CTRL_DIR = 0,
