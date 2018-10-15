@@ -476,7 +476,10 @@ class RpcTrace(common_methods.ColorizedOutput):
             if line.trace and line.pdesc in descriptors:
                 self.log_output(line.to_str(mark=True))
             elif self.VERBOSE_LOG:
-                self.log_output(line.to_str())
+                # Only show INFO and below if the descriptor is not marked for
+                # display.  This dramatically reduces the volume of output.
+                if line.level < iof_cart_logparse.LOG_LEVELS['DBUG']:
+                    self.log_output(line.to_str())
 
     def rpc_trace_output(self, pid, descriptor):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
