@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2017 Intel Corporation
+/* Copyright (C) 2016-2018 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,65 +40,114 @@
 #include "ioc.h"
 #include "log.h"
 
+void ioc_rename_cb(struct ioc_request *request)
+{
+	struct iof_status_out *out = crt_reply_get(request->rpc);
+
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc) {
+		IOC_REPLY_ERR(request, request->rc);
+		D_GOTO(out, 0);
+	}
+
+	IOC_REPLY_ZERO(request);
+
+out:
+	if (request->ir_ht == RHS_INODE)
+		d_hash_rec_decref(&request->fsh->inode_ht,
+				  &request->ir_inode->ie_htl);
+
+	/* Clean up the two refs this code holds on the rpc */
+	crt_req_decref(request->rpc);
+	crt_req_decref(request->rpc);
+
+	D_FREE(request);
+}
+
+static const struct ioc_request_api api = {
+	.on_result	= ioc_rename_cb,
+	.have_gah	= true,
+	.gah_offset	= offsetof(struct iof_rename_in, old_gah),
+};
+
 void
 ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	      fuse_ino_t newparent, const char *newname, unsigned int flags)
 {
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
+	struct ioc_request	*request;
 	struct iof_rename_in	*in;
-	crt_rpc_t		*rpc = NULL;
 	int ret = EIO;
 	int rc;
 
-	IOF_TRACE_UP(req, fs_handle, "rename");
-
 	STAT_ADD(fs_handle->stats, rename);
-
-	IOF_TRACE_DEBUG(req, "renaming %s to %s", name, newname);
-
-	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(err, ret = fs_handle->offline_reason);
 
 	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
 		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		D_GOTO(err, ret = EROFS);
+		D_GOTO(out_no_request, ret = EROFS);
 	}
+
+	D_ALLOC_PTR(request);
+	if (!request) {
+		D_GOTO(out_no_request, ret = ENOMEM);
+	}
+
+	IOC_REQUEST_INIT(request, fs_handle);
+	IOC_REQUEST_RESET(request);
+
+	IOF_TRACE_UP(request, fs_handle, "rename");
+	IOF_TRACE_DEBUG(request, "renaming %s to %s", name, newname);
+
+	request->req = req;
+	request->ir_api = &api;
 
 	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, rename), &rpc);
-	if (rc || !rpc) {
+			    NULL,
+			    FS_TO_OP(fs_handle, rename), &request->rpc);
+	if (rc || !request->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",
 			      rc);
-		D_GOTO(err, ret = ENOMEM);
+		D_GOTO(out_err, ret = EIO);
 	}
 
-	in = crt_req_get(rpc);
+	in = crt_req_get(request->rpc);
 
 	strncpy(in->old_name.name, name, NAME_MAX);
 	strncpy(in->new_name.name, newname, NAME_MAX);
 	in->flags = flags;
 
-	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, parent, &in->old_gah);
-	if (rc != 0)
-		D_GOTO(err, ret = rc);
+	if (parent == 1) {
+		request->ir_ht = RHS_ROOT;
+	} else {
+		rc = find_inode(fs_handle, parent, &request->ir_inode);
+
+		if (rc != 0) {
+			D_GOTO(out_decref, ret = EIO);
+		}
+		request->ir_ht = RHS_INODE;
+	}
 
 	rc = find_gah(fs_handle, newparent, &in->new_gah);
 	if (rc != 0)
-		D_GOTO(err, ret = rc);
+		D_GOTO(out_decref, ret = rc);
 
-	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
-	if (rc) {
-		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
-		D_GOTO(err, ret = EIO);
+	crt_req_addref(request->rpc);
+
+	rc = iof_fs_send(request);
+	if (rc != 0) {
+		D_GOTO(out_decref, ret = EIO);
 	}
 
 	return;
 
-err:
-	IOF_FUSE_REPLY_ERR(req, ret);
+out_no_request:
+	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
+	return;
 
-	if (rpc)
-		crt_req_decref(rpc);
+out_decref:
+	crt_req_decref(request->rpc);
+
+out_err:
+	IOC_REPLY_ERR(request, ret);
+	D_FREE(request);
 }
