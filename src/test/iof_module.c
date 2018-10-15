@@ -44,7 +44,11 @@
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <stdio.h>
+#ifdef IOF_PYTHON_35
+#include <python3.5m/Python.h>
+#else
 #include <python3.4m/Python.h>
+#endif
 #include <dirent.h>
 
 #include <sys/stat.h>
