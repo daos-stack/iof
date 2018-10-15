@@ -98,6 +98,7 @@ class IofLogLine():
         self.pid = int(fields[2][5:-1])
         self._preamble = line[:idx]
         self.index = index
+        self.mask = fields[3]
         try:
             self.level = LOG_LEVELS[fields[4]]
         except KeyError:
@@ -140,11 +141,17 @@ class IofLogLine():
             if self._fields[2] == 'Link':
                 return self._fields[5]
         if attr == 'filename':
-            (filename, _) = self._fields[0].split(':')
-            return filename
-        if attr == 'lineno':
-            (_, lineno) = self._fields[0].split(':')
-            return int(lineno)
+            try:
+                (filename, _) = self._fields[0].split(':')
+                return filename
+            except ValueError:
+                pass
+        elif attr == 'lineno':
+            try:
+                (_, lineno) = self._fields[0].split(':')
+                return int(lineno)
+            except ValueError:
+                pass
         raise AttributeError
 
     def get_msg(self):

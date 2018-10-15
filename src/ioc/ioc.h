@@ -259,7 +259,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 /* Helper macros for open() and creat() to log file access modes */
 #define LOG_MODE(HANDLE, FLAGS, MODE) do {			\
 		if ((FLAGS) & (MODE))				\
-			IOF_LOG_DEBUG("%p " #MODE, HANDLE);	\
+			IOF_TRACE_DEBUG(HANDLE, #MODE);		\
 		FLAGS &= ~MODE;					\
 	} while (0)
 
@@ -292,7 +292,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		LOG_MODE((HANDLE), _flag, O_SYNC);			\
 		LOG_MODE((HANDLE), _flag, O_TRUNC);			\
 		if (_flag)						\
-			IOF_LOG_ERROR("%p Flags 0%o", (HANDLE), _flag);	\
+			IOF_TRACE_ERROR(HANDLE, "Flags 0%o", _flag);	\
 	} while (0)
 
 /** Dump the file mode to the logfile. */
@@ -303,7 +303,7 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		LOG_MODE((HANDLE), _flag, S_ISGID);			\
 		LOG_MODE((HANDLE), _flag, S_ISVTX);			\
 		if (_flag)						\
-			IOF_LOG_ERROR("%p Mode 0%o", (HANDLE), _flag);	\
+			IOF_TRACE_ERROR(HANDLE, "Mode 0%o", _flag);	\
 	} while (0)
 
 #define IOF_UNSUPPORTED_CREATE_FLAGS (O_ASYNC | O_CLOEXEC | O_DIRECTORY | \
