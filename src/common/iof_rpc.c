@@ -230,12 +230,11 @@ struct crt_msg_field *setattr_in[] = {
 };
 
 /*query RPC format*/
-struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT("psr_query", NULL,
-							 psr_out);
+struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT(NULL, psr_out);
 
 #define X(a, b, c)					\
 	static struct crt_req_format IOF_CRF_##a =	\
-		DEFINE_CRT_REQ_FMT(#a, b, c);
+		DEFINE_CRT_REQ_FMT(b, c);
 
 IOF_RPCS_LIST
 
