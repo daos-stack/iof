@@ -47,48 +47,6 @@ struct query_cb_r {
 	int err;
 };
 
-/* A generic callback for handling RPC replies from low-level FUSE RPCs.
- *
- * This can be used with RPCs where the reply type is either status_out
- * or if the reply type is NULL.
- */
-void
-ioc_ll_gen_cb(const struct crt_cb_info *cb_info)
-{
-	struct iof_status_out	*out = crt_reply_get(cb_info->cci_rpc);
-	fuse_req_t		req = cb_info->cci_arg;
-	int			ret;
-
-	/* Local node was out of memory */
-	if (cb_info->cci_rc == -DER_NOMEM)
-		D_GOTO(out_err, ret = ENOMEM);
-
-	/* Remote node was out of memory */
-	if (cb_info->cci_rc == -DER_DOS)
-		D_GOTO(out_err, ret = ENOMEM);
-
-	/* All other errors with the RPC */
-	if (cb_info->cci_rc != 0) {
-		IOF_TRACE_INFO(req, "cci_rc is %d", cb_info->cci_rc);
-		D_GOTO(out_err, ret = EIO);
-	}
-
-	if (out) {
-		if (out->err)
-			D_GOTO(out_err, ret = EIO);
-		if (out->rc)
-			D_GOTO(out_err, ret = out->rc);
-	}
-
-	if (req)
-		IOF_FUSE_REPLY_ZERO(req);
-	return;
-
-out_err:
-	if (req)
-		IOF_FUSE_REPLY_ERR(req, ret);
-}
-
 void ioc_gen_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out = crt_reply_get(request->rpc);

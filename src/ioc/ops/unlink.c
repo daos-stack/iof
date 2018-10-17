@@ -40,41 +40,59 @@
 #include "ioc.h"
 #include "log.h"
 
+static const struct ioc_request_api api = {
+	.on_result	= ioc_gen_cb,
+	.have_gah	= true,
+	.gah_offset	= offsetof(struct iof_unlink_in, gah),
+};
+
 static void
 ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 {
-	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_unlink_in *in;
-	crt_rpc_t *rpc = NULL;
+	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
+	struct ioc_request		*request;
+	struct iof_unlink_in		*in;
 	int rc;
-
 	int ret = EIO;
-
-	IOF_TRACE_UP(req, fs_handle, dir ? "rmdir" : "unlink");
 
 	STAT_ADD(fs_handle->stats, unlink);
 
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
+	if (!IOF_IS_WRITEABLE(fs_handle->flags))
+		D_GOTO(out_no_request, ret = EROFS);
+
+	D_ALLOC_PTR(request);
+	if (!request) {
+		D_GOTO(out_no_request, ret = ENOMEM);
 	}
 
-	if (!IOF_IS_WRITEABLE(fs_handle->flags)) {
-		IOF_LOG_INFO("Attempt to modify Read-Only File System");
-		ret = EROFS;
-		goto out_err;
-	}
+	IOC_REQUEST_INIT(request, fs_handle);
+	IOC_REQUEST_RESET(request);
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, unlink), &rpc);
-	if (rc || !rpc) {
+	IOF_TRACE_UP(request, fs_handle, dir ? "rmdir" : "unlink");
+	IOF_TRACE_INFO(request, "parent %lu name '%s'", parent, name);
+
+	request->req = req;
+	request->ir_api = &api;
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(fs_handle, unlink), &request->rpc);
+	if (rc || !request->rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+		D_GOTO(out_err, ret = EIO);
 	}
 
-	in = crt_req_get(rpc);
+	if (parent == 1) {
+		request->ir_ht = RHS_ROOT;
+	} else {
+		rc = find_inode(fs_handle, parent, &request->ir_inode);
+
+		if (rc != 0) {
+			D_GOTO(out_decref, ret = EIO);
+		}
+		request->ir_ht = RHS_INODE;
+	}
+
+	in = crt_req_get(request->rpc);
 	strncpy(in->name.name, name, NAME_MAX);
 	if (dir)
 		in->flags = 1;
@@ -82,21 +100,27 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 	/* Find the GAH of the parent */
 	rc = find_gah(fs_handle, parent, &in->gah);
 	if (rc != 0)
-		D_GOTO(out_err, ret = rc);
+		D_GOTO(out_decref, ret = rc);
 
-	rc = crt_req_send(rpc, ioc_ll_gen_cb, req);
-	if (rc) {
-		IOF_TRACE_ERROR(req, "Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+	crt_req_addref(request->rpc);
+
+	rc = iof_fs_send(request);
+	if (rc != 0) {
+		D_GOTO(out_decref, ret = EIO);
 	}
 
 	return;
-out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
 
-	if (rpc)
-		crt_req_decref(rpc);
+out_no_request:
+	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
+	return;
+
+out_decref:
+	crt_req_decref(request->rpc);
+
+out_err:
+	IOC_REPLY_ERR(request, ret);
+	D_FREE(request);
 }
 
 void

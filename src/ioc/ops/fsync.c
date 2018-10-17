@@ -97,7 +97,7 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 	rc = iof_fs_send(request);
 	if (rc != 0) {
-		D_GOTO(out_err, ret = EIO);
+		D_GOTO(out_decref, ret = EIO);
 	}
 
 	return;
@@ -105,6 +105,9 @@ ioc_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 out_no_request:
 	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
 	return;
+
+out_decref:
+	crt_req_decref(request->rpc);
 
 out_err:
 	IOC_REPLY_ERR(request, ret);
