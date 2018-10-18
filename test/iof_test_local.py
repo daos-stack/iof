@@ -406,25 +406,21 @@ class Testlocal(unittest.TestCase,
         o_rpctrace = rpctrace_common_methods.RpcTrace(cnss_logfile,
                                                       internals_log_file)
         cnss_pid = o_rpctrace.pids[0]
-        o_rpctrace.rpc_reporting()
+        o_rpctrace.rpc_reporting(cnss_pid)
 
         #Target RPC tracing for multiple IONSS instances
         rank_log = rpctrace_common_methods.RpcTrace(ionss_logfile,
                                                     internals_log_file)
-        for rank in range(self.ionss_count):
-            # rank will correlate to PID to trace in log
-            # (ie rank 0 will trace for the first PID found in the logs)
-            rank_log.rpc_reporting(rank)
+        for pid in rank_log.pids:
+            rank_log.rpc_reporting(pid)
 
         #Descriptor tracing for the CNSS
-        o_rpctrace.descriptor_rpc_trace(cnss_pid)
+        descriptor = o_rpctrace.descriptor_rpc_trace(cnss_pid)
 
-        missing_links = []
-        descriptor = o_rpctrace.descriptor_to_trace(cnss_pid)
         if descriptor is not None:
-            missing_links = o_rpctrace.rpc_trace_output(cnss_pid, descriptor)
-        if missing_links:
-            self.fail('Missing links for TRACE macros: %s' % missing_links)
+            missing_links = o_rpctrace.rpc_trace_output(descriptor)
+            if missing_links:
+                self.fail('Missing links for TRACE macros: %s' % missing_links)
 
         internals_log_file.close()
 

@@ -61,9 +61,6 @@ class RpcTrace(common_methods.ColorizedOutput):
     Descriptor = handle/iof_pol_type/iof_pool/iof_projection_info/iof_state/
     cnss_plugin/plugin_entry/cnss_info"""
 
-    #dictionary maps descriptor to descriptor type and parent
-    desc_dict = {}
-
     ALLOC_STATE = 'ALLOCATED'
     DEALLOC_STATE = 'DEALLOCATED'
     SUBMIT_STATE = 'SUBMITTED'
@@ -95,29 +92,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         #(ie index 0 will be assigned the first PID found in logs)
 
         self.lf = iof_cart_logparse.IofLogIter(self.input_file)
-        self.desc_table = None
-        self.desc_table_pid = None
-        self._to_trace = None
-        self._to_trace_fuse = None
         self.pids = self.lf.get_pids()
-
-    def rpc_reporting(self, index_multiprocess=None):
-        """RPC reporting for RPC state machine"""
-
-        pids = self.lf.get_pids()
-
-        if index_multiprocess is not None:
-            #index_multiprocess is None if there is only one process being
-            #traced, otherwise first index should start at 0
-            pid_to_trace = pids[index_multiprocess]
-            self._rpc_reporting_pid(pid_to_trace)
-            return
-
-        if len(pids) != 1:
-            self.error_output("Multiprocess log file")
-            return
-
-        self._rpc_reporting_pid(pids[0])
 
     def _rpc_error_state_tracing(self, rpc_dict, rpc, rpc_state):
         """Error checking for rpc state"""
@@ -144,7 +119,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             rpc_dict[rpc] = rpc_state
         return (status, message)
 
-    def _rpc_reporting_pid(self, pid_to_trace):
+    def rpc_reporting(self, pid):
         """RPC reporting for RPC state machine, for mutiprocesses"""
         rpc_dict = {}
         op_state_counters = {}
@@ -156,11 +131,11 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         self.normal_output('CaRT RPC Reporting:\nLogfile: {}, '
                            'PID: {}\n'.format(self.input_file,
-                                              pid_to_trace))
+                                              pid))
 
         output_table = []
 
-        for line in self.lf.new_iter(pid=pid_to_trace):
+        for line in self.lf.new_iter(pid=pid):
             rpc_state = None
             opcode = None
             rpc = None
@@ -321,7 +296,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             if line.is_link():
                 state = 'Linked'
                 if desc in desc_state:
-                    msg = 'Bad link'
+                    msg = 'Already linked'
                 else:
                     is_error = False
                 desc_state[desc] = state
@@ -339,7 +314,8 @@ class RpcTrace(common_methods.ColorizedOutput):
                     msg = desc_state[desc]
                 if desc in linked:
                     for child in linked[desc]:
-                        del desc_state[child]
+                        if child in desc_state:
+                            del desc_state[child]
                     del linked[desc]
             else:
                 continue
@@ -381,11 +357,17 @@ class RpcTrace(common_methods.ColorizedOutput):
         """Parses twice thru log to create a hierarchy of descriptors and also
            a dict storing all RPCs tied to a descriptor"""
 
-        self.desc_table = OrderedDict()
-        self.desc_table_pid = pid
-        self.desc_dict = {}
+        # Dictionary, time ordered containing a mapping of descriptors, and a
+        # array of (pointer, type) RPC entries for each descriptor.
+        desc_table = OrderedDict()
+        desc_dict = {}
         self.normal_output('IOF Descriptor/RPC Tracing:\n'
                            'Logfile: {}'.format(self.input_file))
+
+        # Indexed by pub.
+        rpc_table = {}
+
+        rpc_pub2priv = {}
 
         self._descriptor_error_state_tracing(pid)
 
@@ -394,38 +376,60 @@ class RpcTrace(common_methods.ColorizedOutput):
         to_trace_fuse = None
 
         line = None
-        for line in self.lf.new_iter(pid=pid, trace_only=True, stateful=True):
+        for line in self.lf.new_iter(pid=pid, stateful=True):
 
-            if not to_trace and \
+            # Make a note of the first descriptor with a warning message
+            # so this can be selected later for tracing.
+            if line.trace and not to_trace and \
                (line.level <= iof_cart_logparse.LOG_LEVELS['WARN']):
                 to_trace = line.pdesc
 
             if line.is_new():
 
+                # Make a note of the first fuse descriptor encountered to be
+                # traced if there are no warning messages in the file.
                 if not to_trace and \
-                   not to_trace_fuse and fuse_file in line.filename:
+                   not to_trace_fuse and line.filename.startswith(fuse_file):
                     to_trace_fuse = line.pdesc
 
                 obj_type = line.get_field(-3)[1:-1]
 
-                self.desc_table[line.pdesc] = (obj_type, line.pparent)
-                self.desc_dict[line.pdesc] = []
+                desc_table[line.pdesc] = (obj_type, line.pparent)
+                desc_dict[line.pdesc] = []
 
-            if not line.is_link():
-                continue
+            elif line.is_link():
+                # register RPCs tied to given handle
+                # Link lines are a little odd in the log file in that they are
+                # the wrong way round, line.parent is the descriptor and
+                # line.descriptor is the new RPC.
 
-            # register RPCs tied to given handle
-            # Link lines are a little odd in the log file in that they are
-            # the wrong way round, line.parent is the descriptor and
-            # line.descriptor is the new RPC.
+                desc = line.pparent
 
-            desc = line.pparent
+                if desc in desc_dict:
+                    if line.pdesc in rpc_pub2priv:
+                        rpc = rpc_pub2priv[line.pdesc]
+                    else:
+                        rpc = line.pdesc
+                    desc_dict[desc].append((rpc,
+                                            line.get_field(-3)[1:-1]))
+                else:
+                    self.error_output('Descriptor {} is not present'.\
+                                      format(desc))
 
-            if desc in self.desc_dict:
-                self.desc_dict[desc].append((line.pdesc,
-                                             line.get_field(-3)[1:-1]))
-            else:
-                self.error_output('Descriptor {} is not present'.format(desc))
+            elif line.endswith('allocated.'):
+                rpc = line.get_field(3)
+                # This next line depends a output format change to CaRT
+                # logging.
+                if line.get_field(6) == 'rpc_pub':
+                    rpc_pub = line.get_field(7).rstrip('),')
+                    rpc_pub2priv[rpc_pub] = rpc
+                    rpc_table[rpc] = {'pub' : rpc_pub}
+            elif line.endswith('), decref to 0.'):
+                rpc = line.get_field(3)
+                if rpc in rpc_table:
+                    rpc_pub = rpc_table[rpc]['pub']
+                    del rpc_table[rpc]
+                    del rpc_pub2priv[rpc_pub]
 
         # Check for ticket 884.  This happens occasionally in testing but we do
         # not have a reliable reproducer, so detect if it happens and log about
@@ -433,24 +437,38 @@ class RpcTrace(common_methods.ColorizedOutput):
         if line and line.function == 'ioc_fuse_destroy':
             common_methods.show_bug(line, 'IOF-884')
 
-        self._to_trace = to_trace
-        self._to_trace_fuse = to_trace_fuse
+        if not to_trace and not to_trace_fuse:
+            return None
 
-    def _rpc_trace_output_hierarchy(self, descriptor):
-        """Prints full TRACE hierarchy for a given descriptor"""
-        output = []
-        #append all descriptors/rpcs in hierarchy for log dump
-        traces_for_log_dump = []
+        return {'to_trace': to_trace,
+                'to_trace_fuse': to_trace_fuse,
+                'desc_table' : desc_table,
+                'desc_dict' : desc_dict,
+                'pid': pid}
+
+    def _rpc_trace_output_logdump(self, t_desc):
+        """Prints all log messages relating to the given descriptor or any
+           pointer in the descriptor's hierarchy"""
+
+        pid = t_desc['pid']
+        desc_table = t_desc['desc_table']
+        desc_dict = t_desc['desc_dict']
+        if t_desc['to_trace']:
+            descriptor = t_desc['to_trace']
+        else:
+            descriptor = t_desc['to_trace_fuse']
 
         trace = descriptor
         #append an extra line
+        output = []
+        traces_for_log_dump = []
         output.append('')
         try:
             while trace != "root":
                 traces_for_log_dump.append(trace)
-                (trace_type, parent) = self.desc_table[trace]
+                (trace_type, parent) = desc_table[trace]
                 output.append('{}: {}'.format(trace_type, trace))
-                for (desc, name) in self.desc_dict[trace]:
+                for (desc, name) in desc_dict[trace]:
                     traces_for_log_dump.append(desc)
                     output.append('\t{} {}'.format(name, desc))
                 trace = parent
@@ -467,20 +485,14 @@ class RpcTrace(common_methods.ColorizedOutput):
             output.insert(0, '\nDescriptor Hierarchy ({}):'.format(descriptor))
             self.list_output(output)
 
-        return traces_for_log_dump
-
-    def _rpc_trace_output_logdump(self, pid, descriptor):
-        """Prints all log messages relating to the given descriptor or any
-           pointer in the descriptor's hierarchy"""
-
-        descriptors = self._rpc_trace_output_hierarchy(descriptor)
-
         self.log_output('\nLog dump for descriptor hierarchy ({}):'\
-                        .format(descriptors[0]))
+                        .format(traces_for_log_dump[0]))
 
         for line in self.lf.new_iter(pid=pid, raw=True, stateful=True):
 
-            if line.trace and line.pdesc in descriptors:
+            if line.trace and line.pdesc in traces_for_log_dump:
+                self.log_output(line.to_str(mark=True))
+            elif line.is_link() and line.pparent in traces_for_log_dump:
                 self.log_output(line.to_str(mark=True))
             elif self.VERBOSE_LOG:
                 # Only show INFO and below if the descriptor is not marked for
@@ -488,22 +500,31 @@ class RpcTrace(common_methods.ColorizedOutput):
                 if line.level < iof_cart_logparse.LOG_LEVELS['DBUG']:
                     self.log_output(line.to_str())
 
-    def rpc_trace_output(self, pid, descriptor):
+    def rpc_trace_output(self, t_desc):
         """Dumps all RPCs tied to a descriptor, descriptor hierarchy, and all
            log messages related to descriptor"""
         missing_links = []
         output_table = []
 
-        for key in self.desc_table:
-            (stype, par) = self.desc_table[key]
+        desc_table = t_desc['desc_table']
+        desc_dict = t_desc['desc_dict']
+        if t_desc['to_trace']:
+            descriptor = t_desc['to_trace']
+            self.normal_output('Tracing descriptor {} with error/warning'. \
+                               format(descriptor))
+        else:
+            descriptor = t_desc['to_trace_fuse']
+
+        for key in desc_table:
+            (stype, par) = desc_table[key]
 
             rpcs = []
-            if key in self.desc_dict:
-                for i in self.desc_dict[key]:
+            if key in desc_dict:
+                for i in desc_dict[key]:
                     rpcs.append('{} {}'.format(i[0], i[1]))
 
-            if par in self.desc_table:
-                (par_type, _) = self.desc_table[par]
+            if par in desc_table:
+                (par_type, _) = desc_table[par]
                 parent_string = "{} {}".format(par, par_type)
             elif par == 'root':
                 parent_string = par
@@ -525,25 +546,6 @@ class RpcTrace(common_methods.ColorizedOutput):
                                    'Parent'])
 
         #Log dump for descriptor hierarchy
-        self._rpc_trace_output_logdump(pid, descriptor)
+        self._rpc_trace_output_logdump(t_desc)
 
         return missing_links
-
-    def descriptor_to_trace(self, pid):
-        """Find the file handle to use for descriptor tracing:
-        if an error or warning is found in trace logs, use that descriptor,
-        otherwise use first fuse op instance in logs"""
-
-        if self.desc_table_pid != pid:
-            raise Exception("Invalid PID")
-
-        if self._to_trace:
-            self.normal_output('Tracing descriptor {} with error/warning'. \
-                               format(self._to_trace))
-            return self._to_trace
-
-        if self._to_trace_fuse:
-            return self._to_trace_fuse
-
-        self.error_output('Descriptor not found to trace')
-        return None
