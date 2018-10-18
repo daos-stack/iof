@@ -393,6 +393,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         to_trace = None
         to_trace_fuse = None
 
+        line = None
         for line in self.lf.new_iter(pid=pid, trace_only=True, stateful=True):
 
             if not to_trace and \
@@ -425,6 +426,12 @@ class RpcTrace(common_methods.ColorizedOutput):
                                              line.get_field(-3)[1:-1]))
             else:
                 self.error_output('Descriptor {} is not present'.format(desc))
+
+        # Check for ticket 884.  This happens occasionally in testing but we do
+        # not have a reliable reproducer, so detect if it happens and log about
+        # it.
+        if line and line.function == 'ioc_fuse_destroy':
+            common_methods.show_bug(line, 'IOF-884')
 
         self._to_trace = to_trace
         self._to_trace_fuse = to_trace_fuse

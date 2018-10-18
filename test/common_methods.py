@@ -75,6 +75,29 @@ try:
 except ImportError:
     COLORAMA = False
 
+# Use a global variable here so show_line can remember previously reported
+# error lines.
+shown_logs = set()
+
+def show_line(line, sev, msg):
+    """Output a log line in gcc error format"""
+
+    # Only report each individual line once.
+
+    log = "{}:{}:1: {}: {} '{}'".format(line.filename,
+                                        line.lineno,
+                                        sev,
+                                        msg,
+                                        line.get_anon_msg())
+    if log in shown_logs:
+        return
+    print(log)
+    shown_logs.add(log)
+
+def show_bug(line, bug_id):
+    """Mark output with a known bug"""
+    show_line(line, 'error', 'Known bug {}'.format(bug_id))
+
 def import_list():
     """Return a array of imports
 
