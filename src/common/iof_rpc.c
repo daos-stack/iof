@@ -173,6 +173,7 @@ struct crt_msg_field *readdir_out[] = {
 struct crt_msg_field *psr_out[] = {
 	&CMF_IOVEC,
 	&CMF_UINT32,
+	&CMF_UINT32,
 	&CMF_BOOL,
 };
 

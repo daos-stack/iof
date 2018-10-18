@@ -2070,7 +2070,9 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
-	ret = crt_context_set_timeout(fs_handle->proj.crt_ctx, 5);
+	IOF_TRACE_DEBUG(fs_handle, "Setting timeout to %d", fs_info->timeout);
+
+	ret = crt_context_set_timeout(fs_handle->proj.crt_ctx, fs_info->timeout);
 	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(iof_state, "Context timeout not set");
 		D_GOTO(err, 0);
@@ -2265,8 +2267,9 @@ query_projections(struct iof_state *iof_state,
 	iof_state->iof_ctx.poll_interval = query->poll_interval;
 	iof_state->iof_ctx.callback_fn = query->progress_callback ?
 					 iof_check_complete : NULL;
-	IOF_TRACE_INFO(iof_state, "Poll Interval: %u microseconds; "
-				  "Progress Callback: %s", query->poll_interval,
+	IOF_TRACE_INFO(iof_state,
+		       "Poll Interval: %u microseconds; Progress Callback: %s",
+		       query->poll_interval,
 		       query->progress_callback ? "Enabled" : "Disabled");
 
 	if (query->count != query->query_list.iov_len / sizeof(struct iof_fs_info)) {
