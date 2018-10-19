@@ -217,10 +217,34 @@ class IofLogLine():
 
         return self._is_type(['Deregistered'])
 
+    def is_new_rpc(self):
+        """Returns True if line is new rpc"""
+
+        if not self.trace:
+            return False
+
+        if self._fields[-1] == 'allocated.':
+            return True
+
+        if self._fields[-1] == 'received.' and self._fields[-5] == 'allocated':
+            return True
+
+        return False
+
+    def is_dereg_rpc(self):
+        """Returns true if line is a rpc deregister"""
+
+        if not self.trace:
+            return False
+        if self.function != 'crt_hg_req_destroy':
+            return False
+
+        return self._is_type(['destroying'])
+
     def is_callback(self):
         """Returns true if line is RPC callback"""
 
-        return self._is_type(['Invoking', 'RPC', 'callback'], trace=False)
+        return self._is_type(['Invoking', 'RPC', 'callback'])
 
     def is_link(self):
         """Returns True if line is Link descriptor"""

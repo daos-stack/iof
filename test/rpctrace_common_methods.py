@@ -138,25 +138,23 @@ class RpcTrace(common_methods.ColorizedOutput):
         for line in self.lf.new_iter(pid=pid):
             rpc_state = None
             opcode = None
-            rpc = None
 
-            if line.endswith('allocated.') or \
-               line.endswith('allocated per RPC request received.'):
+            if line.is_new_rpc():
                 rpc_state = self.ALLOC_STATE
-                opcode = line.get_field(5)[:-2]
-            elif line.endswith('), decref to 0.'):
+                opcode = line.get_field(3)
+            elif line.is_dereg_rpc():
                 rpc_state = self.DEALLOC_STATE
             elif line.endswith('submitted.'):
                 rpc_state = self.SUBMIT_STATE
             elif line.endswith(' sent.'):
                 rpc_state = self.SENT_STATE
             elif line.is_callback():
-                rpc = line.get_field(6)
+                rpc = line.descriptor
                 rpc_state = self.COMPLETED_STATE
                 result = line.get_field(-1).rstrip('.')
                 result = C_ERRNOS.get(int(result), result)
                 c_state_names.add(result)
-                opcode = current_opcodes[rpc]
+                opcode = current_opcodes[line.descriptor]
                 try:
                     c_states[opcode][result] += 1
                 except KeyError:
@@ -168,8 +166,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             else:
                 continue
 
-            if not rpc:
-                rpc = line.get_field(3)
+            rpc = line.descriptor
 
             if rpc_state == self.ALLOC_STATE:
                 current_opcodes[rpc] = opcode
@@ -416,16 +413,16 @@ class RpcTrace(common_methods.ColorizedOutput):
                     self.error_output('Descriptor {} is not present'.\
                                       format(desc))
 
-            elif line.endswith('allocated.'):
-                rpc = line.get_field(3)
+            elif line.is_new_rpc():
+                rpc = line.descriptor
                 # This next line depends a output format change to CaRT
                 # logging.
-                if line.get_field(6) == 'rpc_pub':
-                    rpc_pub = line.get_field(7).rstrip('),')
+                if line.get_field(4) == 'rpc_pub:':
+                    rpc_pub = line.get_field(5).rstrip(')')
                     rpc_pub2priv[rpc_pub] = rpc
                     rpc_table[rpc] = {'pub' : rpc_pub}
-            elif line.endswith('), decref to 0.'):
-                rpc = line.get_field(3)
+            elif line.is_dereg_rpc():
+                rpc = line.descriptor
                 if rpc in rpc_table:
                     rpc_pub = rpc_table[rpc]['pub']
                     del rpc_table[rpc]

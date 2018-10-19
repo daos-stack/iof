@@ -508,8 +508,13 @@ class Testlocal(unittest.TestCase,
     def _check_pid_from_log_file(self, cl, pid):
         """Check a pid from a single log file for consistency"""
 
-        active_desc = {}
+        # Dict of active descriptors.
+        active_desc = OrderedDict()
         active_desc['root'] = None
+
+        # Dict of active RPCs
+        active_rpcs = OrderedDict()
+
         err_count = 0
 
         regions = OrderedDict()
@@ -558,21 +563,33 @@ class Testlocal(unittest.TestCase,
                         show_line(line, 'error', 'add with bad parent')
                         err_count += 1
                     active_desc[desc] = line
-                if line.is_link():
+                elif line.is_link():
                     parent = line.parent
                     if parent not in active_desc:
                         show_line(line, 'error', 'link with bad parent')
                         err_count += 1
                     desc = parent
+                elif line.is_new_rpc():
+                    active_rpcs[line.descriptor] = line
                 if line.is_dereg():
                     if desc in active_desc:
                         del active_desc[desc]
                     else:
-                        show_line(line, 'error', 'invalid remove')
+                        show_line(line, 'error', 'invalid desc remove')
+                        err_count += 1
+                elif line.is_dereg_rpc():
+                    if desc in active_rpcs:
+                        del active_rpcs[desc]
+                    else:
+                        show_line(line, 'error', 'invalid rpc remove')
                         err_count += 1
                 else:
                     if desc not in active_desc and \
+                       desc not in active_rpcs and \
                        have_debug and line.filename not in error_files_ok:
+
+                        # There's something about this particular function
+                        # that makes it very slow at logging output.
                         show_line(line, 'error', 'inactive desc')
                         error_files.add(line.filename)
                         err_count += 1
@@ -626,6 +643,10 @@ class Testlocal(unittest.TestCase,
             for (_, line) in active_desc.items():
                 show_line(line, 'error', 'desc not deregistered')
             raise Exception('Active descriptors at end of log file')
+
+        if active_rpcs:
+            for (_, line) in active_rpcs.items():
+                show_line(line, 'error', 'rpc not deregistered')
         if error_files or err_count:
             raise Exception('Errors detected in log file')
         if lost_memory:
