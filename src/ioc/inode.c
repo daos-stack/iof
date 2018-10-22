@@ -148,12 +148,14 @@ drop_ino_ref(struct iof_projection_info *fs_handle, ino_t ino)
 	d_hash_rec_ndecref(&fs_handle->inode_ht, 2, rlink);
 }
 
-static void ie_close_cb(struct ioc_request *request)
+static bool
+ie_close_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*desc = CONTAINER(request);
 
 	IOF_TRACE_DOWN(request);
 	iof_pool_release(desc->request.fsh->close_pool, desc);
+	return false;
 }
 
 static const struct ioc_request_api api = {
@@ -189,6 +191,8 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 
 	d_list_del_init(&ie->ie_ie_list);
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
+
+	drop_ino_ref(fs_handle, ie->parent);
 
 	if (!H_GAH_IS_VALID(ie))
 		D_GOTO(out, 0);

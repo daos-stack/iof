@@ -40,7 +40,7 @@
 #include "ioc.h"
 #include "log.h"
 
-static void
+static bool
 statfs_cb(struct ioc_request *request)
 {
 	struct iof_data_out *out = crt_reply_get(request->rpc);
@@ -57,11 +57,12 @@ statfs_cb(struct ioc_request *request)
 
 	IOF_FUSE_REPLY_STATFS(request, out->data.iov_buf);
 	D_FREE(request);
-	return;
+	return false;
 
 out_err:
 	IOC_REPLY_ERR(request, request->rc);
 	D_FREE(request);
+	return false;
 }
 
 static const struct ioc_request_api api = {

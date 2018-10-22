@@ -557,7 +557,9 @@ class Testlocal(unittest.TestCase,
                 desc = line.descriptor
                 if line.is_new():
                     if desc in active_desc:
-                        show_line(line, 'error', 'invalid add')
+                        show_line(line, 'error', 'already exists')
+                        show_line(active_desc[desc], 'error',
+                                  'not deregistered')
                         err_count += 1
                     if line.parent not in active_desc:
                         show_line(line, 'error', 'add with bad parent')

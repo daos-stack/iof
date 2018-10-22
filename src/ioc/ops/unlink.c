@@ -81,16 +81,8 @@ ioc_ll_remove(fuse_req_t req, fuse_ino_t parent, const char *name, bool dir)
 		D_GOTO(out_err, ret = EIO);
 	}
 
-	if (parent == 1) {
-		request->ir_ht = RHS_ROOT;
-	} else {
-		rc = find_inode(fs_handle, parent, &request->ir_inode);
-
-		if (rc != 0) {
-			D_GOTO(out_decref, ret = EIO);
-		}
-		request->ir_ht = RHS_INODE;
-	}
+	request->ir_inode_num = parent;
+	request->ir_ht = RHS_INODE_NUM;
 
 	in = crt_req_get(request->rpc);
 	strncpy(in->name.name, name, NAME_MAX);

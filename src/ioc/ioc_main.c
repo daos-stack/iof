@@ -42,12 +42,16 @@
 #include "iof_ioctl.h"
 #include "iof_pool.h"
 
+int
+iof_fs_resend(struct ioc_request *request);
+
 struct query_cb_r {
 	struct iof_tracker tracker;
 	int err;
 };
 
-void ioc_gen_cb(struct ioc_request *request)
+bool
+ioc_gen_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out = crt_reply_get(request->rpc);
 
@@ -65,6 +69,7 @@ out:
 	crt_req_decref(request->rpc);
 
 	D_FREE(request);
+	return false;
 }
 
 int ioc_simple_resend(struct ioc_request *request)
@@ -95,9 +100,9 @@ int ioc_simple_resend(struct ioc_request *request)
 	crt_req_decref(request->rpc);
 	crt_req_decref(request->rpc);
 	request->rpc = resend_rpc;
-	/* Second addref is called in iof_fs_send */
+	/* Second addref is called in iof_fs_resend */
 	crt_req_addref(request->rpc);
-	return iof_fs_send(request);
+	return iof_fs_resend(request);
 }
 
 static void ih_addref(struct d_hash_table *htable, d_list_t *rlink);
@@ -194,11 +199,11 @@ static void mark_fh_inode(struct iof_file_handle *fh)
 	d_list_t *rlink;
 
 	rlink = d_hash_rec_find(&fh->open_req.fsh->inode_ht,
-				&fh->inode_no, sizeof(fh->inode_no));
+				&fh->inode_num, sizeof(fh->inode_num));
 
 	if (!rlink) {
 		IOF_TRACE_WARNING(fh,
-				  "Unable to find inode %lu", fh->inode_no);
+				  "Unable to find inode %lu", fh->inode_num);
 		return;
 	}
 	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
@@ -222,11 +227,11 @@ static void mark_dh_inode(struct iof_dir_handle *dh)
 	d_list_t *rlink;
 
 	rlink = d_hash_rec_find(&dh->open_req.fsh->inode_ht,
-				&dh->inode_no, sizeof(dh->inode_no));
+				&dh->inode_num, sizeof(dh->inode_num));
 
 	if (!rlink) {
 		IOF_TRACE_WARNING(dh->open_req.fsh,
-				  "Unable to find inode %lu", dh->inode_no);
+				  "Unable to find inode %lu", dh->inode_num);
 		return;
 	}
 	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
@@ -246,6 +251,29 @@ static void gah_addref(struct iof_projection_info *fs_handle)
 	oldref = atomic_fetch_add(&fs_handle->p_gah_update_count, 1);
 
 	IOF_TRACE_DEBUG(fs_handle, "addref to %u", oldref + 1);
+}
+
+/* Safely call the on_result callback for a request
+ * Note that the on_request() callback may free request so take a copy
+ * of ir_ht and ir_inode before invoking the callback, so the inode
+ * reference can be dropped without accessing request.
+ */
+static void
+request_on_result(struct ioc_request *request)
+{
+	struct iof_projection_info	*fsh = request->fsh;
+	struct ioc_inode_entry		*ir_inode = NULL;
+	bool				keep_ref;
+
+	if (request->ir_ht == RHS_INODE) {
+		ir_inode = request->ir_inode;
+	}
+
+	keep_ref = request->ir_api->on_result(request);
+
+	if (ir_inode && !keep_ref) {
+		d_hash_rec_decref(&fsh->inode_ht, &ir_inode->ie_htl);
+	}
 }
 
 /* Remove a reference to the GAH counter, and if it drops to zero
@@ -320,8 +348,7 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 		rc = ioc_simple_resend(request);
 		if (rc != 0) {
 			request->rc = rc;
-			if (request->ir_api->on_result)
-				request->ir_api->on_result(request);
+			request_on_result(request);
 		}
 	}
 	D_MUTEX_UNLOCK(&fs_handle->p_request_lock);
@@ -464,7 +491,7 @@ static void inode_check(struct iof_projection_info *fs_handle)
 	d_list_for_each_entry(fh, &fs_handle->openfile_list, fh_of_list) {
 		IOF_TRACE_INFO(fs_handle,
 			       "Inspecting file " GAH_PRINT_STR " %lu %p",
-			       GAH_PRINT_VAL(fh->common.gah), fh->inode_no,
+			       GAH_PRINT_VAL(fh->common.gah), fh->inode_num,
 			       fh->ie);
 		mark_fh_inode(fh);
 	}
@@ -516,7 +543,7 @@ set_all_offline(struct iof_state *iof_state, int reason, bool unlock)
  * This is called after failover when the re-register RPC completes.
  *
  * TODO: Pause all on-going filesystem activity after failover until
- * this function is called.  This would require generic_cb() and iof_fs_send()
+ * this function is called.  This would require generic_cb() and iof_fs_resend()
  * putting requests on pending lists rather than immediately sending them onto
  * the network, however it will be required to handle the multiple-failure
  * case.
@@ -810,8 +837,7 @@ static void generic_cb(const struct crt_cb_info *cb_info)
 	return;
 
 done:
-	if (request->ir_api->on_result)
-		request->ir_api->on_result(request);
+	request_on_result(request);
 }
 
 /*
@@ -823,12 +849,51 @@ done:
  * and load balance, at the same time preventing code duplication.
  *
  */
-int iof_fs_send(struct ioc_request *request)
+int
+iof_fs_send(struct ioc_request *request)
+{
+	struct iof_projection_info *fs_handle = request->fsh;
+	int rc;
+
+	D_ASSERT(request->ir_api->on_result);
+	/* If the API has passed in a simple inode number then translate it
+	 * to either root, or do a hash table lookup on the inode number.
+	 * Keep a reference on the inode open which will be dropped after
+	 * a call to on_result().
+	 */
+	if (request->ir_ht == RHS_INODE_NUM) {
+		fuse_ino_t req = request->ir_inode_num;
+
+		D_ASSERT(request->ir_api->have_gah);
+
+		if (req == 1) {
+			request->ir_ht = RHS_ROOT;
+		} else {
+			rc = find_inode(fs_handle, req, &request->ir_inode);
+			if (rc != 0) {
+				D_GOTO(err, 0);
+			}
+			request->ir_ht = RHS_INODE;
+		}
+	}
+	rc = iof_fs_resend(request);
+	if (rc) {
+		D_GOTO(err, 0);
+	}
+	return 0;
+err:
+	IOF_TRACE_ERROR(request, "Could not send rpc, rc = %d", rc);
+
+	return rc;
+}
+
+int
+iof_fs_resend(struct ioc_request *request)
 {
 	struct iof_projection_info *fs_handle = request->fsh;
 	crt_endpoint_t ep;
-	int rc;
 	int ret;
+	int rc;
 
 	if (request->ir_api->have_gah) {
 		void *in = crt_req_get(request->rpc);
@@ -1122,8 +1187,6 @@ static void ih_free(struct d_hash_table *htable, d_list_t *rlink)
 	ie = container_of(rlink, struct ioc_inode_entry, ie_htl);
 
 	IOF_TRACE_DEBUG(ie, "%lu", ie->parent);
-	if (ie->parent)
-		drop_ino_ref(fs_handle, ie->parent);
 	ie_close(fs_handle, ie);
 	D_FREE(ie);
 }
@@ -1200,6 +1263,7 @@ dh_reset(void *arg)
 	IOC_REQUEST_RESET(&dh->open_req);
 	IOC_REQUEST_RESET(&dh->close_req);
 
+	dh->open_req.ir_ht = RHS_INODE_NUM;
 	dh->close_req.ir_ht = RHS_DIR;
 	dh->close_req.ir_dir = dh;
 
@@ -1241,12 +1305,12 @@ fh_reset(void *arg)
 	IOC_REQUEST_RESET(&fh->open_req);
 	CHECK_AND_RESET_RRPC(fh, open_req);
 
-	fh->open_req.ir_ht = RHS_INODE;
+	fh->open_req.ir_ht = RHS_INODE_NUM;
 
 	IOC_REQUEST_RESET(&fh->creat_req);
 	CHECK_AND_RESET_RRPC(fh, creat_req);
 
-	fh->creat_req.ir_ht = RHS_NONE;
+	fh->creat_req.ir_ht = RHS_INODE_NUM;
 
 	IOC_REQUEST_RESET(&fh->release_req);
 	CHECK_AND_RESET_RRPC(fh, release_req);
@@ -1378,6 +1442,7 @@ entry_reset(void *arg)
 	IOC_REQUEST_RESET(&req->request);
 	CHECK_AND_RESET_RRPC(req, request);
 
+	req->request.ir_ht = RHS_INODE_NUM;
 	/* Free any destination string on this descriptor.  This is only used
 	 * for symlink to store the link target whilst the RPC is being sent
 	 */

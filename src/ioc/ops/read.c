@@ -41,7 +41,7 @@
 #include "log.h"
 #include "ios_gah.h"
 
-static void
+static bool
 read_bulk_cb(struct ioc_request *request)
 {
 	struct iof_rb *rb = container_of(request, struct iof_rb, rb_req);
@@ -104,6 +104,7 @@ out:
 		}
 	}
 	iof_pool_release(rb->pt, rb);
+	return false;
 }
 
 static const struct ioc_request_api api = {

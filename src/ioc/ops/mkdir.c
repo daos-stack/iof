@@ -46,7 +46,9 @@
 #include "ioc_ops.h"
 
 static const struct ioc_request_api api = {
+	.gah_offset	= offsetof(struct iof_create_in, common.gah),
 	.on_result	= iof_entry_cb,
+	.have_gah	= true,
 };
 
 #define STAT_KEY mkdir
@@ -71,16 +73,16 @@ ioc_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name, mode_t mode)
 	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;
 
-	/* Find the GAH of the parent */
-	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
-	if (rc != 0)
-		D_GOTO(err, 0);
+	desc->request.ir_inode_num = parent;
+
 	rc = iof_fs_send(&desc->request);
 	if (rc != 0)
 		D_GOTO(err, 0);
 	return;
 err:
 	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
-	if (desc)
+	if (desc) {
+		IOF_TRACE_DOWN(&desc->request);
 		iof_pool_release(fs_handle->mkdir_pool, desc);
+	}
 }

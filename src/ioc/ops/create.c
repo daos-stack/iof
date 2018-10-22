@@ -41,7 +41,7 @@
 #include "log.h"
 #include "ios_gah.h"
 
-static void
+static bool
 ioc_create_ll_cb(struct ioc_request *request)
 {
 	struct iof_file_handle		*handle = container_of(request, struct iof_file_handle, creat_req);
@@ -49,7 +49,8 @@ ioc_create_ll_cb(struct ioc_request *request)
 	struct iof_create_out		*out = crt_reply_get(request->rpc);
 	struct fuse_file_info		fi = {0};
 	struct fuse_entry_param		entry = {0};
-	d_list_t	*rlink;
+	d_list_t			*rlink;
+	bool				keep_ref = false;
 
 	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
 			request->rc, out->rc, out->err);
@@ -70,7 +71,7 @@ ioc_create_ll_cb(struct ioc_request *request)
 	fi.fh = (uint64_t)handle;
 	handle->common.gah = out->gah;
 	H_GAH_SET_VALID(handle);
-	handle->inode_no = entry.ino;
+	handle->inode_num = entry.ino;
 	handle->common.ep = request->rpc->cr_ep;
 
 	D_MUTEX_LOCK(&fs_handle->of_lock);
@@ -93,9 +94,11 @@ ioc_create_ll_cb(struct ioc_request *request)
 				       &handle->ie->ie_htl);
 
 	if (rlink == &handle->ie->ie_htl) {
-		handle->ie = NULL;
-		IOF_TRACE_INFO(handle, "New file %lu " GAH_PRINT_STR,
+		IOF_TRACE_INFO(handle->ie, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
+
+		handle->ie = NULL;
+		keep_ref = true;
 	} else {
 		/* This is an interesting, but not impossible case, although it
 		 * could also represent a problem.
@@ -115,22 +118,22 @@ ioc_create_ll_cb(struct ioc_request *request)
 		IOF_TRACE_INFO(request, "Existing file rlink %p %lu "
 			       GAH_PRINT_STR, rlink, entry.ino,
 			       GAH_PRINT_VAL(out->gah));
-		drop_ino_ref(fs_handle, handle->ie->parent);
 		ie_close(fs_handle, handle->ie);
 	}
 
 	IOC_REPLY_CREATE(request, entry, fi);
-	return;
+	return keep_ref;
 
 out_err:
 	IOC_REPLY_ERR(request, request->rc);
-	drop_ino_ref(fs_handle, handle->ie->parent);
 	iof_pool_release(fs_handle->fh_pool, handle);
+	return false;
 }
 
 static const struct ioc_request_api api = {
 	.on_result = ioc_create_ll_cb,
 	.gah_offset = offsetof(struct iof_create_in, common.gah),
+	.have_gah = true,
 };
 
 void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
@@ -191,10 +194,7 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 	in = crt_req_get(handle->creat_req.rpc);
 
-	/* Find the GAH of the parent */
-	rc = find_gah_ref(fs_handle, parent, &in->common.gah);
-	if (rc != 0)
-		D_GOTO(out_err, 0);
+	handle->creat_req.ir_inode_num = parent;
 
 	strncpy(in->common.name.name, name, NAME_MAX);
 	in->mode = mode;

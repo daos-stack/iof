@@ -48,7 +48,8 @@
 
 #define STAT_KEY closedir
 
-static void closedir_ll_cb(struct ioc_request *request)
+static bool
+closedir_ll_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out	= crt_reply_get(request->rpc);
 	struct TYPE_NAME *dh		= CONTAINER(request);
@@ -70,6 +71,7 @@ out:
 	D_MUTEX_UNLOCK(&fs_handle->od_lock);
 
 	iof_pool_release(dh->open_req.fsh->dh_pool, dh);
+	return false;
 }
 
 static const struct ioc_request_api api = {

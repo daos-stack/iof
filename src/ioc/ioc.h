@@ -461,8 +461,13 @@ struct ioc_request;
  * Set of callbacks invoked during the lifetime of a request.
  */
 struct ioc_request_api {
-	/** Called once, per request with the result */
-	void	(*on_result)(struct ioc_request *req);
+	/** Called once, per request with the result
+	 *
+	 * Should return true if ir_ht is set to RHS_INODE_NUM, and
+	 * an open reference should be kept on the inode after on_result
+	 * returns.
+	 */
+	bool	(*on_result)(struct ioc_request *req);
 	/** Offset of GAH in RPC input buffer */
 	off_t	gah_offset;
 	/** Set to true if gah_offset is set */
@@ -486,6 +491,7 @@ enum ioc_request_htype {
 	RHS_INODE,
 	RHS_FILE,
 	RHS_DIR,
+	RHS_INODE_NUM,
 };
 
 /**
@@ -524,6 +530,7 @@ struct ioc_request {
 		struct ioc_inode_entry	*ir_inode;
 		struct iof_file_handle	*ir_file;
 		struct iof_dir_handle	*ir_dir;
+		fuse_ino_t		ir_inode_num;
 	};
 	/** List of requests.
 	 *
@@ -678,7 +685,7 @@ struct iof_dir_handle {
 	/** Set to 0 if the server rejects the GAH at any point */
 	ATOMIC int			gah_ok;
 	/** The inode number of the directory */
-	ino_t				inode_no;
+	ino_t				inode_num;
 	/** Endpoint for this directory handle */
 	crt_endpoint_t			ep;
 	/** List of directory handles */
@@ -714,7 +721,7 @@ struct iof_file_handle {
 	/** List of open files for inode, stored in ino->ie_fh_list */
 	d_list_t			fh_ino_list;
 	/** The inode number of the file */
-	ino_t				inode_no;
+	ino_t				inode_num;
 	/** A pre-allocated inode entry.  This is created as the struct is
 	 * allocated and then used on a successful create() call.  Once
 	 * the file handle is in use then this field will be NULL.
@@ -829,7 +836,7 @@ int iof_fs_send(struct ioc_request *request);
 
 int ioc_simple_resend(struct ioc_request *request);
 
-void ioc_gen_cb(struct ioc_request *);
+bool ioc_gen_cb(struct ioc_request *);
 
 void ioc_ll_lookup(fuse_req_t, fuse_ino_t, const char *);
 
@@ -889,6 +896,6 @@ void ioc_ll_symlink(fuse_req_t, const char *, fuse_ino_t, const char *);
 
 void ioc_ll_fsync(fuse_req_t, fuse_ino_t, int, struct fuse_file_info *);
 
-void iof_entry_cb(struct ioc_request *request);
+bool iof_entry_cb(struct ioc_request *);
 
 #endif

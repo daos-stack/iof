@@ -41,7 +41,7 @@
 #include "log.h"
 #include "ios_gah.h"
 
-static void
+static bool
 ioc_open_ll_cb(struct ioc_request *request)
 {
 	struct iof_file_handle	*handle = container_of(request, struct iof_file_handle, open_req);
@@ -50,9 +50,6 @@ ioc_open_ll_cb(struct ioc_request *request)
 
 	IOF_TRACE_DEBUG(handle, "cci_rc %d rc %d err %d",
 			request->rc, out->rc, out->err);
-
-	d_hash_rec_decref(&request->fsh->inode_ht,
-			  &request->ir_inode->ie_htl);
 
 	IOC_REQUEST_RESOLVE(request, out);
 	if (request->rc != 0) {
@@ -73,17 +70,18 @@ ioc_open_ll_cb(struct ioc_request *request)
 
 	IOC_REPLY_OPEN(&handle->open_req, fi);
 
-	return;
+	return false;
 
 out_err:
 	IOC_REPLY_ERR(request, request->rc);
 	iof_pool_release(request->fsh->fh_pool, handle);
+	return false;
 }
 
 static const struct ioc_request_api api = {
-	.on_result = ioc_open_ll_cb,
-	.gah_offset = offsetof(struct iof_open_in, gah),
-	.have_gah = true,
+	.on_result	= ioc_open_ll_cb,
+	.gah_offset	= offsetof(struct iof_open_in, gah),
+	.have_gah	= true,
 };
 
 void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
@@ -132,14 +130,11 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req.req = req;
 	handle->open_req.ir_api = &api;
-	handle->inode_no = ino;
+	handle->inode_num = ino;
 
 	in = crt_req_get(handle->open_req.rpc);
 
-	/* Find the INODE of the file to open */
-	rc = find_inode(fs_handle, ino, &handle->open_req.ir_inode);
-	if (rc != 0)
-		D_GOTO(out_err, 0);
+	handle->open_req.ir_inode_num = ino;
 
 	in->flags = fi->flags;
 	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);

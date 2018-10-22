@@ -46,13 +46,15 @@
 #define TYPE_NAME entry_req
 #include "ioc_ops.h"
 
-void iof_entry_cb(struct ioc_request *request)
+bool
+iof_entry_cb(struct ioc_request *request)
 {
 	struct entry_req		*desc = container_of(request, struct entry_req, request);
 	struct iof_projection_info	*fs_handle = desc->request.fsh;
 	struct iof_entry_out		*out = crt_reply_get(request->rpc);
 	struct fuse_entry_param		entry = {0};
 	d_list_t			*rlink;
+	bool				keep_ref = false;
 
 	IOC_REQUEST_RESOLVE(request, out);
 	if (request->rc)
@@ -78,21 +80,21 @@ void iof_entry_cb(struct ioc_request *request)
 		IOF_TRACE_INFO(desc->ie, "New file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 		desc->ie = NULL;
+		keep_ref = true;
 	} else {
 		IOF_TRACE_INFO(container_of(rlink, struct ioc_inode_entry, ie_htl),
 			       "Existing file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
-		drop_ino_ref(fs_handle, desc->ie->parent);
 		ie_close(fs_handle, desc->ie);
 	}
-out:
-	if (request->rc) {
-		drop_ino_ref(fs_handle, desc->ie->parent);
-		IOC_REPLY_ERR(request, request->rc);
-	} else {
-		IOC_REPLY_ENTRY(request, entry);
-	}
+
+	IOC_REPLY_ENTRY(request, entry);
 	iof_pool_release(desc->pool, desc);
+	return keep_ref;
+out:
+	IOC_REPLY_ERR(request, request->rc);
+	iof_pool_release(desc->pool, desc);
+	return false;
 }
 
 static const struct ioc_request_api api = {
@@ -118,16 +120,7 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 
 	IOF_TRACE_INFO(desc, "ie %p", &desc->ie);
 
-	if (parent == 1) {
-		desc->request.ir_ht = RHS_ROOT;
-	} else {
-		rc = find_inode(fs_handle, parent, &desc->request.ir_inode);
-
-		if (rc != 0)
-			D_GOTO(err, 0);
-
-		desc->request.ir_ht = RHS_INODE;
-	}
+	desc->request.ir_inode_num = parent;
 
 	in = crt_req_get(desc->request.rpc);
 	strncpy(in->name.name, name, NAME_MAX);
@@ -142,6 +135,5 @@ ioc_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 err:
 	if (desc)
 		iof_pool_release(fs_handle->lookup_pool, desc);
-	drop_ino_ref(fs_handle, parent);
 	IOC_REPLY_ERR_RAW(fs_handle, req, rc);
 }

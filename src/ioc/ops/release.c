@@ -41,7 +41,8 @@
 #include "log.h"
 #include "ios_gah.h"
 
-void ioc_release_cb(struct ioc_request *request)
+static bool
+ioc_release_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out = crt_reply_get(request->rpc);
 
@@ -53,12 +54,13 @@ void ioc_release_cb(struct ioc_request *request)
 	}
 
 	iof_pool_release(request->fsh->fh_pool, request->ir_file);
+	return false;
 }
 
 static const struct ioc_request_api api = {
-	.on_result = ioc_release_cb,
-	.gah_offset = offsetof(struct iof_gah_in, gah),
-	.have_gah = true,
+	.on_result	= ioc_release_cb,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 static void

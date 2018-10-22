@@ -40,7 +40,8 @@
 #include "ioc.h"
 #include "log.h"
 
-void ioc_rename_cb(struct ioc_request *request)
+static bool
+ioc_rename_cb(struct ioc_request *request)
 {
 	struct iof_status_out *out = crt_reply_get(request->rpc);
 
@@ -53,15 +54,12 @@ void ioc_rename_cb(struct ioc_request *request)
 	IOC_REPLY_ZERO(request);
 
 out:
-	if (request->ir_ht == RHS_INODE)
-		d_hash_rec_decref(&request->fsh->inode_ht,
-				  &request->ir_inode->ie_htl);
-
 	/* Clean up the two refs this code holds on the rpc */
 	crt_req_decref(request->rpc);
 	crt_req_decref(request->rpc);
 
 	D_FREE(request);
+	return false;
 }
 
 static const struct ioc_request_api api = {
@@ -116,16 +114,8 @@ ioc_ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
 	strncpy(in->new_name.name, newname, NAME_MAX);
 	in->flags = flags;
 
-	if (parent == 1) {
-		request->ir_ht = RHS_ROOT;
-	} else {
-		rc = find_inode(fs_handle, parent, &request->ir_inode);
-
-		if (rc != 0) {
-			D_GOTO(out_decref, ret = EIO);
-		}
-		request->ir_ht = RHS_INODE;
-	}
+	request->ir_inode_num = parent;
+	request->ir_ht = RHS_INODE_NUM;
 
 	rc = find_gah(fs_handle, newparent, &in->new_gah);
 	if (rc != 0)

@@ -47,28 +47,8 @@
 
 #define STAT_KEY setattr
 
-static void ioc_setattr_result_fn(struct ioc_request *request)
-{
-	struct iof_attr_out *out = crt_reply_get(request->rpc);
-	struct TYPE_NAME *desc;
-
-	IOC_REQUEST_RESOLVE(request, out);
-
-	if (request->rc == 0)
-		IOC_REPLY_ATTR(request, &out->stat);
-	else
-		IOC_REPLY_ERR(request, request->rc);
-
-	desc = CONTAINER(request);
-
-	if (request->ir_ht == RHS_INODE)
-		d_hash_rec_decref(&request->fsh->inode_ht,
-				  &request->ir_inode->ie_htl);
-
-	iof_pool_release(request->fsh->POOL_NAME, desc);
-}
-
-static void ioc_fsetattr_result_fn(struct ioc_request *request)
+static bool
+ioc_setattr_result_fn(struct ioc_request *request)
 {
 	struct iof_attr_out *out = crt_reply_get(request->rpc);
 
@@ -80,16 +60,11 @@ static void ioc_fsetattr_result_fn(struct ioc_request *request)
 		IOC_REPLY_ERR(request, request->rc);
 
 	iof_pool_release(request->fsh->POOL_NAME, CONTAINER(request));
+	return false;
 }
 
 static const struct ioc_request_api setattr_api = {
 	.on_result	= ioc_setattr_result_fn,
-	.gah_offset	= offsetof(struct iof_setattr_in, gah),
-	.have_gah	= true,
-};
-
-static const struct ioc_request_api fsetattr_api = {
-	.on_result	= ioc_fsetattr_result_fn,
 	.gah_offset	= offsetof(struct iof_setattr_in, gah),
 	.have_gah	= true,
 };
@@ -109,30 +84,16 @@ ioc_ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr, int to_set,
 
 	IOF_TRACE_INFO(fs_handle, "inode %lu handle %p", ino, handle);
 
-	if (handle) {
-		IOC_REQ_INIT_REQ(desc, fs_handle, fsetattr_api, req, rc);
-		if (rc)
-			D_GOTO(err, rc);
+	IOC_REQ_INIT_REQ(desc, fs_handle, setattr_api, req, rc);
+	if (rc)
+		D_GOTO(err, rc);
 
+	if (handle) {
 		desc->request.ir_ht = RHS_FILE;
 		desc->request.ir_file = handle;
 	} else {
-		IOC_REQ_INIT_REQ(desc, fs_handle, setattr_api, req, rc);
-		if (rc)
-			D_GOTO(err, rc);
-
-		if (ino == 1) {
-			desc->request.ir_ht = RHS_ROOT;
-		} else {
-			rc = find_inode(fs_handle, ino, &desc->request.ir_inode);
-
-			if (rc != 0) {
-				IOF_TRACE_DOWN(&desc->request);
-				D_GOTO(err, 0);
-			}
-
-			desc->request.ir_ht = RHS_INODE;
-		}
+		desc->request.ir_ht = RHS_INODE_NUM;
+		desc->request.ir_inode_num = ino;
 	}
 
 	in = crt_req_get(desc->request.rpc);

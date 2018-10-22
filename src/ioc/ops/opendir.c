@@ -48,7 +48,7 @@
 
 #define STAT_KEY opendir
 
-static void
+static bool
 opendir_ll_cb(struct ioc_request *request)
 {
 	struct TYPE_NAME	*dh = CONTAINER(request);
@@ -70,11 +70,13 @@ opendir_ll_cb(struct ioc_request *request)
 		IOC_REPLY_ERR(request, request->rc);
 		iof_pool_release(dh->open_req.fsh->dh_pool, dh);
 	}
+	return false;
 }
 
 static const struct ioc_request_api api = {
 	.on_result	= opendir_ll_cb,
-	.gah_offset = offsetof(struct iof_gah_in, gah),
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
 };
 
 /* TODO: lots */
@@ -83,7 +85,6 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
 	struct iof_projection_info	*fs_handle = fuse_req_userdata(req);
 	struct TYPE_NAME		*dh = NULL;
-	struct iof_gah_in		*in;
 	int rc;
 
 	IOF_TRACE_INFO(fs_handle, "ino %lu", ino);
@@ -91,13 +92,9 @@ void ioc_ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	if (rc)
 		D_GOTO(err, rc);
 
-	in = crt_req_get(dh->open_req.rpc);
-	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0)
-		D_GOTO(err, 0);
+	dh->open_req.ir_inode_num = ino;
 
-	dh->inode_no = ino;
+	dh->inode_num = ino;
 
 	rc = iof_fs_send(&dh->open_req);
 	if (rc != 0)

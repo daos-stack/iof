@@ -41,7 +41,7 @@
 #include "log.h"
 #include "ios_gah.h"
 
-static void
+static bool
 write_cb(struct ioc_request *request)
 {
 	struct iof_wb		*wb = container_of(request, struct iof_wb, wb_req);
@@ -60,7 +60,6 @@ write_cb(struct ioc_request *request)
 			H_GAH_SET_INVALID(wb->wb_req.ir_file);
 
 		D_GOTO(err, request->rc = EIO);
-		return;
 	}
 
 	IOC_REQUEST_RESOLVE(request, out);
@@ -73,12 +72,13 @@ write_cb(struct ioc_request *request)
 
 	iof_pool_release(request->fsh->write_pool, wb);
 
-	return;
+	return false;
 
 err:
 	IOC_REPLY_ERR(request, request->rc);
 
 	iof_pool_release(request->fsh->write_pool, wb);
+	return false;
 }
 
 static const struct ioc_request_api api = {
