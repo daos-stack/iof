@@ -123,20 +123,27 @@ find_inode(struct iof_projection_info *fs_handle, ino_t ino,
 		return EHOSTDOWN;
 	}
 
-	IOF_TRACE_INFO(ie, "Using inode %lu " GAH_PRINT_STR, ie->stat.st_ino,
-		       GAH_PRINT_VAL(ie->gah));
+	IOF_TRACE_INFO(ie, "Using inode %lu " GAH_PRINT_STR " parent %lu",
+		       ie->stat.st_ino, GAH_PRINT_VAL(ie->gah), ie->parent);
 
 	*iep = ie;
 	return 0;
 }
 
-/* Drop a reference on the GAH in the hash table */
-void
+/* Drop a reference on the GAH in the hash table
+ *
+ * TODO: Merge this with ioc_forget_one()
+ *
+ */
+static void
 drop_ino_ref(struct iof_projection_info *fs_handle, ino_t ino)
 {
 	d_list_t *rlink;
 
 	if (ino == 1)
+		return;
+
+	if (ino == 0)
 		return;
 
 	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
@@ -169,9 +176,12 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	struct iof_file_handle *fh;
 	struct ioc_inode_entry *iec;
 	int			rc;
+	int			ref = atomic_load_consume(&ie->ie_ref);
 
-	if (FS_IS_OFFLINE(fs_handle))
-		D_GOTO(err, rc = fs_handle->offline_reason);
+	IOF_TRACE_DEBUG(ie, "closing, ref %u, parent %lu", ref, ie->parent);
+
+	D_ASSERT(ref == 0);
+	atomic_fetch_add(&ie->ie_ref, 1);
 
 	D_MUTEX_LOCK(&fs_handle->of_lock);
 	/* Check that all files opened for this inode have been released */
@@ -193,6 +203,9 @@ void ie_close(struct iof_projection_info *fs_handle, struct ioc_inode_entry *ie)
 	D_MUTEX_UNLOCK(&fs_handle->gah_lock);
 
 	drop_ino_ref(fs_handle, ie->parent);
+
+	if (FS_IS_OFFLINE(fs_handle))
+		D_GOTO(err, rc = fs_handle->offline_reason);
 
 	if (!H_GAH_IS_VALID(ie))
 		D_GOTO(out, 0);

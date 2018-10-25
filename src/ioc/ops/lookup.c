@@ -82,9 +82,18 @@ iof_entry_cb(struct ioc_request *request)
 		desc->ie = NULL;
 		keep_ref = true;
 	} else {
+		/* The lookup has resulted in an existing file, so reuse that
+		 * entry, drop the inode in the lookup descriptor and do not
+		 * keep a reference on the parent.
+		 * Note that this function will be called with a reference on
+		 * the parent anyway, so keep that one, but drop one in the call
+		 * to ie_close().
+		 */
 		IOF_TRACE_INFO(container_of(rlink, struct ioc_inode_entry, ie_htl),
 			       "Existing file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
+		atomic_fetch_sub(&desc->ie->ie_ref, 1);
+		keep_ref = true;
 		ie_close(fs_handle, desc->ie);
 	}
 

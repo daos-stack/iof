@@ -42,10 +42,11 @@
 #include "log.h"
 
 static void
-ioc_ll_forget_one(struct iof_projection_info *fs_handle,
-		  fuse_ino_t ino, uintptr_t nlookup)
+ioc_forget_one(struct iof_projection_info *fs_handle,
+	       fuse_ino_t ino, uintptr_t nlookup)
 {
 	d_list_t *rlink;
+	int rc;
 
 	/* One additional reference is needed because the rec_find() itself
 	 * acquires one
@@ -63,7 +64,12 @@ ioc_ll_forget_one(struct iof_projection_info *fs_handle,
 		       "ino %lu count %lu",
 		       ino, nlookup);
 
-	d_hash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
+	rc = d_hash_rec_ndecref(&fs_handle->inode_ht, nlookup, rlink);
+	if (rc != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(fs_handle, "Invalid refcount %lu on %p",
+				nlookup,
+				container_of(rlink, struct ioc_inode_entry, ie_htl));
+	}
 }
 
 void
@@ -75,7 +81,7 @@ ioc_ll_forget(fuse_req_t req, fuse_ino_t ino, uintptr_t nlookup)
 
 	fuse_reply_none(req);
 
-	ioc_ll_forget_one(fs_handle, ino, nlookup);
+	ioc_forget_one(fs_handle, ino, nlookup);
 }
 
 void
@@ -92,6 +98,5 @@ ioc_ll_forget_multi(fuse_req_t req, size_t count,
 	IOF_TRACE_INFO(fs_handle, "Forgetting %zi", count);
 
 	for (i = 0; i < count; i++)
-		ioc_ll_forget_one(fs_handle,
-				  forgets[i].ino, forgets[i].nlookup);
+		ioc_forget_one(fs_handle, forgets[i].ino, forgets[i].nlookup);
 }

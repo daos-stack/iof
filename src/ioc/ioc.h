@@ -820,9 +820,6 @@ int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 /* Convert from a inode to a GAH and keep a reference using the hash table */
 int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 
-/* Drop a reference on the GAH in the hash table */
-void drop_ino_ref(struct iof_projection_info *, ino_t);
-
 /* Find a inode pointer from number. returns an error code if not found */
 int
 find_inode(struct iof_projection_info *fs_handle, ino_t ino,

@@ -527,10 +527,11 @@ class Testlocal(unittest.TestCase,
 
         # This is a list of functions where any warning or error is promoted to
         # a test failure.
-        strict_functions = ('iof_deregister_fuse')
+        strict_functions = {'drop_ino_ref' : 'IOF-888'}
 
-        if self.htable_bug:
-            strict_functions = ()
+        if not self.htable_bug:
+            strict_functions['iof_deregister_fuse'] = 'IOF-888'
+            strict_functions['ioc_forget_one'] = 'IOF-888'
 
         have_debug = False
 
@@ -1024,6 +1025,25 @@ class Testlocal(unittest.TestCase,
         if isinstance(rc, int):
             self.fail("Failed to close directory: '{}'".format(os.strerror(rc)))
 
+    def test_double_stat(self):
+        """Test a single file with two names"""
+
+        # Create two files, stat them both, then rename one
+        # after the other and rename the remaining file.
+
+        self.htable_bug = True
+
+        create_file(self.export_dir, 'a')
+        create_file(self.export_dir, 'b')
+
+        print(os.stat(os.path.join(self.import_dir, 'a')))
+        print(os.stat(os.path.join(self.import_dir, 'b')))
+
+        os.rename(os.path.join(self.export_dir, 'b'),
+                  os.path.join(self.export_dir, 'a'))
+
+        print(os.stat(os.path.join(self.import_dir, 'a')))
+
 #pylint: disable=too-many-branches
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_failover_readdir(self):
@@ -1459,6 +1479,8 @@ class Testlocal(unittest.TestCase,
         # Many of these cases are expected to fail currently (and removing the
         # file before failover always will) so the test is mostly to confirm the
         # code doesn't crash and to see progress on feature development.
+
+        self.htable_bug = True
 
         frontend_dir = self.import_dir
         backend_dir = self.export_dir
