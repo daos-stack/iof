@@ -144,14 +144,14 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	in->flags = fi->flags;
 	IOF_TRACE_INFO(handle, "flags 0%o", fi->flags);
 
+	LOG_FLAGS(handle, fi->flags);
+
 	rc = iof_fs_send(&handle->open_req);
 	if (rc) {
 		D_GOTO(out_err, rc = EIO);
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
-
-	LOG_FLAGS(handle, fi->flags);
 
 	return;
 out_err:

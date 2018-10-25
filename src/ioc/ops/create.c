@@ -203,15 +203,15 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 	strncpy(handle->ie->name, name, NAME_MAX);
 	handle->ie->parent = parent;
 
+	LOG_FLAGS(handle, fi->flags);
+	LOG_MODES(handle, mode);
+
 	rc = iof_fs_send(&handle->creat_req);
 	if (rc) {
 		D_GOTO(out_err, rc = EIO);
 	}
 
 	iof_pool_restock(fs_handle->fh_pool);
-
-	LOG_FLAGS(handle, fi->flags);
-	LOG_MODES(handle, mode);
 
 	return;
 out_err:
