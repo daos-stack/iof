@@ -52,6 +52,8 @@ import sys
 import yaml
 import tempfile
 import subprocess
+import common_methods
+import iof_cart_logparse
 import iofcommontestsuite
 import rpctrace_common_methods
 import iof_test_local
@@ -93,6 +95,13 @@ def run_once(prefix, cmd, log_top_dir, floc):
     print('Return code was {}'.format(rc))
     # This is a valgrind error code and means memory leaks
     if rc == 42:
+        for line in iof_cart_logparse.IofLogIter(log_file):
+            if not line.endswith('fault_id 0, injecting fault.'):
+                continue
+            common_methods.show_line(line, 'error',
+                                     'Valgrind error when fault injected here')
+            common_methods.show_bug(line, 'IOF-887')
+        print("Alloc test failing with valgrind errors")
         sys.exit(1)
     # This means abnormal exit, probably a segv.
     if rc < 0:
