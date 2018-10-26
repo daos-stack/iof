@@ -1676,7 +1676,6 @@ iof_thread(void *arg)
 		IOF_TRACE_ERROR(iof_ctx, "crt_progress error on shutdown "
 				"rc: %d", rc);
 
-	iof_tracker_signal(&iof_ctx->thread_shutdown_tracker);
 	return (void *)(uintptr_t)rc;
 }
 
@@ -1688,7 +1687,6 @@ iof_thread_start(struct iof_ctx *iof_ctx)
 
 	iof_tracker_init(&iof_ctx->thread_start_tracker, 1);
 	iof_tracker_init(&iof_ctx->thread_stop_tracker, 1);
-	iof_tracker_init(&iof_ctx->thread_shutdown_tracker, 1);
 
 	rc = pthread_create(&iof_ctx->thread, NULL,
 			    iof_thread, iof_ctx);
@@ -1720,7 +1718,6 @@ iof_thread_stop(struct iof_ctx *iof_ctx)
 
 	IOF_TRACE_INFO(iof_ctx, "Stopping CRT thread");
 	iof_tracker_signal(&iof_ctx->thread_stop_tracker);
-	iof_tracker_wait(&iof_ctx->thread_shutdown_tracker);
 	pthread_join(iof_ctx->thread, &rtn);
 	IOF_TRACE_INFO(iof_ctx,
 		       "CRT thread stopped with %d",

@@ -99,8 +99,6 @@ struct iof_ctx {
 	struct iof_tracker		thread_start_tracker;
 	/** Tracker to signal thread stop */
 	struct iof_tracker		thread_stop_tracker;
-	/** Tracker to detect thread stop */
-	struct iof_tracker		thread_shutdown_tracker;
 	/** Poll interval to pass to crt_progress */
 	uint32_t			poll_interval;
 	/** Callback function to pass to crt_progress() */
