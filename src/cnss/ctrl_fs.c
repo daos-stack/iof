@@ -55,6 +55,7 @@ static int ctrl_log_handle;
 # include <fuse3/fuse.h>
 
 #include "log.h"
+#include "iof_fs.h"
 #include "ctrl_fs.h"
 #include "iof_ctrl_util.h"
 
@@ -134,6 +135,7 @@ struct data_node {
 
 struct ctrl_fs_data {
 	char *prefix;
+	struct iof_tracker start_tracker;
 	struct fuse *fuse;
 	int next_inode;
 	int startup_rc;
@@ -812,6 +814,8 @@ static void *ctrl_thread_func(void *arg)
 
 	IOF_LOG_INFO("Starting ctrl fs loop");
 
+	iof_tracker_signal(&ctrl_fs.start_tracker);
+
 	rc = fuse_loop(ctrl_fs.fuse); /* Blocking */
 
 	IOF_LOG_INFO("Exited ctrl fs loop %d", rc);
@@ -1237,6 +1241,8 @@ static void *ctrl_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 		     cfg->entry_timeout, cfg->negative_timeout,
 		     cfg->attr_timeout);
 
+	iof_tracker_signal(&ctrl_fs.start_tracker);
+
 	return handle;
 }
 
@@ -1317,6 +1323,11 @@ int ctrl_fs_start(const char *prefix)
 	}
 	fuse_opt_free_args(&args);
 
+	/* Use a tracker to detect both thread startup, and the .init
+	 * callback being invoked.
+	 */
+	iof_tracker_init(&ctrl_fs.start_tracker, 2);
+
 	rc = pthread_create(&ctrl_fs.thread, NULL,
 			    ctrl_thread_func, NULL);
 
@@ -1326,6 +1337,7 @@ int ctrl_fs_start(const char *prefix)
 			      rc);
 		goto out;
 	}
+	iof_tracker_wait(&ctrl_fs.start_tracker);
 
 out:
 	if (ctrl_fs.startup_rc != 0)
@@ -1377,6 +1389,7 @@ int ctrl_fs_shutdown(void)
 	}
 
 	fuse_destroy(ctrl_fs.fuse);
+	ctrl_fs.fuse = NULL;
 	IOF_LOG_INFO("Cleaning up ctrl_fs");
 
 	cleanup_ctrl_fs();
