@@ -547,6 +547,8 @@ class Testlocal(unittest.TestCase,
                     err_count += 1
                     show_line(line, 'error',
                               'warning in strict file in {}'.format(self.id()))
+                    common_methods.show_bug(line,
+                                            strict_functions[line.function])
                     raise Exception
             except AttributeError:
                 pass
