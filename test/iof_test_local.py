@@ -1048,6 +1048,21 @@ class Testlocal(unittest.TestCase,
 
         print(os.stat(os.path.join(self.import_dir, 'a')))
 
+    def test_stat_no_file(self):
+        """Test stat of a file that does, then does not exist"""
+
+        create_file(self.export_dir, 'a_file')
+
+        print(os.stat(os.path.join(self.import_dir, 'a_file')))
+
+        os.unlink(os.path.join(self.export_dir, 'a_file'))
+
+        try:
+            print(os.stat(os.path.join(self.import_dir, 'a_file')))
+        except FileNotFoundError:
+            return
+        self.fail('Should have failed')
+
 #pylint: disable=too-many-branches
     @unittest.skipUnless(have_iofmod, "needs iofmod")
     def test_failover_readdir(self):
