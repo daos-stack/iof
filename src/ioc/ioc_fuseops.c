@@ -113,6 +113,9 @@ ioc_fuse_init(void *arg, struct fuse_conn_info *conn)
 	conn->want |= FUSE_CAP_BIG_WRITES;
 #endif
 
+	/* This does not work as ioctl.c assumes fi->fh is a file handle */
+	conn->want &= ~FUSE_CAP_IOCTL_DIR;
+
 	IOF_TRACE_INFO(fs_handle, "Capability requested %#x", conn->want);
 
 	ioc_show_flags(fs_handle, conn->want);
