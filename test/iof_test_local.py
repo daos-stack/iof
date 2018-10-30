@@ -73,6 +73,8 @@ import common_methods
 import rpctrace_common_methods
 import iof_cart_logparse
 
+jdata = None
+
 sys.path.append('install/Linux/TESTING/scripts')
 try:
     #Python/C Shim
@@ -145,7 +147,8 @@ class Testlocal(unittest.TestCase,
         # still works with the run_test.sh script which sets the PATH
         # from the yml file.
         try:
-            iofcommontestsuite.load_config()
+            global jdata
+            jdata = iofcommontestsuite.load_config()
         except FileNotFoundError:
             pass
 
@@ -252,11 +255,17 @@ class Testlocal(unittest.TestCase,
                     else:
                         raise
 
-        ompi_bin = os.getenv('IOF_OMPI_BIN', None)
-        if ompi_bin:
-            orterun = os.path.realpath(os.path.join(ompi_bin, 'orterun'))
+        global jdata
+        if jdata:
+            orterun = os.path.realpath(os.path.join(jdata['OMPI_PREFIX'],
+                                                    'bin',
+                                                    'orterun'))
         else:
-            orterun = 'orterun'
+            ompi_bin = os.getenv('IOF_OMPI_BIN', None)
+            if ompi_bin:
+                orterun = os.path.realpath(os.path.join(ompi_bin, 'orterun'))
+            else:
+                orterun = 'orterun'
 
         config = {"projections":
                   [{"full_path": self.export_dir},
@@ -328,7 +337,11 @@ class Testlocal(unittest.TestCase,
 
         if self.cnss_valgrind:
             cmd.extend(valgrind)
-        cmd.extend(['cnss', '-p', self.cnss_prefix,
+        if jdata:
+            cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'cnss'))
+        else:
+            cmd.append('cnss')
+        cmd.extend(['-p', self.cnss_prefix,
                     ':',
                     '-n', str(self.ionss_count),
                     '-x', 'CRT_PHY_ADDR_STR=%s' % self.crt_phy_addr,
@@ -341,7 +354,12 @@ class Testlocal(unittest.TestCase,
 
         if self.ionss_valgrind:
             cmd.extend(valgrind)
-        cmd.extend(['ionss', '-c', config_file.name])
+        if jdata:
+            cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'ionss'))
+        else:
+            cmd.append('ionss')
+
+        cmd.extend(['-c', config_file.name])
 
         self.proc = self.common_launch_process(cmd)
 

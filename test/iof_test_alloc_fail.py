@@ -139,7 +139,7 @@ def run_once(prefix, cmd, log_top_dir, floc):
 def main():
     """Main function"""
 
-    iofcommontestsuite.load_config()
+    jdata = iofcommontestsuite.load_config()
     export_tmp_dir = os.getenv("IOF_TMP_DIR", '/tmp')
     prefix = tempfile.mkdtemp(prefix='iof_allocf_',
                               dir=export_tmp_dir)
@@ -168,7 +168,7 @@ def main():
     while True:
         floc += 1
         subprocess.call(['fusermount', '-q', '-u', ctrl_fs_dir])
-        cmd = ['orterun', '-n', '1']
+        cmd = [os.path.join(jdata['OMPI_PREFIX'], 'bin', 'orterun'), '-n', '1']
         cmd.extend(['valgrind',
                     '--quiet',
                     '--leak-check=full',
@@ -184,7 +184,8 @@ def main():
                         '--xml-file={}'.format(
                             os.path.join(log_top_dir, 'af',
                                          "valgrind-{}.xml".format(floc)))])
-        cmd.extend(['cnss', '-p', prefix])
+        cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'cnss'))
+        cmd.extend(['-p', prefix])
         try:
             run_once(prefix, cmd, log_top_dir, floc)
         except EndOfTest:

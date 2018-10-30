@@ -81,14 +81,8 @@ def load_config():
     fd = open('.build_vars-Linux.json')
     data = json.load(fd)
     fd.close()
-    new_path = '%s/bin:%s/bin:%s/bin:%s' % (data['OMPI_PREFIX'],
-                                            data['CART_PREFIX'],
-                                            data['PREFIX'],
-                                            os.environ['PATH'])
-
     CART_PREFIX = data['CART_PREFIX']
     SELF_PREFIX = data['PREFIX']
-    os.environ['PATH'] = new_path
     return data
 
 def valgrind_iof_supp_file():
