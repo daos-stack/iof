@@ -1908,6 +1908,7 @@ initialize_projection(struct iof_state *iof_state,
 	bool				writeable = false;
 	int				ret;
 	struct fuse_lowlevel_ops	*fuse_ops = NULL;
+	int i;
 
 	struct iof_pool_reg pt = {.init = dh_init,
 				  .reset = dh_reset,
@@ -1958,8 +1959,25 @@ initialize_projection(struct iof_state *iof_state,
 		return false;
 
 	IOF_TRACE_UP(fs_handle, iof_state, "iof_projection");
-	IOF_TRACE_UP(&fs_handle->ctx[0], fs_handle, "iof_ctx[0]");
-	IOF_TRACE_UP(&fs_handle->ctx[1], fs_handle, "iof_ctx[1]");
+
+	fs_handle->ctx_num = fs_info->cnss_thread_count;
+	if (fs_handle->ctx_num == 0) {
+		fs_handle->ctx_num = 1;
+	}
+	if ((fs_info->flags & IOF_FAILOVER) && (fs_handle->ctx_num < 2)) {
+		fs_handle->ctx_num = 2;
+	}
+
+	D_ALLOC_ARRAY(fs_handle->ctx_array, fs_handle->ctx_num);
+	if (!fs_handle->ctx_array) {
+		IOF_TRACE_DOWN(fs_handle);
+		D_FREE(fs_handle);
+		return false;
+	}
+
+	for (i = 0; i < fs_handle->ctx_num; i++) {
+		IOF_TRACE_UP(&fs_handle->ctx_array[i], fs_handle, "iof_ctx");
+	}
 
 	ret = iof_pool_init(&fs_handle->pool, fs_handle);
 	if (ret != -DER_SUCCESS)
@@ -1981,6 +1999,9 @@ initialize_projection(struct iof_state *iof_state,
 					 ? "Single " : "Multi-",
 			fs_handle->flags & IOF_FUSE_WRITE_BUF ? "_buf" : "",
 			fs_handle->flags & IOF_FUSE_READ_BUF ? "buf" : "data");
+
+	IOF_TRACE_INFO(fs_handle, "%d cart threads",
+		       fs_handle->ctx_num);
 
 	ret = d_hash_table_create_inplace(D_HASH_FT_RWLOCK |
 					  D_HASH_FT_EPHEMERAL,
@@ -2158,26 +2179,19 @@ initialize_projection(struct iof_state *iof_state,
 		D_GOTO(err, 0);
 	}
 
-	fs_handle->ctx[0].crt_ctx	= fs_handle->proj.crt_ctx;
-	fs_handle->ctx[0].poll_interval	= iof_state->iof_ctx.poll_interval;
-	fs_handle->ctx[0].callback_fn	= iof_state->iof_ctx.callback_fn;
+	for (i = 0; i < fs_handle->ctx_num; i++) {
+		fs_handle->ctx_array[i].crt_ctx       = fs_handle->proj.crt_ctx;
+		fs_handle->ctx_array[i].poll_interval = iof_state->iof_ctx.poll_interval;
+		fs_handle->ctx_array[i].callback_fn   = iof_state->iof_ctx.callback_fn;
 
-	fs_handle->ctx[1].crt_ctx	= fs_handle->proj.crt_ctx;
-	fs_handle->ctx[1].poll_interval	= iof_state->iof_ctx.poll_interval;
-	fs_handle->ctx[1].callback_fn	= iof_state->iof_ctx.callback_fn;
-
-	/* TODO: Much better error checking is required here, not least
-	 * terminating the thread if there are any failures in the rest of
-	 * this function
-	 */
-	if (!iof_thread_start(&fs_handle->ctx[0])) {
-		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
-		D_GOTO(err, 0);
-	}
-
-	if (!iof_thread_start(&fs_handle->ctx[1])) {
-		IOF_TRACE_ERROR(fs_handle, "Could not create thread");
-		D_GOTO(err, 0);
+		/* TODO: Much better error checking is required here, not least
+		 * terminating the thread if there are any failures in the rest
+		 * of this function
+		 */
+		if (!iof_thread_start(&fs_handle->ctx_array[i])) {
+			IOF_TRACE_ERROR(fs_handle, "Could not create thread");
+			D_GOTO(err, 0);
+		}
 	}
 
 	args.argc = 4;
@@ -2510,6 +2524,7 @@ static int iof_deregister_fuse(void *arg)
 	int handles = 0;
 	int rc;
 	int rcp = 0;
+	int i;
 
 	IOF_TRACE_INFO(fs_handle, "Draining inode table");
 	do {
@@ -2575,15 +2590,12 @@ static int iof_deregister_fuse(void *arg)
 	/* Stop the progress thread for this projection and delete the context
 	 */
 
-	rc = iof_thread_stop(&fs_handle->ctx[0]);
-	if (rc != 0)
-		IOF_TRACE_ERROR(fs_handle,
-				"thread[0] stop returned %d", rc);
-
-	rc = iof_thread_stop(&fs_handle->ctx[1]);
-	if (rc != 0)
-		IOF_TRACE_ERROR(fs_handle,
-				"thread[1] stop returned %d", rc);
+	for (i = 0; i < fs_handle->ctx_num; i++) {
+		rc = iof_thread_stop(&fs_handle->ctx_array[i]);
+		if (rc != 0)
+			IOF_TRACE_ERROR(fs_handle,
+					"thread[%d] stop returned %d", i, rc);
+	}
 
 	do {
 		/* If this context has a pool associated with it then reap
@@ -2593,7 +2605,7 @@ static int iof_deregister_fuse(void *arg)
 		bool active;
 
 		do {
-			rc = iof_progress_drain(&fs_handle->ctx[0]);
+			rc = iof_progress_drain(&fs_handle->ctx_array[0]);
 
 			active = iof_pool_reclaim(&fs_handle->pool);
 
@@ -2651,9 +2663,12 @@ static int iof_deregister_fuse(void *arg)
 		rcp = rc;
 	}
 
-	IOF_TRACE_DOWN(&fs_handle->ctx[0]);
-	IOF_TRACE_DOWN(&fs_handle->ctx[1]);
+	for (i = 0; i < fs_handle->ctx_num; i++) {
+		IOF_TRACE_DOWN(&fs_handle->ctx_array[i]);
+	}
 	d_list_del_init(&fs_handle->link);
+
+	D_FREE(fs_handle->ctx_array);
 
 	D_FREE(fs_handle->mount_point);
 

@@ -147,6 +147,7 @@ struct ios_projection {
 	uint32_t		inode_htable_size;
 	uint32_t		readdir_size;
 	uint32_t		cnss_timeout;
+	uint32_t		cnss_thread_count;
 	char			*mount_path;
 
 	/* Per-projection tunable flags */

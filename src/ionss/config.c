@@ -72,6 +72,7 @@
 	X(max_read_count, set_decimal)		\
 	X(max_write_count, set_decimal)		\
 	X(inode_htable_size, set_decimal)	\
+	X(cnss_thread_count, set_decimal)	\
 	X(cnss_timeout, set_decimal)		\
 	X(cnss_threads, set_flag)		\
 	X(fuse_read_buf, set_flag)		\
@@ -109,6 +110,7 @@ const uint32_t	default_max_iov_write_size	= 64;
 const uint32_t	default_max_read_count		= 3;
 const uint32_t	default_max_write_count		= 3;
 const uint32_t	default_inode_htable_size	= 5;
+const uint32_t	default_cnss_thread_count	= 0;
 const uint32_t	default_cnss_timeout		= 60;
 const bool	default_cnss_threads		= true;
 const bool	default_fuse_read_buf		= true;

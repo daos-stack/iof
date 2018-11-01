@@ -262,8 +262,10 @@ class Testlocal(unittest.TestCase,
                   [{"full_path": self.export_dir},
                    {"full_path": '/usr'}]}
         config['projections'][0]['mount_path'] = 'exp'
-        config['projections'][1]['failover'] = 'disable'
+        config['failover'] = 'disable'
         config['cnss_timeout'] = 5
+        if self.failover_test:
+            config['projections'][0]['failover'] = 'auto'
 
         config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
                                                   prefix="ionss_",

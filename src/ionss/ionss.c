@@ -2481,6 +2481,16 @@ static void show_help(const char *prog)
 	"# Enable or disable the use of FUSE threads on the CNSS.\n"
 	"cnss_threads:           true\n"
 	"\n"
+	"# Number of cnss threads created to service network requests.\n"
+	"# If \"0\" is chosen then projections will use 2 threads if failover\n"
+	"# is enabled, or 1 if it is not.\n"
+	"cnss_thread_count:      0\n"
+	"\n"
+	"# Timeout value used by the CNSS.  This is the value that the CNSS uses\n"
+	"# to detect network timeout, so controles how often keep-alive requets\n"
+	"# are sent whilst waiting for RPC replies\n"
+	"cnss_timeout:           60\n"
+	"\n"
 	"# Select FUSE API to use on the client while reading:\n"
 	"# true: 'fuse_reply_buf'; false: 'fuse_reply_data'\n"
 	"fuse_read_buf:          true\n"
@@ -2919,6 +2929,7 @@ int main(int argc, char **argv)
 		base.fs_list[i].max_iov_write = projection->max_iov_write_size;
 		base.fs_list[i].htable_size = projection->inode_htable_size;
 		base.fs_list[i].timeout = projection->cnss_timeout;
+		base.fs_list[i].cnss_thread_count = projection->cnss_thread_count;
 
 		base.fs_list[i].flags = IOF_FS_DEFAULT;
 		if (projection->failover)

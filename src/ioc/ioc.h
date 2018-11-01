@@ -164,7 +164,8 @@ enum iof_failover_state {
 
 struct iof_projection_info {
 	struct iof_projection		proj;
-	struct iof_ctx			ctx[2];
+	struct iof_ctx			*ctx_array;
+	int ctx_num;
 	struct iof_state		*iof_state;
 	struct ios_gah			gah;
 	d_list_t			link;

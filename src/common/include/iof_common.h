@@ -113,20 +113,21 @@ struct ios_name {
 
 struct iof_fs_info {
 	/*Associated mount point*/
-	struct ios_name dir_name;
+	struct ios_name		dir_name;
 	/*id of filesystem*/
-	struct ios_gah gah;
-	int id;
+	struct ios_gah		gah;
+	int			id;
 	/*Feature flags, as described above*/
-	uint64_t flags;
+	uint64_t		flags;
 	/* Per-projection tunable options */
-	uint32_t max_read;
-	uint32_t max_write;
-	uint32_t readdir_size;
-	uint32_t max_iov_read;
-	uint32_t max_iov_write;
-	uint32_t htable_size;
-	uint32_t timeout;
+	uint32_t		max_read;
+	uint32_t		max_write;
+	uint32_t		readdir_size;
+	uint32_t		max_iov_read;
+	uint32_t		max_iov_write;
+	uint32_t		htable_size;
+	uint32_t		cnss_thread_count;
+	uint32_t		timeout;
 };
 
 /* The response to the initial query RPC.
