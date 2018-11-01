@@ -1594,6 +1594,7 @@ class Testlocal(unittest.TestCase,
             with self.subTest(possible[5:]):
 
                 obj()
+                self.clean_export_dir()
 
         if have_iofmod:
             subtest_count += self.test_iofmod()
