@@ -2682,6 +2682,7 @@ int main(int argc, char **argv)
 		switch (c) {
 		case 'h':
 			show_help(argv[0]);
+			iof_log_close();
 			exit(0);
 			break;
 		case 'v':
@@ -2699,11 +2700,14 @@ int main(int argc, char **argv)
 
 	if (!config_file) {
 		show_help(argv[0]);
+		iof_log_close();
 		exit(1);
 	}
 
-	if (parse_config(config_file, &base))
+	if (parse_config(config_file, &base)) {
+		iof_log_close();
 		exit(1);
+	}
 
 	IOF_TRACE_ROOT(&base, "ionss");
 
@@ -2738,14 +2742,14 @@ int main(int argc, char **argv)
 	/*initialize CaRT*/
 	ret = crt_init(base.group_name, CRT_FLAG_BIT_SERVER);
 	if (ret) {
-		IOF_LOG_ERROR("Crt_init failed with ret = %d", ret);
+		IOF_LOG_ERROR("crt_init failed with ret = %d", ret);
 		D_GOTO(cleanup, exit_rc = ret);
 	}
 
 	base.primary_group = crt_group_lookup(base.group_name);
 	if (base.primary_group == NULL) {
 		IOF_LOG_ERROR("Failed to look up primary group");
-		D_GOTO(cleanup, exit_rc = -DER_NONEXIST);
+		D_GOTO(shutdown, exit_rc = -DER_NONEXIST);
 	}
 	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
 	crt_group_rank(base.primary_group, &base.my_rank);
@@ -2780,7 +2784,7 @@ int main(int argc, char **argv)
 
 		ret = iof_pool_init(&projection->pool, projection);
 		if (ret != -DER_SUCCESS) {
-			D_GOTO(cleanup, exit_rc = ret);
+			D_GOTO(shutdown, exit_rc = ret);
 		}
 
 		fd = open(projection->full_path,
@@ -2871,13 +2875,13 @@ int main(int argc, char **argv)
 	if (ret) {
 		IOF_LOG_ERROR("File System look up failed with ret = %d", ret);
 		D_GOTO(cleanup, exit_rc = -DER_MISC);
-		goto cleanup;
+		goto shutdown;
 	}
 
 	ret = crt_context_create(&base.crt_ctx);
 	if (ret) {
 		IOF_LOG_ERROR("Could not create context");
-		D_GOTO(cleanup, exit_rc = ret);
+		D_GOTO(shutdown, exit_rc = ret);
 	}
 
 	for (i = 0; i < base.projection_count; i++) {
@@ -2962,7 +2966,7 @@ int main(int argc, char **argv)
 
 	ret = ionss_register();
 	if (ret)
-		D_GOTO(cleanup, exit_rc = ret);
+		D_GOTO(shutdown, exit_rc = ret);
 
 	shutdown = 0;
 
@@ -2984,7 +2988,7 @@ int main(int argc, char **argv)
 
 		D_ALLOC_ARRAY(progress_tids, base.thread_count);
 		if (!progress_tids) {
-			D_GOTO(cleanup, exit_rc = -DER_NOMEM);
+			D_GOTO(shutdown, exit_rc = -DER_NOMEM);
 		}
 		for (thread = 0; thread < base.thread_count; thread++) {
 			IOF_LOG_INFO("Starting thread %d", thread);
@@ -3004,7 +3008,7 @@ int main(int argc, char **argv)
 
 	IOF_LOG_INFO("Shutting down, threads terminated");
 
-cleanup:
+shutdown:
 
 	/* After shutdown has been invoked close all files and free any memory,
 	 * in normal operation all files should be closed as a result of CNSS
@@ -3033,9 +3037,6 @@ cleanup:
 			IOF_TRACE_WARNING(projection,
 					  "Problem closing lock");
 
-		D_FREE(projection->full_path);
-		D_FREE(projection->mount_path);
-
 		iof_pool_destroy(&projection->pool);
 
 		IOF_TRACE_DOWN(projection);
@@ -3051,15 +3052,6 @@ cleanup:
 		}
 	}
 
-	D_FREE(base.projection_array);
-
-	/* TODO:
-	 *
-	 * This means a resource leak, or failed cleanup after client eviction.
-	 * We really should have the ability to iterate over any handles that
-	 * remain open at this point.
-	 */
-
 	ret = crt_finalize();
 	if (ret) {
 		IOF_LOG_ERROR("Could not finalize cart");
@@ -3068,13 +3060,26 @@ cleanup:
 		}
 	}
 
+cleanup:
+
+	for (i = 0; i < base.projection_count; i++) {
+		struct ios_projection *projection = &base.projection_array[i];
+
+		D_FREE(projection->full_path);
+		D_FREE(projection->mount_path);
+	}
+
+	D_FREE(base.projection_array);
+
 	D_FREE(base.fs_list);
 
-	ret = ios_gah_destroy(base.gs);
-	if (ret) {
-		IOF_LOG_ERROR("Could not close GAH pool");
-		if (exit_rc == -DER_SUCCESS) {
-			exit_rc = ret;
+	if (base.gs) {
+		ret = ios_gah_destroy(base.gs);
+		if (ret) {
+			IOF_LOG_ERROR("Could not close GAH pool");
+			if (exit_rc == -DER_SUCCESS) {
+				exit_rc = ret;
+			}
 		}
 	}
 
@@ -3082,6 +3087,10 @@ cleanup:
 	 * valgrind can better detect lost memory
 	 */
 	memset(&base, 0, sizeof(base));
+
+	if (exit_rc == -DER_NOMEM) {
+		exit_rc = -2;
+	}
 
 	IOF_TRACE_INFO(&base, "Exiting with status %d", -exit_rc);
 	IOF_TRACE_DOWN(&base);

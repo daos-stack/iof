@@ -38,13 +38,12 @@
 """
 Memory allocation failure testing for IOF.
 
-Intercept memory allocations in CaRT to cause them to fail, and run the CNSS
+Intercept memory allocations in CaRT to cause them to fail, and run the program
 to see how it behaves.  For each allocation point as the program runs fail
 and see if the program exits cleanly and shuts down properly without leaking
 any memory.
 
-This test targets the startup procedure of CNSS, so does not yet require
-a IONSS process, or indeed any network connectivity at all.
+This test targets the startup procedure of both the CNSS and the IONSS.
 """
 
 import os
@@ -136,7 +135,22 @@ def run_once(prefix, cmd, log_top_dir, floc):
     if not have_inject:
         raise EndOfTest
 
-def main():
+def open_config_file():
+    """Write a ionss config file"""
+
+    config = {"projections":
+              [{"full_path": '/tmp'}]}
+
+    config_file = tempfile.NamedTemporaryFile(suffix='.cfg',
+                                              prefix="ionss_",
+                                              mode='w',
+                                              delete=False)
+    yaml.dump(config, config_file.file, default_flow_style=False)
+    config_file.close()
+    return config_file.name
+
+#pylint: disable=too-many-branches
+def run_test(ionss=False):
     """Main function"""
 
     jdata = iofcommontestsuite.load_config()
@@ -147,12 +161,17 @@ def main():
 
     use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
 
+    if ionss:
+        bin_cmd = 'ionss'
+    else:
+        bin_cmd = 'cnss'
+
     log_top_dir = os.getenv("IOF_TESTLOG",
                             os.path.join(os.path.dirname(
                                 os.path.realpath(__file__)),
                                          'output',
                                          'alloc_fail',
-                                         'cnss'))
+                                         bin_cmd))
 
     try:
         os.makedirs(os.path.join(log_top_dir, 'af'))
@@ -162,13 +181,17 @@ def main():
     crt_suppressfile = iofcommontestsuite.valgrind_cart_supp_file()
     iof_suppressfile = iofcommontestsuite.valgrind_iof_supp_file()
 
-    os.environ['D_LOG_MASK'] = 'DEBUG'
     floc = 0
+
+    if ionss:
+        config_file = open_config_file()
 
     while True:
         floc += 1
-        subprocess.call(['fusermount', '-q', '-u', ctrl_fs_dir])
+        if not ionss:
+            subprocess.call(['fusermount', '-q', '-u', ctrl_fs_dir])
         cmd = [os.path.join(jdata['OMPI_PREFIX'], 'bin', 'orterun'), '-n', '1']
+        cmd.extend(['-x', 'D_LOG_MASK=DEBUG'])
         cmd.extend(['valgrind',
                     '--quiet',
                     '--leak-check=full',
@@ -184,15 +207,26 @@ def main():
                         '--xml-file={}'.format(
                             os.path.join(log_top_dir, 'af',
                                          "valgrind-{}.xml".format(floc)))])
-        cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'cnss'))
-        cmd.extend(['-p', prefix])
+        if ionss:
+            cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'ionss'))
+            cmd.extend(['-c', config_file])
+        else:
+            cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'cnss'))
+            cmd.extend(['-p', prefix])
         try:
             run_once(prefix, cmd, log_top_dir, floc)
         except EndOfTest:
             print("Ran without injecting error")
             break
-
-
+        # Only test the first few iterations of ionss as there are still
+        # issues later on, and as yet no hooks are in place to make ionss
+        # exit after startup.
+        if ionss and floc == 50:
+            break
+    if ionss:
+        os.unlink(config_file)
+#pylint: enable=too-many-branches
 
 if __name__ == '__main__':
-    main()
+    run_test()
+    run_test(ionss=True)
