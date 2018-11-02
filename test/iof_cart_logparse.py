@@ -253,6 +253,7 @@ class IofLogLine():
 
         return self._is_type(['Link'])
 
+# pylint: disable=too-many-branches
 class StateIter():
     """Helper class for IofLogIter to add a statefull iterator.
 
@@ -267,8 +268,12 @@ class StateIter():
         self._l = None
 
     def __iter__(self):
+
+        # Dict, indexed by pointer, containing re-use index for that pointer.
         self.reuse_table = {}
+        # Conversion from active pointer to line where it was created.
         self.active_desc = {}
+
         self._l = iter(self.li)
         return self
 
@@ -278,7 +283,7 @@ class StateIter():
         if not line.trace:
             return line
 
-        if line.is_new():
+        if line.is_new() or line.is_new_rpc():
             if line.descriptor in self.reuse_table:
                 self.reuse_table[line.descriptor] += 1
                 line.pdesc = '{}_{}'.format(line.descriptor,
@@ -286,21 +291,39 @@ class StateIter():
             else:
                 self.reuse_table[line.descriptor] = 0
                 line.pdesc = line.descriptor
-            self.active_desc[line.descriptor] = line.pdesc
-            line.pparent = self.active_desc.get(line.parent, line.parent)
-        else:
-            if line.is_link():
-                line.pdesc = line.descriptor
+            self.active_desc[line.descriptor] = line
+            if line.is_new():
+                if line.parent in self.active_desc:
+                    line.pparent = self.active_desc[line.parent].pdesc
+                else:
+                    line.pparent = line.parent
+                line.rpc = False
             else:
-                line.pdesc = self.active_desc.get(line.descriptor,
-                                                  line.descriptor)
+                line.rpc = True
+        elif line.is_link():
+            if line.parent in self.active_desc:
+                line.pparent = self.active_desc[line.parent].pdesc
+            else:
+                line.pparent = line.parent
+            line.pdesc = line.descriptor
+            line.rpc = False
+        else:
+            if line.descriptor in self.active_desc:
+                line.rpc = self.active_desc[line.descriptor].rpc
+                if not line.rpc:
+                    line.pparent = self.active_desc[line.descriptor].pparent
+                line.pdesc = self.active_desc[line.descriptor].pdesc
+            else:
+                line.pdesc = line.descriptor
+                line.rpc = False
 
-            if line.is_link():
-                line.pparent = self.active_desc.get(line.parent, line.parent)
 
-        if line.is_dereg() and line.descriptor in self.active_desc:
-            del self.active_desc[line.descriptor]
+            if (line.is_dereg() or line.is_dereg_rpc()) and \
+               line.descriptor in self.active_desc:
+                del self.active_desc[line.descriptor]
+
         return line
+# pylint: disable=too-many-branches
 
 class IofLogIter():
     """Class for parsing CaRT log files

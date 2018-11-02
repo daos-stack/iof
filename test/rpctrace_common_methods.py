@@ -379,7 +379,7 @@ class RpcTrace(common_methods.ColorizedOutput):
             # so this can be selected later for tracing.
             if line.trace and not to_trace and \
                (line.level <= iof_cart_logparse.LOG_LEVELS['WARN']):
-                to_trace = line.pdesc
+                to_trace = line
 
             if line.is_new():
 
@@ -387,7 +387,7 @@ class RpcTrace(common_methods.ColorizedOutput):
                 # traced if there are no warning messages in the file.
                 if not to_trace and \
                    not to_trace_fuse and line.filename.startswith(fuse_file):
-                    to_trace_fuse = line.pdesc
+                    to_trace_fuse = line
 
                 obj_type = line.get_field(-3)[1:-1]
 
@@ -455,31 +455,33 @@ class RpcTrace(common_methods.ColorizedOutput):
         else:
             descriptor = t_desc['to_trace_fuse']
 
-        trace = descriptor
+        trace = descriptor.pdesc
         #append an extra line
         output = []
         traces_for_log_dump = []
         output.append('')
-        try:
-            while trace != "root":
-                traces_for_log_dump.append(trace)
-                (trace_type, parent) = desc_table[trace]
-                output.append('{}: {}'.format(trace_type, trace))
-                for (desc, name) in desc_dict[trace]:
-                    traces_for_log_dump.append(desc)
-                    output.append('\t{} {}'.format(name, desc))
-                trace = parent
-        except KeyError:
-            self.error_output('Descriptor {} does not trace back to root'\
-                              .format(descriptor))
+        if not descriptor.rpc:
+            try:
+                while trace != "root":
+                    traces_for_log_dump.append(trace)
+                    (trace_type, parent) = desc_table[trace]
+                    output.append('{}: {}'.format(trace_type, trace))
+                    for (desc, name) in desc_dict[trace]:
+                        traces_for_log_dump.append(desc)
+                        output.append('\t{} {}'.format(name, desc))
+                    trace = parent
+            except KeyError:
+                self.error_output('Descriptor {} does not trace back to root'\
+                                  .format(descriptor.pdesc))
 
         traces_for_log_dump.append(trace)
 
         if not output:
             self.error_output('Descriptor {} not currently registered or '
-                              'linked'.format(descriptor))
+                              'linked'.format(descriptor.pdesc))
         else:
-            output.insert(0, '\nDescriptor Hierarchy ({}):'.format(descriptor))
+            output.insert(0, '\nDescriptor Hierarchy ({}):'\
+                          .format(descriptor.pdesc))
             self.list_output(output)
 
         self.log_output('\nLog dump for descriptor hierarchy ({}):'\
@@ -508,7 +510,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         if t_desc['to_trace']:
             descriptor = t_desc['to_trace']
             self.normal_output('Tracing descriptor {} with error/warning'. \
-                               format(descriptor))
+                               format(descriptor.pdesc))
         else:
             descriptor = t_desc['to_trace_fuse']
 
