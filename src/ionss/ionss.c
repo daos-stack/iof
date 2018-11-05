@@ -1266,7 +1266,8 @@ void iof_read_check_and_send(struct ios_projection *projection)
 	ard = iof_pool_acquire(projection->ar_pool);
 	if (!ard) {
 		projection->current_read_count--;
-		IOF_LOG_WARNING("No ARD slot available (%d/%d)",
+		IOF_TRACE_DEBUG(projection,
+				"No ARD slot available (%d/%d)",
 				projection->current_read_count,
 				projection->max_read_count);
 		D_MUTEX_UNLOCK(&projection->lock);
@@ -1745,9 +1746,9 @@ void iof_write_check_and_send(struct ios_projection *projection)
 	awd = iof_pool_acquire(projection->aw_pool);
 	if (!awd) {
 		projection->current_write_count--;
-		IOF_TRACE_WARNING(projection, "No AWD slot available (%d/%d)",
-				  projection->current_write_count,
-				  projection->max_write_count);
+		IOF_TRACE_DEBUG(projection, "No AWD slot available (%d/%d)",
+				projection->current_write_count,
+				projection->max_write_count);
 		D_MUTEX_UNLOCK(&projection->lock);
 		return;
 	}

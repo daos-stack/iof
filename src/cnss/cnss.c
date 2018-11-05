@@ -334,9 +334,10 @@ register_fuse(void *arg,
 			goto cleanup;
 
 		rc = fuse_session_mount(info->session, info->mnt);
-		if (rc != 0)
+		if (rc != 0) {
+			IOF_TRACE_ERROR(plugin, "Failed to mount %d", rc);
 			goto cleanup;
-
+		}
 		*sessionp = info->session;
 	} else {
 		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
@@ -349,8 +350,10 @@ register_fuse(void *arg,
 		}
 
 		rc = fuse_mount(info->fuse, info->mnt);
-		if (rc != 0)
+		if (rc != 0) {
+			IOF_TRACE_ERROR(plugin, "Failed to mount %d", rc);
 			goto cleanup;
+		}
 	}
 
 	IOF_TRACE_DEBUG(plugin,
