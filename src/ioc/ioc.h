@@ -382,6 +382,18 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
+#define IOC_REPLY_READLINK(ioc_req, path)				\
+	do {								\
+		int __rc;						\
+		IOF_TRACE_DEBUG(ioc_req, "Returning path '%s'", path);	\
+		__rc = fuse_reply_readlink((ioc_req)->req, path);	\
+		if (__rc != 0)						\
+			IOF_TRACE_ERROR(ioc_req,			\
+					"fuse_reply_readlink returned %d:%s", \
+					__rc, strerror(-__rc));		\
+		IOF_TRACE_DOWN(ioc_req);				\
+	} while (0)
+
 #define IOC_REPLY_WRITE(handle, req, bytes)				\
 	do {								\
 		int __rc;						\

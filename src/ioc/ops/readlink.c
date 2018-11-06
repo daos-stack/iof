@@ -40,75 +40,93 @@
 #include "ioc.h"
 #include "log.h"
 
-static void
-readlink_ll_cb(const struct crt_cb_info *cb_info)
+static bool
+readlink_cb(struct ioc_request *request)
 {
-	fuse_req_t req = cb_info->cci_arg;
-	struct iof_string_out *out = crt_reply_get(cb_info->cci_rpc);
+	struct iof_string_out *out = crt_reply_get(request->rpc);
 
-	if (cb_info->cci_rc != 0) {
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		return;
+	/* Drop the two refs that this code has taken, one from the
+	 * req_create() call and a second from addref
+	 */
+	crt_req_decref(request->rpc);
+	crt_req_decref(request->rpc);
+	IOC_REQUEST_RESOLVE(request, out);
+	if (request->rc) {
+		D_GOTO(out_err, 0);
 	}
 
-	if (out->rc) {
-		IOF_FUSE_REPLY_ERR(req, out->rc);
-		return;
-	}
+	IOC_REPLY_READLINK(request, out->path);
 
-	if (out->err || !out->path) {
-		IOF_FUSE_REPLY_ERR(req, EIO);
-		return;
-	}
+	D_FREE(request);
+	return false;
 
-	fuse_reply_readlink(req, out->path);
+out_err:
+	IOC_REPLY_ERR(request, request->rc);
+	D_FREE(request);
+	return false;
+
 }
+
+static const struct ioc_request_api api = {
+	.on_result	= readlink_cb,
+	.gah_offset	= offsetof(struct iof_gah_in, gah),
+	.have_gah	= true,
+};
 
 void
 ioc_ll_readlink(fuse_req_t req, fuse_ino_t ino)
 {
 	struct iof_projection_info *fs_handle = fuse_req_userdata(req);
-	struct iof_gah_in *in;
-	crt_rpc_t *rpc = NULL;
+	struct ioc_request		*request;
 	int rc;
 	int ret;
 
 	STAT_ADD(fs_handle->stats, readlink);
 
-	if (FS_IS_OFFLINE(fs_handle)) {
-		ret = fs_handle->offline_reason;
-		goto out_err;
+	D_ALLOC_PTR(request);
+	if (!request) {
+		D_GOTO(out_no_request, ret = ENOMEM);
 	}
 
-	rc = crt_req_create(fs_handle->proj.crt_ctx,
-			    &fs_handle->proj.grp->psr_ep,
-			    FS_TO_OP(fs_handle, readlink), &rpc);
-	if (rc || !rpc) {
-		IOF_LOG_ERROR("Could not create request, rc = %d",
-			      rc);
-		ret = EIO;
-		goto out_err;
+	IOC_REQUEST_INIT(request, fs_handle);
+	IOC_REQUEST_RESET(request);
+
+	IOF_TRACE_UP(request, fs_handle, "readlink");
+	IOF_TRACE_INFO(request, "statfs %lu", ino);
+
+	request->req = req;
+	request->ir_api = &api;
+	request->ir_ht = RHS_INODE_NUM;
+	request->ir_inode_num = ino;
+
+	rc = crt_req_create(fs_handle->proj.crt_ctx, NULL,
+			    FS_TO_OP(fs_handle, readlink), &request->rpc);
+	if (rc || !request->rpc) {
+		IOF_TRACE_ERROR(request,
+				"Could not create request, rc = %d",
+				rc);
+		D_GOTO(out_err, ret = EIO);
 	}
 
-	in = crt_req_get(rpc);
-	in->gah = fs_handle->gah;
+	/* Add a second ref as that's what the iof_fs_send() function
+	 * expects.  In the case of failover the RPC might be completed,
+	 * and a copy made the the RPC seen in statfs_cb might not be
+	 * the same one as seen here.
+	 */
+	crt_req_addref(request->rpc);
 
-	/* Find the GAH of the parent */
-	rc = find_gah(fs_handle, ino, &in->gah);
-	if (rc != 0)
-		D_GOTO(out_err, ret = rc);
-
-	rc = crt_req_send(rpc, readlink_ll_cb, req);
-	if (rc) {
-		IOF_LOG_ERROR("Could not send rpc, rc = %d", rc);
-		ret = EIO;
-		goto out_err;
+	rc = iof_fs_send(request);
+	if (rc != 0) {
+		D_GOTO(out_err, ret = EIO);
 	}
 
 	return;
 
+out_no_request:
+	IOC_REPLY_ERR_RAW(fs_handle, req, ret);
+	return;
+
 out_err:
-	IOF_FUSE_REPLY_ERR(req, ret);
-	if (rpc)
-		crt_req_decref(rpc);
+	IOC_REPLY_ERR(request, ret);
+	D_FREE(request);
 }
