@@ -79,9 +79,13 @@ def run_once(prefix, cmd, log_top_dir, floc):
     unlink_file(log_file)
 
     y = {}
+    # Fault id 100 is in ionss itself, and is used to trigger shutdown
+    # when IONSS has finished initialising, so this test can complete
+    # rather than block.
     y['fault_config'] = [{'id': 0,
                           'interval': floc,
-                          'max_faults': 1}]
+                          'max_faults': 1},
+                         {'id': 100}]
 
     fd = open(os.path.join(prefix, 'fi.yaml'), 'w+')
     fd.write(yaml.dump(y))
@@ -101,13 +105,13 @@ def run_once(prefix, cmd, log_top_dir, floc):
                                      'Valgrind error when fault injected here')
             common_methods.show_bug(line, 'IOF-887')
         print("Alloc test failing with valgrind errors")
-        sys.exit(1)
+        return True
     # This means abnormal exit, probably a segv.
     if rc < 0:
-        sys.exit(1)
+        return True
     # This means it's not one of the CNSS_ERR error codes.
     if rc > 10:
-        sys.exit(1)
+        return True
 
     ifd = open(internals_file, 'w+')
     trace = rpctrace_common_methods.RpcTrace(log_file, ifd)
@@ -117,6 +121,9 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     have_inject = False
     for line in trace.lf.new_iter():
+        if line.endswith('fault_id 100, injecting fault.'):
+            print(line.to_str())
+            break
         if not line.endswith('fault_id 0, injecting fault.'):
             continue
         have_inject = True
@@ -130,10 +137,11 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     if trace.have_errors:
         print("Internals tracing code found errors: {}".format(internals_file))
-        sys.exit(1)
+        return True
 
     if not have_inject:
         raise EndOfTest
+    return False
 
 def open_config_file():
     """Write a ionss config file"""
@@ -186,6 +194,7 @@ def run_app(ionss=False):
     if ionss:
         config_file = open_config_file()
 
+    my_res = []
     while True:
         floc += 1
         if not ionss:
@@ -214,17 +223,18 @@ def run_app(ionss=False):
             cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'cnss'))
             cmd.extend(['-p', prefix])
         try:
-            run_once(prefix, cmd, log_top_dir, floc)
+            res = run_once(prefix, cmd, log_top_dir, floc)
+            if res:
+                my_res.append(floc)
         except EndOfTest:
             print("Ran without injecting error")
             break
-        # Only test the first few iterations of ionss as there are still
-        # issues later on, and as yet no hooks are in place to make ionss
-        # exit after startup.
-        if ionss and floc == 50:
-            break
     if ionss:
         os.unlink(config_file)
+
+    if my_res:
+        print('Failed for {}'.format(my_res))
+        sys.exit(1)
 #pylint: enable=too-many-branches
 
 if __name__ == '__main__':

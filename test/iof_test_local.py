@@ -664,7 +664,7 @@ class Testlocal(unittest.TestCase,
                 elif line.is_realloc():
                     new_pointer = line.get_field(-3)
                     old_pointer = line.get_field(-1)[:-2].split(':')[-1]
-                    if old_pointer == new_pointer:
+                    if new_pointer != '(nil)' and old_pointer != '(nil)':
                         memsize.subtract(regions[old_pointer].calloc_size())
                     regions[new_pointer] = line
                     memsize.add(line.calloc_size())

@@ -2741,13 +2741,16 @@ int main(int argc, char **argv)
 	base.primary_group = crt_group_lookup(base.group_name);
 	if (base.primary_group == NULL) {
 		IOF_LOG_ERROR("Failed to look up primary group");
-		D_GOTO(shutdown, exit_rc = -DER_NONEXIST);
+		D_GOTO(shutdown_no_proj, exit_rc = -DER_NONEXIST);
 	}
 	IOF_LOG_INFO("Primary Group: %s", base.primary_group->cg_grpid);
 	crt_group_rank(base.primary_group, &base.my_rank);
 	crt_group_size(base.primary_group, &base.num_ranks);
 
 	base.gs = ios_gah_init(base.my_rank);
+	if (!base.gs) {
+		D_GOTO(shutdown_no_proj, exit_rc = -DER_NOMEM);
+	}
 
 	/*
 	 * Populate the projection_array with every projection.
@@ -2782,14 +2785,15 @@ int main(int argc, char **argv)
 		fd = open(projection->full_path,
 			  O_DIRECTORY | O_PATH | O_NOATIME | O_RDONLY);
 		if (fd == -1) {
-			IOF_LOG_ERROR("Could not open export directory %s",
-				      projection->full_path);
+			IOF_TRACE_ERROR(projection,
+					"Could not open export directory %s",
+					projection->full_path);
 			err = 1;
-
+			IOF_TRACE_DOWN(projection);
 			continue;
 		}
 
-		projection->active = 0;
+		projection->active = false;
 		projection->base = &base;
 		rc = d_hash_table_create_inplace(D_HASH_FT_RWLOCK |
 						 D_HASH_FT_EPHEMERAL,
@@ -2797,7 +2801,8 @@ int main(int argc, char **argv)
 						 NULL, &hops,
 						 &projection->file_ht);
 		if (rc != 0) {
-			IOF_LOG_ERROR("Could not create hash table");
+			IOF_TRACE_ERROR(projection,
+					"Could not create hash table");
 			continue;
 		}
 
@@ -2829,8 +2834,9 @@ int main(int argc, char **argv)
 							   W_OK, 0) == 0);
 		projection->fh_pool = iof_pool_register(&projection->pool,
 							&fhp);
-		if (!projection->fh_pool)
+		if (!projection->fh_pool) {
 			continue;
+		}
 
 		rc = ios_fh_alloc(projection, &projection->root);
 		if (rc != 0)
@@ -2866,8 +2872,7 @@ int main(int argc, char **argv)
 	ret = filesystem_lookup();
 	if (ret) {
 		IOF_LOG_ERROR("File System look up failed with ret = %d", ret);
-		D_GOTO(cleanup, exit_rc = -DER_MISC);
-		goto shutdown;
+		D_GOTO(shutdown, exit_rc = -DER_MISC);
 	}
 
 	ret = crt_context_create(&base.crt_ctx);
@@ -2897,11 +2902,11 @@ int main(int argc, char **argv)
 		projection->ar_pool = iof_pool_register(&projection->pool,
 							&arp);
 		if (!projection->ar_pool)
-			projection->active = 0;
+			projection->active = false;
 		projection->aw_pool = iof_pool_register(&projection->pool,
 							&awp);
 		if (!projection->aw_pool)
-			projection->active = 0;
+			projection->active = false;
 	}
 
 	/* Create a fs_list from the projection array */
@@ -2962,6 +2967,10 @@ int main(int argc, char **argv)
 
 	shutdown = 0;
 
+	if (D_SHOULD_FAIL(100)) {
+		D_GOTO(shutdown, exit_rc = -DER_SHUTDOWN);
+	}
+
 	if (base.thread_count == 1) {
 		int rc;
 		/* progress loop */
@@ -3011,8 +3020,7 @@ shutdown:
 		struct ios_projection *projection = &base.projection_array[i];
 		int rc;
 
-		if (!projection->active)
-			continue;
+
 
 		/* Close all file handles associated with a projection.
 		 *
@@ -3033,6 +3041,8 @@ shutdown:
 
 		IOF_TRACE_DOWN(projection);
 	}
+
+shutdown_no_proj:
 
 	D_RWLOCK_DESTROY(&base.gah_rwlock);
 
@@ -3082,6 +3092,8 @@ cleanup:
 
 	if (exit_rc == -DER_NOMEM) {
 		exit_rc = -2;
+	} else if (exit_rc == -DER_SHUTDOWN) {
+		exit_rc = -4;
 	}
 
 	IOF_TRACE_INFO(&base, "Exiting with status %d", -exit_rc);
