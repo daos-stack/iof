@@ -98,6 +98,35 @@ def show_bug(line, bug_id):
     """Mark output with a known bug"""
     show_line(line, 'error', 'Known bug {}'.format(bug_id))
 
+class hwm_counter():
+    """Class to track integer values, with high-water mark"""
+
+    # Used for memory allocation sizes currently.
+    def __init__(self):
+        self.__val = 0
+        self.__hwm = 0
+        self.__acount = 0
+        self.__fcount = 0
+
+    def __str__(self):
+        return "Total:{:,} HWM:{:,} {} allocations, {} frees".\
+            format(self.__val,
+                   self.__hwm,
+                   self.__acount,
+                   self.__fcount)
+
+    def add(self, val):
+        """Add a value"""
+        self.__val += val
+        if self.__val > self.__hwm:
+            self.__hwm = self.__val
+        self.__acount += 1
+
+    def subtract(self, val):
+        """Subtract a value"""
+        self.__val -= val
+        self.__fcount += 1
+
 def import_list():
     """Return a array of imports
 

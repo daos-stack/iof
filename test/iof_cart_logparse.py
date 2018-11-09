@@ -253,6 +253,25 @@ class IofLogLine():
 
         return self._is_type(['Link'])
 
+    def is_calloc(self):
+        """Returns True if line is a allocation point"""
+        return self.get_field(2).startswith('alloc(')
+
+    def is_realloc(self):
+        """Returns True if line is a call to"""
+        return self.get_field(2) == 'realloc'
+
+    def calloc_size(self):
+        """Returns the size of the allocation"""
+        if self.get_field(5) == '*':
+            count = int(self.get_field(-3).split(':')[-1])
+            return count * int(self.get_field(4))
+        return int(self.get_field(4))
+
+    def is_free(self):
+        """Returns True if line is a call to free"""
+        return self.get_field(2) == 'free'
+
 # pylint: disable=too-many-branches
 class StateIter():
     """Helper class for IofLogIter to add a statefull iterator.

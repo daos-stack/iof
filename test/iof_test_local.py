@@ -538,6 +538,7 @@ class Testlocal(unittest.TestCase,
         err_count = 0
 
         regions = OrderedDict()
+        memsize = common_methods.hwm_counter()
 
         error_files = set()
 
@@ -620,26 +621,31 @@ class Testlocal(unittest.TestCase,
                         err_count += 1
             else:
                 non_trace_lines += 1
-                m = line.get_field(2)
-                if m.startswith('alloc('):
+                if line.is_calloc():
                     pointer = line.get_field(-1).rstrip('.')
                     regions[pointer] = line
-                elif m == 'free':
+                    memsize.add(line.calloc_size())
+                elif line.is_free():
                     pointer = line.get_field(-1).rstrip('.')
                     if pointer in regions:
+                        memsize.subtract(regions[pointer].calloc_size())
                         del regions[pointer]
                     elif pointer != '(nil)':
                         show_line(line, 'error', 'free of unknown memory')
-                elif m == 'realloc':
+                elif line.is_realloc():
                     new_pointer = line.get_field(6)
-                    regions[new_pointer] = line
                     old_pointer = line.get_field(-1)[:-2].split(':')[-1]
+                    if old_pointer == new_pointer:
+                        memsize.subtract(regions[old_pointer].calloc_size())
+                    regions[new_pointer] = line
+                    memsize.add(line.calloc_size())
                     if old_pointer not in (new_pointer, '(nil)'):
                         if old_pointer in regions:
                             del regions[old_pointer]
                         else:
                             show_line(line, 'error',
                                       'realloc of unknown memory')
+
         del active_desc['root']
 
         if not have_debug:
@@ -652,6 +658,8 @@ class Testlocal(unittest.TestCase,
                                                                   total_lines,
                                                                   trace_lines,
                                                                   p_trace))
+
+        print("Memsize: {}".format(memsize))
 
         # Special case the fuse arg values as these are allocated by IOF
         # but freed by fuse itself.
