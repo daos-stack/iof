@@ -1996,7 +1996,7 @@ initialize_projection(struct iof_state *iof_state,
 	IOF_TRACE_INFO(fs_handle, "FUSE: %sthreaded | API => "
 			"Write: ioc_ll_write%s, Read: fuse_reply_%s",
 			fs_handle->flags & IOF_CNSS_MT
-					 ? "Single " : "Multi-",
+					 ? "Multi-" : "Single ",
 			fs_handle->flags & IOF_FUSE_WRITE_BUF ? "_buf" : "",
 			fs_handle->flags & IOF_FUSE_READ_BUF ? "buf" : "data");
 
