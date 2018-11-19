@@ -150,7 +150,7 @@ def open_config_file():
     return config_file.name
 
 #pylint: disable=too-many-branches
-def run_test(ionss=False):
+def run_app(ionss=False):
     """Main function"""
 
     jdata = iofcommontestsuite.load_config()
@@ -228,5 +228,5 @@ def run_test(ionss=False):
 #pylint: enable=too-many-branches
 
 if __name__ == '__main__':
-    run_test()
-    run_test(ionss=True)
+    run_app()
+    run_app(ionss=True)
