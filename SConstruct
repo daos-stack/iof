@@ -76,27 +76,12 @@ def save_build_info(env, prereqs, platform):
     env.InstallAs('$PREFIX/TESTING/.build_vars.json',
                   json_build_vars)
 
-def check_d_log(context):
-    """Helper function to check d_log_sync_mask() args"""
-
-    context.Message("Checking if d_log_sync_mask expects options ")
-
-    ret = context.TryCompile("""
-#include <gurt/dlog.h>
-int main() {
-    d_log_sync_mask(0, false);
-    return 0;
-}
-""", ".c")
-    context.Result(ret)
-    return ret
-
 def run_checks(env, prereqs, platform):
     """Run all configure time checks"""
 
     cenv = env.Clone()
     cenv.Append(CFLAGS='-Werror')
-    config = Configure(cenv, custom_tests={'d_log_args' : check_d_log})
+    config = Configure(cenv)
     try:
         cmd = 'setfattr'
         if platform == 'Darwin':
@@ -117,8 +102,6 @@ def run_checks(env, prereqs, platform):
         Exit(2)
 
     prereqs.require(cenv, 'cart')
-    if config.d_log_args():
-        env.AppendUnique(CPPDEFINES=['D_LOG_ARGS=1'])
     config.Finish()
 
     env.AppendIfSupported(CFLAGS=DESIRED_FLAGS)

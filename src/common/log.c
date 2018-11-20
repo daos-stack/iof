@@ -42,41 +42,20 @@
 #include "log.h"
 
 int iof_log_handle;
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-
-static int iof_log_allocfacility(const char *shortname, const char *longname)
-{
-	int handle;
-
-	handle = d_log_allocfacility(shortname, longname);
-#ifdef D_LOG_ARGS
-	d_log_sync_mask(0, false);
-#else
-	d_log_sync_mask();
-#endif
-
-	return handle;
-}
 
 void iof_log_init(const char *shortname, const char *longname, int *handle)
 {
 	int new_handle;
 
 	d_log_init();
-	new_handle = iof_log_allocfacility(shortname, longname);
+	new_handle = d_log_allocfacility(shortname, longname);
+	d_log_sync_mask();
 
-	D_MUTEX_LOCK(&lock);
 	if (handle == NULL) {
 		iof_log_handle = new_handle;
 	} else {
 		*handle = new_handle;
-		/* Ensure default log handle is initialized.  If user
-		 * explicitely initializes it, it will get overwritten
-		 */
-		if (iof_log_handle == -1)
-			iof_log_handle = new_handle;
 	}
-	D_MUTEX_UNLOCK(&lock);
 }
 
 void iof_log_close(void)
