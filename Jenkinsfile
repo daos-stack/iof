@@ -181,7 +181,13 @@ pipeline {
                     }
                     steps {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                                script: '''ln -s $(which fusermount) install/Linux/bin/fusermount3
+                                script: '''id || true
+                                           pwd || true
+                                           ls $HOME || true
+                                           pip3 list || true
+                                           find /home/jenkins/ -type f | xargs ls -ld || true
+                                           ln -s $(which fusermount) install/Linux/bin/fusermount3
+                                           mount
                                            . ./.build_vars-Linux.sh
                                            DAOS_BASE=${SL_OMPI_PREFIX%/install/*}
                                            if [ "$PWD" != "$DAOS_BASE" ]; then
