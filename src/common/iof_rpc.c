@@ -37,10 +37,12 @@
  */
 
 #include "iof_common.h"
+#include "iof_fs.h"
 #include "log.h"
 
 #define IOF_PROTO_WRITE_BASE 0x01000000
 #define IOF_PROTO_SIGNON_BASE 0x02000000
+#define IOF_PROTO_SIGNON_VERSION 2
 
 /*
  * Re-use the CMF_UUID type when using a GAH as they are both 128 bit types
@@ -263,7 +265,7 @@ static struct crt_proto_rpc_format iof_signon_rpc_types[] = {
 
 static struct crt_proto_format iof_signon_registry = {
 	.cpf_name = "IOF_HANDSHAKE",
-	.cpf_ver = 1,
+	.cpf_ver = IOF_PROTO_SIGNON_VERSION,
 	.cpf_count = ARRAY_SIZE(iof_signon_rpc_types),
 	.cpf_prf = iof_signon_rpc_types,
 	.cpf_base = IOF_PROTO_SIGNON_BASE,
@@ -287,9 +289,10 @@ static struct crt_proto_format iof_write_registry = {
  * On the target side proto can be NULL, as no RPCs are sent, so the opcodes
  * are not requried.
  */
-int iof_core_register(struct crt_proto_format *reg,
-		      struct crt_proto_format **proto,
-		      crt_rpc_cb_t handlers[])
+static int
+iof_core_register(struct crt_proto_format *reg,
+		  struct crt_proto_format **proto,
+		  crt_rpc_cb_t handlers[])
 {
 	int rc;
 	int i;
@@ -314,8 +317,58 @@ iof_register(struct crt_proto_format **proto,
 }
 
 int
-iof_signon_register(struct crt_proto_format **proto,
-		    crt_rpc_cb_t handlers[])
+iof_signon_register(crt_rpc_cb_t handlers[])
 {
-	return iof_core_register(&iof_signon_registry, proto, handlers);
+	return iof_core_register(&iof_signon_registry, NULL, handlers);
+}
+
+struct sq_cb {
+	struct iof_tracker	tracker;
+	uint32_t		version;
+	int			rc;
+};
+
+static void
+iof_signon_query_cb(struct crt_proto_query_cb_info *cb_info)
+{
+	struct sq_cb *cbi = cb_info->pq_arg;
+
+	cbi->rc = cb_info->pq_rc;
+	if (cbi->rc == -DER_SUCCESS) {
+		cbi->version = cb_info->pq_ver;
+	}
+
+	iof_tracker_signal(&cbi->tracker);
+}
+
+/* Query the server side protocol in use, for now we only support one
+ * version so check that with the server and ensure it's what we expect
+ */
+int
+iof_signon_query(crt_endpoint_t *tgt_ep,
+		 struct crt_proto_format **proto)
+{
+	uint32_t ver = IOF_PROTO_SIGNON_VERSION;
+	struct sq_cb cbi = {0};
+	int rc;
+
+	iof_tracker_init(&cbi.tracker, 1);
+
+	rc = crt_proto_query(tgt_ep, IOF_PROTO_SIGNON_BASE,
+			     &ver, 1, iof_signon_query_cb, &cbi);
+	if (rc != -DER_SUCCESS) {
+		return rc;
+	}
+
+	iof_tracker_wait(&cbi.tracker);
+
+	if (cbi.rc != -DER_SUCCESS) {
+		return cbi.rc;
+	}
+
+	if (cbi.version != IOF_PROTO_SIGNON_VERSION) {
+		return -DER_INVAL;
+	}
+
+	return iof_core_register(&iof_signon_registry, proto, NULL);
 }

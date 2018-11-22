@@ -1815,7 +1815,7 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = iof_signon_register(&iof_state->handshake_proto, NULL);
+	ret = iof_signon_query(&group->grp.psr_ep, &iof_state->handshake_proto);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
 				"with ret: %d", ret);

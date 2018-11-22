@@ -349,7 +349,10 @@ iof_register(struct crt_proto_format **proto,
 	     crt_rpc_cb_t handlers[]);
 
 int
-iof_signon_register(struct crt_proto_format **proto,
-		    crt_rpc_cb_t handlers[]);
+iof_signon_register(crt_rpc_cb_t handlers[]);
+
+int
+iof_signon_query(crt_endpoint_t *tgt_ep,
+		 struct crt_proto_format **proto);
 
 #endif

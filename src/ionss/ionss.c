@@ -2244,7 +2244,7 @@ int ionss_register(void)
 		return ret;
 	}
 
-	ret = iof_signon_register(NULL, signon_handlers);
+	ret = iof_signon_register(signon_handlers);
 	if (ret) {
 		IOF_LOG_ERROR("RPC signon handler registration failed,"
 			      " ret = %d", ret);
