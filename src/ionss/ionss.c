@@ -2934,7 +2934,8 @@ int main(int argc, char **argv)
 		base.fs_list[i].max_iov_write = projection->max_iov_write_size;
 		base.fs_list[i].htable_size = projection->inode_htable_size;
 		base.fs_list[i].timeout = projection->cnss_timeout;
-		base.fs_list[i].cnss_thread_count = projection->cnss_thread_count;
+		base.fs_list[i].cnss_thread_count =
+		    projection->cnss_thread_count;
 
 		base.fs_list[i].flags = IOF_FS_DEFAULT;
 		if (projection->failover)

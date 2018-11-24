@@ -68,7 +68,8 @@ ioc_forget_one(struct iof_projection_info *fs_handle,
 	if (rc != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(fs_handle, "Invalid refcount %lu on %p",
 				nlookup,
-				container_of(rlink, struct ioc_inode_entry, ie_htl));
+				container_of(rlink, struct ioc_inode_entry,
+					     ie_htl));
 	}
 }
 

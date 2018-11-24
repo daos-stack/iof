@@ -89,7 +89,8 @@ iof_entry_cb(struct ioc_request *request)
 		 * the parent anyway, so keep that one, but drop one in the call
 		 * to ie_close().
 		 */
-		IOF_TRACE_INFO(container_of(rlink, struct ioc_inode_entry, ie_htl),
+		IOF_TRACE_INFO(container_of(rlink, struct ioc_inode_entry,
+					    ie_htl),
 			       "Existing file %lu " GAH_PRINT_STR,
 			       entry.ino, GAH_PRINT_VAL(out->gah));
 		atomic_fetch_sub(&desc->ie->ie_ref, 1);

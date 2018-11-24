@@ -110,7 +110,7 @@ const uint32_t	default_max_iov_write_size	= 64;
 const uint32_t	default_max_read_count		= 3;
 const uint32_t	default_max_write_count		= 3;
 const uint32_t	default_inode_htable_size	= 5;
-const uint32_t	default_cnss_thread_count	= 0;
+const uint32_t	default_cnss_thread_count;
 const uint32_t	default_cnss_timeout		= 60;
 const bool	default_cnss_threads		= true;
 const bool	default_fuse_read_buf		= true;
@@ -305,13 +305,17 @@ static int parse_node(yaml_document_t *document, yaml_node_t *node,
 		ret = sel_option->setter(sel_option, document, val_node);
 		if (ret) {
 			if (val_node->type == YAML_SCALAR_NODE) {
-				IOF_LOG_WARNING("Unknown configuration value %s %.*s",
-						sel_option->key,
-						(int)val_node->data.scalar.length,
-						(char *)val_node->data.scalar.value);
+				IOF_LOG_WARNING(
+				    "Unknown configuration value %s %.*s",
+				    sel_option->key,
+				    (int)val_node->data.scalar.length,
+				    (char *)val_node->data.scalar.value
+				);
 			} else {
-				IOF_LOG_WARNING("Unknown configuration value %s",
-						sel_option->key);
+				IOF_LOG_WARNING(
+				    "Unknown configuration value %s",
+				    sel_option->key
+				);
 			}
 			return ret;
 		}

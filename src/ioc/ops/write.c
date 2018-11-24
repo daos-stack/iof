@@ -44,7 +44,8 @@
 static bool
 write_cb(struct ioc_request *request)
 {
-	struct iof_wb		*wb = container_of(request, struct iof_wb, wb_req);
+	struct iof_wb		*wb = container_of(request,
+						   struct iof_wb, wb_req);
 	struct iof_writex_out	*out = crt_reply_get(request->rpc);
 	struct iof_writex_in	*in = crt_req_get(request->rpc);
 

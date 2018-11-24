@@ -453,15 +453,16 @@ struct fuse_lowlevel_ops *iof_get_fuse_ops(uint64_t);
 		IOF_TRACE_DOWN(ioc_req);				\
 	} while (0)
 
-#define IOC_REPLY_IOCTL(handle, req, gah_info)				\
-	do {								\
-		int __rc;						\
-		IOF_TRACE_DEBUG(handle, "Returning ioctl");		\
-		__rc = fuse_reply_ioctl(req, 0, &(gah_info), sizeof(gah_info)); \
-		if (__rc != 0)						\
-			IOF_TRACE_ERROR(handle,				\
+#define IOC_REPLY_IOCTL(handle, req, gah_info)				   \
+	do {								   \
+		int __rc;						   \
+		IOF_TRACE_DEBUG(handle, "Returning ioctl");		   \
+		__rc = fuse_reply_ioctl(req, 0, &(gah_info),		   \
+					sizeof(gah_info));		   \
+		if (__rc != 0)						   \
+			IOF_TRACE_ERROR(handle,				   \
 					"fuse_reply_ioctl returned %d:%s", \
-					__rc, strerror(-__rc));		\
+					__rc, strerror(-__rc));		   \
 	} while (0)
 
 struct ioc_request;
