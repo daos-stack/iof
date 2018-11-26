@@ -2236,13 +2236,6 @@ int ionss_register(void)
 				"broadcast RPC handler, ret = %d", ret);
 		return ret;
 	}
-	ret = crt_rpc_register(SHUTDOWN_BCAST_OP,
-			       CRT_RPC_FEAT_NO_TIMEOUT, NULL);
-	if (ret) {
-		IOF_LOG_ERROR("Cannot register shutdown "
-				"broadcast RPC, ret = %d", ret);
-		return ret;
-	}
 
 	ret = iof_register(NULL, write_handlers);
 	if (ret) {
