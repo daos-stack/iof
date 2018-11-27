@@ -40,9 +40,10 @@
 #include "iof_fs.h"
 #include "log.h"
 
-#define IOF_PROTO_WRITE_BASE 0x01000000
 #define IOF_PROTO_SIGNON_BASE 0x02000000
 #define IOF_PROTO_SIGNON_VERSION 2
+#define IOF_PROTO_WRITE_BASE 0x01000000
+#define IOF_PROTO_WRITE_VERSION 3
 
 /*
  * Re-use the CMF_UUID type when using a GAH as they are both 128 bit types
@@ -273,7 +274,7 @@ static struct crt_proto_format iof_signon_registry = {
 
 static struct crt_proto_format iof_write_registry = {
 	.cpf_name = "IOF_WRITE",
-	.cpf_ver = 2,
+	.cpf_ver = IOF_PROTO_WRITE_VERSION,
 	.cpf_count = ARRAY_SIZE(iof_write_rpc_types),
 	.cpf_prf = iof_write_rpc_types,
 	.cpf_base = IOF_PROTO_WRITE_BASE,
@@ -324,8 +325,11 @@ iof_signon_register(crt_rpc_cb_t handlers[])
 
 struct sq_cb {
 	struct iof_tracker	tracker;
-	uint32_t		version;
-	int			rc;
+	uint32_t		signon_version;
+	int			signon_rc;
+	uint32_t		write_version;
+	int			write_rc;
+
 };
 
 static void
@@ -333,42 +337,81 @@ iof_signon_query_cb(struct crt_proto_query_cb_info *cb_info)
 {
 	struct sq_cb *cbi = cb_info->pq_arg;
 
-	cbi->rc = cb_info->pq_rc;
-	if (cbi->rc == -DER_SUCCESS) {
-		cbi->version = cb_info->pq_ver;
+	cbi->signon_rc = cb_info->pq_rc;
+	if (cbi->signon_rc == -DER_SUCCESS) {
+		cbi->signon_version = cb_info->pq_ver;
 	}
 
 	iof_tracker_signal(&cbi->tracker);
 }
 
-/* Query the server side protocol in use, for now we only support one
- * version so check that with the server and ensure it's what we expect
+static void
+iof_write_query_cb(struct crt_proto_query_cb_info *cb_info)
+{
+	struct sq_cb *cbi = cb_info->pq_arg;
+
+	cbi->write_rc = cb_info->pq_rc;
+	if (cbi->write_rc == -DER_SUCCESS) {
+		cbi->write_version = cb_info->pq_ver;
+	}
+
+	iof_tracker_signal(&cbi->tracker);
+}
+
+/* Query the server side protocols in use, for now we only support one
+ * version so check that with the server and ensure it's what we expect.
+ *
+ * Query both the protocols at the same time, by sending both requests
+ * and then waiting for them both to complete.
  */
 int
-iof_signon_query(crt_endpoint_t *tgt_ep,
-		 struct crt_proto_format **proto)
+iof_client_register(crt_endpoint_t *tgt_ep,
+		    struct crt_proto_format **signon,
+		    struct crt_proto_format **write)
 {
-	uint32_t ver = IOF_PROTO_SIGNON_VERSION;
+	uint32_t signon_ver = IOF_PROTO_SIGNON_VERSION;
+	uint32_t write_ver = IOF_PROTO_WRITE_VERSION;
 	struct sq_cb cbi = {0};
 	int rc;
 
-	iof_tracker_init(&cbi.tracker, 1);
+	iof_tracker_init(&cbi.tracker, 2);
 
 	rc = crt_proto_query(tgt_ep, IOF_PROTO_SIGNON_BASE,
-			     &ver, 1, iof_signon_query_cb, &cbi);
+			     &signon_ver, 1, iof_signon_query_cb, &cbi);
 	if (rc != -DER_SUCCESS) {
+		return rc;
+	}
+
+	rc = crt_proto_query(tgt_ep, IOF_PROTO_WRITE_BASE,
+			     &write_ver, 1, iof_write_query_cb, &cbi);
+	if (rc != -DER_SUCCESS) {
+		iof_tracker_signal(&cbi.tracker);
+		iof_tracker_wait(&cbi.tracker);
 		return rc;
 	}
 
 	iof_tracker_wait(&cbi.tracker);
 
-	if (cbi.rc != -DER_SUCCESS) {
-		return cbi.rc;
+	if (cbi.signon_rc != -DER_SUCCESS) {
+		return cbi.signon_rc;
 	}
 
-	if (cbi.version != IOF_PROTO_SIGNON_VERSION) {
+	if (cbi.write_rc != -DER_SUCCESS) {
+		return cbi.write_rc;
+	}
+
+	if (cbi.signon_version != IOF_PROTO_SIGNON_VERSION) {
 		return -DER_INVAL;
 	}
 
-	return iof_core_register(&iof_signon_registry, proto, NULL);
+	if (cbi.write_version != IOF_PROTO_WRITE_VERSION) {
+		return -DER_INVAL;
+	}
+
+	rc = iof_core_register(&iof_signon_registry, signon, NULL);
+	if (rc != -DER_SUCCESS) {
+		return rc;
+	}
+
+	return iof_core_register(&iof_write_registry, write, NULL);
 }

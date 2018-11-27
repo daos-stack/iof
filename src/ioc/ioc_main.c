@@ -1815,17 +1815,12 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 		return ret;
 	}
 
-	ret = iof_signon_query(&group->grp.psr_ep, &iof_state->handshake_proto);
+	ret = iof_client_register(&group->grp.psr_ep,
+				  &iof_state->handshake_proto,
+				  &iof_state->proto);
 	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
-				"with ret: %d", ret);
-		return ret;
-	}
-
-	ret = iof_register(&iof_state->proto, NULL);
-	if (ret) {
-		IOF_TRACE_ERROR(iof_state, "RPC client registration failed "
-				"with ret: %d", ret);
+		IOF_TRACE_ERROR(iof_state,
+				"RPC registration failed with ret: %d", ret);
 		return ret;
 	}
 

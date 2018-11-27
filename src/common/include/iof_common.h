@@ -352,7 +352,8 @@ int
 iof_signon_register(crt_rpc_cb_t handlers[]);
 
 int
-iof_signon_query(crt_endpoint_t *tgt_ep,
-		 struct crt_proto_format **proto);
+iof_client_register(crt_endpoint_t *tgt_ep,
+		    struct crt_proto_format **signon,
+		    struct crt_proto_format **write);
 
 #endif
