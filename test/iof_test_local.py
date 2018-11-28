@@ -633,7 +633,7 @@ class Testlocal(unittest.TestCase,
                     elif pointer != '(nil)':
                         show_line(line, 'error', 'free of unknown memory')
                 elif line.is_realloc():
-                    new_pointer = line.get_field(6)
+                    new_pointer = line.get_field(-3)
                     old_pointer = line.get_field(-1)[:-2].split(':')[-1]
                     if old_pointer == new_pointer:
                         memsize.subtract(regions[old_pointer].calloc_size())

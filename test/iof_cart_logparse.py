@@ -264,7 +264,11 @@ class IofLogLine():
     def calloc_size(self):
         """Returns the size of the allocation"""
         if self.get_field(5) == '*':
-            count = int(self.get_field(-3).split(':')[-1])
+            if self.is_realloc():
+                field = -5
+            else:
+                field = -3
+            count = int(self.get_field(field).split(':')[-1])
             return count * int(self.get_field(4))
         return int(self.get_field(4))
 
