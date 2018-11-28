@@ -63,7 +63,7 @@ echo "hit enter to continue"
 
 cat <<EOF > install/Linux/TESTING/scripts/iof_fio_main.cfg
 {
-    "host_list": ["vm2", "vm3"],
+    "host_list": ["${HOSTPREFIX}vm2", "${HOSTPREFIX}vm3"],
     "test_mode": "littleChief"
 }
 EOF
