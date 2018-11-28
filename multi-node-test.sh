@@ -31,7 +31,7 @@ while [ $i -gt 0 ]; do
         let x+=1
     done
     sudo rmdir $DAOS_BASE || find $DAOS_BASE || true" 2>&1 | dshbak -c
-    if [ \${PIPESTATUS[0] = 0 ]; then
+    if [ \${PIPESTATUS[0]} = 0 ]; then
         i=0
     fi
     let i-=1
