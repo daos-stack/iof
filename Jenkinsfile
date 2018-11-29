@@ -237,34 +237,7 @@ pipeline {
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
 
-                        /* not working yet
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: branch]],
-                            extensions: [[$class: 'RelativeTargetDirectory',
-                                                  relativeTargetDir: 'jenkins']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: [[
-                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
-                                refspec: refspec,
-                                url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins'
-                            ]]
-                        ])
-
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: branch]],
-                            extensions: [[$class: 'RelativeTargetDirectory',
-                                                  relativeTargetDir: 'scony_python-junit']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: [[
-                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
-                                refspec: refspec,
-                                url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit'
-                            ]]
-                        ])
-                        */
-
+                        echo "Starting Two-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 2; echo "rc: $?"',
                                 junit_files: IOF_5-node_junit.xml
@@ -282,7 +255,7 @@ pipeline {
                         }
                         */
                         always {
-                            junit 'IOF_5-node_junit.xml'
+                            //junit 'IOF_5-node_junit.xml'
                             archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
                         }
                     }
@@ -293,42 +266,15 @@ pipeline {
                     }
                     steps {
                         echo "Starting Five-node"
-                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
+                        checkoutScm url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
 
-                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
+                        checkoutScm url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
 
-                        /* not working yet
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: branch]],
-                            extensions: [[$class: 'RelativeTargetDirectory',
-                                                  relativeTargetDir: 'jenkins']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: [[
-                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
-                                refspec: refspec,
-                                url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins'
-                            ]]
-                        ])
-
-                        checkout([
-                            $class: 'GitSCM',
-                            branches: [[name: branch]],
-                            extensions: [[$class: 'RelativeTargetDirectory',
-                                                  relativeTargetDir: 'scony_python-junit']],
-                            submoduleCfg: [],
-                            userRemoteConfigs: [[
-                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
-                                refspec: refspec,
-                                url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit'
-                            ]]
-                        ])
-                        */
-
+                        echo "Starting Five-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 5; echo "rc: $?"',
                                 junit_files: IOF_5-node_junit.xml
@@ -346,7 +292,7 @@ pipeline {
                         }
                         */
                         always {
-                            junit 'IOF_5-node_junit.xml'
+                            //junit 'IOF_5-node_junit.xml'
                             archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
                         }
                     }
