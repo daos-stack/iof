@@ -225,13 +225,41 @@ pipeline {
                         label 'cluster_provisioner2'
                     }
                     steps {
-                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
+                        /* not working yet
+                        checkoutScm url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
 
-                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
+                        checkoutScm url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+                        */
+
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: branch]],
+                            extensions: [[$class: 'RelativeTargetDirectory',
+                                                  relativeTargetDir: 'jenkins']],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[
+                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
+                                refspec: refspec,
+                                url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins'
+                            ]]
+                        ])
+
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: branch]],
+                            extensions: [[$class: 'RelativeTargetDirectory',
+                                                  relativeTargetDir: 'scony_python-junit']],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[
+                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
+                                refspec: refspec,
+                                url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit'
+                            ]]
+                        ])
 
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 2; echo "rc: $?"',
