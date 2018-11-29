@@ -183,6 +183,9 @@ pipeline {
              */
             parallel {
                 stage('Single node') {
+                    agent {
+                        label 'single'
+                    }
                     steps {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: '''id || true
@@ -222,9 +225,10 @@ pipeline {
                 }
                 stage('Two-node') {
                     agent {
-                        label 'cluster_provisioner2'
+                        label 'cluster_provisioner-2'
                     }
                     steps {
+                        echo "Starting Two-node"
                         /* not working yet
                         checkoutScm url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
@@ -288,6 +292,8 @@ pipeline {
                         label 'cluster_provisioner'
                     }
                     steps {
+                        echo "Starting Five-node"
+                        /* not working yet
                         checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
@@ -295,6 +301,33 @@ pipeline {
                         checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+                        */
+
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: branch]],
+                            extensions: [[$class: 'RelativeTargetDirectory',
+                                                  relativeTargetDir: 'jenkins']],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[
+                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
+                                refspec: refspec,
+                                url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins'
+                            ]]
+                        ])
+
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: branch]],
+                            extensions: [[$class: 'RelativeTargetDirectory',
+                                                  relativeTargetDir: 'scony_python-junit']],
+                            submoduleCfg: [],
+                            userRemoteConfigs: [[
+                                credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a',
+                                refspec: refspec,
+                                url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit'
+                            ]]
+                        ])
 
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 5; echo "rc: $?"',
