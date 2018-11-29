@@ -86,26 +86,26 @@ python3 test_runner config=scripts/iof_fio_main.cfg scripts/iof_multi_two_node.y
     rc=\${PIPESTATUS[0]}
     echo \"Test exited with \$rc\"
 }
-find testLogs/testRun -name subtest_results.yml -exec grep -Hi fail {} \\;
 mv testLogs/testRun{,-fio}
+find testLogs/testRun-fio -name subtest_results.yml -exec grep -Hi fail {} \\;
 python3 test_runner config=scripts/iof_ior_main.cfg scripts/iof_multi_two_node.yml || {
     rc=\${PIPESTATUS[0]}
     echo \"Test exited with \$rc\"
 }
-find testLogs/testRun -name subtest_results.yml -exec grep -Hi fail {} \\;
 mv testLogs/testRun{,-ior}
+find testLogs/testRun-ior -name subtest_results.yml -exec grep -Hi fail {} \\;
 python3 test_runner config=scripts/iof_iozone_main.cfg scripts/iof_multi_two_node.yml || {
     rc=\${PIPESTATUS[0]}
     echo \"Test exited with \$rc\"
 }
-find testLogs/testRun -name subtest_results.yml -exec grep -Hi fail {} \\;
 mv testLogs/testRun{,-iozone}
-python3 test_runner config=scripts/iof_mdtest_main.cfg scripts/iof_m_two_node.yml || {
+find testLogs/testRun-iozone -name subtest_results.yml -exec grep -Hi fail {} \\;
+python3 test_runner config=scripts/iof_mdtest_main.cfg scripts/iof_multi_two_node.yml || {
     rc=\${PIPESTATUS[0]}
     echo \"Test exited with \$rc\"
 }
-find testLogs/testRun -name subtest_results.yml -exec grep -Hi fail {} \\;
 mv testLogs/testRun{,-mdtest}
+find testLogs/testRun-mdtest -name subtest_results.yml -exec grep -Hi fail {} \\;
 
 ls -l
 exit \$rc"; then
