@@ -1,6 +1,6 @@
 // To use a test branch (i.e. PR) until it lands to master
 // I.e. for testing library changes
-@Library(value="pipeline-lib@debug-iof") _
+@Library(value="pipeline-lib@debug") _
 
 pipeline {
     agent any
@@ -174,11 +174,15 @@ pipeline {
 //NOTESTYET            }
 //NOTESTYET        }
         stage('Test') {
+            /* pity we cannot do this.  these three tests would fit nicely
+             * on a single 8 node cluster
+             * https://issues.jenkins-ci.org/browse/JENKINS-54945
+            agent {
+                label 'cluster_provisioner'
+            }
+             */
             parallel {
                 stage('Single node') {
-                    agent {
-                        label 'single'
-                    }
                     steps {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: '''id || true
@@ -216,14 +220,22 @@ pipeline {
                         }
                     }
                 }
-                stage('Multi-node') {
+                stage('Two-node') {
                     agent {
-                        label 'cluster_provisioner'
+                        label 'cluster_provisioner2'
                     }
                     steps {
+                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
+                                    checkoutDir: 'jenkins',
+                                    credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+
+                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
+                                    checkoutDir: 'scony_python-junit',
+                                    credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                                script: 'bash -x ./multi-node-test.sh; echo "rc: $?"',
-                                junit_files: null
+                                script: 'bash -x ./multi-node-test.sh 2; echo "rc: $?"',
+                                junit_files: IOF_5-node_junit.xml
                     }
                     post {
                         /* temporarily moved into runTest->stepResult due to JENKINS-39203
@@ -238,8 +250,42 @@ pipeline {
                         }
                         */
                         always {
-                            sh 'echo "Nothing to do"'
-                            //junit 'install/Linux/tmp/*results.xml, Functional daos_test/*/results.xml'
+                            junit 'IOF_5-node_junit.xml'
+                            archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
+                        }
+                    }
+                }
+                stage('Five-node') {
+                    agent {
+                        label 'cluster_provisioner'
+                    }
+                    steps {
+                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
+                                    checkoutDir: 'jenkins',
+                                    credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+
+                        checkoutSCM url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
+                                    checkoutDir: 'scony_python-junit',
+                                    credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: 'bash -x ./multi-node-test.sh 5; echo "rc: $?"',
+                                junit_files: IOF_5-node_junit.xml
+                    }
+                    post {
+                        /* temporarily moved into runTest->stepResult due to JENKINS-39203
+                        success {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status', description: 'Functional daos_test',  context: 'test/functional_daos_test', status: 'SUCCESS'
+                        }
+                        unstable {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status', description: 'Functional daos_test',  context: 'test/functional_daos_test', status: 'FAILURE'
+                        }
+                        failure {
+                            githubNotify credentialsId: 'daos-jenkins-commit-status', description: 'Functional daos_test',  context: 'test/functional_daos_test', status: 'ERROR'
+                        }
+                        */
+                        always {
+                            junit 'IOF_5-node_junit.xml'
                             archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
                         }
                     }
