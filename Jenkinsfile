@@ -225,10 +225,11 @@ pipeline {
                 }
                 stage('Two-node') {
                     agent {
-                        label 'cluster_provisioner-2'
+                        label 'cluster_provisioner-2_nodes'
                     }
                     steps {
                         echo "Starting Two-node"
+                        /*
                         checkoutScm url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
@@ -236,6 +237,7 @@ pipeline {
                         checkoutScm url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+                        */
 
                         echo "Starting Two-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
@@ -262,10 +264,11 @@ pipeline {
                 }
                 stage('Five-node') {
                     agent {
-                        label 'cluster_provisioner'
+                        label 'cluster_provisioner-5_nodes'
                     }
                     steps {
                         echo "Starting Five-node"
+                        /*
                         checkoutScm url: 'ssh://review.hpdd.intel.com:29418/exascale/jenkins',
                                     checkoutDir: 'jenkins',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
@@ -273,6 +276,7 @@ pipeline {
                         checkoutScm url: 'ssh://review.hpdd.intel.com:29418/coral/scony_python-junit',
                                     checkoutDir: 'scony_python-junit',
                                     credentialsId: 'bf21c68b-9107-4a38-8077-e929e644996a'
+                        */
 
                         echo "Starting Five-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
