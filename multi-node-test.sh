@@ -63,7 +63,7 @@ echo "hit enter to continue"
 
 if [ "$1" = "2" ]; then
     vm1=vm"$(((EXECUTOR_NUMBER+4)*2-1))"
-    vm2=vm"$(((EXECUTOR_NUMBER+4)*2))
+    vm2=vm"$(((EXECUTOR_NUMBER+4)*2))"
     cat <<EOF > install/Linux/TESTING/scripts/iof_fio_main.cfg
 {
     "host_list": ["${HOSTPREFIX}${vm1}", "${HOSTPREFIX}${vm2}"],
