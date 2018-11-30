@@ -16,12 +16,21 @@ trap 'echo "encountered an unchecked return code, exiting with error"' ERR
 # shellcheck disable=SC1091
 . .build_vars-Linux.sh
 
+if [ "$1" = "2" ]; then
+    vm2="$(((${EXECUTOR_NUMBER:-0}+4)*2))"
+    vm1="$((vm2-1))"
+    vmrange="$vm1-$vm2"
+    vm1="vm$vm1"
+    vm2="vm$vm2"
+elif [ "$1" = "5" ]; then
+    vmrange="2-6"
+fi
 # shellcheck disable=SC2154
 trap 'set +e
 i=5
 # due to flakiness on wolf-53, try this several times
 while [ $i -gt 0 ]; do
-    pdsh -R ssh -S -w ${HOSTPREFIX}vm[1-9] "set -x
+    pdsh -R ssh -S -w ${HOSTPREFIX}vm[1,$vmrange] "set -x
     x=0
     while [ \$x -lt 30 ] &&
           grep $DAOS_BASE /proc/mounts &&
@@ -30,6 +39,7 @@ while [ $i -gt 0 ]; do
         sleep 1
         let x+=1
     done
+    sudo sed -i -e \"/added by multi-node-test-$1.sh/d\" /etc/fstab
     sudo rmdir $DAOS_BASE || find $DAOS_BASE || true" 2>&1 | dshbak -c
     if [ ${PIPESTATUS[0]} = 0 ]; then
         i=0
@@ -38,12 +48,12 @@ while [ $i -gt 0 ]; do
 done' EXIT
 
 DAOS_BASE=${SL_OMPI_PREFIX%/install/*}
-if ! pdsh -R ssh -S -w "${HOSTPREFIX}"vm[1-9] "set -ex
+if ! pdsh -R ssh -S -w "${HOSTPREFIX}"vm[1,$vmrange] "set -ex
 ulimit -c unlimited
 sudo mkdir -p $DAOS_BASE
 sudo ed <<EOF /etc/fstab
 \\\$a
-$NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by ftest.sh
+$NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by multi-node-test-$1.sh
 .
 wq
 EOF
@@ -62,8 +72,6 @@ echo "hit enter to continue"
 #exit 0
 
 if [ "$1" = "2" ]; then
-    vm1=vm"$(((EXECUTOR_NUMBER+4)*2-1))"
-    vm2=vm"$(((EXECUTOR_NUMBER+4)*2))"
     cat <<EOF > install/Linux/TESTING/scripts/iof_fio_main.cfg
 {
     "host_list": ["${HOSTPREFIX}${vm1}", "${HOSTPREFIX}${vm2}"],
@@ -163,7 +171,7 @@ PYTHONPATH=scony_python-junit/ jenkins/autotest_utils/results_to_junit.py
 
 if false; then
 # collect the logs
-if ! rpdcp -R ssh -w "${HOSTPREFIX}"vm[1-9] \
+if ! rpdcp -R ssh -w "${HOSTPREFIX}"vm[1,$vmrange] \
     /tmp/Functional_"$TEST_TAG"/\*daos.log "$PWD"/; then
     echo "Copying daos.logs from remote nodes failed"
     # pass
