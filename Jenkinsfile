@@ -242,7 +242,7 @@ pipeline {
                         echo "Starting Two-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 2; echo "rc: $?"',
-                                junit_files: IOF_5-node_junit.xml
+                                junit_files: "IOF_2-node_junit.xml"
                     }
                     post {
                         /* temporarily moved into runTest->stepResult due to JENKINS-39203
@@ -281,7 +281,7 @@ pipeline {
                         echo "Starting Five-node runTest"
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: 'bash -x ./multi-node-test.sh 5; echo "rc: $?"',
-                                junit_files: IOF_5-node_junit.xml
+                                junit_files: "IOF_5-node_junit.xml"
                     }
                     post {
                         /* temporarily moved into runTest->stepResult due to JENKINS-39203
