@@ -57,13 +57,13 @@ $NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by multi-node-test-$1.sh
 .
 wq
 EOF
-if ! sudo mount $DAOS_BASE; them
+if ! sudo mount $DAOS_BASE; then
     if [ \"\${HOSTNAME%%%%.*}\" != \"${HOSTPREFIX}\"vm1 ]; then
         # could be already mounted from another test running in parallel
         # let's see what that rc is
         echo \"mount rc: \${PIPESTATUS[0]}\"
     else
-        exit \${PIPESTATUS[0]}\
+        exit \${PIPESTATUS[0]}
     fi
 fi
 
