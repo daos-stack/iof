@@ -79,33 +79,6 @@ echo "hit enter to continue"
 #read -r
 #exit 0
 
-if [ "$1" = "2" ]; then
-    cat <<EOF > install/Linux/TESTING/scripts/iof_fio_main.cfg
-{
-    "host_list": ["${HOSTPREFIX}${vm1}", "${HOSTPREFIX}${vm2}"],
-    "test_mode": "littleChief"
-}
-EOF
-cp install/Linux/TESTING/scripts/iof_{fio,ior}_main.cfg
-cp install/Linux/TESTING/scripts/iof_{fio,iozone}_main.cfg
-cp install/Linux/TESTING/scripts/iof_{fio,mdtest}_main.cfg
-elif [ "$1" = "5" ]; then
-    cat <<EOF > install/Linux/TESTING/scripts/iof_multi_five_node.cfg
-{
-    "host_list": [
-        "${HOSTPREFIX}vm2",
-        "${HOSTPREFIX}vm3",
-        "${HOSTPREFIX}vm4",
-        "${HOSTPREFIX}vm5",
-        "${HOSTPREFIX}vm6"
-    ],
-    "test_mode": "littleChief"
-}
-EOF
-pwd
-ls -l install/Linux/TESTING/scripts/iof_multi_five_node.cfg
-fi
-
 rm -rf install/Linux/TESTING/testLogs/
 rm -f  install/Linux/bin/fusermount3
 ln -s "$(command -v fusermount)" install/Linux/bin/fusermount3
@@ -118,6 +91,16 @@ cd $DAOS_BASE
 # now run it!
 pushd install/Linux/TESTING
 if [ \"$1\" = \"2\" ]; then
+    cat <<EOF > scripts/iof_fio_main.cfg
+{
+    \"host_list\": [\"${HOSTPREFIX}${vm1}\", \"${HOSTPREFIX}${vm2}\"],
+    \"test_mode\": \"littleChief\"
+}
+EOF
+    cp scripts/iof_{fio,ior}_main.cfg
+    cp scripts/iof_{fio,iozone}_main.cfg
+    cp scripts/iof_{fio,mdtest}_main.cfg
+
     python3 test_runner config=scripts/iof_fio_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
@@ -151,8 +134,18 @@ if [ \"$1\" = \"2\" ]; then
     find testLogs/testRun-mdtest -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
 elif [ \"$1\" = \"5\" ]; then
-pwd
-ls -l scripts/iof_multi_five_node.cfg
+    cat <<EOF > scripts/iof_multi_five_node.cfg
+{
+    \"host_list\": [
+        \"${HOSTPREFIX}vm2\",
+        \"${HOSTPREFIX}vm3\",
+        \"${HOSTPREFIX}vm4\",
+        \"${HOSTPREFIX}vm5\",
+        \"${HOSTPREFIX}vm6\"
+    ],
+    \"test_mode\": \"littleChief\"
+}
+EOF
     python3 test_runner config=scripts/iof_multi_five_node.cfg \\
             scripts/iof_multi_five_node.yml || {
         rc=\${PIPESTATUS[0]}
