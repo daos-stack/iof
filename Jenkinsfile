@@ -255,7 +255,7 @@ pipeline {
                         }
                         */
                         always {
-                            //junit 'IOF_5-node_junit.xml'
+                            junit 'IOF_5-node_junit.xml'
                             archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
                         }
                     }
@@ -292,7 +292,7 @@ pipeline {
                         }
                         */
                         always {
-                            //junit 'IOF_5-node_junit.xml'
+                            junit 'IOF_5-node_junit.xml'
                             archiveArtifacts artifacts: 'install/Linux/TESTING/testLogs/**'
                         }
                     }
