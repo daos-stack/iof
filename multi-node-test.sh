@@ -58,7 +58,7 @@ $NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by multi-node-test-$1.sh
 wq
 EOF
 if ! sudo mount $DAOS_BASE; then
-    if [ \"\${HOSTNAME%%%%.*}\" != \"${HOSTPREFIX}\"vm1 ]; then
+    if [ \"\${HOSTNAME%%%%.*}\" = \"${HOSTPREFIX}\"vm1 ]; then
         # could be already mounted from another test running in parallel
         # let's see what that rc is
         echo \"mount rc: \${PIPESTATUS[0]}\"
@@ -102,6 +102,8 @@ elif [ "$1" = "5" ]; then
     "test_mode": "littleChief"
 }
 EOF
+pwd
+ls -l install/Linux/TESTING/scripts/iof_multi_five_node.cfg
 fi
 
 rm -rf install/Linux/TESTING/testLogs/
@@ -149,6 +151,8 @@ if [ \"$1\" = \"2\" ]; then
     find testLogs/testRun-mdtest -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
 elif [ \"$1\" = \"5\" ]; then
+pwd
+ls -l scripts/iof_multi_five_node.cfg
     python3 test_runner config=scripts/iof_multi_five_node.cfg \\
             scripts/iof_multi_five_node.yml || {
         rc=\${PIPESTATUS[0]}
