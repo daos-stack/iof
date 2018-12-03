@@ -163,6 +163,11 @@ EOF
     find $log_base_path/testRun -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
 fi
+popd
+ls -ld install install/Linux install/Linux/TESTING >&2
+ls -l install/Linux/TESTING >&2
+df -h install/Linux/TESTING >&2
+ls -ltar
 exit \$rc"; then
     rc=${PIPESTATUS[0]}
 else
@@ -189,14 +194,13 @@ EOF
 cat results_1.yml
 
 PYTHONPATH=scony_python-junit/ jenkins/autotest_utils/results_to_junit.py
+ls -ltar
 
-if false; then
-# collect the logs
-if ! rpdcp -R ssh -w "${HOSTPREFIX}"vm[1,$vmrange] \
-    /tmp/Functional_"$TEST_TAG"/\*daos.log "$PWD"/; then
-    echo "Copying daos.logs from remote nodes failed"
-    # pass
-fi
+## collect the logs
+#if ! rpdcp -R ssh -w "${HOSTPREFIX}"vm[1,$vmrange] \
+#    /tmp/Functional_"$TEST_TAG"/\*daos.log "$PWD"/; then
+#    echo "Copying daos.logs from remote nodes failed"
+#    # pass
+#fi
 ls -l
-fi
 exit "$rc"
