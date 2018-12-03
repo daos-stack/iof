@@ -31,6 +31,8 @@ fi
 
 log_base_path="testLogs-${1}_node"
 
+rm -f results_1.yml IOF_[25]-node_junit.xml
+
 # shellcheck disable=SC2154
 trap 'set +e
 i=5
@@ -185,10 +187,21 @@ Tests:
 EOF
     pwd >&2
     hostname >&2
-    ls -ld install install/Linux install/Linux/TESTING >&2
-    ls -l install/Linux/TESTING >&2
-    df -h install/Linux/TESTING >&2
-    find install/Linux/TESTING/$log_base_path -name subtest_results.yml \
+    i=10
+    while [ "$i" -gt 0 ]; do
+        ls -ld install install/Linux install/Linux/TESTING >&2
+        ls -l install/Linux/TESTING >&2
+        df -h install/Linux/TESTING >&2
+        ssh "${HOSTPREFIX}$test_runner_vm" "set -x
+             if [ \"$i\" -lt 3 ]; then
+                 sync; sync
+             fi
+             ls -l $PWD/install/Linux/TESTING
+                   $DAOS_BASE/install/Linux/TESTING" >&2
+        sleep 5
+        let i-=1
+    done
+    find install/Linux/TESTING/"$log_base_path" -name subtest_results.yml \
          -print0 | xargs -0 cat
 } > results_1.yml
 cat results_1.yml
