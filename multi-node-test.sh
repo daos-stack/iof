@@ -196,7 +196,7 @@ EOF
              if [ \"$i\" -lt 3 ]; then
                  sync; sync
              fi
-             ls -l $PWD/install/Linux/TESTING
+             ls -l $PWD/install/Linux/TESTING \
                    $DAOS_BASE/install/Linux/TESTING" >&2
         sleep 5
         let i-=1
