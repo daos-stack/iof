@@ -21,6 +21,7 @@ if [ "$1" = "2" ]; then
     vm1="$((test_runner_vm+1))"
     vm2="$((test_runner_vm+2))"
     vmrange="$vm1-$vm2"
+    test_runner_vm="vm$test_runner_vm"
     vm1="vm$vm1"
     vm2="vm$vm2"
 elif [ "$1" = "5" ]; then
@@ -50,7 +51,7 @@ while [ $i -gt 0 ]; do
 done' EXIT
 
 DAOS_BASE=${SL_OMPI_PREFIX%/install/*}
-if ! pdsh -R ssh -S -w "${HOSTPREFIX}"vm[1,$vmrange] "set -ex
+if ! pdsh -R ssh -S -w "${HOSTPREFIX}$test_runner_vm,${HOSTPREFIX}vm[$vmrange]" "set -ex
 ulimit -c unlimited
 sudo mkdir -p $DAOS_BASE
 sudo ed <<EOF /etc/fstab
@@ -60,7 +61,7 @@ $NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by multi-node-test-$1.sh
 wq
 EOF
 if ! sudo mount $DAOS_BASE; then
-    if [ \"\${HOSTNAME%%%%.*}\" = \"${HOSTPREFIX}\"\"$test_runner_vm\" ]; then
+    if [ \"\${HOSTNAME%%%%.*}\" = \"${HOSTPREFIX}$test_runner_vm\" ]; then
         # could be already mounted from another test running in parallel
         # let's see what that rc is
         echo \"mount rc: \${PIPESTATUS[0]}\"
@@ -86,7 +87,7 @@ rm -f  install/Linux/bin/fusermount3
 ln -s "$(command -v fusermount)" install/Linux/bin/fusermount3
 
 # shellcheck disable=SC2029
-if ! ssh "${HOSTPREFIX}""$test_runner_vm" "set -ex
+if ! ssh "${HOSTPREFIX}$test_runner_vm" "set -ex
 ulimit -c unlimited
 cd $DAOS_BASE
 
