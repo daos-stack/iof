@@ -94,7 +94,7 @@ ulimit -c unlimited
 cd $DAOS_BASE
 
 # now run it!
-pushd install/Linux/TESTING
+pushd install/Linux/TESTING/
 if [ \"$1\" = \"2\" ]; then
     cat <<EOF > scripts/iof_fio_main.cfg
 {
@@ -107,7 +107,7 @@ EOF
     cp scripts/iof_{fio,iozone}_main.cfg
     cp scripts/iof_{fio,mdtest}_main.cfg
 
-    rm -rf install/Linux/TESTING/$log_base_path/
+    rm -rf $log_base_path/
     python3 test_runner config=scripts/iof_fio_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
@@ -154,7 +154,7 @@ elif [ \"$1\" = \"5\" ]; then
     \"log_base_path\": \"$log_base_path\"
 }
 EOF
-    rm -rf install/Linux/TESTING/$log_base_path/
+    rm -rf $log_base_path/
     python3 test_runner config=scripts/iof_multi_five_node.cfg \\
             scripts/iof_multi_five_node.yml || {
         rc=\${PIPESTATUS[0]}
@@ -178,9 +178,13 @@ TestGroup:
     user_name: jenkins
 Tests:
 EOF
+    pwd >&2
+    ls -ld install install/Linux install/Linux/TESTING >&2
+    ls -l install/Linux/TESTING >&2
     find install/Linux/TESTING/$log_base_path -name subtest_results.yml \
          -print0 | xargs -0 cat
 } > results_1.yml
+cat results_1.yml
 
 PYTHONPATH=scony_python-junit/ jenkins/autotest_utils/results_to_junit.py
 
