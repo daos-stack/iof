@@ -28,6 +28,9 @@ elif [ "$1" = "5" ]; then
     test_runner_vm="vm1"
     vmrange="2-6"
 fi
+
+log_base_path="testLogs-${1}_node"
+
 # shellcheck disable=SC2154
 trap 'set +e
 i=5
@@ -78,11 +81,10 @@ df -h" 2>&1 | dshbak -c; then
     exit 1
 fi
 
-echo "hit enter to continue"
+#echo "hit enter to continue"
 #read -r
 #exit 0
 
-rm -rf install/Linux/TESTING/testLogs/
 rm -f  install/Linux/bin/fusermount3
 ln -s "$(command -v fusermount)" install/Linux/bin/fusermount3
 
@@ -97,44 +99,46 @@ if [ \"$1\" = \"2\" ]; then
     cat <<EOF > scripts/iof_fio_main.cfg
 {
     \"host_list\": [\"${HOSTPREFIX}${vm1}\", \"${HOSTPREFIX}${vm2}\"],
-    \"test_mode\": \"littleChief\"
+    \"test_mode\": \"littleChief\",
+    \"log_base_path\": \"$log_base_path\"
 }
 EOF
     cp scripts/iof_{fio,ior}_main.cfg
     cp scripts/iof_{fio,iozone}_main.cfg
     cp scripts/iof_{fio,mdtest}_main.cfg
 
+    rm -rf install/Linux/TESTING/$log_base_path/
     python3 test_runner config=scripts/iof_fio_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
         echo \"Test exited with \$rc\"
     }
-    mv testLogs/testRun{,-fio}
-    find testLogs/testRun-fio -name subtest_results.yml \\
+    mv $log_base_path/testRun{,-fio}
+    find $log_base_path/testRun-fio -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
     python3 test_runner config=scripts/iof_ior_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
         echo \"Test exited with \$rc\"
     }
-    mv testLogs/testRun{,-ior}
-    find testLogs/testRun-ior -name subtest_results.yml \\
+    mv $log_base_path/testRun{,-ior}
+    find $log_base_path/testRun-ior -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
     python3 test_runner config=scripts/iof_iozone_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
         echo \"Test exited with \$rc\"
     }
-    mv testLogs/testRun{,-iozone}
-    find testLogs/testRun-iozone -name subtest_results.yml \\
+    mv $log_base_path/testRun{,-iozone}
+    find $log_base_path/testRun-iozone -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
     python3 test_runner config=scripts/iof_mdtest_main.cfg \\
             scripts/iof_multi_two_node.yml || {
         rc=\${PIPESTATUS[0]}
         echo \"Test exited with \$rc\"
     }
-    mv testLogs/testRun{,-mdtest}
-    find testLogs/testRun-mdtest -name subtest_results.yml \\
+    mv $log_base_path/testRun{,-mdtest}
+    find $log_base_path/testRun-mdtest -name subtest_results.yml \\
          -exec grep -Hi fail {} \\;
 elif [ \"$1\" = \"5\" ]; then
     cat <<EOF > scripts/iof_multi_five_node.cfg
@@ -146,15 +150,18 @@ elif [ \"$1\" = \"5\" ]; then
         \"${HOSTPREFIX}vm5\",
         \"${HOSTPREFIX}vm6\"
     ],
-    \"test_mode\": \"littleChief\"
+    \"test_mode\": \"littleChief\",
+    \"log_base_path\": \"$log_base_path\"
 }
 EOF
+    rm -rf install/Linux/TESTING/$log_base_path/
     python3 test_runner config=scripts/iof_multi_five_node.cfg \\
             scripts/iof_multi_five_node.yml || {
         rc=\${PIPESTATUS[0]}
         echo \"Test exited with \$rc\"
     }
-    mv testLogs/testRun{,-five_node}
+    find $log_base_path/testRun -name subtest_results.yml \\
+         -exec grep -Hi fail {} \\;
 fi
 exit \$rc"; then
     rc=${PIPESTATUS[0]}
@@ -171,8 +178,8 @@ TestGroup:
     user_name: jenkins
 Tests:
 EOF
-    find install/Linux/TESTING/testLogs -name subtest_results.yml -print0 | \
-         xargs -0 cat
+    find install/Linux/TESTING/$log_base_path -name subtest_results.yml \
+         -print0 | xargs -0 cat
 } > results_1.yml
 
 PYTHONPATH=scony_python-junit/ jenkins/autotest_utils/results_to_junit.py
