@@ -17,12 +17,14 @@ trap 'echo "encountered an unchecked return code, exiting with error"' ERR
 . .build_vars-Linux.sh
 
 if [ "$1" = "2" ]; then
-    vm2="$(((${EXECUTOR_NUMBER:-0}+4)*2))"
-    vm1="$((vm2-1))"
+    test_runner_vm=$((${EXECUTOR_NUMBER:-0}*3+7))
+    vm1="$((test_runner_vm+1))"
+    vm2="$((test_runner_vm+2))"
     vmrange="$vm1-$vm2"
     vm1="vm$vm1"
     vm2="vm$vm2"
 elif [ "$1" = "5" ]; then
+    test_runner_vm="vm1"
     vmrange="2-6"
 fi
 # shellcheck disable=SC2154
@@ -58,7 +60,7 @@ $NFS_SERVER:$PWD $DAOS_BASE nfs defaults 0 0 # added by multi-node-test-$1.sh
 wq
 EOF
 if ! sudo mount $DAOS_BASE; then
-    if [ \"\${HOSTNAME%%%%.*}\" = \"${HOSTPREFIX}\"vm1 ]; then
+    if [ \"\${HOSTNAME%%%%.*}\" = \"${HOSTPREFIX}\"\"$test_runner_vm\" ]; then
         # could be already mounted from another test running in parallel
         # let's see what that rc is
         echo \"mount rc: \${PIPESTATUS[0]}\"
@@ -84,7 +86,7 @@ rm -f  install/Linux/bin/fusermount3
 ln -s "$(command -v fusermount)" install/Linux/bin/fusermount3
 
 # shellcheck disable=SC2029
-if ! ssh "${HOSTPREFIX}"vm1 "set -ex
+if ! ssh "${HOSTPREFIX}""$test_runner_vm" "set -ex
 ulimit -c unlimited
 cd $DAOS_BASE
 
