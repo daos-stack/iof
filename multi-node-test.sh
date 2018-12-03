@@ -36,7 +36,7 @@ trap 'set +e
 i=5
 # due to flakiness on wolf-53, try this several times
 while [ $i -gt 0 ]; do
-    pdsh -R ssh -S -w ${HOSTPREFIX}vm[1,$vmrange] "set -x
+    pdsh -R ssh -S -w "${HOSTPREFIX}$test_runner_vm,${HOSTPREFIX}vm[$vmrange]" "set -x
     x=0
     while [ \$x -lt 30 ] &&
           grep $DAOS_BASE /proc/mounts &&
@@ -179,8 +179,10 @@ TestGroup:
 Tests:
 EOF
     pwd >&2
+    hostname >&2
     ls -ld install install/Linux install/Linux/TESTING >&2
     ls -l install/Linux/TESTING >&2
+    df -h install/Linux/TESTING >&2
     find install/Linux/TESTING/$log_base_path -name subtest_results.yml \
          -print0 | xargs -0 cat
 } > results_1.yml
