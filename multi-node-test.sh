@@ -178,8 +178,8 @@ fi
 
 hostname
 pwd
-scp -a "${HOSTPREFIX}$test_runner_vm":$DAOS_BASE/install/Linux/TESTING/"$log_base_path" .
-ls -l . "$log_base_path"
+#scp -r "${HOSTPREFIX}$test_runner_vm":$DAOS_BASE/install/Linux/TESTING/"$log_base_path" .
+#ls -l . "$log_base_path"
 #    i=10
 #    while [ "$i" -gt 0 ]; do
 #        ls -ld install install/Linux install/Linux/TESTING >&2
