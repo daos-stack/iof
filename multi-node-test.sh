@@ -193,11 +193,12 @@ EOF
         ls -l install/Linux/TESTING >&2
         df -h install/Linux/TESTING >&2
         ssh "${HOSTPREFIX}$test_runner_vm" "set -x
+             set +e
              if [ \"$i\" -lt 3 ]; then
                  sync; sync
              fi
-             ls -l $PWD/install/Linux/TESTING \
-                   $DAOS_BASE/install/Linux/TESTING" >&2
+             ls -l $DAOS_BASE/install/Linux/TESTING
+             exit 0" >&2
         sleep 5
         let i-=1
     done
