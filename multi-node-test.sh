@@ -176,6 +176,25 @@ else
     rc=0
 fi
 
+hostname
+pwd
+scp -a "${HOSTPREFIX}$test_runner_vm":$DAOS_BASE/install/Linux/TESTING/"$log_base_path" .
+ls -l . "$log_base_path"
+#    i=10
+#    while [ "$i" -gt 0 ]; do
+#        ls -ld install install/Linux install/Linux/TESTING >&2
+#        ls -l install/Linux/TESTING >&2
+#        df -h install/Linux/TESTING >&2
+#        ssh "${HOSTPREFIX}$test_runner_vm" "set -x
+#             set +e
+#             if [ \"$i\" -lt 3 ]; then
+#                 sync; sync
+#             fi
+#             ls -l $DAOS_BASE/install/Linux/TESTING
+#             exit 0" >&2
+#        sleep 5
+#        let i-=1
+#    done
 {
     cat <<EOF
 TestGroup:
@@ -185,25 +204,9 @@ TestGroup:
     user_name: jenkins
 Tests:
 EOF
-    pwd >&2
-    hostname >&2
-    i=10
-    while [ "$i" -gt 0 ]; do
-        ls -ld install install/Linux install/Linux/TESTING >&2
-        ls -l install/Linux/TESTING >&2
-        df -h install/Linux/TESTING >&2
-        ssh "${HOSTPREFIX}$test_runner_vm" "set -x
-             set +e
-             if [ \"$i\" -lt 3 ]; then
-                 sync; sync
-             fi
-             ls -l $DAOS_BASE/install/Linux/TESTING
-             exit 0" >&2
-        sleep 5
-        let i-=1
-    done
-    find install/Linux/TESTING/"$log_base_path" -name subtest_results.yml \
-         -print0 | xargs -0 cat
+    ssh "${HOSTPREFIX}$test_runner_vm" "set -ex
+    find \"$DAOS_BASE\"/install/Linux/TESTING\"$log_base_path\" \
+         -name subtest_results.yml -print0 | xargs -0 cat"
 } > results_1.yml
 cat results_1.yml
 
