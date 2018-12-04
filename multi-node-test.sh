@@ -205,7 +205,7 @@ TestGroup:
 Tests:
 EOF
     ssh "${HOSTPREFIX}$test_runner_vm" "set -ex
-    find \"$DAOS_BASE\"/install/Linux/TESTING\"$log_base_path\" \
+    find \"$DAOS_BASE\"/install/Linux/TESTING/\"$log_base_path\" \
          -name subtest_results.yml -print0 | xargs -0 cat"
 } > results_1.yml
 cat results_1.yml
