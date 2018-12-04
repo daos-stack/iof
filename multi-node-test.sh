@@ -178,7 +178,7 @@ fi
 
 hostname
 pwd
-scp -r "${HOSTPREFIX}$test_runner_vm":$DAOS_BASE/install/Linux/TESTING/"$log_base_path" install/Linux/TESTING/
+scp -r "${HOSTPREFIX}$test_runner_vm:$DAOS_BASE/install/Linux/TESTING/$log_base_path" install/Linux/TESTING/
 #ls -l . "$log_base_path"
 #    i=10
 #    while [ "$i" -gt 0 ]; do
@@ -205,7 +205,7 @@ TestGroup:
 Tests:
 EOF
     find install/Linux/TESTING/"$log_base_path" \
-         -name subtest_results.yml -print0 | xargs -0 cat"
+         -name subtest_results.yml -print0 | xargs -0 cat
 } > results_1.yml
 cat results_1.yml
 
