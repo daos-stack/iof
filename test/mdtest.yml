@@ -2,6 +2,7 @@ description: "scripts test module"
 
 defaultENV:
     D_LOG_MASK: "WARN"
+    LD_LIBRARY_PATH: "/testbin/mdtest/lib"
 
 module:
     name: "mdtest"

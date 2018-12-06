@@ -44,7 +44,8 @@
 static bool
 ioc_open_ll_cb(struct ioc_request *request)
 {
-	struct iof_file_handle	*handle = container_of(request, struct iof_file_handle, open_req);
+	struct iof_file_handle	*handle = container_of(
+	    request, struct iof_file_handle, open_req);
 	struct iof_open_out	*out = crt_reply_get(request->rpc);
 	struct fuse_file_info	fi = {0};
 
@@ -125,7 +126,8 @@ void ioc_ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 	}
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
 	IOF_TRACE_UP(&handle->open_req, handle, "open_req");
-	IOF_TRACE_LINK(handle->open_req.rpc, &handle->open_req, "open_file_rpc");
+	IOF_TRACE_LINK(handle->open_req.rpc, &handle->open_req,
+		       "open_file_rpc");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->open_req.req = req;

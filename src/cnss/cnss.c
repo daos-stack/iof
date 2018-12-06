@@ -980,7 +980,9 @@ shutdown_ctrl_fs:
 				       "Plugin %s(%p) calling destroy_plugin_data at %p",
 				       entry->fns->name,
 				       entry->fns->handle,
-				       FN_TO_PVOID(entry->fns->destroy_plugin_data));
+				       FN_TO_PVOID(
+					   entry->fns->destroy_plugin_data
+				       ));
 			entry->fns->destroy_plugin_data(entry->fns->handle);
 		}
 

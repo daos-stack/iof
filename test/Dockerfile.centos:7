@@ -1,0 +1,40 @@
+#
+# Copyright 2018, Intel Corporation
+#
+# 'recipe' for Docker to build an image of centOS-based
+# environment for testing the IOF project.
+#
+
+# Pull base image
+FROM centos:7
+MAINTAINER Brian J. Murrell <brian.murrell@intel.com>
+
+# use same UID as host and default value of 1000 if not specified
+ARG UID=1000
+
+# Install basic tools
+RUN yum install -y epel-release
+RUN yum install -y fuse python34-nose python34-pip python34-PyYAML \
+                   numactl-libs libevent openssh-clients librdmacm \
+                   infinipath-psm libpsm2 valgrind CUnit rsync
+
+# Add Jenkins user
+ENV USER jenkins
+ENV PASSWD jenkins
+RUN useradd -u $UID -ms /bin/bash $USER
+RUN echo "$USER:$PASSWD" | chpasswd
+
+# Switch to new user
+USER $USER
+WORKDIR /home/$USER
+
+# no python3-tabulate RPM
+# TODO: build one
+RUN pip3 install --user tabulate
+
+# Set environment variables
+#ENV PATH=/home/daos/daos/install/bin:$PATH
+#ENV LD_LIBRARY_PATH=/home/daos/daos/install/lib:/home/daos/daos/install/lib/daos_srv:$LD_LIBRARY_PATH
+#ENV CPATH=/home/daos/daos/install/include:$CPATH
+#ENV CRT_PHY_ADDR_STR="ofi+sockets"
+#ENV OFI_INTERFACE=eth0

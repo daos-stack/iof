@@ -44,7 +44,8 @@
 static bool
 ioc_create_ll_cb(struct ioc_request *request)
 {
-	struct iof_file_handle		*handle = container_of(request, struct iof_file_handle, creat_req);
+	struct iof_file_handle		*handle = container_of(
+	    request, struct iof_file_handle, creat_req);
 	struct iof_projection_info	*fs_handle = request->fsh;
 	struct iof_create_out		*out = crt_reply_get(request->rpc);
 	struct fuse_file_info		fi = {0};
@@ -183,7 +184,8 @@ void ioc_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
 
 	IOF_TRACE_UP(handle, fs_handle, fs_handle->fh_pool->reg.name);
 	IOF_TRACE_UP(&handle->creat_req, handle, "creat_req");
-	IOF_TRACE_LINK(handle->creat_req.rpc, &handle->creat_req, "creat_file_rpc");
+	IOF_TRACE_LINK(handle->creat_req.rpc, &handle->creat_req,
+		       "creat_file_rpc");
 
 	handle->common.projection = &fs_handle->proj;
 	handle->creat_req.req = req;

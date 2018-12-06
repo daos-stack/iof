@@ -318,10 +318,12 @@ static void gah_decref(struct iof_projection_info *fs_handle)
 		if (ref > 1) {
 			int rc;
 
-			rc = fuse_lowlevel_notify_inval_entry(fs_handle->session,
-							      ie->parent,
-							      ie->name,
-							      strlen(ie->name));
+			rc = fuse_lowlevel_notify_inval_entry(
+			    fs_handle->session,
+			    ie->parent,
+			    ie->name,
+			    strlen(ie->name)
+			);
 
 			IOF_TRACE_INFO(ie, "inval returned %d", rc);
 			if (rc == -ENOENT) {
@@ -1328,14 +1330,16 @@ fh_reset(void *arg)
 	}
 
 	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(fh->open_req.fsh, open), &fh->open_req.rpc);
+			    FS_TO_OP(fh->open_req.fsh, open),
+				     &fh->open_req.rpc);
 	if (rc || !fh->open_req.rpc) {
 		D_FREE(fh->ie);
 		return false;
 	}
 
 	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(fh->open_req.fsh, create), &fh->creat_req.rpc);
+			    FS_TO_OP(fh->open_req.fsh, create),
+				     &fh->creat_req.rpc);
 	if (rc || !fh->creat_req.rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_req.rpc);
@@ -1343,7 +1347,8 @@ fh_reset(void *arg)
 	}
 
 	rc = crt_req_create(fh->open_req.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(fh->open_req.fsh, close), &fh->release_req.rpc);
+			    FS_TO_OP(fh->open_req.fsh, close),
+				     &fh->release_req.rpc);
 	if (rc || !fh->release_req.rpc) {
 		D_FREE(fh->ie);
 		crt_req_decref(fh->open_req.rpc);
@@ -2173,16 +2178,20 @@ initialize_projection(struct iof_state *iof_state,
 
 	IOF_TRACE_DEBUG(fs_handle, "Setting timeout to %d", fs_info->timeout);
 
-	ret = crt_context_set_timeout(fs_handle->proj.crt_ctx, fs_info->timeout);
+	ret = crt_context_set_timeout(fs_handle->proj.crt_ctx,
+				      fs_info->timeout);
 	if (ret != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(iof_state, "Context timeout not set");
 		D_GOTO(err, 0);
 	}
 
 	for (i = 0; i < fs_handle->ctx_num; i++) {
-		fs_handle->ctx_array[i].crt_ctx       = fs_handle->proj.crt_ctx;
-		fs_handle->ctx_array[i].poll_interval = iof_state->iof_ctx.poll_interval;
-		fs_handle->ctx_array[i].callback_fn   = iof_state->iof_ctx.callback_fn;
+		fs_handle->ctx_array[i].crt_ctx =
+		    fs_handle->proj.crt_ctx;
+		fs_handle->ctx_array[i].poll_interval =
+		    iof_state->iof_ctx.poll_interval;
+		fs_handle->ctx_array[i].callback_fn =
+		    iof_state->iof_ctx.callback_fn;
 
 		/* TODO: Much better error checking is required here, not least
 		 * terminating the thread if there are any failures in the rest
@@ -2713,9 +2722,10 @@ static void iof_finish(void *arg)
 		/*send a detach RPC to IONSS*/
 		rc = crt_req_create(iof_state->iof_ctx.crt_ctx,
 				&group->grp.psr_ep,
-				CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
-					iof_state->handshake_proto->cpf_ver,
-					1),
+				CRT_PROTO_OPC(
+				    iof_state->handshake_proto->cpf_base,
+				    iof_state->handshake_proto->cpf_ver,
+				    1),
 				&rpc);
 		if (rc != -DER_SUCCESS || !rpc) {
 			IOF_TRACE_ERROR(iof_state,
@@ -2767,7 +2777,8 @@ static void iof_finish(void *arg)
 
 		rc = crt_context_destroy(iof_state->iof_ctx.crt_ctx, false);
 		if (rc != -DER_SUCCESS)
-			IOF_TRACE_ERROR(iof_state, "Could not destroy context %d",
+			IOF_TRACE_ERROR(iof_state,
+					"Could not destroy context %d",
 					rc);
 		IOF_TRACE_DOWN(&iof_state->iof_ctx);
 	}
