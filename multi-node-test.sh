@@ -33,6 +33,9 @@ log_base_path="testLogs-${1}_node"
 
 rm -f results_1.yml IOF_[25]-node_junit.xml
 
+curl -O 'https://build.hpdd.intel.com/job/mdtest-iof_devel/lastSuccessfulBuild/arch=x86_64,distro=el7/artifact/artifacts/mpich_files.tar.gz'
+curl -O 'https://build.hpdd.intel.com/job/mdtest-iof_devel/lastSuccessfulBuild/arch=x86_64,distro=el7/artifact/artifacts/mdtest_files.tar.gz'
+
 # shellcheck disable=SC2154
 trap 'set +e
 i=5
@@ -78,6 +81,12 @@ fi
 # TODO: package this in to an RPM
 pip3 install --user tabulate
 
+# install mdtest
+sudo rm -rf /testbin/
+sudo mkdir -p /testbin/mdtest
+cd /testbin/mdtest
+sudo tar xzvf $DAOS_BASE/mpich_files.tar.gz
+sudo tar xzvf $DAOS_BASE/mdtest_files.tar.gz
 df -h" 2>&1 | dshbak -c; then
     echo "Cluster setup (i.e. provisioning) failed"
     exit 1
@@ -100,7 +109,8 @@ pushd install/Linux/TESTING/
 if [ \"$1\" = \"2\" ]; then
     cat <<EOF > scripts/iof_fio_main.cfg
 {
-    \"host_list\": [\"${HOSTPREFIX}${vm1}\", \"${HOSTPREFIX}${vm2}\"],
+    \"should_be_host_list\": [\"${HOSTPREFIX}${vm1}\", \"${HOSTPREFIX}${vm2}\"],
+    \"host_list\": [\"${HOSTPREFIX}${test_runner_vm}\", \"${HOSTPREFIX}${vm1}\"],
     \"test_mode\": \"littleChief\",
     \"log_base_path\": \"$log_base_path\"
 }
@@ -145,12 +155,18 @@ EOF
 elif [ \"$1\" = \"5\" ]; then
     cat <<EOF > scripts/iof_multi_five_node.cfg
 {
-    \"host_list\": [
+    \"should_be_host_list\": [
         \"${HOSTPREFIX}vm2\",
         \"${HOSTPREFIX}vm3\",
         \"${HOSTPREFIX}vm4\",
         \"${HOSTPREFIX}vm5\",
         \"${HOSTPREFIX}vm6\"
+    ],
+    \"host_list\": [\"${HOSTPREFIX}${test_runner_vm}\",
+        \"${HOSTPREFIX}vm2\",
+        \"${HOSTPREFIX}vm3\",
+        \"${HOSTPREFIX}vm4\",
+        \"${HOSTPREFIX}vm5\"
     ],
     \"test_mode\": \"littleChief\",
     \"log_base_path\": \"$log_base_path\"
