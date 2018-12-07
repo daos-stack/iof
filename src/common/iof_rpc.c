@@ -52,9 +52,17 @@
 #define CMF_GAH CMF_UUID
 
 int
-iof_proc_name(crt_proc_t proc, void *arg)
+crt_proc_struct_ios_name(crt_proc_t proc, void *arg)
 {
 	struct ios_name *data = arg;
+
+	return crt_proc_memcpy(proc, data, sizeof(*data));
+}
+
+int
+crt_proc_struct_ios_gah(crt_proc_t proc, void *arg)
+{
+	struct ios_gah *data = arg;
 
 	return crt_proc_memcpy(proc, data, sizeof(*data));
 }
@@ -69,7 +77,7 @@ iof_proc_stat(crt_proc_t proc, void *arg)
 
 struct crt_msg_field CMF_IOF_NAME = {
 	.cmf_size = sizeof(struct ios_name),
-	.cmf_proc = iof_proc_name,
+	.cmf_proc = crt_proc_struct_ios_name,
 };
 
 struct crt_msg_field CMF_IOF_STAT = {
@@ -173,13 +181,6 @@ struct crt_msg_field *readdir_out[] = {
 	&CMF_INT,
 };
 
-struct crt_msg_field *psr_out[] = {
-	&CMF_IOVEC,
-	&CMF_UINT32,
-	&CMF_UINT32,
-	&CMF_BOOL,
-};
-
 struct crt_msg_field *readx_in[] = {
 	&CMF_GAH,	/* gah */
 	&CMF_UINT64,	/* base */
@@ -232,8 +233,9 @@ struct crt_msg_field *setattr_in[] = {
 	&CMF_UINT32,	/* to_set */
 };
 
-/*query RPC format*/
-struct crt_req_format QUERY_RPC_FMT = DEFINE_CRT_REQ_FMT(NULL, psr_out);
+CRT_GEN_PROC_FUNC(iof_fs_info, IOF_FS_INFO)
+
+CRT_RPC_DEFINE(iof_query, ,IOF_SQ_OUT)
 
 #define X(a, b, c)					\
 	static struct crt_req_format IOF_CRF_##a =	\
@@ -257,7 +259,7 @@ static struct crt_proto_rpc_format iof_write_rpc_types[] = {
 
 static struct crt_proto_rpc_format iof_signon_rpc_types[] = {
 	{
-		.prf_req_fmt = &QUERY_RPC_FMT,
+		.prf_req_fmt = &CQF_iof_query,
 	},
 	{
 		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,

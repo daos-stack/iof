@@ -551,9 +551,9 @@ static void
 rereg_cb(const struct crt_cb_info *cb_info)
 {
 	struct iof_state *iof_state = cb_info->cci_arg;
-	struct iof_psr_query *query = crt_reply_get(cb_info->cci_rpc);
+	struct iof_query_out *query = crt_reply_get(cb_info->cci_rpc);
 	struct iof_projection_info *fs_handle;
-	struct iof_fs_info *tmp, *fs_info;
+	struct iof_fs_info *fs_info;
 
 	IOF_TRACE_INFO(iof_state, "rc %d", cb_info->cci_rc);
 
@@ -562,27 +562,17 @@ rereg_cb(const struct crt_cb_info *cb_info)
 		return;
 	}
 
-	if (query->count != query->query_list.iov_len / sizeof(struct iof_fs_info)) {
+	if (query->info.ca_count != iof_state->num_proj) {
 		IOF_TRACE_ERROR(iof_state,
-				"Invalid response from IONSS %d %ld",
-				query->count,
-				query->query_list.iov_len / sizeof(struct iof_fs_info));
+				"Unexpected projection count %ld %d",
+				query->info.ca_count, iof_state->num_proj);
 		set_all_offline(iof_state, EINVAL, true);
 		return;
 	}
 
-	if (query->count != iof_state->num_proj) {
-		IOF_TRACE_ERROR(iof_state,
-				"Unexpected projection count %d %d",
-				query->count, iof_state->num_proj);
-		set_all_offline(iof_state, EINVAL, true);
-		return;
-	}
-
-	tmp = query->query_list.iov_buf;
+	fs_info = query->info.ca_arrays;
 
 	d_list_for_each_entry(fs_handle, &iof_state->fs_list, link) {
-		fs_info = tmp++;
 
 		IOF_TRACE_DEBUG(fs_handle,
 				"Local projection dir is '%s'",
@@ -610,6 +600,7 @@ rereg_cb(const struct crt_cb_info *cb_info)
 		}
 
 		gah_decref(fs_handle);
+		fs_info++;
 	}
 }
 
@@ -1894,7 +1885,7 @@ static bool
 initialize_projection(struct iof_state *iof_state,
 		      struct iof_group_info *group,
 		      struct iof_fs_info *fs_info,
-		      struct iof_psr_query *query,
+		      struct iof_query_out *query,
 		      int id)
 {
 	struct iof_projection_info	*fs_handle;
@@ -2311,9 +2302,8 @@ query_projections(struct iof_state *iof_state,
 		  struct iof_group_info *group,
 		  int *total, int *active)
 {
-	struct iof_fs_info *tmp;
 	crt_rpc_t *query_rpc = NULL;
-	struct iof_psr_query *query;
+	struct iof_query_out *query;
 	int rc;
 	int i;
 
@@ -2370,23 +2360,17 @@ query_projections(struct iof_state *iof_state,
 		       query->poll_interval,
 		       query->progress_callback ? "Enabled" : "Disabled");
 
-	if (query->count != query->query_list.iov_len / sizeof(struct iof_fs_info)) {
-		IOF_TRACE_ERROR(iof_state,
-				"Invalid response from IONSS %d",
-				query->count);
-		return false;
-	}
-	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %d",
-			group->grp_name, query->count);
+	IOF_TRACE_DEBUG(iof_state, "Number of filesystems projected by %s: %ld",
+			group->grp_name, query->info.ca_count);
 
-	tmp = query->query_list.iov_buf;
+	for (i = 0; i < query->info.ca_count; i++) {
 
-	for (i = 0; i < query->count; i++) {
-		if (!initialize_projection(iof_state, group, &tmp[i], query,
+		if (!initialize_projection(iof_state, group,
+					   &query->info.ca_arrays[i], query,
 					   (*total)++)) {
 			IOF_TRACE_ERROR(iof_state,
 					"Could not initialize projection '%s' from %s",
-					tmp[i].dir_name.name,
+					query->info.ca_arrays[i].dir_name.name,
 					group->grp_name);
 			return false;
 		}

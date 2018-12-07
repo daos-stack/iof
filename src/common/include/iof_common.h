@@ -111,33 +111,28 @@ struct ios_name {
 	char name[NAME_MAX + 1];
 };
 
-struct iof_fs_info {
-	/*Associated mount point*/
-	struct ios_name		dir_name;
-	/*id of filesystem*/
-	struct ios_gah		gah;
-	int			id;
-	/*Feature flags, as described above*/
-	uint64_t		flags;
-	/* Per-projection tunable options */
-	uint32_t		max_read;
-	uint32_t		max_write;
-	uint32_t		readdir_size;
-	uint32_t		max_iov_read;
-	uint32_t		max_iov_write;
-	uint32_t		htable_size;
-	uint32_t		cnss_thread_count;
-	uint32_t		timeout;
-};
+#define IOF_FS_INFO							\
+	((struct ios_name)	(dir_name)		CRT_VAR)	\
+	((struct ios_gah)	(gah)			CRT_VAR)	\
+	((uint64_t)		(flags)			CRT_VAR)	\
+	((uint32_t)		(timeout)		CRT_VAR)	\
+	((uint32_t)		(max_read)		CRT_VAR)	\
+	((uint32_t)		(max_write)		CRT_VAR)	\
+	((uint32_t)		(readdir_size)		CRT_VAR)	\
+	((uint32_t)		(max_iov_read)		CRT_VAR)	\
+	((uint32_t)		(max_iov_write)		CRT_VAR)	\
+	((uint32_t)		(htable_size)		CRT_VAR)	\
+	((uint32_t)		(cnss_thread_count)	CRT_VAR)	\
+	((int)			(id)			CRT_VAR)	\
 
-/* The response to the initial query RPC.
- */
-struct iof_psr_query {
-	d_iov_t		query_list;
-	uint32_t	count;
-	uint32_t	poll_interval;
-	bool		progress_callback;
-};
+CRT_GEN_STRUCT(iof_fs_info, IOF_FS_INFO)
+
+#define IOF_SQ_OUT							\
+	((uint32_t)		(poll_interval)		CRT_VAR)	\
+	((bool)			(progress_callback)	CRT_VAR)	\
+	((struct iof_fs_info)	(info)			CRT_ARRAY)
+
+CRT_RPC_DECLARE(iof_query, ,IOF_SQ_OUT)
 
 struct iof_gah_string_in {
 	struct ios_gah gah;

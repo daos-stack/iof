@@ -2203,14 +2203,13 @@ static crt_rpc_cb_t write_handlers[] = {
 static void
 iof_query_handler(crt_rpc_t *query_rpc)
 {
-	struct iof_psr_query *query = crt_reply_get(query_rpc);
+	struct iof_query_out *query = crt_reply_get(query_rpc);
 	int ret;
 
 	query->poll_interval = base.cnss_poll_interval;
 	query->progress_callback = base.progress_callback;
-	query->count = base.projection_count;
-	d_iov_set(&query->query_list, base.fs_list,
-		  base.projection_count * sizeof(struct iof_fs_info));
+	query->info.ca_count = base.projection_count;
+	query->info.ca_arrays = base.fs_list;
 
 	ret = crt_reply_send(query_rpc);
 	if (ret)
