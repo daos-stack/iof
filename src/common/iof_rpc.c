@@ -43,7 +43,9 @@
 #define IOF_PROTO_SIGNON_BASE 0x02000000
 #define IOF_PROTO_SIGNON_VERSION 2
 #define IOF_PROTO_WRITE_BASE 0x01000000
-#define IOF_PROTO_WRITE_VERSION 3
+#define IOF_PROTO_WRITE_VERSION 4
+#define IOF_PROTO_IO_BASE 0x03000000
+#define IOF_PROTO_IO_VERSION 1
 
 /*
  * Re-use the CMF_UUID type when using a GAH as they are both 128 bit types
@@ -181,23 +183,10 @@ struct crt_msg_field *readdir_out[] = {
 	&CMF_INT,
 };
 
-struct crt_msg_field *readx_in[] = {
-	&CMF_GAH,	/* gah */
-	&CMF_UINT64,	/* base */
-	&CMF_UINT64,	/* len */
-	&CMF_UINT64,	/* xtvec_len */
-	&CMF_UINT64,	/* bulk_len */
-	&CMF_BULK,	/* xtvec_bulk */
-	&CMF_BULK,	/* data_bulk */
-};
+CRT_GEN_PROC_FUNC(iof_xtvec, IOF_STRUCT_XTVEC);
 
-struct crt_msg_field *readx_out[] = {
-	&CMF_IOVEC,	/* data */
-	&CMF_UINT64,	/* bulk_len */
-	&CMF_UINT32,	/* iov_len */
-	&CMF_INT,	/* rc */
-	&CMF_INT,	/* err */
-};
+CRT_RPC_DEFINE(iof_readx, IOF_RPC_READX_IN, IOF_RPC_READX_OUT);
+CRT_RPC_DEFINE(iof_writex, IOF_RPC_WRITEX_IN, IOF_RPC_WRITEX_OUT);
 
 struct crt_msg_field *status_out[] = {
 	&CMF_INT,
@@ -262,6 +251,18 @@ static struct crt_proto_rpc_format iof_signon_rpc_types[] = {
 		.prf_req_fmt = &CQF_iof_query,
 	},
 	{
+		/* Detach RPC */
+		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,
+	}
+};
+
+static struct crt_proto_rpc_format iof_io_rpc_types[] = {
+	{
+		.prf_req_fmt = &CQF_iof_readx,
+		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,
+	},
+	{
+		.prf_req_fmt = &CQF_iof_writex,
 		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,
 	}
 };
@@ -275,12 +276,21 @@ static struct crt_proto_format iof_signon_registry = {
 };
 
 static struct crt_proto_format iof_write_registry = {
-	.cpf_name = "IOF_WRITE",
+	.cpf_name = "IOF_METADATA",
 	.cpf_ver = IOF_PROTO_WRITE_VERSION,
 	.cpf_count = ARRAY_SIZE(iof_write_rpc_types),
 	.cpf_prf = iof_write_rpc_types,
 	.cpf_base = IOF_PROTO_WRITE_BASE,
 };
+
+static struct crt_proto_format iof_io_registry = {
+	.cpf_name = "IOF_IO",
+	.cpf_ver = IOF_PROTO_IO_VERSION,
+	.cpf_count = ARRAY_SIZE(iof_io_rpc_types),
+	.cpf_prf = iof_io_rpc_types,
+	.cpf_base = IOF_PROTO_IO_BASE,
+};
+
 
 /* Bulk register a RPC type
  *
@@ -313,10 +323,9 @@ iof_core_register(struct crt_proto_format *reg,
 }
 
 int
-iof_register(struct crt_proto_format **proto,
-	     crt_rpc_cb_t handlers[])
+iof_write_register(crt_rpc_cb_t handlers[])
 {
-	return iof_core_register(&iof_write_registry, proto, handlers);
+	return iof_core_register(&iof_write_registry, NULL, handlers);
 }
 
 int
@@ -325,13 +334,21 @@ iof_signon_register(crt_rpc_cb_t handlers[])
 	return iof_core_register(&iof_signon_registry, NULL, handlers);
 }
 
+int
+iof_io_register(struct crt_proto_format **proto,
+		crt_rpc_cb_t handlers[])
+{
+	return iof_core_register(&iof_io_registry, proto, handlers);
+}
+
 struct sq_cb {
 	struct iof_tracker	tracker;
 	uint32_t		signon_version;
 	int			signon_rc;
 	uint32_t		write_version;
 	int			write_rc;
-
+	uint32_t		io_version;
+	int			io_rc;
 };
 
 static void
@@ -360,6 +377,20 @@ iof_write_query_cb(struct crt_proto_query_cb_info *cb_info)
 	iof_tracker_signal(&cbi->tracker);
 }
 
+static void
+iof_io_query_cb(struct crt_proto_query_cb_info *cb_info)
+{
+	struct sq_cb *cbi = cb_info->pq_arg;
+
+	cbi->io_rc = cb_info->pq_rc;
+	if (cbi->io_rc == -DER_SUCCESS) {
+		cbi->io_version = cb_info->pq_ver;
+	}
+
+	iof_tracker_signal(&cbi->tracker);
+}
+
+
 /* Query the server side protocols in use, for now we only support one
  * version so check that with the server and ensure it's what we expect.
  *
@@ -369,14 +400,16 @@ iof_write_query_cb(struct crt_proto_query_cb_info *cb_info)
 int
 iof_client_register(crt_endpoint_t *tgt_ep,
 		    struct crt_proto_format **signon,
-		    struct crt_proto_format **write)
+		    struct crt_proto_format **write,
+		    struct crt_proto_format **io)
 {
 	uint32_t signon_ver = IOF_PROTO_SIGNON_VERSION;
 	uint32_t write_ver = IOF_PROTO_WRITE_VERSION;
+	uint32_t io_ver = IOF_PROTO_IO_VERSION;
 	struct sq_cb cbi = {0};
 	int rc;
 
-	iof_tracker_init(&cbi.tracker, 2);
+	iof_tracker_init(&cbi.tracker, 3);
 
 	rc = crt_proto_query(tgt_ep, IOF_PROTO_SIGNON_BASE,
 			     &signon_ver, 1, iof_signon_query_cb, &cbi);
@@ -386,6 +419,15 @@ iof_client_register(crt_endpoint_t *tgt_ep,
 
 	rc = crt_proto_query(tgt_ep, IOF_PROTO_WRITE_BASE,
 			     &write_ver, 1, iof_write_query_cb, &cbi);
+	if (rc != -DER_SUCCESS) {
+		iof_tracker_signal(&cbi.tracker);
+		iof_tracker_signal(&cbi.tracker);
+		iof_tracker_wait(&cbi.tracker);
+		return rc;
+	}
+
+	rc = crt_proto_query(tgt_ep, IOF_PROTO_IO_BASE,
+			     &io_ver, 1, iof_io_query_cb, &cbi);
 	if (rc != -DER_SUCCESS) {
 		iof_tracker_signal(&cbi.tracker);
 		iof_tracker_wait(&cbi.tracker);
@@ -402,6 +444,10 @@ iof_client_register(crt_endpoint_t *tgt_ep,
 		return cbi.write_rc;
 	}
 
+	if (cbi.io_rc != -DER_SUCCESS) {
+		return cbi.io_rc;
+	}
+
 	if (cbi.signon_version != IOF_PROTO_SIGNON_VERSION) {
 		return -DER_INVAL;
 	}
@@ -410,10 +456,28 @@ iof_client_register(crt_endpoint_t *tgt_ep,
 		return -DER_INVAL;
 	}
 
-	rc = iof_core_register(&iof_signon_registry, signon, NULL);
+	if (cbi.io_version != IOF_PROTO_IO_VERSION) {
+		return -DER_INVAL;
+	}
+
+	rc = crt_proto_register(&iof_signon_registry);
 	if (rc != -DER_SUCCESS) {
 		return rc;
 	}
 
-	return iof_core_register(&iof_write_registry, write, NULL);
+	rc = crt_proto_register(&iof_write_registry);
+	if (rc != -DER_SUCCESS) {
+		return rc;
+	}
+
+	rc = crt_proto_register(&iof_io_registry);
+	if (rc != -DER_SUCCESS) {
+		return rc;
+	}
+
+	*signon	= &iof_signon_registry;
+	*write	= &iof_write_registry;
+	*io	= &iof_io_registry;
+
+	return -DER_SUCCESS;
 }

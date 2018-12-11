@@ -2218,13 +2218,16 @@ iof_query_handler(crt_rpc_t *query_rpc)
 	atomic_fetch_add(&cnss_count, 1);
 }
 
-static crt_rpc_cb_t signon_handlers[] = {
-	iof_query_handler,
-	cnss_detach_handler,
-};
-
 int ionss_register(void)
 {
+	crt_rpc_cb_t signon_handlers[] = {
+		iof_query_handler,
+		cnss_detach_handler,
+	};
+	crt_rpc_cb_t io_handlers[] = {
+		iof_readx_handler,
+		iof_writex_handler,
+	};
 	int ret;
 
 	ret = crt_rpc_srv_register(SHUTDOWN_BCAST_OP,
@@ -2236,9 +2239,16 @@ int ionss_register(void)
 		return ret;
 	}
 
-	ret = iof_register(NULL, write_handlers);
+	ret = iof_write_register(write_handlers);
 	if (ret) {
 		IOF_LOG_ERROR("RPC server handler registration failed,"
+			      " ret = %d", ret);
+		return ret;
+	}
+
+	ret = iof_io_register(NULL, io_handlers);
+	if (ret) {
+		IOF_LOG_ERROR("RPC I/O handler registration failed,"
 			      " ret = %d", ret);
 		return ret;
 	}

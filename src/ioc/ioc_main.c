@@ -1524,7 +1524,7 @@ rb_reset(void *arg)
 	}
 
 	rc = crt_req_create(rb->rb_req.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(rb->rb_req.fsh, readx), &rb->rb_req.rpc);
+			    FS_TO_IOOP(rb->rb_req.fsh, 0), &rb->rb_req.rpc);
 	if (rc || !rb->rb_req.rpc) {
 		IOF_TRACE_ERROR(rb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(rb, lb);
@@ -1580,7 +1580,7 @@ wb_reset(void *arg)
 	}
 
 	rc = crt_req_create(wb->wb_req.fsh->proj.crt_ctx, NULL,
-			    FS_TO_OP(wb->wb_req.fsh, writex), &wb->wb_req.rpc);
+			    FS_TO_IOOP(wb->wb_req.fsh, 1), &wb->wb_req.rpc);
 	if (rc || !wb->wb_req.rpc) {
 		IOF_TRACE_ERROR(wb, "Could not create request, rc = %d", rc);
 		IOF_BULK_FREE(wb, lb);
@@ -1808,7 +1808,8 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 
 	ret = iof_client_register(&group->grp.psr_ep,
 				  &iof_state->handshake_proto,
-				  &iof_state->proto);
+				  &iof_state->proto,
+				  &iof_state->io_proto);
 	if (ret) {
 		IOF_TRACE_ERROR(iof_state,
 				"RPC registration failed with ret: %d", ret);
@@ -1971,7 +1972,7 @@ initialize_projection(struct iof_state *iof_state,
 
 	fs_handle->iof_state = iof_state;
 	fs_handle->flags = fs_info->flags;
-	fs_handle->proj.proto = iof_state->proto;
+	fs_handle->proj.io_proto = iof_state->io_proto;
 	fs_handle->failover_state = iof_failover_running;
 	IOF_TRACE_INFO(fs_handle, "Filesystem mode: Private; "
 			"Access: Read-%s | Fail Over: %s",

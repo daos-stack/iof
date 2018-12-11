@@ -43,7 +43,6 @@
 #include <gurt/common.h>
 
 #include "ios_gah.h"
-#include "iof_ext.h"
 
 #define IOF_DEFAULT_SET "IONSS"
 
@@ -248,23 +247,6 @@ struct iof_open_out {
 	int err;
 };
 
-struct iof_readx_in {
-	struct ios_gah gah;
-	struct iof_xtvec xtvec;
-	uint64_t xtvec_len;
-	uint64_t bulk_len;
-	crt_bulk_t xtvec_bulk;
-	crt_bulk_t data_bulk;
-};
-
-struct iof_readx_out {
-	d_iov_t data;
-	uint64_t bulk_len;
-	uint32_t iov_len;
-	int rc;
-	int err;
-};
-
 struct iof_data_out {
 	d_iov_t data;
 	int rc;
@@ -278,25 +260,6 @@ struct iof_status_out {
 
 struct iof_gah_in {
 	struct ios_gah gah;
-};
-
-struct iof_writex_in {
-	struct ios_gah gah;
-	d_iov_t data;
-	struct iof_xtvec xtvec;
-	uint64_t xtvec_len;
-	uint64_t bulk_len;
-	crt_bulk_t xtvec_bulk;
-	crt_bulk_t data_bulk;
-};
-
-struct iof_writex_out {
-	uint64_t len;
-	int rc;
-	int err;
-	uint64_t pad[2]; /* TODO: Optimize this later.  For now, just add
-			  * some padding so ionss_io_req_desc fits
-			  */
 };
 
 struct iof_setattr_in {
@@ -314,9 +277,7 @@ extern struct crt_req_format QUERY_RPC_FMT;
 	X(readdir,	readdir_in,	readdir_out)	\
 	X(closedir,	gah_in,		NULL)		\
 	X(getattr,	gah_in,		attr_out)	\
-	X(writex,	writex_in,	writex_out)	\
 	X(rename,	rename_in,	status_out)	\
-	X(readx,	readx_in,	readx_out)	\
 	X(unlink,	unlink_in,	status_out)	\
 	X(open,		open_in,	gah_pair)	\
 	X(create,	create_in,	create_out)	\
@@ -339,9 +300,53 @@ enum {
 
 #undef X
 
+#define IOF_STRUCT_XTVEC		\
+	((uint64_t) (xt_off) CRT_VAR)	\
+	((uint64_t) (xt_len) CRT_VAR)
+
+CRT_GEN_STRUCT(iof_xtvec, IOF_STRUCT_XTVEC);
+
+#define IOF_RPC_READX_IN					\
+	((struct ios_gah)	(gah)		CRT_VAR)	\
+	((struct iof_xtvec)	(xtvec)		CRT_VAR)	\
+	((uint64_t)		(xtvec_len)	CRT_VAR)	\
+	((uint64_t)		(bulk_len)	CRT_VAR)	\
+	((crt_bulk_t)		(xtvec_bulk)	CRT_VAR)	\
+	((crt_bulk_t)		(data_bulk)	CRT_VAR)
+
+#define IOF_RPC_READX_OUT			\
+	((d_iov_t) (data) CRT_VAR)		\
+	((uint64_t) (bulk_len) CRT_VAR)		\
+	((uint32_t) (iov_len) CRT_VAR)		\
+	((int) (rc) CRT_VAR)			\
+	((int) (err) CRT_VAR)
+
+CRT_RPC_DECLARE(iof_readx, IOF_RPC_READX_IN, IOF_RPC_READX_OUT)
+
+#define IOF_RPC_WRITEX_IN					\
+	((struct ios_gah)	(gah)		CRT_VAR)	\
+	((d_iov_t)		(data)		CRT_VAR)	\
+	((struct iof_xtvec)	(xtvec)		CRT_VAR)	\
+	((uint64_t)		(xtvec_len)	CRT_VAR)	\
+	((uint64_t)		(bulk_len)	CRT_VAR)	\
+	((crt_bulk_t)		(xtvec_bulk)	CRT_VAR)	\
+	((crt_bulk_t)		(data_bulk)	CRT_VAR)
+
+#define IOF_RPC_WRITEX_OUT			\
+	((uint64_t)	(len)	CRT_VAR)	\
+	((int)		(rc)	CRT_VAR)	\
+	((int)		(err)	CRT_VAR)	\
+	((uint64_t)	(pad0)	CRT_VAR)	\
+	((uint64_t)	(pad1)	CRT_VAR)
+
+CRT_RPC_DECLARE(iof_writex, IOF_RPC_WRITEX_IN, IOF_RPC_WRITEX_OUT)
+
 int
-iof_register(struct crt_proto_format **proto,
-	     crt_rpc_cb_t handlers[]);
+iof_write_register(crt_rpc_cb_t handlers[]);
+
+int
+iof_io_register(struct crt_proto_format **proto,
+		crt_rpc_cb_t handlers[]);
 
 int
 iof_signon_register(crt_rpc_cb_t handlers[]);
@@ -349,6 +354,7 @@ iof_signon_register(crt_rpc_cb_t handlers[]);
 int
 iof_client_register(crt_endpoint_t *tgt_ep,
 		    struct crt_proto_format **signon,
-		    struct crt_proto_format **write);
+		    struct crt_proto_format **write,
+		    struct crt_proto_format **io);
 
 #endif

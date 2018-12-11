@@ -109,9 +109,9 @@ ssize_t ioil_do_writex(const char *buff, size_t len, off_t position,
 	grp = fs_handle->grp;
 
 	rc = crt_req_create(fs_handle->crt_ctx, &grp->psr_ep,
-			    CRT_PROTO_OPC(fs_handle->proto->cpf_base,
-					  fs_handle->proto->cpf_ver,
-					  DEF_RPC_TYPE(writex)),
+			    CRT_PROTO_OPC(fs_handle->io_proto->cpf_base,
+					  fs_handle->io_proto->cpf_ver,
+					  1),
 			    &rpc);
 	if (rc || !rpc) {
 		IOF_LOG_ERROR("Could not create request, rc = %d",

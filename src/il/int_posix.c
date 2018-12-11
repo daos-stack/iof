@@ -223,7 +223,7 @@ static int find_projections(void)
 
 		proj->cli_fs_id = i;
 		proj->crt_ctx = crt_ctx;
-		proj->proto = iof_proto;
+		proj->io_proto = iof_proto;
 		snprintf(tmp, BUFSIZE, "iof/projections/%d/group_id", i);
 		rc = iof_ctrl_read_uint32(&proj->grp_id, tmp);
 		if (rc != 0) {
@@ -375,7 +375,10 @@ static __attribute__((constructor)) void ioil_init(void)
 		return;
 	}
 
-	rc = iof_register(&iof_proto, NULL);
+	/* TODO: This needs to call the crt_proto_query() to ensure the server
+	 * supports the same version of the protocol
+	 */
+	rc = iof_io_register(&iof_proto, NULL);
 	if (rc != 0) {
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();

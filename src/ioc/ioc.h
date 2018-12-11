@@ -114,8 +114,10 @@ struct iof_state {
 	struct cnss_plugin_cb		*cb;
 	/** CaRT RPC protocol used for handshake */
 	struct crt_proto_format		*handshake_proto;
-	/** CaRT RPC protocol used */
+	/** CaRT RPC protocol used for metadata */
 	struct crt_proto_format		*proto;
+	/** CaRT RPC protocol used for I/O */
+	struct crt_proto_format		*io_proto;
 	/** iof_ctx for state */
 	struct iof_ctx			iof_ctx;
 	/** List of projections */
@@ -239,9 +241,14 @@ struct iof_projection_info {
 /*
  * Returns the correct RPC Type ID from the protocol registry.
  */
-#define FS_TO_OP(HANDLE, FN) (CRT_PROTO_OPC((HANDLE)->proj.proto->cpf_base, \
-					    (HANDLE)->proj.proto->cpf_ver, \
+#define FS_TO_OP(HANDLE, FN) (CRT_PROTO_OPC((HANDLE)->iof_state->proto->cpf_base, \
+					    (HANDLE)->iof_state->proto->cpf_ver, \
 					    DEF_RPC_TYPE(FN)))
+
+#define FS_TO_IOOP(HANDLE, IDX) (CRT_PROTO_OPC((HANDLE)->proj.io_proto->cpf_base, \
+					       (HANDLE)->proj.io_proto->cpf_ver, \
+					       IDX))
+
 
 int iof_is_mode_supported(uint8_t flags);
 
