@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -617,28 +617,23 @@ static void ioc_eviction_cb(crt_group_t *group, d_rank_t rank, void *arg)
 	struct iof_state		*iof_state = arg;
 	d_rank_t			updated_psr;
 	d_rank_list_t			*psr_list = NULL;
-	struct iof_group_info		*g = NULL;
+	struct iof_group_info		*g = &iof_state->group;
 	struct iof_projection_info	*fs_handle;
 	crt_rpc_t			*rpc = NULL;
 	int				active = 0;
-	int i, crc, rc;
+	int crc, rc;
 
 	IOF_TRACE_INFO(iof_state,
 		       "Eviction handler, Group: %s; Rank: %u",
 		       group->cg_grpid, rank);
 
-	for (i = 0; i < iof_state->num_groups; i++) {
-		g = iof_state->groups + i;
-		if (!strncmp(group->cg_grpid,
-			     g->grp.dest_grp->cg_grpid,
-			     CRT_GROUP_ID_MAX_LEN))
-			break;
-		g = NULL;
-	}
-
-	if (g == NULL) {
+	if (strncmp(group->cg_grpid,
+		    iof_state->group.grp.dest_grp->cg_grpid,
+		    CRT_GROUP_ID_MAX_LEN)) {
 		IOF_TRACE_INFO(iof_state,
-			       "Not an ionss group: %s", group->cg_grpid);
+			       "Group ID wrong %s %s",
+			       group->cg_grpid,
+			       iof_state->group.grp.dest_grp->cg_grpid);
 		return;
 	}
 
@@ -1062,17 +1057,13 @@ static int iof_uint64_read(char *buf, size_t buflen, void *arg)
  *
  * Returns true on success.
  */
-#define BUFSIZE 64
 static bool
 attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 {
-	char buf[BUFSIZE];
-	int ret;
-	struct cnss_plugin_cb *cb;
+	struct cnss_plugin_cb *cb = iof_state->cb;
 	struct ctrl_dir *ionss_dir = NULL;
 	d_rank_list_t *psr_list = NULL;
-
-	cb = iof_state->cb;
+	int ret;
 
 	/* First check for the IONSS process set, and if it does not
 	 * exist then * return cleanly to allow the rest of the CNSS
@@ -1116,9 +1107,7 @@ attach_group(struct iof_state *iof_state, struct iof_group_info *group)
 	IOF_TRACE_INFO(iof_state, "Primary Service Rank: %d",
 		       atomic_load_consume(&group->grp.pri_srv_rank));
 
-	snprintf(buf, BUFSIZE, "%d", group->grp.grp_id);
-
-	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, buf,
+	ret = cb->create_ctrl_subdir(iof_state->ionss_dir, "0",
 				     &ionss_dir);
 	if (ret != 0) {
 		IOF_TRACE_ERROR(iof_state, "Failed to create control dir for "
@@ -1723,27 +1712,10 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	struct iof_state *iof_state = arg;
 	struct iof_group_info *group;
 	int ret;
-	int num_attached = 0;
-	int num_groups = 1;
-	int i;
 
 	iof_state->cb = cb;
 
-	/* Hard code only the default group now */
-	D_ALLOC_ARRAY(iof_state->groups, num_groups);
-	if (iof_state->groups == NULL)
-		return 1;
-
-	/* Set this only after a successful allocation */
-	iof_state->num_groups = num_groups;
-
-	group = &iof_state->groups[0];
-	D_STRNDUP(group->grp_name, IOF_DEFAULT_SET, 128);
-	if (group->grp_name == NULL) {
-		IOF_TRACE_ERROR(iof_state, "No memory available to configure "
-				"IONSS");
-		return 1;
-	}
+	iof_state->group.grp_name = IOF_DEFAULT_SET;
 
 	D_INIT_LIST_HEAD(&iof_state->fs_list);
 
@@ -1776,24 +1748,15 @@ static int iof_reg(void *arg, struct cnss_plugin_cb *cb, size_t cb_size)
 	}
 
 	/* Despite the hard coding above, now we can do attaches in a loop */
-	for (i = 0; i < iof_state->num_groups; i++) {
-		group = &iof_state->groups[i];
-		group->grp.grp_id = i;
+	group = &iof_state->group;
 
-		if (!attach_group(iof_state, group)) {
-			IOF_TRACE_ERROR(iof_state,
-					"Failed to attach to service group '%s'",
-					group->grp_name);
-			continue;
-		}
-		group->crt_attached = true;
-		num_attached++;
-	}
-
-	if (num_attached == 0) {
-		IOF_TRACE_ERROR(iof_state, "No IONSS found");
+	if (!attach_group(iof_state, group)) {
+		IOF_TRACE_ERROR(iof_state,
+				"Failed to attach to service group '%s'",
+				group->grp_name);
 		return 1;
 	}
+	group->crt_attached = true;
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir, "ioctl_version",
 					  IOF_IOCTL_VERSION);
@@ -2085,9 +2048,6 @@ initialize_projection(struct iof_state *iof_state,
 					  fs_handle->fs_id);
 
 	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
-					  "group_id", group->grp.grp_id);
-
-	cb->register_ctrl_constant_uint64(fs_handle->fs_dir,
 					  "max_read",
 					  fs_handle->max_read);
 
@@ -2150,7 +2110,6 @@ initialize_projection(struct iof_state *iof_state,
 		       fs_handle->proj.cli_fs_id);
 
 	fs_handle->proj.grp = &group->grp;
-	fs_handle->proj.grp_id = group->grp.grp_id;
 
 	ret = crt_context_create(&fs_handle->proj.crt_ctx);
 	if (ret) {
@@ -2388,9 +2347,10 @@ static int iof_post_start(void *arg)
 {
 	struct cnss_plugin_cb	*cb;
 	struct iof_state	*iof_state = arg;
+	struct iof_group_info	*group = &iof_state->group;
 	int			active_projections = 0;
 	int			total_projections = 0;
-	int grp_num;
+	int active;
 	int ret;
 
 	cb = iof_state->cb;
@@ -2403,24 +2363,18 @@ static int iof_post_start(void *arg)
 		return 1;
 	}
 
-	for (grp_num = 0; grp_num < iof_state->num_groups; grp_num++) {
-		struct iof_group_info *group = &iof_state->groups[grp_num];
-		int active;
+	if (!group->crt_attached)
+		return 1;
 
-		if (!group->crt_attached)
-			continue;
-
-		if (!query_projections(iof_state, group, &total_projections,
-				       &active)) {
-			IOF_TRACE_ERROR(iof_state,
-					"Couldn't mount projections from %s",
-					group->grp_name);
-			continue;
-		}
-		active_projections += active;
-
-		group->iof_registered = true;
+	if (!query_projections(iof_state, group, &total_projections, &active)) {
+		IOF_TRACE_ERROR(iof_state,
+				"Couldn't mount projections from %s",
+				group->grp_name);
+		return 1;
 	}
+	active_projections += active;
+
+	group->iof_registered = true;
 
 	cb->register_ctrl_constant_uint64(cb->plugin_dir,
 					  "projection_count",
@@ -2672,60 +2626,48 @@ detach_cb(const struct crt_cb_info *cb_info)
 static void iof_finish(void *arg)
 {
 	struct iof_state *iof_state = arg;
-	struct iof_group_info *group;
-
+	struct iof_group_info *group = &iof_state->group;
 	int rc;
-	int i;
 	struct iof_tracker tracker;
+	crt_rpc_t *rpc = NULL;
 
-	iof_tracker_init(&tracker, iof_state->num_groups);
+	iof_tracker_init(&tracker, 1);
 
-	for (i = 0; i < iof_state->num_groups; i++) {
-		crt_rpc_t *rpc = NULL;
-
-		group = &iof_state->groups[i];
-
-		if (!group->iof_registered) {
-			iof_tracker_signal(&tracker);
-			continue;
-		}
-
-		/*send a detach RPC to IONSS*/
-		rc = crt_req_create(iof_state->iof_ctx.crt_ctx,
-				&group->grp.psr_ep,
-				CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
-					iof_state->handshake_proto->cpf_ver,
-					1),
-				&rpc);
-		if (rc != -DER_SUCCESS || !rpc) {
-			IOF_TRACE_ERROR(iof_state,
-					"Could not create detach req rc = %d",
-					rc);
-			iof_tracker_signal(&tracker);
-			continue;
-		}
-
-		rc = crt_req_send(rpc, detach_cb, &tracker);
-		if (rc != -DER_SUCCESS) {
-			IOF_TRACE_ERROR(iof_state, "Detach RPC not sent");
-			iof_tracker_signal(&tracker);
-		}
+	if (!group->iof_registered) {
+		iof_tracker_signal(&tracker);
+		D_GOTO(tracker_stop, 0);
+		return;
 	}
 
+	/*send a detach RPC to IONSS*/
+	rc = crt_req_create(iof_state->iof_ctx.crt_ctx,
+			    &group->grp.psr_ep,
+			    CRT_PROTO_OPC(iof_state->handshake_proto->cpf_base,
+					  iof_state->handshake_proto->cpf_ver,
+					  1),
+			    &rpc);
+	if (rc != -DER_SUCCESS || !rpc) {
+		IOF_TRACE_ERROR(iof_state,
+				"Could not create detach req rc = %d",
+				rc);
+		iof_tracker_signal(&tracker);
+		D_GOTO(tracker_stop, 0);
+	}
+
+	rc = crt_req_send(rpc, detach_cb, &tracker);
+	if (rc != -DER_SUCCESS) {
+		IOF_TRACE_ERROR(iof_state, "Detach RPC not sent");
+		iof_tracker_signal(&tracker);
+	}
+
+tracker_stop:
 	/* If an error occurred above, there will be no need to call
 	 * progress
 	 */
 	if (!iof_tracker_test(&tracker))
 		iof_wait(iof_state->iof_ctx.crt_ctx, &tracker);
 
-	for (i = 0; i < iof_state->num_groups; i++) {
-		group = &iof_state->groups[i];
-
-		D_FREE(group->grp_name);
-
-		if (!group->crt_attached)
-			continue;
-
+	if (group->crt_attached) {
 		rc = crt_group_detach(group->grp.dest_grp);
 		if (rc != -DER_SUCCESS)
 			IOF_TRACE_ERROR(iof_state, "crt_group_detach failed "
@@ -2753,7 +2695,6 @@ static void iof_finish(void *arg)
 	}
 
 	IOF_TRACE_DOWN(iof_state);
-	D_FREE(iof_state->groups);
 	D_FREE(iof_state);
 }
 

@@ -1,4 +1,4 @@
-/* Copyright (C) 2017-2018 Intel Corporation
+/* Copyright (C) 2017-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,7 +49,6 @@ struct iof_service_group {
 	crt_group_t		*dest_grp; /* Server group */
 	crt_endpoint_t		psr_ep;    /* Server PSR endpoint */
 	ATOMIC uint32_t		pri_srv_rank;  /* Primary Service Rank */
-	uint32_t		grp_id;    /* CNSS defined ionss id */
 	bool			enabled;   /* Indicates group is available */
 };
 
@@ -64,8 +63,6 @@ struct iof_projection {
 	struct crt_proto_format		*io_proto;
 	/** context to use */
 	crt_context_t			crt_ctx;
-	/** CNSS defined ionss id */
-	uint32_t			grp_id;
 	/** bulk threshold */
 	uint32_t			max_iov_write;
 	/** max write size */

@@ -1,4 +1,4 @@
-/* Copyright (C) 2017-2018 Intel Corporation
+/* Copyright (C) 2017-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,8 +66,7 @@ static vector_t fd_table;
 static const char *cnss_prefix;
 static crt_context_t crt_ctx;
 static int cnss_id;
-static struct iof_service_group *ionss_grps;
-static uint32_t ionss_count;
+static struct iof_service_group ionss_grp;
 static struct iof_projection *projections;
 static uint32_t projection_count;
 static struct crt_proto_format *iof_proto;
@@ -119,10 +118,11 @@ int ioil_initialize_fd_table(int max_fds)
 
 static int find_projections(void)
 {
+	struct iof_service_group *grp_info = &ionss_grp;
 	char buf[IOF_CTRL_MAX_LEN];
 	char tmp[BUFSIZE];
 	int rc;
-	int i;
+	int i = 0;
 	uint32_t version;
 	d_rank_t rank;
 	uint32_t tag;
@@ -145,66 +145,51 @@ static int find_projections(void)
 		return 1;
 	}
 
-	rc = iof_ctrl_read_uint32(&ionss_count, "iof/ionss_count");
+	snprintf(tmp, BUFSIZE, "iof/ionss/%d/name", i);
+
+	rc = iof_ctrl_read_str(buf, IOF_CTRL_MAX_LEN, tmp);
 	if (rc != 0) {
-		IOF_LOG_INFO("Could not get ionss count, rc = %d", rc);
+		IOF_LOG_INFO("Could not get ionss name, rc = %d", rc);
 		return 1;
 	}
 
-	ionss_grps = calloc(ionss_count, sizeof(*ionss_grps));
-	if (!ionss_grps)
+	/* Ok, now try to attach.  Note, this will change when we
+	 * attach to multiple IONSS processes
+	 */
+	rc = crt_group_attach(buf, &grp_info->dest_grp);
+	if (rc != 0) {
+		IOF_LOG_INFO("Could not attach to ionss %s, rc = %d",
+			     buf, rc);
 		return 1;
-
-	for (i = 0; i < ionss_count; i++) {
-		struct iof_service_group *grp_info = &ionss_grps[i];
-
-		snprintf(tmp, BUFSIZE, "iof/ionss/%d/name", i);
-
-		rc = iof_ctrl_read_str(buf, IOF_CTRL_MAX_LEN, tmp);
-		if (rc != 0) {
-			IOF_LOG_INFO("Could not get ionss name, rc = %d", rc);
-			return 1;
-		}
-
-		/* Ok, now try to attach.  Note, this will change when we
-		 * attach to multiple IONSS processes
-		 */
-		rc = crt_group_attach(buf, &grp_info->dest_grp);
-		if (rc != 0) {
-			IOF_LOG_INFO("Could not attach to ionss %s, rc = %d",
-				     buf, rc);
-			return 1;
-		}
-
-		rc = iof_lm_attach(grp_info->dest_grp, crt_ctx);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not initialize failover, rc = %d",
-				      rc);
-			return 1;
-		}
-
-		grp_info->psr_ep.ep_grp = grp_info->dest_grp;
-
-		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);
-		rc = iof_ctrl_read_uint32(&rank, tmp);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not read psr_rank, rc = %d", rc);
-			return 1;
-		}
-
-		grp_info->psr_ep.ep_rank = rank;
-		grp_info->grp_id = i;
-
-		snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_tag", i);
-		rc = iof_ctrl_read_uint32(&tag, tmp);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not read psr_tag, rc = %d", rc);
-			return 1;
-		}
-		grp_info->psr_ep.ep_tag = tag;
-
-		grp_info->enabled = true;
 	}
+
+	rc = iof_lm_attach(grp_info->dest_grp, crt_ctx);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not initialize failover, rc = %d",
+			      rc);
+		return 1;
+	}
+
+	grp_info->psr_ep.ep_grp = grp_info->dest_grp;
+
+	snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_rank", i);
+	rc = iof_ctrl_read_uint32(&rank, tmp);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not read psr_rank, rc = %d", rc);
+		return 1;
+	}
+
+	grp_info->psr_ep.ep_rank = rank;
+
+	snprintf(tmp, BUFSIZE, "iof/ionss/%d/psr_tag", i);
+	rc = iof_ctrl_read_uint32(&tag, tmp);
+	if (rc != 0) {
+		IOF_LOG_ERROR("Could not read psr_tag, rc = %d", rc);
+		return 1;
+	}
+	grp_info->psr_ep.ep_tag = tag;
+
+	grp_info->enabled = true;
 
 	rc = iof_ctrl_read_uint32(&projection_count, "iof/projection_count");
 	if (rc != 0) {
@@ -224,17 +209,6 @@ static int find_projections(void)
 		proj->cli_fs_id = i;
 		proj->crt_ctx = crt_ctx;
 		proj->io_proto = iof_proto;
-		snprintf(tmp, BUFSIZE, "iof/projections/%d/group_id", i);
-		rc = iof_ctrl_read_uint32(&proj->grp_id, tmp);
-		if (rc != 0) {
-			IOF_LOG_ERROR("Could not read grp_id, rc = %d", rc);
-			return 1;
-		}
-
-		if (proj->grp_id > ionss_count) {
-			IOF_LOG_ERROR("Invalid grp_id for projection");
-			return 1;
-		}
 
 		snprintf(tmp, BUFSIZE, "iof/projections/%d/max_iov_write", i);
 		rc = iof_ctrl_read_uint32(&proj->max_iov_write, tmp);
@@ -250,7 +224,7 @@ static int find_projections(void)
 			return 1;
 		}
 
-		proj->grp = &ionss_grps[proj->grp_id];
+		proj->grp = &ionss_grp;
 		proj->enabled = true;
 	}
 
@@ -405,15 +379,11 @@ static __attribute__((constructor)) void ioil_init(void)
 
 static __attribute__((destructor)) void ioil_fini(void)
 {
-	int i;
-
 	if (ioil_initialized) {
-		for (i = 0; i < ionss_count; i++)
-			crt_group_detach(ionss_grps[i].dest_grp);
+		crt_group_detach(ionss_grp.dest_grp);
 		crt_context_destroy(crt_ctx, 0);
 		crt_finalize();
 		iof_ctrl_util_finalize();
-		free(ionss_grps);
 		free(projections);
 	}
 	ioil_initialized = false;

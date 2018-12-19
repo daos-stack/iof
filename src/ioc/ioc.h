@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -106,6 +106,27 @@ struct iof_ctx {
 };
 
 /**
+ * IOF Group struct.
+ *
+ * Intended to be used to support multiple groups but support for that is not
+ * in place yet so only 1 group is currently allowed.
+ *
+ */
+
+struct iof_group_info {
+	/** Service group pointer */
+	struct iof_service_group	grp;
+	/** The group name */
+	char				*grp_name;
+
+	/** Set to true if the CaRT group attached */
+	bool				crt_attached;
+
+	/** Set to true if registered with the IONSS */
+	bool				iof_registered;
+};
+
+/**
  * Global state for IOF client.
  *
  */
@@ -129,32 +150,9 @@ struct iof_state {
 	/** ctrl_fs projections directory handle */
 	struct ctrl_dir			*projections_dir;
 	/** Group information */
-	struct iof_group_info		*groups;
-	/** Number of groups, will be 1 */
-	uint32_t			num_groups;
+	struct iof_group_info		group;
 	/** Number of projections */
 	uint32_t			num_proj;
-};
-
-/**
- * IOF Group struct.
- *
- * Intended to be used to support multiple groups but support for that is not
- * in place yet so only 1 group is currently allowed.
- *
- */
-
-struct iof_group_info {
-	/** Service group pointer */
-	struct iof_service_group	grp;
-	/** The group name */
-	char				*grp_name;
-
-	/** Set to true if the CaRT group attached */
-	bool				crt_attached;
-
-	/** Set to true if registered with the IONSS */
-	bool				iof_registered;
 };
 
 enum iof_failover_state {
