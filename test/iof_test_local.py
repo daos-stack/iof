@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016-2018 Intel Corporation
+# Copyright (C) 2016-2019 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -74,6 +74,24 @@ import rpctrace_common_methods
 import iof_cart_logparse
 
 jdata = None
+
+class LogCheckError(Exception):
+    """Error in the log parsing code"""
+    def __str__(self):
+        return self.__doc__
+
+class NotAllFreed(LogCheckError):
+    """Not all memory allocations freed"""
+
+class WarningStrict(LogCheckError):
+    """Error for warnings from strict files"""
+
+class ActiveDescriptors(LogCheckError):
+    """Active descriptors at end of log file"""
+
+class LogError(LogCheckError):
+    """Errors detected in log file"""
+
 
 sys.path.append('install/Linux/TESTING/scripts')
 try:
@@ -584,7 +602,7 @@ class Testlocal(unittest.TestCase,
                               'warning in strict file in {}'.format(self.id()))
                     common_methods.show_bug(line,
                                             strict_functions[line.function])
-                    raise Exception
+                    raise WarningStrict()
             except AttributeError:
                 pass
             if line.trace:
@@ -704,15 +722,15 @@ class Testlocal(unittest.TestCase,
         if active_desc:
             for (_, line) in active_desc.items():
                 show_line(line, 'error', 'desc not deregistered')
-            raise Exception('Active descriptors at end of log file')
+            raise ActiveDescriptors()
 
         if active_rpcs:
             for (_, line) in active_rpcs.items():
                 show_line(line, 'error', 'rpc not deregistered')
         if error_files or err_count:
-            raise Exception('Errors detected in log file')
+            raise LogError()
         if lost_memory:
-            raise Exception('Not all memory allocations freed')
+            raise NotAllFreed()
 #pylint: enable=too-many-branches,no-self-use,too-many-nested-blocks
 
     def _tidy_callgrind_files(self):

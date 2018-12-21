@@ -107,19 +107,16 @@ def run_once(prefix, cmd, log_top_dir, floc):
         print("Alloc test failing with valgrind errors")
         return True
     # This means abnormal exit, probably a segv.
-    if rc < 0:
-        return True
-    # This means it's not one of the CNSS_ERR error codes.
-    if rc > 10:
-        return True
-    if rc == 0:
+    # Less than zero means abnormal exit, probably from a signal
+    # 0 means no error reported which there should be.
+    # > 10 means it's not a CNSS_ERR code.
+    if rc <= 0 or rc > 10:
         return True
 
     ifd = open(internals_file, 'w+')
     trace = rpctrace_common_methods.RpcTrace(log_file, ifd)
-    pid = trace.pids[0]
-    trace.rpc_reporting(pid)
-    trace.descriptor_rpc_trace(pid)
+    trace.rpc_reporting(trace.pids[0])
+    trace.descriptor_rpc_trace(trace.pids[0])
 
     have_inject = False
     for line in trace.lf.new_iter():
@@ -135,7 +132,12 @@ def run_once(prefix, cmd, log_top_dir, floc):
     ifd.close()
 
     tl = iof_test_local.Testlocal()
-    tl.check_log_file(log_file)
+    try:
+        tl.check_log_file(log_file)
+    except iof_test_local.LogCheckError as e:
+        print(e)
+        print("Log tracing code found errors: {}".format(internals_file))
+        return True
 
     if trace.have_errors:
         print("Internals tracing code found errors: {}".format(internals_file))
