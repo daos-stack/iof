@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -699,7 +699,7 @@ int main(int argc, char **argv)
 	struct cnss_info *cnss_info;
 	bool active_plugins = false;
 	int ret;
-
+	int rc;
 	bool service_process_set = false;
 	char *ctrl_prefix;
 	bool rcb;
@@ -938,14 +938,19 @@ int main(int argc, char **argv)
 	CALL_PLUGIN_FN(&cnss_info->plugins, stop_plugin_services);
 	CALL_PLUGIN_FN(&cnss_info->plugins, flush_plugin_services);
 
+	ret = 0;
+
 shutdown_cart:
 	rcb = shutdown_fs(cnss_info);
+	if (!rcb)
+		ret = 1;
 
 	CALL_PLUGIN_FN(&cnss_info->plugins, destroy_plugin_data);
 
-	ret = crt_finalize();
-	if (!rcb)
+	rc = crt_finalize();
+	if (rc != -DER_SUCCESS)
 		ret = 1;
+
 	ctrl_fs_shutdown(); /* Shuts down ctrl fs and waits */
 
 	while ((entry = d_list_pop_entry(&cnss_info->plugins,

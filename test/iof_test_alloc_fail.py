@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2016-2018 Intel Corporation
+# Copyright (C) 2016-2019 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -111,6 +111,8 @@ def run_once(prefix, cmd, log_top_dir, floc):
         return True
     # This means it's not one of the CNSS_ERR error codes.
     if rc > 10:
+        return True
+    if rc == 0:
         return True
 
     ifd = open(internals_file, 'w+')
