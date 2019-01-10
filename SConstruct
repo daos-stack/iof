@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2018 Intel Corporation
+# Copyright (C) 2016-2019 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -130,10 +130,7 @@ def scons():
     prereqs = PreReqComponent(env, opts,
                               config_file=commits_file, arch=platform)
 
-    prereqs.preload(os.path.join(Dir('#').abspath,
-                                 "scons_local",
-                                 "components.py"),
-                    prebuild=["ompi", "cart", "fuse"])
+    prereqs.load_definitions(prebuild=["cart", "fuse", "ompi"])
 
     Export('env prereqs IOF_VERSION')
 
