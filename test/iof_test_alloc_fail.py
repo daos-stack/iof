@@ -57,6 +57,8 @@ import iofcommontestsuite
 import rpctrace_common_methods
 import iof_test_local
 
+FAIL_ON_ERROR = False
+
 def unlink_file(file_name):
     """Unlink a file without failing if it doesn't exist"""
 
@@ -69,6 +71,7 @@ class EndOfTest(Exception):
     """Raised when no injected fault is found"""
     pass
 
+#pylint: disable=too-many-locals
 def run_once(prefix, cmd, log_top_dir, floc):
     """Run a single instance of the command"""
     print("Testing {}".format(floc))
@@ -119,15 +122,16 @@ def run_once(prefix, cmd, log_top_dir, floc):
     trace.descriptor_rpc_trace(trace.pids[0])
 
     have_inject = False
+    have_eot = False
     for line in trace.lf.new_iter():
         if line.endswith('fault_id 100, injecting fault.'):
             print(line.to_str())
+            have_eot = True
             break
         if not line.endswith('fault_id 0, injecting fault.'):
             continue
         have_inject = True
         print(line.to_str())
-        break
 
     ifd.close()
 
@@ -145,7 +149,13 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     if not have_inject:
         raise EndOfTest
+
+    # If a fault was injected but ignored then fail the test.
+    if have_eot:
+        print("Fault was injected but silently ignored")
+        return True
     return False
+#pylint: enable=too-many-locals
 
 def open_config_file():
     """Write a ionss config file"""
@@ -162,6 +172,7 @@ def open_config_file():
     return config_file.name
 
 #pylint: disable=too-many-branches
+#pylint: disable=too-many-statements
 def run_app(ionss=False):
     """Main function"""
 
@@ -230,6 +241,8 @@ def run_app(ionss=False):
             res = run_once(prefix, cmd, log_top_dir, floc)
             if res:
                 my_res.append(floc)
+                if FAIL_ON_ERROR:
+                    sys.exit(1)
         except EndOfTest:
             print("Ran without injecting error")
             break
@@ -240,6 +253,7 @@ def run_app(ionss=False):
         print('Failed for {}'.format(my_res))
         sys.exit(1)
 #pylint: enable=too-many-branches
+#pylint: enable=too-many-statements
 
 if __name__ == '__main__':
     run_app()

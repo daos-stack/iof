@@ -1,4 +1,4 @@
-/* Copyright (C) 2017-2018 Intel Corporation
+/* Copyright (C) 2017-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -320,6 +320,23 @@ iof_pool_register(struct iof_pool *pool, struct iof_pool_reg *reg)
 	type->reg = *reg;
 
 	create_many(type);
+
+	if (type->free_count == 0) {
+		/* If create_many() failed to create any descriptors then
+		 * return failure, as it either means an early allocation
+		 * failure or a wider problem with the type itself.
+		 *
+		 * This works with the fault injection tests as precisely
+		 * one descriptor is created initially, if there were more
+		 * and one failed the error would not propagate and the
+		 * injected fault would be ignored - failing the specific
+		 * test.
+		 */
+		IOF_TRACE_DOWN(type);
+		D_MUTEX_DESTROY(&type->lock);
+		D_FREE(type);
+		return NULL;
+	}
 
 	D_MUTEX_LOCK(&pool->lock);
 	d_list_add_tail(&type->type_list, &pool->list);

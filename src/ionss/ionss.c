@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -2813,12 +2813,15 @@ int main(int argc, char **argv)
 		if (rc != 0) {
 			IOF_TRACE_ERROR(projection,
 					"Could not create hash table");
+			err = 1;
 			continue;
 		}
 
 		rc = D_MUTEX_INIT(&projection->lock, NULL);
-		if (rc != -DER_SUCCESS)
+		if (rc != -DER_SUCCESS) {
+			err = 1;
 			continue;
+		}
 
 		D_INIT_LIST_HEAD(&projection->read_list);
 		D_INIT_LIST_HEAD(&projection->write_list);
@@ -2845,12 +2848,15 @@ int main(int argc, char **argv)
 		projection->fh_pool = iof_pool_register(&projection->pool,
 							&fhp);
 		if (!projection->fh_pool) {
+			err = 1;
 			continue;
 		}
 
 		rc = ios_fh_alloc(projection, &projection->root);
-		if (rc != 0)
+		if (rc != 0) {
+			err = 1;
 			continue;
+		}
 
 		projection->root->fd = fd;
 		projection->root->mf.inode_no = buf.st_ino;
@@ -2865,6 +2871,7 @@ int main(int argc, char **argv)
 				       &projection->root->clist, 0);
 		if (rc != 0) {
 			IOF_LOG_ERROR("Could not insert into hash table");
+			err = 1;
 			continue;
 		}
 
@@ -2876,7 +2883,7 @@ int main(int argc, char **argv)
 		projection->id = i;
 	}
 	if (err) {
-		D_GOTO(cleanup, exit_rc = -DER_MISC);
+		D_GOTO(shutdown, exit_rc = -DER_MISC);
 	}
 
 	ret = filesystem_lookup();
@@ -2911,12 +2918,14 @@ int main(int argc, char **argv)
 			continue;
 		projection->ar_pool = iof_pool_register(&projection->pool,
 							&arp);
-		if (!projection->ar_pool)
-			projection->active = false;
+		if (!projection->ar_pool) {
+			D_GOTO(shutdown, exit_rc = -DER_NOMEM);
+		}
 		projection->aw_pool = iof_pool_register(&projection->pool,
 							&awp);
-		if (!projection->aw_pool)
-			projection->active = false;
+		if (!projection->aw_pool) {
+			D_GOTO(shutdown, exit_rc = -DER_NOMEM);
+		}
 	}
 
 	/* Create a fs_list from the projection array */
@@ -2929,7 +2938,7 @@ int main(int argc, char **argv)
 		 * the CNSS at startup
 		 */
 		if (!projection->active) {
-			IOF_LOG_WARNING("Not projecting %s",
+			IOF_LOG_WARNING("Not projecting '%s'",
 					projection->full_path);
 			continue;
 		}
@@ -3029,8 +3038,6 @@ shutdown:
 	for (i = 0; i < base.projection_count; i++) {
 		struct ios_projection *projection = &base.projection_array[i];
 		int rc;
-
-
 
 		/* Close all file handles associated with a projection.
 		 *
