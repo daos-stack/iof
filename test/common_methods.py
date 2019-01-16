@@ -852,7 +852,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         if not self_test:
             cart_prefix = os.getenv("IOF_CART_PREFIX", None)
             if not cart_prefix:
-                self.fail('Could not find self_test binary')
+                self.skipTest('Could not find self_test binary')
             self_test = os.path.join(cart_prefix, 'bin', 'self_test')
             if not os.path.exists(self_test):
                 self.fail('Could not find self_test binary %s', self_test)
