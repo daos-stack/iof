@@ -62,7 +62,6 @@ import tempfile
 import yaml
 import logging
 import unittest
-from collections import OrderedDict
 #pylint: disable=import-error
 #pylint: disable=no-name-in-module
 from distutils.spawn import find_executable
@@ -71,27 +70,9 @@ from distutils.spawn import find_executable
 import iofcommontestsuite
 import common_methods
 import rpctrace_common_methods
-import iof_cart_logparse
+import iof_cart_logtest
 
 jdata = None
-
-class LogCheckError(Exception):
-    """Error in the log parsing code"""
-    def __str__(self):
-        return self.__doc__
-
-class NotAllFreed(LogCheckError):
-    """Not all memory allocations freed"""
-
-class WarningStrict(LogCheckError):
-    """Error for warnings from strict files"""
-
-class ActiveDescriptors(LogCheckError):
-    """Active descriptors at end of log file"""
-
-class LogError(LogCheckError):
-    """Errors detected in log file"""
-
 
 sys.path.append('install/Linux/TESTING/scripts')
 try:
@@ -125,10 +106,6 @@ def create_file(directory, fname):
 
     fd = open(os.path.join(directory, fname), mode='w')
     fd.close()
-
-def show_line(line, sev, msg):
-    """Output a log line in gcc error format"""
-    common_methods.show_line(line, sev, msg)
 
 class Testlocal(unittest.TestCase,
                 common_methods.CnssChecks,
@@ -525,7 +502,9 @@ class Testlocal(unittest.TestCase,
         """Check cnss log file for consistency"""
         cnss_logfile = os.path.join(self.log_path, 'cnss.log')
 
-        self.check_log_file(cnss_logfile)
+        log_test = iof_cart_logtest.LogTest()
+
+        log_test.check_log_file(cnss_logfile, self.htable_bug)
 
         # Don't check the server log files on failover, as inherently
         # they'll be incomplete.
@@ -533,205 +512,7 @@ class Testlocal(unittest.TestCase,
             return
         ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
-        self.check_log_file(ionss_logfile)
-
-
-    def check_log_file(self, log_file):
-        """Check a single log file for consistency"""
-
-        cl = iof_cart_logparse.IofLogIter(log_file)
-        for pid in cl.get_pids():
-            self._check_pid_from_log_file(cl, pid)
-
-#pylint: disable=too-many-branches,no-self-use,too-many-nested-blocks
-    def _check_pid_from_log_file(self, cl, pid):
-        """Check a pid from a single log file for consistency"""
-
-        # Dict of active descriptors.
-        active_desc = OrderedDict()
-        active_desc['root'] = None
-
-        # Dict of active RPCs
-        active_rpcs = OrderedDict()
-
-        err_count = 0
-
-        regions = OrderedDict()
-        memsize = common_methods.hwm_counter()
-
-        error_files = set()
-
-        # This is a list of files which are known to have unresolved errors, so
-        # ignore them for now.
-        error_files_ok = ('src/common/iof_bulk.c')
-
-        # List of known free locations where there may be a mismatch, this is a
-        # dict of functions, each with a unordered list of variables that are
-        # freed by the function.
-        # Typically this is where memory is allocated in one file, and freed in
-        # another.
-        mismatch_free_ok = {'crt_plugin_fini': ('timeout_cb_priv',
-                                                'cb_priv',
-                                                'prog_cb_priv',
-                                                'event_cb_priv'),
-                            'crt_finalize': ('crt_gdata.cg_addr'),
-                            'crt_rpc_priv_free': ('rpc_priv'),
-                            'crt_init_opt': ('crt_gdata.cg_addr')}
-
-        # This is a list of functions where any warning or error is promoted to
-        # a test failure.
-        strict_functions = {'drop_ino_ref' : 'IOF-888'}
-
-        if not self.htable_bug:
-            strict_functions['iof_deregister_fuse'] = 'IOF-888'
-            strict_functions['ioc_forget_one'] = 'IOF-888'
-
-        have_debug = False
-
-        trace_lines = 0
-        non_trace_lines = 0
-
-        for line in cl.new_iter(pid=pid):
-            try:
-                # Not all log lines contain a function so catch that case
-                # here and do not abort.
-                if line.function in strict_functions and \
-                   line.level <= iof_cart_logparse.LOG_LEVELS['WARN']:
-                    err_count += 1
-                    show_line(line, 'error',
-                              'warning in strict file in {}'.format(self.id()))
-                    common_methods.show_bug(line,
-                                            strict_functions[line.function])
-                    raise WarningStrict()
-            except AttributeError:
-                pass
-            if line.trace:
-                trace_lines += 1
-                if not have_debug and \
-                   line.level > iof_cart_logparse.LOG_LEVELS['INFO']:
-                    have_debug = True
-                desc = line.descriptor
-                if line.is_new():
-                    if desc in active_desc:
-                        show_line(line, 'error', 'already exists')
-                        show_line(active_desc[desc], 'error',
-                                  'not deregistered')
-                        err_count += 1
-                    if line.parent not in active_desc:
-                        show_line(line, 'error', 'add with bad parent')
-                        err_count += 1
-                    active_desc[desc] = line
-                elif line.is_link():
-                    parent = line.parent
-                    if parent not in active_desc:
-                        show_line(line, 'error', 'link with bad parent')
-                        err_count += 1
-                    desc = parent
-                elif line.is_new_rpc():
-                    active_rpcs[line.descriptor] = line
-                if line.is_dereg():
-                    if desc in active_desc:
-                        del active_desc[desc]
-                    else:
-                        show_line(line, 'error', 'invalid desc remove')
-                        err_count += 1
-                elif line.is_dereg_rpc():
-                    if desc in active_rpcs:
-                        del active_rpcs[desc]
-                    else:
-                        show_line(line, 'error', 'invalid rpc remove')
-                        err_count += 1
-                else:
-                    if desc not in active_desc and \
-                       desc not in active_rpcs and \
-                       have_debug and line.filename not in error_files_ok:
-
-                        # There's something about this particular function
-                        # that makes it very slow at logging output.
-                        show_line(line, 'error', 'inactive desc')
-                        error_files.add(line.filename)
-                        err_count += 1
-            else:
-                non_trace_lines += 1
-                if line.is_calloc():
-                    pointer = line.get_field(-1).rstrip('.')
-                    regions[pointer] = line
-                    memsize.add(line.calloc_size())
-                elif line.is_free():
-                    pointer = line.get_field(-1).rstrip('.')
-                    if pointer in regions:
-                        if line.mask != regions[pointer].mask:
-                            var = line.get_field(3).strip("'")
-                            if line.function in mismatch_free_ok and \
-                               var in mismatch_free_ok[line.function]:
-                                pass
-                            else:
-                                show_line(regions[pointer], 'warning',
-                                          'mask mismatch in alloc/free')
-                                show_line(line, 'warning',
-                                          'mask mismatch in alloc/free')
-                        if line.level != regions[pointer].level:
-                            show_line(regions[pointer], 'warning',
-                                      'level mismatch in alloc/free')
-                            show_line(line, 'warning',
-                                      'level mismatch in alloc/free')
-                        memsize.subtract(regions[pointer].calloc_size())
-                        del regions[pointer]
-                    elif pointer != '(nil)':
-                        show_line(line, 'error', 'free of unknown memory')
-                elif line.is_realloc():
-                    new_pointer = line.get_field(-3)
-                    old_pointer = line.get_field(-1)[:-2].split(':')[-1]
-                    if new_pointer != '(nil)' and old_pointer != '(nil)':
-                        memsize.subtract(regions[old_pointer].calloc_size())
-                    regions[new_pointer] = line
-                    memsize.add(line.calloc_size())
-                    if old_pointer not in (new_pointer, '(nil)'):
-                        if old_pointer in regions:
-                            del regions[old_pointer]
-                        else:
-                            show_line(line, 'error',
-                                      'realloc of unknown memory')
-
-        del active_desc['root']
-
-        if not have_debug:
-            print('DEBUG not enabled, No log consistency checking possible')
-
-        total_lines = trace_lines + non_trace_lines
-        p_trace = trace_lines / total_lines * 100
-
-        print("Pid {}, {} lines total, {} trace ({:.2f}%)".format(pid,
-                                                                  total_lines,
-                                                                  trace_lines,
-                                                                  p_trace))
-
-        print("Memsize: {}".format(memsize))
-
-        # Special case the fuse arg values as these are allocated by IOF
-        # but freed by fuse itself.
-        # Skip over CaRT issues for now to get this landed, we can enable them
-        # once this is stable.
-        lost_memory = False
-        for (_, line) in regions.items():
-            if line.function == 'initialize_projection':
-                continue
-            show_line(line, 'error', 'memory not freed')
-            lost_memory = True
-
-        if active_desc:
-            for (_, line) in active_desc.items():
-                show_line(line, 'error', 'desc not deregistered')
-            raise ActiveDescriptors()
-
-        if active_rpcs:
-            for (_, line) in active_rpcs.items():
-                show_line(line, 'error', 'rpc not deregistered')
-        if error_files or err_count:
-            raise LogError()
-        if lost_memory:
-            raise NotAllFreed()
-#pylint: enable=too-many-branches,no-self-use,too-many-nested-blocks
+        log_test.check_log_file(ionss_logfile, self.htable_bug)
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:

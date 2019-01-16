@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2017-2018 Intel Corporation
+# Copyright (C) 2017-2019 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -43,6 +43,7 @@ Methods associated to RPC tracing for error debuging.
 import os
 from collections import OrderedDict
 import common_methods
+import iof_cart_logtest
 import iof_cart_logparse
 
 # CaRT Error numbers to convert to strings.
@@ -432,7 +433,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         # not have a reliable reproducer, so detect if it happens and log about
         # it.
         if line and line.function == 'ioc_fuse_destroy':
-            common_methods.show_bug(line, 'IOF-884')
+            iof_cart_logtest.show_bug(line, 'IOF-884')
 
         if not to_trace and not to_trace_fuse:
             return None

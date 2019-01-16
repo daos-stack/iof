@@ -51,11 +51,11 @@ import sys
 import yaml
 import tempfile
 import subprocess
-import common_methods
 import iof_cart_logparse
+import iof_cart_logtest
 import iofcommontestsuite
 import rpctrace_common_methods
-import iof_test_local
+
 
 FAIL_ON_ERROR = False
 
@@ -104,9 +104,9 @@ def run_once(prefix, cmd, log_top_dir, floc):
         for line in iof_cart_logparse.IofLogIter(log_file):
             if not line.endswith('fault_id 0, injecting fault.'):
                 continue
-            common_methods.show_line(line, 'error',
-                                     'Valgrind error when fault injected here')
-            common_methods.show_bug(line, 'IOF-887')
+            iof_cart_logtest.show_line(line, 'error',
+                                       'Valgrind error when fault injected')
+            iof_cart_logtest.show_bug(line, 'IOF-887')
         print("Alloc test failing with valgrind errors")
         return True
     # This means abnormal exit, probably a segv.
@@ -135,10 +135,10 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     ifd.close()
 
-    tl = iof_test_local.Testlocal()
+    tl = iof_cart_logtest.LogTest()
     try:
-        tl.check_log_file(log_file)
-    except iof_test_local.LogCheckError as e:
+        tl.check_log_file(log_file, False)
+    except iof_cart_logtest.LogCheckError as e:
         print(e)
         print("Log tracing code found errors: {}".format(internals_file))
         return True
