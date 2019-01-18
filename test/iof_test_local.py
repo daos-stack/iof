@@ -504,7 +504,11 @@ class Testlocal(unittest.TestCase,
 
         log_test = iof_cart_logtest.LogTest()
 
-        log_test.check_log_file(cnss_logfile, self.htable_bug)
+        strict_test = True
+        if self.failover_test or self.htable_bug:
+            strict_test = False
+
+        log_test.check_log_file(cnss_logfile, self.htable_bug, strict_test)
 
         # Don't check the server log files on failover, as inherently
         # they'll be incomplete.
@@ -512,7 +516,7 @@ class Testlocal(unittest.TestCase,
             return
         ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
-        log_test.check_log_file(ionss_logfile, self.htable_bug)
+        log_test.check_log_file(ionss_logfile, self.htable_bug, True)
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:

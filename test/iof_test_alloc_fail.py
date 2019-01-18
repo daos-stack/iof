@@ -137,7 +137,7 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     tl = iof_cart_logtest.LogTest()
     try:
-        tl.check_log_file(log_file, False)
+        tl.check_log_file(log_file, False, False)
     except iof_cart_logtest.LogCheckError as e:
         print(e)
         print("Log tracing code found errors: {}".format(internals_file))

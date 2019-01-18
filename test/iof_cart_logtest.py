@@ -54,6 +54,9 @@ class NotAllFreed(LogCheckError):
 class WarningStrict(LogCheckError):
     """Error for warnings from strict files"""
 
+class WarningMode(LogCheckError):
+    """Error for warnings in strict mode"""
+
 class ActiveDescriptors(LogCheckError):
     """Active descriptors at end of log file"""
 
@@ -118,15 +121,15 @@ class hwm_counter():
 class LogTest():
     """Log testing"""
 
-    def check_log_file(self, log_file, htable_bug):
+    def check_log_file(self, log_file, htable_bug, abort_on_warning):
         """Check a single log file for consistency"""
 
         cl = iof_cart_logparse.IofLogIter(log_file)
         for pid in cl.get_pids():
-            self._check_pid_from_log_file(cl, pid, htable_bug)
+            self._check_pid_from_log_file(cl, pid, htable_bug, abort_on_warning)
 
 #pylint: disable=too-many-branches,no-self-use,too-many-nested-blocks
-    def _check_pid_from_log_file(self, cl, pid, htable_bug):
+    def _check_pid_from_log_file(self, cl, pid, htable_bug, abort_on_warning):
         """Check a pid from a single log file for consistency"""
 
         # Dict of active descriptors.
@@ -137,6 +140,8 @@ class LogTest():
         active_rpcs = OrderedDict()
 
         err_count = 0
+        warnings_strict = False
+        warnings_mode = False
 
         regions = OrderedDict()
         memsize = hwm_counter()
@@ -179,13 +184,16 @@ class LogTest():
                 # here and do not abort.
                 if line.function in strict_functions and \
                    line.level <= iof_cart_logparse.LOG_LEVELS['WARN']:
-                    err_count += 1
-                    show_line(line, 'error',
-                              'warning in strict file')
+                    show_line(line, 'error', 'warning in strict file')
                     show_bug(line, strict_functions[line.function])
-                    raise WarningStrict()
+                    warnings_strict = True
             except AttributeError:
                 pass
+            if abort_on_warning:
+                if line.level <= iof_cart_logparse.LOG_LEVELS['WARN'] and \
+                   line.function != 'crt_opc_lookup':
+                    show_line(line, 'error', 'warning in strict mode')
+                    warnings_mode = True
             if line.trace:
                 trace_lines += 1
                 if not have_debug and \
@@ -312,4 +320,8 @@ class LogTest():
             raise LogError()
         if lost_memory:
             raise NotAllFreed()
+        if warnings_strict:
+            raise WarningStrict()
+        if warnings_mode:
+            raise WarningMode()
 #pylint: enable=too-many-branches,no-self-use,too-many-nested-blocks
