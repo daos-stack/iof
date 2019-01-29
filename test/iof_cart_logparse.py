@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (C) 2018 Intel Corporation
+# Copyright (C) 2018-2019 Intel Corporation
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -105,11 +105,7 @@ class IofLogLine():
             raise InvalidLogFile(fields[4])
 
         self._fields = fields[5:]
-        # Handle old-style trace messages.
-        if self._fields[1] == 'TRACE:':
-            self.trace = True
-            self._fields.pop(1)
-        elif self._fields[1][-2:] == '()':
+        if self._fields[1][-2:] == '()':
             self.trace = False
             self.function = self._fields[1][:-2]
         elif self._fields[1][-1:] == ')':
@@ -178,8 +174,11 @@ class IofLogLine():
             if entry.startswith('Gah('):
                 (root, _, _) = entry[4:-1].split('.')
                 fields.append('Gah({}.-.-)'.format(root))
-            elif entry.startswith('0x'):
-                fields.append('0x...')
+            elif entry.startswith('0x') and len(entry) > 5:
+                if entry.endswith(')'):
+                    fields.append('0x...)')
+                else:
+                    fields.append('0x...')
             else:
                 fields.append(entry)
 
@@ -304,6 +303,7 @@ class StateIter():
         line = next(self._l)
 
         if not line.trace:
+            line.rpc = False
             return line
 
         if line.is_new() or line.is_new_rpc():
@@ -336,6 +336,7 @@ class StateIter():
                 if not line.rpc:
                     line.pparent = self.active_desc[line.descriptor].pparent
                 line.pdesc = self.active_desc[line.descriptor].pdesc
+                line.rpc_opcode = self.active_desc[line.descriptor].get_field(3)
             else:
                 line.pdesc = line.descriptor
                 line.rpc = False

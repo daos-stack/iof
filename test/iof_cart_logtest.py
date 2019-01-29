@@ -63,6 +63,13 @@ class ActiveDescriptors(LogCheckError):
 class LogError(LogCheckError):
     """Errors detected in log file"""
 
+WARN_FUNCTIONS = ['crt_grp_lc_addr_insert',
+                  'crt_opc_lookup',
+                  'crt_ctx_epi_abort',
+                  'crt_rpc_complete',
+                  'crt_req_timeout_hdlr',
+                  'crt_context_timeout_check']
+
 # Use a global variable here so show_line can remember previously reported
 # error lines.
 shown_logs = set()
@@ -178,7 +185,7 @@ class LogTest():
         trace_lines = 0
         non_trace_lines = 0
 
-        for line in cl.new_iter(pid=pid):
+        for line in cl.new_iter(pid=pid, stateful=True):
             try:
                 # Not all log lines contain a function so catch that case
                 # here and do not abort.
@@ -191,9 +198,17 @@ class LogTest():
                 pass
             if abort_on_warning:
                 if line.level <= iof_cart_logparse.LOG_LEVELS['WARN'] and \
-                   line.function != 'crt_opc_lookup':
-                    show_line(line, 'error', 'warning in strict mode')
-                    warnings_mode = True
+                   line.mask != 'HG' and \
+                   line.function not in WARN_FUNCTIONS:
+                    if line.rpc:
+                        # Ignore the SWIM RPC opcode, as this often sends RPCs
+                        # that fail during shutdown.
+                        if line.rpc_opcode != '0xfe000000':
+                            show_line(line, 'error', 'warning in strict mode')
+                            warnings_mode = True
+                    else:
+                        show_line(line, 'error', 'warning in strict mode')
+                        warnings_mode = True
             if line.trace:
                 trace_lines += 1
                 if not have_debug and \
