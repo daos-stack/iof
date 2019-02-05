@@ -835,13 +835,8 @@ struct entry_req {
 /* Convert from a inode to a GAH using the hash table */
 int find_gah(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
 
-/* Convert from a inode to a GAH and keep a reference using the hash table */
-int find_gah_ref(struct iof_projection_info *, fuse_ino_t, struct ios_gah *);
-
-/* Find a inode pointer from number. returns an error code if not found */
 int
-find_inode(struct iof_projection_info *fs_handle, ino_t ino,
-	   struct ioc_inode_entry **iep);
+find_inode(struct ioc_request *);
 
 void ie_close(struct iof_projection_info *, struct ioc_inode_entry *);
 

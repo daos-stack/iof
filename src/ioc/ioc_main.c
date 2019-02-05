@@ -837,7 +837,6 @@ done:
 int
 iof_fs_send(struct ioc_request *request)
 {
-	struct iof_projection_info *fs_handle = request->fsh;
 	int rc;
 
 	D_ASSERT(request->ir_api->on_result);
@@ -847,14 +846,13 @@ iof_fs_send(struct ioc_request *request)
 	 * a call to on_result().
 	 */
 	if (request->ir_ht == RHS_INODE_NUM) {
-		fuse_ino_t req = request->ir_inode_num;
 
 		D_ASSERT(request->ir_api->have_gah);
 
-		if (req == 1) {
+		if (request->ir_inode_num == 1) {
 			request->ir_ht = RHS_ROOT;
 		} else {
-			rc = find_inode(fs_handle, req, &request->ir_inode);
+			rc = find_inode(request);
 			if (rc != 0) {
 				D_GOTO(err, 0);
 			}

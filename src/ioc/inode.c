@@ -1,4 +1,4 @@
-/* Copyright (C) 2017-2018 Intel Corporation
+/* Copyright (C) 2017-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,9 +47,8 @@
 #include "ioc_ops.h"
 
 /* Find a GAH from a inode, return 0 if found */
-static int
-find_gah_internal(struct iof_projection_info *fs_handle,
-		  ino_t ino, struct ios_gah *gah, bool drop_ref)
+int
+find_gah(struct iof_projection_info *fs_handle, ino_t ino, struct ios_gah *gah)
 {
 	struct ioc_inode_entry *ie;
 	d_list_t *rlink;
@@ -81,38 +80,20 @@ find_gah_internal(struct iof_projection_info *fs_handle,
 
 	/* Once the GAH has been copied drop the reference on the parent inode
 	 */
-	if (drop_ref)
-		d_hash_rec_decref(&fs_handle->inode_ht, rlink);
+	d_hash_rec_decref(&fs_handle->inode_ht, rlink);
 	return 0;
 }
 
 int
-find_gah(struct iof_projection_info *fs_handle,
-	 fuse_ino_t ino,
-	 struct ios_gah *gah)
+find_inode(struct ioc_request *request)
 {
-	return find_gah_internal(fs_handle, ino, gah, true);
-}
-
-int
-find_gah_ref(struct iof_projection_info *fs_handle,
-	     fuse_ino_t ino,
-	     struct ios_gah *gah)
-{
-	return find_gah_internal(fs_handle, ino, gah, false);
-}
-
-int
-find_inode(struct iof_projection_info *fs_handle, ino_t ino,
-	   struct ioc_inode_entry **iep)
-{
+	struct iof_projection_info *fs_handle = request->fsh;
 	struct ioc_inode_entry *ie;
 	d_list_t *rlink;
 
-	if (ino == 1)
-		return EINVAL;
-
-	rlink = d_hash_rec_find(&fs_handle->inode_ht, &ino, sizeof(ino));
+	rlink = d_hash_rec_find(&fs_handle->inode_ht,
+				&request->ir_inode_num,
+				sizeof(request->ir_inode_num));
 	if (!rlink)
 		return ENOENT;
 
@@ -126,7 +107,7 @@ find_inode(struct iof_projection_info *fs_handle, ino_t ino,
 	IOF_TRACE_INFO(ie, "Using inode %lu " GAH_PRINT_STR " parent %lu",
 		       ie->stat.st_ino, GAH_PRINT_VAL(ie->gah), ie->parent);
 
-	*iep = ie;
+	request->ir_inode = ie;
 	return 0;
 }
 
