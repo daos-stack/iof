@@ -72,9 +72,21 @@ class EndOfTest(Exception):
     pass
 
 #pylint: disable=too-many-locals
+#pylint: disable=too-many-statements
 def run_once(prefix, cmd, log_top_dir, floc):
     """Run a single instance of the command"""
     print("Testing {}".format(floc))
+
+    # There is a bug here that if the test runs but does not inject a fault
+    # because "floc" is too high but it does find errors then the upper
+    # loop does not exit, just keeps calling this function with higher
+    # values of floc.
+    #
+    # One option would be to run as a first instance without
+    # a value for floc to check the code is clean on the normal case before
+    # doing fault injection which might give faster failure for easy bugs
+    # however it wouldn't well handle the case where errors were the result
+    # of race conditions.
 
     log_file = os.path.join(log_top_dir, 'af', 'fail_{}.log'.format(floc))
     internals_file = os.path.join(log_top_dir, 'af',
@@ -117,13 +129,15 @@ def run_once(prefix, cmd, log_top_dir, floc):
         return True
 
     ifd = open(internals_file, 'w+')
-    trace = rpctrace_common_methods.RpcTrace(log_file, ifd)
+    li = iof_cart_logparse.IofLogIter(log_file)
+    trace = rpctrace_common_methods.RpcTrace(li, ifd)
     trace.rpc_reporting(trace.pids[0])
     trace.descriptor_rpc_trace(trace.pids[0])
 
     have_inject = False
     have_eot = False
-    for line in trace.lf.new_iter():
+
+    for line in li:
         if line.endswith('fault_id 100, injecting fault.'):
             print(line.to_str())
             have_eot = True
@@ -135,9 +149,11 @@ def run_once(prefix, cmd, log_top_dir, floc):
 
     ifd.close()
 
-    tl = iof_cart_logtest.LogTest()
     try:
-        tl.check_log_file(log_file, False, False)
+        ct = iof_cart_logtest.LogTest(li)
+        ct.set_error_ok('src/common/iof_bulk.c')
+        ct.check_log_file(False)
+
     except iof_cart_logtest.LogCheckError as e:
         print(e)
         print("Log tracing code found errors: {}".format(internals_file))

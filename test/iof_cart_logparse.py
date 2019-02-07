@@ -363,8 +363,8 @@ class IofLogIter():
         # or do a first pass checking the pid list.  This allows the same
         # iterator to work fast if the file can be kept in memory, or the
         # same, bug slower if it needs to be re-read each time.
-        self._fd = None
         self._fd = open(fname, 'r')
+        self.fname = fname
         self._data = []
         index = 0
         pids = set()

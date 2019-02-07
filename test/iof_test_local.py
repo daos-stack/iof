@@ -70,6 +70,7 @@ from distutils.spawn import find_executable
 import iofcommontestsuite
 import common_methods
 import rpctrace_common_methods
+import iof_cart_logparse
 import iof_cart_logtest
 
 jdata = None
@@ -392,7 +393,6 @@ class Testlocal(unittest.TestCase,
             self.cnss_stats["init_{}".format(mnt)] = projection_stats[2]
 
         self.mark_log('Starting test {}'.format(self.id()))
-#pylint: enable=too-many-branches
 
     def mark_log(self, msg):
         """Log a message to stdout and to the CNSS logs
@@ -408,43 +408,95 @@ class Testlocal(unittest.TestCase,
         self.wfd.flush()
         os.fsync(self.wfd.fileno())
 
-    def rpc_descriptor_tracing(self):
-        """RPC tracing runs at the end of each test"""
+    def _log_check(self):
+        """Check log files for consistency
 
-        #Create a dump file for all testing and internals path output
-        i_log_file = os.path.join(self.log_path, 'internals.out')
-        internals_log_file = open(i_log_file, 'w')
 
-        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
-        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
+        Always run the log file tracing, but have the internals (RPC)
+        tracing be optional.
 
-        #Origin RPC tracing for one CNSS instance
-        o_rpctrace = rpctrace_common_methods.RpcTrace(cnss_logfile,
-                                                      internals_log_file)
-        cnss_pid = o_rpctrace.pids[0]
-        o_rpctrace.rpc_reporting(cnss_pid)
+        The way this function is written is intended to allow most
+        checks to run and report failures, even if some tests fail,
+        so that when there is a failure we give as much inforation
+        about is as possible.
 
-        #Target RPC tracing for multiple IONSS instances
-        rank_log = rpctrace_common_methods.RpcTrace(ionss_logfile,
-                                                    internals_log_file)
-        for pid in rank_log.pids:
-            rank_log.rpc_reporting(pid)
+        This isn't quite complete as if the CNSS log shows problems in
+        the check_log_file() function the IONSS log won't be tested.
+        """
 
-        #Descriptor tracing for the CNSS
-        descriptor = o_rpctrace.descriptor_rpc_trace(cnss_pid)
+        cl = iof_cart_logparse.IofLogIter(os.path.join(self.log_path,
+                                                       'cnss.log'))
 
-        if descriptor is not None:
-            missing_links = o_rpctrace.rpc_trace_output(descriptor)
+        il = None
+        ionss_file = os.path.join(self.log_path, 'ionss.log')
+        if os.path.exists(ionss_file):
+            il = iof_cart_logparse.IofLogIter(ionss_file)
+
+        cnss_errors = False
+        ionss_errors = False
+        missing_links = False
+
+        if self.internals_tracing:
+            #Create a dump file for all testing and internals path output
+            internals_log_file = open(os.path.join(self.log_path,
+                                                   'internals.out'),
+                                      'w')
+
+            #Origin RPC tracing for one CNSS instance
+            ctrace = rpctrace_common_methods.RpcTrace(cl, internals_log_file)
+            cnss_pid = ctrace.pids[0]
+            ctrace.rpc_reporting(cnss_pid)
+
+            #Target RPC tracing for multiple IONSS instances
+            if il:
+                itrace = rpctrace_common_methods.RpcTrace(il,
+                                                          internals_log_file)
+                for pid in itrace.pids:
+                    itrace.rpc_reporting(pid)
+
+            #Descriptor tracing for the CNSS
+            descriptor = ctrace.descriptor_rpc_trace(cnss_pid)
+
+            if descriptor is not None:
+                missing_links = ctrace.rpc_trace_output(descriptor)
+
+            internals_log_file.close()
+
+            cnss_errors = ctrace.have_errors
+
+            if il and not self.failover_test:
+                ionss_errors = itrace.have_errors
+
+        c_log_test = iof_cart_logtest.LogTest(cl)
+        c_log_test.set_warning_function('drop_ino_ref', 'IOF-888')
+
+        if not self.htable_bug:
+            c_log_test.set_warning_function('iof_deregister_fuse', 'IOF-888')
+            c_log_test.set_warning_function('ioc_forget_one', 'IOF-888')
+
+        c_log_test.set_error_ok('src/common/iof_bulk.c')
+        strict_test = True
+        if self.failover_test or self.htable_bug:
+            strict_test = False
+
+        c_log_test.check_log_file(strict_test)
+
+        # Don't check the server log files on failover, as inherently
+        # they'll be incomplete.
+        if il and not self.failover_test:
+
+            i_log_test = iof_cart_logtest.LogTest(il)
+            i_log_test.set_error_ok('src/common/iof_bulk.c')
+            i_log_test.check_log_file(True)
+
+        if self.internals_tracing:
+            if cnss_errors:
+                self.fail("Cnss log has integrity errors")
+            if ionss_errors:
+                self.fail("IONSS log has integrity errors")
             if missing_links:
                 self.fail('Missing links for TRACE macros: %s' % missing_links)
-
-        internals_log_file.close()
-
-        if o_rpctrace.have_errors:
-            self.fail("Cnss log has integrity errors")
-
-        if not self.failover_test and rank_log.have_errors:
-            self.fail("IONSS log has integrity errors")
+#pylint: enable=too-many-branches
 
     def tearDown(self):
         """tear down the test"""
@@ -482,41 +534,11 @@ class Testlocal(unittest.TestCase,
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
 
-        if self.internals_tracing:
-            # If the internals tracing reports errors then also call the log
-            # check, so both are available.  Due to the magic of stacking
-            # exceptions this prints a reasonable output on stdout on failure.
-            try:
-                self.rpc_descriptor_tracing()
-            except AssertionError:
-                self._check_log()
-                raise
+        self._log_check()
 
         self.cleanup(procrtn)
 
         self.normal_output("Ending {}".format(self.id()))
-
-        self._check_log()
-
-    def _check_log(self):
-        """Check cnss log file for consistency"""
-        cnss_logfile = os.path.join(self.log_path, 'cnss.log')
-
-        log_test = iof_cart_logtest.LogTest()
-
-        strict_test = True
-        if self.failover_test or self.htable_bug:
-            strict_test = False
-
-        log_test.check_log_file(cnss_logfile, self.htable_bug, strict_test)
-
-        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
-        # Don't check the server log files on failover, as inherently
-        # they'll be incomplete.
-        if self.failover_test or not os.path.exists(ionss_logfile):
-            return
-
-        log_test.check_log_file(ionss_logfile, self.htable_bug, True)
 
     def _tidy_callgrind_files(self):
         if self.cnss_valgrind:

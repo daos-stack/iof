@@ -85,15 +85,15 @@ class RpcTrace(common_methods.ColorizedOutput):
     VERBOSE_STATE_TRANSITIONS = False
     VERBOSE_LOG = True
 
-    def __init__(self, fname, output_stream):
+    def __init__(self, log_iter, output_stream):
         self.set_log(output_stream)
-        self.input_file = fname
+        self.input_file = log_iter.fname
 
         #index_multiprocess will determine which PID to trace
         #(ie index 0 will be assigned the first PID found in logs)
 
-        self.lf = iof_cart_logparse.IofLogIter(self.input_file)
-        self.pids = self.lf.get_pids()
+        self._lf = log_iter
+        self.pids = self._lf.get_pids()
 
     def _rpc_error_state_tracing(self, rpc_dict, rpc, rpc_state):
         """Error checking for rpc state"""
@@ -136,7 +136,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         output_table = []
 
-        for line in self.lf.new_iter(pid=pid):
+        for line in self._lf.new_iter(pid=pid):
             rpc_state = None
             opcode = None
 
@@ -274,7 +274,7 @@ class RpcTrace(common_methods.ColorizedOutput):
 
         output_table = []
 
-        for line in self.lf.new_iter(pid=pid, trace_only=True):
+        for line in self._lf.new_iter(pid=pid, trace_only=True):
             state = None
             desc = line.descriptor
             if desc == '':
@@ -374,7 +374,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         to_trace_fuse = None
 
         line = None
-        for line in self.lf.new_iter(pid=pid, stateful=True):
+        for line in self._lf.new_iter(pid=pid, stateful=True):
 
             # Make a note of the first descriptor with a warning message
             # so this can be selected later for tracing.
@@ -488,7 +488,7 @@ class RpcTrace(common_methods.ColorizedOutput):
         self.log_output('\nLog dump for descriptor hierarchy ({}):'\
                         .format(traces_for_log_dump[0]))
 
-        for line in self.lf.new_iter(pid=pid, raw=True, stateful=True):
+        for line in self._lf.new_iter(pid=pid, raw=True, stateful=True):
 
             if line.trace and line.pdesc in traces_for_log_dump:
                 self.log_output(line.to_str(mark=True))

@@ -127,15 +127,30 @@ class hwm_counter():
 class LogTest():
     """Log testing"""
 
-    def check_log_file(self, log_file, htable_bug, abort_on_warning):
+    def __init__(self, log_iter):
+        self._li = log_iter
+        self.strict_functions = {}
+        self.error_files_ok = set()
+
+    def set_warning_function(self, function, bug_id):
+        """Register functions for known bugs
+
+        Add a mapping from functions with errors to known bugs
+        """
+        self.strict_functions[function] = bug_id
+
+    def set_error_ok(self, file_name):
+        """Register a file as having known errors"""
+        self.error_files_ok.add(file_name)
+
+    def check_log_file(self, abort_on_warning):
         """Check a single log file for consistency"""
 
-        cl = iof_cart_logparse.IofLogIter(log_file)
-        for pid in cl.get_pids():
-            self._check_pid_from_log_file(cl, pid, htable_bug, abort_on_warning)
+        for pid in self._li.get_pids():
+            self._check_pid_from_log_file(pid, abort_on_warning)
 
 #pylint: disable=too-many-branches,no-self-use,too-many-nested-blocks
-    def _check_pid_from_log_file(self, cl, pid, htable_bug, abort_on_warning):
+    def _check_pid_from_log_file(self, pid, abort_on_warning):
         """Check a pid from a single log file for consistency"""
 
         # Dict of active descriptors.
@@ -154,10 +169,6 @@ class LogTest():
 
         error_files = set()
 
-        # This is a list of files which are known to have unresolved errors, so
-        # ignore them for now.
-        error_files_ok = ('src/common/iof_bulk.c')
-
         # List of known free locations where there may be a mismatch, this is a
         # dict of functions, each with a unordered list of variables that are
         # freed by the function.
@@ -171,27 +182,19 @@ class LogTest():
                             'crt_rpc_priv_free': ('rpc_priv'),
                             'crt_init_opt': ('crt_gdata.cg_addr')}
 
-        # This is a list of functions where any warning or error is promoted to
-        # a test failure.
-        strict_functions = {'drop_ino_ref' : 'IOF-888'}
-
-        if not htable_bug:
-            strict_functions['iof_deregister_fuse'] = 'IOF-888'
-            strict_functions['ioc_forget_one'] = 'IOF-888'
-
         have_debug = False
 
         trace_lines = 0
         non_trace_lines = 0
 
-        for line in cl.new_iter(pid=pid, stateful=True):
+        for line in self._li.new_iter(pid=pid, stateful=True):
             try:
                 # Not all log lines contain a function so catch that case
                 # here and do not abort.
-                if line.function in strict_functions and \
+                if line.function in self.strict_functions and \
                    line.level <= iof_cart_logparse.LOG_LEVELS['WARN']:
                     show_line(line, 'error', 'warning in strict file')
-                    show_bug(line, strict_functions[line.function])
+                    show_bug(line, self.strict_functions[line.function])
                     warnings_strict = True
             except AttributeError:
                 pass
@@ -247,7 +250,7 @@ class LogTest():
                 else:
                     if desc not in active_desc and \
                        desc not in active_rpcs and \
-                       have_debug and line.filename not in error_files_ok:
+                       have_debug and line.filename not in self.error_files_ok:
 
                         # There's something about this particular function
                         # that makes it very slow at logging output.
