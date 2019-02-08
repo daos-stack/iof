@@ -59,7 +59,13 @@
 #include "ionss.h"
 
 #define IOF_MAX_PATH_LEN 4096
-#define SHUTDOWN_BCAST_OP (0xFFF0)
+#define IOF_PROTO_SERVER_BASE 0x04000000
+#define IOF_PROTO_SERVER_VER 1
+
+#define SHUTDOWN_BCAST_OP			\
+	CRT_PROTO_OPC(IOF_PROTO_SERVER_BASE,	\
+		IOF_PROTO_SERVER_VER,		\
+		0)
 
 static int shutdown;
 static ATOMIC unsigned int cnss_count;
@@ -2220,6 +2226,19 @@ iof_query_handler(crt_rpc_t *query_rpc)
 
 int ionss_register(void)
 {
+	struct crt_proto_rpc_format iof_shutdown_rpc_type = {
+		.prf_flags = CRT_RPC_FEAT_NO_TIMEOUT,
+		.prf_hdlr = shutdown_handler,
+	};
+
+	struct crt_proto_format iof_server_proto = {
+		.cpf_name = "IOF_IO",
+		.cpf_ver = IOF_PROTO_SERVER_VER,
+		.cpf_count = 1,
+		.cpf_prf = &iof_shutdown_rpc_type,
+		.cpf_base = IOF_PROTO_SERVER_BASE,
+	};
+
 	crt_rpc_cb_t signon_handlers[] = {
 		iof_query_handler,
 		cnss_detach_handler,
@@ -2230,12 +2249,9 @@ int ionss_register(void)
 	};
 	int ret;
 
-	ret = crt_rpc_srv_register(SHUTDOWN_BCAST_OP,
-				   CRT_RPC_FEAT_NO_TIMEOUT,
-				   NULL, shutdown_handler);
+	ret = crt_proto_register(&iof_server_proto);
 	if (ret) {
-		IOF_LOG_ERROR("Cannot register shutdown "
-				"broadcast RPC handler, ret = %d", ret);
+		IOF_LOG_ERROR("Cannot register server protocol: %d", ret);
 		return ret;
 	}
 

@@ -510,11 +510,11 @@ class Testlocal(unittest.TestCase,
 
         log_test.check_log_file(cnss_logfile, self.htable_bug, strict_test)
 
+        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
         # Don't check the server log files on failover, as inherently
         # they'll be incomplete.
-        if self.failover_test:
+        if self.failover_test or not os.path.exists(ionss_logfile):
             return
-        ionss_logfile = os.path.join(self.log_path, 'ionss.log')
 
         log_test.check_log_file(ionss_logfile, self.htable_bug, True)
 

@@ -64,7 +64,6 @@ class LogError(LogCheckError):
     """Errors detected in log file"""
 
 WARN_FUNCTIONS = ['crt_grp_lc_addr_insert',
-                  'crt_opc_lookup',
                   'crt_ctx_epi_abort',
                   'crt_rpc_complete',
                   'crt_req_timeout_hdlr',
