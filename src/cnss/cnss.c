@@ -56,35 +56,36 @@
 /* A descriptor for the plugin */
 struct plugin_entry {
 	/* The callback functions, as provided by the plugin */
-	struct cnss_plugin	*fns;
+	struct cnss_plugin	*pe_fns;
 	/* The size of the fns struct */
-	size_t			fns_size;
+	size_t			pe_fns_size;
 
 	/* The dl_open() reference to this so it can be closed cleanly */
-	void			*dl_handle;
+	void			*pe_dl_handle;
 
 	/* The list of plugins */
-	d_list_t		list;
-
-	/* Flag to say if plugin is active */
-	bool			active;
+	d_list_t		pe_list;
 
 	/* The copy of the plugin->cnss callback functions this plugin uses */
-	struct cnss_plugin_cb	self_fns;
+	struct cnss_plugin_cb	pe_self_fns;
 
-	d_list_t		fuse_list;
+	d_list_t		pe_fuse_list;
+
+	/* Flag to say if plugin is active */
+	bool			pe_active;
+
 };
 
 struct fs_info {
-	char		*mnt;
-	struct fuse	*fuse;
-	struct fuse_session *session;
-	pthread_t	thread;
-	pthread_mutex_t	lock;
-	void		*private_data;
-	d_list_t	entries;
-	bool		running;
-	bool		mt;
+	char			*fsi_mnt;
+	struct fuse		*fsi_fuse;
+	struct fuse_session	*fsi_session;
+	pthread_t		fsi_thread;
+	pthread_mutex_t		fsi_lock;
+	void			*fsi_private_data;
+	d_list_t		fsi_entries;
+	bool			fsi_running;
+	bool			fsi_mt;
 };
 
 #define FN_TO_PVOID(fn) (*((void **)&(fn)))
@@ -96,17 +97,17 @@ struct fs_info {
  * correctly if contained in a do - while loop.
  */
 #define CHECK_PLUGIN_FUNCTION(ITER, FN)					\
-	if (!ITER->active)						\
+	if (!ITER->pe_active)						\
 		continue;						\
-	if (!ITER->fns->FN)						\
+	if (!ITER->pe_fns->FN)						\
 		continue;						\
-	if ((offsetof(struct cnss_plugin, FN) + sizeof(void *)) > ITER->fns_size) \
+	if ((offsetof(struct cnss_plugin, FN) + sizeof(void *)) > ITER->pe_fns_size) \
 		continue;						\
 	IOF_LOG_INFO("Plugin %s(%p) calling %s at %p",			\
-		ITER->fns->name,					\
-		(void *)ITER->fns->handle,				\
+		ITER->pe_fns->name,					\
+		(void *)ITER->pe_fns->handle,				\
 		#FN,							\
-		FN_TO_PVOID(ITER->fns->FN))
+		FN_TO_PVOID(ITER->pe_fns->FN))
 
 /*
  * Call a function in each registered and active plugin
@@ -115,9 +116,9 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		d_list_for_each_entry(_li, LIST, list) {		\
+		d_list_for_each_entry(_li, LIST, pe_list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_li->fns->FN(_li->fns->handle);		\
+			_li->pe_fns->FN(_li->pe_fns->handle);		\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
@@ -130,14 +131,14 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		d_list_for_each_entry(_li, LIST, list) {		\
+		d_list_for_each_entry(_li, LIST, pe_list) {		\
 			int _rc;					\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_rc = _li->fns->FN(_li->fns->handle);	\
+			_rc = _li->pe_fns->FN(_li->pe_fns->handle);	\
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
-					_li->fns->name, _rc);	\
-				_li->active = false;			\
+					_li->pe_fns->name, _rc);	\
+				_li->pe_active = false;			\
 			}						\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
@@ -151,9 +152,9 @@ struct fs_info {
 	do {								\
 		struct plugin_entry *_li;				\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		d_list_for_each_entry(_li, LIST, list) {		\
+		d_list_for_each_entry(_li, LIST, pe_list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_li->fns->FN(_li->fns->handle, __VA_ARGS__);	\
+			_li->pe_fns->FN(_li->pe_fns->handle, __VA_ARGS__); \
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
 	} while (0)
@@ -167,15 +168,15 @@ struct fs_info {
 		struct plugin_entry *_li;				\
 		int _rc;						\
 		IOF_LOG_INFO("Calling plugin %s", #FN);			\
-		d_list_for_each_entry(_li, LIST, list) {		\
+		d_list_for_each_entry(_li, LIST, pe_list) {		\
 			CHECK_PLUGIN_FUNCTION(_li, FN);			\
-			_rc = _li->fns->FN(_li->fns->handle,		\
-					   &_li->self_fns,		\
+			_rc = _li->pe_fns->FN(_li->pe_fns->handle,	\
+					   &_li->pe_self_fns,		\
 					   sizeof(struct cnss_plugin_cb));\
 			if (_rc != 0) {					\
 				IOF_LOG_INFO("Disabling plugin %s %d",	\
-					     _li->fns->name, _rc);	\
-				_li->active = false;			\
+					     _li->pe_fns->name, _rc);	\
+				_li->pe_active = false;			\
 			}						\
 		}							\
 		IOF_LOG_INFO("Finished calling plugin %s", #FN);	\
@@ -188,10 +189,10 @@ static const char *get_config_option(const char *var)
 
 static void iof_fuse_umount(struct fs_info *info)
 {
-	if (info->session)
-		fuse_session_unmount(info->session);
+	if (info->fsi_session)
+		fuse_session_unmount(info->fsi_session);
 	else
-		fuse_unmount(info->fuse);
+		fuse_unmount(info->fsi_fuse);
 }
 
 /* Add a NO-OP signal handler.  This doesn't do anything other than
@@ -213,28 +214,28 @@ static void *ll_loop_fn(void *args)
 	struct fs_info *info = args;
 	const struct sigaction act = {.sa_handler = iof_signal_poke};
 
-	D_MUTEX_LOCK(&info->lock);
-	info->running = true;
-	D_MUTEX_UNLOCK(&info->lock);
+	D_MUTEX_LOCK(&info->fsi_lock);
+	info->fsi_running = true;
+	D_MUTEX_UNLOCK(&info->fsi_lock);
 
 	sigaction(SIGUSR1, &act, NULL);
 
 	/*Blocking*/
-	if (info->mt) {
+	if (info->fsi_mt) {
 		struct fuse_loop_config config = {.max_idle_threads = 10};
 
-		ret = fuse_session_loop_mt(info->session, &config);
+		ret = fuse_session_loop_mt(info->fsi_session, &config);
 	} else {
-		ret = fuse_session_loop(info->session);
+		ret = fuse_session_loop(info->fsi_session);
 	}
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
 	IOF_LOG_DEBUG("%p fuse loop completed %d", info, ret);
 
-	D_MUTEX_LOCK(&info->lock);
-	info->running = false;
-	D_MUTEX_UNLOCK(&info->lock);
+	D_MUTEX_LOCK(&info->fsi_lock);
+	info->fsi_running = false;
+	D_MUTEX_UNLOCK(&info->fsi_lock);
 	return (void *)(uintptr_t)ret;
 }
 
@@ -243,27 +244,27 @@ static void *loop_fn(void *args)
 	int ret;
 	struct fs_info *info = (struct fs_info *)args;
 
-	D_MUTEX_LOCK(&info->lock);
-	info->running = true;
-	D_MUTEX_UNLOCK(&info->lock);
+	D_MUTEX_LOCK(&info->fsi_lock);
+	info->fsi_running = true;
+	D_MUTEX_UNLOCK(&info->fsi_lock);
 
 	/*Blocking*/
-	if (info->mt) {
+	if (info->fsi_mt) {
 		struct fuse_loop_config config = {.max_idle_threads = 10};
 
-		ret = fuse_loop_mt(info->fuse, &config);
+		ret = fuse_loop_mt(info->fsi_fuse, &config);
 	} else {
-		ret = fuse_loop(info->fuse);
+		ret = fuse_loop(info->fsi_fuse);
 	}
 
 	if (ret != 0)
 		IOF_LOG_ERROR("Fuse loop exited with return code: %d", ret);
 
-	D_MUTEX_LOCK(&info->lock);
-	fuse_destroy(info->fuse);
-	info->fuse = NULL;
-	info->running = false;
-	D_MUTEX_UNLOCK(&info->lock);
+	D_MUTEX_LOCK(&info->fsi_lock);
+	fuse_destroy(info->fsi_fuse);
+	info->fsi_fuse = NULL;
+	info->fsi_running = false;
+	D_MUTEX_UNLOCK(&info->fsi_lock);
 
 	return (void *)(uintptr_t)ret;
 }
@@ -307,49 +308,49 @@ register_fuse(void *arg,
 	if (!info)
 		return false;
 
-	info->mt = threaded;
+	info->fsi_mt = threaded;
 
 	/* TODO: The plugin should provide the sub-directory only, not the
 	 * entire mount point and this function should add the cnss_prefix
 	 */
-	D_STRNDUP(info->mnt, mnt, 1024);
-	if (!info->mnt)
+	D_STRNDUP(info->fsi_mnt, mnt, 1024);
+	if (!info->fsi_mnt)
 		goto cleanup_no_mutex;
 
-	rc = D_MUTEX_INIT(&info->lock, NULL);
+	rc = D_MUTEX_INIT(&info->fsi_lock, NULL);
 	if (rc != -DER_SUCCESS) {
 		IOF_TRACE_ERROR(plugin, "Count not create mutex");
 		goto cleanup_no_mutex;
 	}
 
-	info->private_data = private_data;
+	info->fsi_private_data = private_data;
 
 	if (flo) {
 		/* TODO: Cleanup properly here */
-		info->session = fuse_session_new(args,
-						 flo,
-						 sizeof(*flo),
-						 private_data);
-		if (!info->session)
+		info->fsi_session = fuse_session_new(args,
+						     flo,
+						     sizeof(*flo),
+						     private_data);
+		if (!info->fsi_session)
 			goto cleanup;
 
-		rc = fuse_session_mount(info->session, info->mnt);
+		rc = fuse_session_mount(info->fsi_session, info->fsi_mnt);
 		if (rc != 0) {
 			IOF_TRACE_ERROR(plugin, "Failed to mount %d", rc);
 			goto cleanup;
 		}
-		*sessionp = info->session;
+		*sessionp = info->fsi_session;
 	} else {
-		info->fuse = fuse_new(args, ops, sizeof(*ops), private_data);
+		info->fsi_fuse = fuse_new(args, ops, sizeof(*ops), private_data);
 
-		if (!info->fuse) {
+		if (!info->fsi_fuse) {
 			IOF_TRACE_ERROR(plugin, "Could not initialize fuse");
 			fuse_opt_free_args(args);
 			iof_fuse_umount(info);
 			goto cleanup;
 		}
 
-		rc = fuse_mount(info->fuse, info->mnt);
+		rc = fuse_mount(info->fsi_fuse, info->fsi_mnt);
 		if (rc != 0) {
 			IOF_TRACE_ERROR(plugin, "Failed to mount %d", rc);
 			goto cleanup;
@@ -357,38 +358,39 @@ register_fuse(void *arg,
 	}
 
 	IOF_TRACE_DEBUG(plugin,
-			"Registered a fuse mount point at : '%s'", info->mnt);
+			"Registered a fuse mount point at : '%s'",
+			info->fsi_mnt);
 	IOF_TRACE_DEBUG(plugin,
-			"Private data %p threaded %u", private_data, info->mt);
+			"Private data %p threaded %u", private_data, info->fsi_mt);
 
 	fuse_opt_free_args(args);
 
 	if (flo)
-		rc = pthread_create(&info->thread, NULL,
+		rc = pthread_create(&info->fsi_thread, NULL,
 				    ll_loop_fn, info);
 	else
-		rc = pthread_create(&info->thread, NULL,
+		rc = pthread_create(&info->fsi_thread, NULL,
 				    loop_fn, info);
 
 	if (rc) {
 		IOF_TRACE_ERROR(plugin,
 				"Could not start FUSE filesysten at '%s'",
-				info->mnt);
+				info->fsi_mnt);
 		iof_fuse_umount(info);
 		goto cleanup;
 	}
 
-	d_list_add(&info->entries, &plugin->fuse_list);
+	d_list_add(&info->fsi_entries, &plugin->pe_fuse_list);
 
 	return true;
 cleanup:
-	rc = pthread_mutex_destroy(&info->lock);
+	rc = pthread_mutex_destroy(&info->fsi_lock);
 	if (rc != 0)
 		IOF_TRACE_ERROR(plugin,
 				"Failed to destroy lock %d %s",
 				rc, strerror(rc));
 cleanup_no_mutex:
-	D_FREE(info->mnt);
+	D_FREE(info->fsi_mnt);
 	D_FREE(info);
 
 	return false;
@@ -401,14 +403,14 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	void *rcp = NULL;
 	int rc;
 
-	D_MUTEX_LOCK(&info->lock);
+	D_MUTEX_LOCK(&info->fsi_lock);
 
-	IOF_TRACE_DEBUG(plugin, "Unmounting FS: '%s'", info->mnt);
+	IOF_TRACE_DEBUG(plugin, "Unmounting FS: '%s'", info->fsi_mnt);
 
 #if 0
 	/* This will have already been called once */
-	if (plugin->active && plugin->fns->flush_fuse)
-		plugin->fns->flush_fuse(info->private_data);
+	if (plugin->pe_active && plugin->pe_fns->flush_fuse)
+		plugin->pe_fns->flush_fuse(info->private_data);
 #endif
 
 	/* Add a short delay to allow the flush time to work, by sleeping
@@ -420,9 +422,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 	 */
 	sleep(1);
 
-	if (info->running) {
+	if (info->fsi_running) {
 		IOF_TRACE_DEBUG(plugin,
-				"Sending termination signal '%s'", info->mnt);
+				"Sending termination signal '%s'", info->fsi_mnt);
 
 		/*
 		 * If the FUSE thread is in the filesystem servicing requests
@@ -431,18 +433,18 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		 * will cause I/O activity and loop_fn() to deadlock with this
 		 * function.
 		 */
-		if (info->session) {
-			fuse_session_exit(info->session);
-			fuse_session_unmount(info->session);
+		if (info->fsi_session) {
+			fuse_session_exit(info->fsi_session);
+			fuse_session_unmount(info->fsi_session);
 		} else {
-			struct fuse_session *session = fuse_get_session(info->fuse);
+			struct fuse_session *session = fuse_get_session(info->fsi_fuse);
 
 			fuse_session_exit(session);
 			fuse_session_unmount(session);
 		}
 	}
 
-	D_MUTEX_UNLOCK(&info->lock);
+	D_MUTEX_UNLOCK(&info->fsi_lock);
 
 	clock_gettime(CLOCK_REALTIME, &wait_time);
 
@@ -451,20 +453,20 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 		wait_time.tv_sec++;
 
-		rc = pthread_timedjoin_np(info->thread, &rcp, &wait_time);
+		rc = pthread_timedjoin_np(info->fsi_thread, &rcp, &wait_time);
 
 		IOF_TRACE_INFO(plugin,
 			       "Join returned %d:'%s'", rc, strerror(rc));
 
 		if (rc == ETIMEDOUT) {
-			if (info->session &&
-			    !fuse_session_exited(info->session))
+			if (info->fsi_session &&
+			    !fuse_session_exited(info->fsi_session))
 				IOF_TRACE_INFO(plugin, "Session still running");
 
 			IOF_TRACE_INFO(plugin,
 				       "Thread still running, waking it up");
 
-			pthread_kill(info->thread, SIGUSR1);
+			pthread_kill(info->fsi_thread, SIGUSR1);
 		}
 
 	} while (rc == ETIMEDOUT);
@@ -473,9 +475,9 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 		IOF_TRACE_ERROR(plugin, "Final join returned %d:%s",
 				rc, strerror(rc));
 
-	d_list_del_init(&info->entries);
+	d_list_del_init(&info->fsi_entries);
 
-	rc = pthread_mutex_destroy(&info->lock);
+	rc = pthread_mutex_destroy(&info->fsi_lock);
 	if (rc != 0)
 		IOF_TRACE_ERROR(plugin,
 				"Failed to destroy lock %d:%s",
@@ -483,16 +485,17 @@ deregister_fuse(struct plugin_entry *plugin, struct fs_info *info)
 
 	rc = (uintptr_t)rcp;
 
-	if (plugin->active && plugin->fns->deregister_fuse) {
-		int rcf = plugin->fns->deregister_fuse(info->private_data);
+	if (plugin->pe_active && plugin->pe_fns->deregister_fuse) {
+		int rcf = plugin->pe_fns->deregister_fuse(info->fsi_private_data);
 
 		if (rcf)
 			rc = rcf;
 	}
 
-	if (info->session) {
-		IOF_TRACE_INFO(plugin, "destroying session %p", info->session);
-		fuse_session_destroy(info->session);
+	if (info->fsi_session) {
+		IOF_TRACE_INFO(plugin,
+			       "destroying session %p", info->fsi_session);
+		fuse_session_destroy(info->fsi_session);
 		IOF_TRACE_INFO(plugin, "session destroyed");
 	}
 
@@ -504,15 +507,15 @@ void flush_fs(struct cnss_info *cnss_info)
 	struct plugin_entry *plugin;
 	struct fs_info *info;
 
-	d_list_for_each_entry(plugin, &cnss_info->plugins, list) {
-		if (!plugin->active || !plugin->fns->flush_fuse)
+	d_list_for_each_entry(plugin, &cnss_info->plugins, pe_list) {
+		if (!plugin->pe_active || !plugin->pe_fns->flush_fuse)
 			continue;
 
-		d_list_for_each_entry(info, &plugin->fuse_list, entries) {
-			if (!info->session)
+		d_list_for_each_entry(info, &plugin->pe_fuse_list, fsi_entries) {
+			if (!info->fsi_session)
 				continue;
 
-			plugin->fns->flush_fuse(info->private_data);
+			plugin->pe_fns->flush_fuse(info->fsi_private_data);
 		}
 	}
 }
@@ -524,17 +527,17 @@ bool shutdown_fs(struct cnss_info *cnss_info)
 	bool ok = true;
 	int rc;
 
-	d_list_for_each_entry(plugin, &cnss_info->plugins, list) {
-		d_list_for_each_entry_safe(info, i2, &plugin->fuse_list,
-					   entries) {
+	d_list_for_each_entry(plugin, &cnss_info->plugins, pe_list) {
+		d_list_for_each_entry_safe(info, i2, &plugin->pe_fuse_list,
+					   fsi_entries) {
 			rc = deregister_fuse(plugin, info);
 			if (rc) {
 				IOF_TRACE_ERROR(cnss_info,
 						"Shutdown mount '%s' failed",
-						info->mnt);
+						info->fsi_mnt);
 				ok = false;
 			}
-			D_FREE(info->mnt);
+			D_FREE(info->fsi_mnt);
 			D_FREE(info);
 		}
 	}
@@ -594,7 +597,7 @@ add_plugin(struct cnss_info *info,
 
 	IOF_TRACE_UP(entry, info, "plugin_entry");
 
-	rc = fn(&entry->fns, &entry->fns_size);
+	rc = fn(&entry->pe_fns, &entry->pe_fns_size);
 	if (rc != 0) {
 		IOF_TRACE_INFO(entry, "Plugin at entry point %p failed (%d)",
 			       FN_TO_PVOID(fn), rc);
@@ -603,72 +606,72 @@ add_plugin(struct cnss_info *info,
 		return false;
 	}
 
-	if (!entry->fns->name) {
+	if (!entry->pe_fns->name) {
 		IOF_TRACE_ERROR(entry, "Disabling plugin: name is required\n");
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 		return false;
 	}
 
-	if (entry->fns->version != CNSS_PLUGIN_VERSION) {
+	if (entry->pe_fns->version != CNSS_PLUGIN_VERSION) {
 		IOF_TRACE_ERROR(entry,
 				"Plugin version incorrect %x %x, disabling",
-				entry->fns->version,
+				entry->pe_fns->version,
 				CNSS_PLUGIN_VERSION);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 		return false;
 	}
 
-	IOF_TRACE_UP(entry->fns->handle, info, entry->fns->name);
+	IOF_TRACE_UP(entry->pe_fns->handle, info, entry->pe_fns->name);
 
-	rc = ctrl_create_subdir(NULL, entry->fns->name,
-				&entry->self_fns.plugin_dir);
+	rc = ctrl_create_subdir(NULL, entry->pe_fns->name,
+				&entry->pe_self_fns.plugin_dir);
 	if (rc != 0) {
 		IOF_TRACE_ERROR(entry,
 				"ctrl dir creation failed (%d), disabling", rc);
-		if (entry->fns->destroy_plugin_data)
-			entry->fns->destroy_plugin_data(entry->fns->handle);
+		if (entry->pe_fns->destroy_plugin_data)
+			entry->pe_fns->destroy_plugin_data(entry->pe_fns->handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 		return false;
 	}
 
-	entry->self_fns.prefix = info->prefix;
-	entry->active = true;
+	entry->pe_self_fns.prefix = info->prefix;
+	entry->pe_active = true;
 
-	entry->dl_handle = dl_handle;
+	entry->pe_dl_handle = dl_handle;
 
-	entry->self_fns.fuse_version = 3;
+	entry->pe_self_fns.fuse_version = 3;
 
-	entry->self_fns.get_config_option = get_config_option;
-	entry->self_fns.create_ctrl_subdir = ctrl_create_subdir;
-	entry->self_fns.register_ctrl_variable = ctrl_register_variable;
-	entry->self_fns.register_ctrl_event = ctrl_register_event;
-	entry->self_fns.register_ctrl_tracker = ctrl_register_tracker;
-	entry->self_fns.register_ctrl_constant = ctrl_register_constant;
-	entry->self_fns.register_ctrl_constant_int64 =
+	entry->pe_self_fns.get_config_option = get_config_option;
+	entry->pe_self_fns.create_ctrl_subdir = ctrl_create_subdir;
+	entry->pe_self_fns.register_ctrl_variable = ctrl_register_variable;
+	entry->pe_self_fns.register_ctrl_event = ctrl_register_event;
+	entry->pe_self_fns.register_ctrl_tracker = ctrl_register_tracker;
+	entry->pe_self_fns.register_ctrl_constant = ctrl_register_constant;
+	entry->pe_self_fns.register_ctrl_constant_int64 =
 		ctrl_register_constant_int64;
-	entry->self_fns.register_ctrl_constant_uint64 =
+	entry->pe_self_fns.register_ctrl_constant_uint64 =
 		ctrl_register_constant_uint64;
-	entry->self_fns.register_ctrl_uint64_variable =
+	entry->pe_self_fns.register_ctrl_uint64_variable =
 		ctrl_register_uint64_variable;
-	entry->self_fns.register_fuse_fs = register_fuse;
-	entry->self_fns.handle = entry;
+	entry->pe_self_fns.register_fuse_fs = register_fuse;
+	entry->pe_self_fns.handle = entry;
 
-	d_list_add(&entry->list, &info->plugins);
+	d_list_add(&entry->pe_list, &info->plugins);
 
-	D_INIT_LIST_HEAD(&entry->fuse_list);
+	D_INIT_LIST_HEAD(&entry->pe_fuse_list);
 
 	IOF_LOG_INFO("Added plugin %s(%p) from entry point %p",
-		     entry->fns->name,
-		     (void *)entry->fns->handle,
+		     entry->pe_fns->name,
+		     (void *)entry->pe_fns->handle,
 		     FN_TO_PVOID(fn));
 
-	if (sizeof(struct cnss_plugin) != entry->fns_size)
-		IOF_TRACE_WARNING(entry->fns->handle,
+	if (sizeof(struct cnss_plugin) != entry->pe_fns_size)
+		IOF_TRACE_WARNING(entry->pe_fns->handle,
 				  "Plugin size incorrect %zd %zd, some functions may be disabled",
-				  entry->fns_size,
+				  entry->pe_fns_size,
 				  sizeof(struct cnss_plugin));
 
 	return true;
@@ -842,8 +845,8 @@ int main(int argc, char **argv)
 	/* Walk the list of plugins and if any require the use of a service
 	 * process set across the CNSS nodes then create one
 	 */
-	d_list_for_each_entry(entry, &cnss_info->plugins, list) {
-		if (entry->active && entry->fns->require_service) {
+	d_list_for_each_entry(entry, &cnss_info->plugins, pe_list) {
+		if (entry->pe_active && entry->pe_fns->require_service) {
 			service_process_set = true;
 			break;
 		}
@@ -895,23 +898,23 @@ int main(int argc, char **argv)
 	CALL_PLUGIN_FN_CHECK(&cnss_info->plugins, post_start);
 
 	/* Walk the plugins and check for active ones */
-	d_list_for_each_entry_safe(entry, entry2, &cnss_info->plugins, list) {
-		if (entry->active) {
+	d_list_for_each_entry_safe(entry, entry2, &cnss_info->plugins, pe_list) {
+		if (entry->pe_active) {
 			active_plugins = true;
 			continue;
 		}
-		if (entry->fns->destroy_plugin_data) {
+		if (entry->pe_fns->destroy_plugin_data) {
 			IOF_TRACE_INFO(cnss_info,
 				       "Plugin %s(%p) calling destroy_plugin_data at %p",
-				       entry->fns->name,
-				       entry->fns->handle,
-				       FN_TO_PVOID(entry->fns->destroy_plugin_data));
-			entry->fns->destroy_plugin_data(entry->fns->handle);
+				       entry->pe_fns->name,
+				       entry->pe_fns->handle,
+				       FN_TO_PVOID(entry->pe_fns->destroy_plugin_data));
+			entry->pe_fns->destroy_plugin_data(entry->pe_fns->handle);
 		}
-		d_list_del(&entry->list);
+		d_list_del(&entry->pe_list);
 
-		if (entry->dl_handle)
-			dlclose(entry->dl_handle);
+		if (entry->pe_dl_handle)
+			dlclose(entry->pe_dl_handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 	}
@@ -955,9 +958,9 @@ shutdown_cart:
 
 	while ((entry = d_list_pop_entry(&cnss_info->plugins,
 					 struct plugin_entry,
-					 list))) {
-		if (entry->dl_handle)
-			dlclose(entry->dl_handle);
+					 pe_list))) {
+		if (entry->pe_dl_handle)
+			dlclose(entry->pe_dl_handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 	}
@@ -978,19 +981,19 @@ shutdown_ctrl_fs:
 	ctrl_fs_shutdown();
 	while ((entry = d_list_pop_entry(&cnss_info->plugins,
 					 struct plugin_entry,
-					 list))) {
+					 pe_list))) {
 
-		if (entry->fns->destroy_plugin_data) {
+		if (entry->pe_fns->destroy_plugin_data) {
 			IOF_TRACE_INFO(cnss_info,
 				       "Plugin %s(%p) calling destroy_plugin_data at %p",
-				       entry->fns->name,
-				       entry->fns->handle,
-				       FN_TO_PVOID(entry->fns->destroy_plugin_data));
-			entry->fns->destroy_plugin_data(entry->fns->handle);
+				       entry->pe_fns->name,
+				       entry->pe_fns->handle,
+				       FN_TO_PVOID(entry->pe_fns->destroy_plugin_data));
+			entry->pe_fns->destroy_plugin_data(entry->pe_fns->handle);
 		}
 
-		if (entry->dl_handle != NULL)
-			dlclose(entry->dl_handle);
+		if (entry->pe_dl_handle != NULL)
+			dlclose(entry->pe_dl_handle);
 		IOF_TRACE_DOWN(entry);
 		D_FREE(entry);
 	}
