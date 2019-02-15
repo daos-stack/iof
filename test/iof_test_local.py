@@ -56,6 +56,7 @@ import shutil
 import errno
 import getpass
 import signal
+import psutil
 import tabulate
 import subprocess
 import tempfile
@@ -502,10 +503,52 @@ class Testlocal(unittest.TestCase,
                 self.fail('Missing links for TRACE macros: %s' % missing_links)
 #pylint: enable=too-many-branches
 
+    def _pids_from_log_files(self):
+        """Return the pids of all local processes
+
+        Returns a list of psutil.Process() objects, one for each process
+        launched by this test.
+        """
+
+        pid_self = psutil.Process()
+        pids = []
+
+        cl = iof_cart_logparse.IofLogIter(os.path.join(self.log_path,
+                                                       'cnss.log'))
+
+        pids.extend(cl.get_pids())
+        ionss_file = os.path.join(self.log_path, 'ionss.log')
+        if os.path.exists(ionss_file):
+            il = iof_cart_logparse.IofLogIter(ionss_file)
+            pids.extend(il.get_pids())
+        known_pids = set()
+        known_pids.add(1)
+        known_pids.add(pid_self.pid)
+        ret = []
+        for pid in pids:
+            try:
+                process = psutil.Process(pid)
+            except psutil.NoSuchProcess:
+                continue
+            while (process and process.pid not in known_pids):
+                known_pids.add(process.pid)
+                ret.append(process)
+                process = process.parent()
+
+        children = pid_self.children(recursive=True)
+        for child in children:
+            if child.pid not in known_pids:
+                print("Process {} not added properly".format(child))
+                ret.append(child)
+        return ret
+
     def tearDown(self):
         """tear down the test"""
 
-        self.dump_failover_state()
+        try:
+            self.dump_failover_state()
+        except OSError:
+            pass
 
         self.mark_log('Finished test {}, cleaning up'.format(self.id()))
 
@@ -527,8 +570,9 @@ class Testlocal(unittest.TestCase,
         self.compare_projection_dir(self.mount_dirs, self.export_dirs,
                                     'single node')
 
+        all_pids = self._pids_from_log_files()
         # Firstly try and shutdown the filesystems cleanly
-        if self.is_running():
+        if self.is_running() and False:
             f = open(self.shutdown_file, 'w')
             f.write('1')
             f.close()
@@ -538,9 +582,20 @@ class Testlocal(unittest.TestCase,
         if self.proc is not None:
             procrtn = self.common_stop_process(self.proc)
 
+        stale_procs = False
+        (gone, alive) = psutil.wait_procs(all_pids, timeout=5)
+        print("gone {} alive {}".format(gone, alive))
+        for pid in alive:
+            print("Problem with pid {}".format(pid.pid))
+            pid.kill()
+            stale_procs = True
+
         self._log_check()
 
         self.cleanup(procrtn)
+
+        if stale_procs:
+            self.fail("Test lest stale processes")
 
         self.normal_output("Ending {}".format(self.id()))
 

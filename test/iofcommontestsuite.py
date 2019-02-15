@@ -67,7 +67,6 @@ By default the output is displayed on the screen.
 import os
 import json
 import subprocess
-import time
 import logging
 
 CART_PREFIX = None
@@ -273,28 +272,29 @@ class CommonTestSuite():
 
         Return the error code of the process, or -1 if the process was killed.
         """
-        self.logger.info("Test: stopping processes :%s", proc.pid)
-        i = 60
+        self.logger.info("Test: Wating for process :%s", proc.pid)
         procrtn = None
-        while i:
-            proc.poll()
+        try:
+            proc.wait(60)
             procrtn = proc.returncode
-            if procrtn is not None:
-                break
-            else:
-                time.sleep(1)
-                i = i - 1
+        except subprocess.TimeoutExpired:
+            pass
 
         if procrtn is None:
             procrtn = -1
             try:
-                self.logger.info("Test: terminating processes :%s", proc.pid)
+                self.logger.info("Test: terminating process :%s", proc.pid)
                 proc.terminate()
-                proc.wait(2)
+                # Wait up to 5 seconds for the process to exit.
+                proc.wait(5)
+                procrtn = proc.returncode
             except ProcessLookupError:
                 pass
+            except subprocess.TimeoutExpired:
+                self.logger.info("Killing process due to timeout: %s", proc.pid)
+                proc.kill()
             except Exception:
-                self.logger.info("Killing processes: %s", proc.pid)
+                self.logger.info("Killing process: %s", proc.pid)
                 proc.kill()
 
         self.logger.info("Test: return code: %s\n", procrtn)
