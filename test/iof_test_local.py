@@ -314,8 +314,13 @@ class Testlocal(unittest.TestCase,
             self.log_mask = "WARN"
             self.internals_tracing = False
 
+        # Only enable tcp and self for internal ompi/pmix comms to avoid
+        # any problems on nodes which have IB cards.
+        # Allow oversubscription of the cores on the nodes, so tests are
+        # not limited to available CPUs.
         cmd = [orterun,
                '--mca', 'btl', 'self,tcp',
+               '--mca', 'rmaps_base_oversubscribe', '1',
                '--output-filename', self.log_path]
 
         if getpass.getuser() == 'root':
