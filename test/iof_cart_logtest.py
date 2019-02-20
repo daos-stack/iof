@@ -200,7 +200,7 @@ class LogTest():
                 pass
             if abort_on_warning:
                 if line.level <= iof_cart_logparse.LOG_LEVELS['WARN'] and \
-                   line.mask != 'HG' and \
+                   line.mask.lower() != 'hg' and \
                    line.function not in WARN_FUNCTIONS:
                     if line.rpc:
                         # Ignore the SWIM RPC opcode, as this often sends RPCs
