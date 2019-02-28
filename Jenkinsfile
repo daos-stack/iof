@@ -153,6 +153,9 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Single node') {
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
                     agent {
                         label 'ci_vm1'
                     }
