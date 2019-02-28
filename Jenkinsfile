@@ -186,6 +186,39 @@ pipeline {
                         }
                     }
                 }
+            stage('Fault injection') {
+                agent {
+                        dockerfile {
+                            filename 'Dockerfile.centos:7'
+                            dir 'utils/docker'
+                            label 'docker_runner'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                        }
+                    }
+                steps {
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: """./test/iof_test_alloc_fail.py""",
+                                publishValgrind (
+                                    failBuildOnInvalidReports: true,
+                                    failBuildOnMissingReports: false,
+                                    failThresholdDefinitelyLost: '0',
+                                    failThresholdInvalidReadWrite: '0',
+                                    failThresholdTotal: '0',
+                                    pattern: '**/*.memcheck',
+                                    publishResultsForAbortedBuilds: false,
+                                    publishResultsForFailedBuilds: false,
+                                    sourceSubstitutionPaths: '',
+                                    unstableThresholdDefinitelyLost: '',
+                                    unstableThresholdInvalidReadWrite: '',
+                                    unstableThresholdTotal: ''
+                                )
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                        }
+                    }
+                }
             }
         }
     }

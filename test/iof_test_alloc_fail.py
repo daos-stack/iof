@@ -198,7 +198,8 @@ def run_app(ionss=False):
                               dir=export_tmp_dir)
     ctrl_fs_dir = os.path.join(prefix, '.ctrl')
 
-    use_valgrind = os.getenv('TR_USE_VALGRIND', default=None)
+    # Hardcode this to on for now to enable valgrind in CI.
+    use_valgrind = True
 
     if ionss:
         bin_cmd = 'ionss'
@@ -242,11 +243,11 @@ def run_app(ionss=False):
             cmd.append('--suppressions={}'.format(crt_suppressfile))
 
         # If running in a CI environment then output to xml.
-        if use_valgrind == 'memcheck':
+        if use_valgrind:
             cmd.extend(['--xml=yes',
                         '--xml-file={}'.format(
                             os.path.join(log_top_dir, 'af',
-                                         "valgrind-{}.xml".format(floc)))])
+                                         "fail_{}.memcheck".format(floc)))])
         if ionss:
             cmd.append(os.path.join(jdata['PREFIX'], 'bin', 'ionss'))
             cmd.extend(['-c', config_file])
