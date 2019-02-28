@@ -197,21 +197,21 @@ pipeline {
                     }
                 steps {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                                script: """./test/iof_test_alloc_fail.py""",
-                                publishValgrind (
-                                    failBuildOnInvalidReports: true,
-                                    failBuildOnMissingReports: false,
-                                    failThresholdDefinitelyLost: '0',
-                                    failThresholdInvalidReadWrite: '0',
-                                    failThresholdTotal: '0',
-                                    pattern: '**/*.memcheck',
-                                    publishResultsForAbortedBuilds: false,
-                                    publishResultsForFailedBuilds: false,
-                                    sourceSubstitutionPaths: '',
-                                    unstableThresholdDefinitelyLost: '',
-                                    unstableThresholdInvalidReadWrite: '',
-                                    unstableThresholdTotal: ''
-                                )
+                                script: """./test/iof_test_alloc_fail.py"""
+                        publishValgrind (
+                            failBuildOnInvalidReports: true,
+                            failBuildOnMissingReports: false,
+                            failThresholdDefinitelyLost: '0',
+                            failThresholdInvalidReadWrite: '0',
+                            failThresholdTotal: '0',
+                            pattern: '**/*.memcheck',
+                            publishResultsForAbortedBuilds: false,
+                            publishResultsForFailedBuilds: false,
+                            sourceSubstitutionPaths: '',
+                            unstableThresholdDefinitelyLost: '',
+                            unstableThresholdInvalidReadWrite: '',
+                            unstableThresholdTotal: ''
+                        )
                     }
                     post {
                         always {
