@@ -129,7 +129,7 @@ class Testlocal(unittest.TestCase,
     cnss_stats = {}
     ionss_config_file = None
     log_path = None
-    internals_tracing = False
+    internals_tracing = True
     ionss_count = 3
     cnss_valgrind = False
     ionss_valgrind = False
@@ -251,7 +251,6 @@ class Testlocal(unittest.TestCase,
                     else:
                         raise
 
-        global jdata
         if jdata:
             orterun = os.path.realpath(os.path.join(jdata['OMPI_PREFIX'],
                                                     'bin',
@@ -300,7 +299,7 @@ class Testlocal(unittest.TestCase,
                 self.ionss_valgrind = True
             self.cnss_valgrind = True
 
-        default_log_mask = "INFO,CTRL=WARN"
+        default_log_mask = "DEBUG,CTRL=WARN"
         itracing = os.getenv("INTERNALS_TRACING", "no")
         if itracing == "yes":
             self.internals_tracing = True
@@ -439,12 +438,12 @@ class Testlocal(unittest.TestCase,
 
         cnss_errors = False
         ionss_errors = False
-        missing_links = False
+        missing_links = []
 
         if self.internals_tracing:
             #Create a dump file for all testing and internals path output
             internals_log_file = open(os.path.join(self.log_path,
-                                                   'internals.out'),
+                                                   'internals.log'),
                                       'w')
 
             #Origin RPC tracing for one CNSS instance
