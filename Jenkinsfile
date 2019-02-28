@@ -102,13 +102,19 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues enabledForFailure: true,
-                                         aggregatingResults: true,
-                                         id: "analysis-centos7",
-                                         tools: [ clang(), cppCheck() ],
-                                         filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
-                                                   excludeFile('_build\\.external-Linux\\/.*')]
+                            node('lightweight') {
+                                recordIssues enabledForFailure: true,
+                                             aggregatingResults: true,
+                                             id: "analysis-centos7",
+                                             tools: [ cppCheck() ],
+                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
+                                                       excludeFile('_build\\.external-Linux\\/.*')]
+			    }
                         }
+                        success {
+                            sh "rm -rf _build.external${arch}"
+                        }
+
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
@@ -125,13 +131,19 @@ pipeline {
                     }
                     post {
                         always {
-                            recordIssues enabledForFailure: true,
-                                         aggregatingResults: true,
-                                         id: "analysis-ubuntu18",
-                                         tools: [ clang(), cppCheck() ],
-                                         filters: [excludeFile('.*\\/_build\\.external\\/.*'),
-                                                   excludeFile('_build\\.external\\/.*')]
+			    node('lightweight') {
+                                recordIssues enabledForFailure: true,
+                                             aggregatingResults: true,
+                                             id: "analysis-ubuntu18",
+                                             tools: [ cppCheck() ],
+                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
+                                                       excludeFile('_build\\.external-Linux\\/.*')]
+			    }
                         }
+                        success {
+                            sh "rm -rf _build.external${arch}"
+                        }
+
                     }
                 }
             }
