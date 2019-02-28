@@ -106,7 +106,7 @@ pipeline {
                                 recordIssues enabledForFailure: true,
                                              aggregatingResults: true,
                                              id: "analysis-centos7",
-                                             tools: [ cppCheck() ],
+                                             tools: [ gcc4(), cppCheck() ],
                                              filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
                                                        excludeFile('_build\\.external-Linux\\/.*')]
 			    }
@@ -114,7 +114,6 @@ pipeline {
                         success {
                             sh "rm -rf _build.external${arch}"
                         }
-
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
@@ -135,7 +134,7 @@ pipeline {
                                 recordIssues enabledForFailure: true,
                                              aggregatingResults: true,
                                              id: "analysis-ubuntu18",
-                                             tools: [ cppCheck() ],
+                                             tools: [ gcc4(), cppCheck() ],
                                              filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
                                                        excludeFile('_build\\.external-Linux\\/.*')]
 			    }
@@ -143,7 +142,6 @@ pipeline {
                         success {
                             sh "rm -rf _build.external${arch}"
                         }
-
                     }
                 }
             }

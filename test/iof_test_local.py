@@ -443,7 +443,7 @@ class Testlocal(unittest.TestCase,
         if self.internals_tracing:
             #Create a dump file for all testing and internals path output
             internals_log_file = open(os.path.join(self.log_path,
-                                                   'internals.out'),
+                                                   'internals.log'),
                                       'w')
 
             #Origin RPC tracing for one CNSS instance
