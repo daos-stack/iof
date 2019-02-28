@@ -43,6 +43,10 @@ def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll(
 pipeline {
     agent { label 'lightweight' }
 
+    triggers {
+        cron(env.BRANCH_NAME == 'master' ? 'H 0 * * *' : '')
+    }
+
     environment {
         GITHUB_USER = credentials('daos-jenkins-review-posting')
         BAHTTPS_PROXY = "${env.HTTP_PROXY ? '--build-arg HTTP_PROXY="' + env.HTTP_PROXY + '" --build-arg http_proxy="' + env.HTTP_PROXY + '"' : ''}"
@@ -109,7 +113,7 @@ pipeline {
                                              tools: [ gcc4(), cppCheck() ],
                                              filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
                                                        excludeFile('_build\\.external-Linux\\/.*')]
-			    }
+                            }
                         }
                         success {
                             sh "rm -rf _build.external${arch}"
@@ -130,14 +134,14 @@ pipeline {
                     }
                     post {
                         always {
-			    node('lightweight') {
+                            node('lightweight') {
                                 recordIssues enabledForFailure: true,
                                              aggregatingResults: true,
                                              id: "analysis-ubuntu18",
                                              tools: [ gcc4(), cppCheck() ],
                                              filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
                                                        excludeFile('_build\\.external-Linux\\/.*')]
-			    }
+                            }
                         }
                         success {
                             sh "rm -rf _build.external${arch}"
@@ -169,7 +173,7 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
-					pip3.4 install --user tabulate
+                                        pip3.4 install --user tabulate
                                         nosetests-3.4 --exe --with-xunit"
                                     exit 0
                                     """,
