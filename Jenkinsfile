@@ -198,6 +198,8 @@ pipeline {
                 steps {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """find .
+                                    pwd
+                                    cat ./.build_vars-Linux.sh
                                     ./test/iof_test_alloc_fail.py"""
                         publishValgrind (
                             failBuildOnInvalidReports: true,
