@@ -224,7 +224,8 @@ pipeline {
                         unstableThresholdDefinitelyLost: '',
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
-                    )
+                        )
+                    }
                     post {
                         always {
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
