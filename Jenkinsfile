@@ -190,7 +190,7 @@ pipeline {
                 agent {
                     label 'ci_vm1'
                 }
-		options {
+                options {
                     timeout(time: 60, unit: 'MINUTES')
                 }
                 steps {
@@ -209,6 +209,7 @@ pipeline {
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
+                                pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
                     publishValgrind (
