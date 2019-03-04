@@ -209,6 +209,7 @@ pipeline {
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
+                                ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
