@@ -187,46 +187,44 @@ pipeline {
                     }
                 }
             stage('Fault injection') {
-                    agent {
-                        label 'ci_vm1'
-                    }
-		    options {
-                        timeout(time: 60, unit: 'MINUTES')
-                    }
+                agent {
+                    label 'ci_vm1'
+                }
+		options {
+                    timeout(time: 60, unit: 'MINUTES')
+                }
                 steps {
-                    steps {
-                        provisionNodes NODELIST: env.NODELIST,
-                           node_count: 1,
-                           snapshot: true
-                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                                script: """set -x
-                                    . ./.build_vars-Linux.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
-                                    NODELIST=$nodelist
-                                    NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
-                                    ssh -i ci_key jenkins@\$NODE "set -x
-                                        set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
-                                        ./test/iof_test_alloc_fail.py
-                                    """,
-                        publishValgrind (
-                            failBuildOnInvalidReports: true,
-                            failBuildOnMissingReports: false,
-                            failThresholdDefinitelyLost: '0',
-                            failThresholdInvalidReadWrite: '0',
-                            failThresholdTotal: '0',
-                            pattern: '**/*.memcheck',
-                            publishResultsForAbortedBuilds: false,
-                            publishResultsForFailedBuilds: false,
-                            sourceSubstitutionPaths: '',
-                            unstableThresholdDefinitelyLost: '',
-                            unstableThresholdInvalidReadWrite: '',
-                            unstableThresholdTotal: ''
-                        )
-                    }
+                    provisionNodes NODELIST: env.NODELIST,
+                        node_count: 1,
+                        snapshot: true
+                    runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                        script: """set -x
+                            . ./.build_vars-Linux.sh
+                            CART_BASE=\${SL_PREFIX%/install*}
+                            NODELIST=$nodelist
+                            NODE=\${NODELIST%%,*}
+                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                            ssh -i ci_key jenkins@\$NODE "set -x
+                                set -e
+                                sudo mkdir -p \$CART_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
+                                cd \$CART_BASE
+                                ./test/iof_test_alloc_fail.py
+                            """
+                    publishValgrind (
+                        failBuildOnInvalidReports: true,
+                        failBuildOnMissingReports: false,
+                        failThresholdDefinitelyLost: '0',
+                        failThresholdInvalidReadWrite: '0',
+                        failThresholdTotal: '0',
+                        pattern: '**/*.memcheck',
+                        publishResultsForAbortedBuilds: false,
+                        publishResultsForFailedBuilds: false,
+                        sourceSubstitutionPaths: '',
+                        unstableThresholdDefinitelyLost: '',
+                        unstableThresholdInvalidReadWrite: '',
+                        unstableThresholdTotal: ''
+                    )
                     post {
                         always {
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
