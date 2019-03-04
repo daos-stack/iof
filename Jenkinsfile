@@ -187,20 +187,31 @@ pipeline {
                     }
                 }
             stage('Fault injection') {
-                agent {
-                        dockerfile {
-                            filename 'Dockerfile.centos:7'
-                            dir 'utils/docker'
-                            label 'docker_runner'
-                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
-                        }
+                    agent {
+                        label 'ci_vm1'
+                    }
+		    options {
+                        timeout(time: 60, unit: 'MINUTES')
                     }
                 steps {
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                                script: """find .
-                                    pwd
-                                    cat ./.build_vars-Linux.sh
-                                    ./test/iof_test_alloc_fail.py"""
+                                script: """set -x
+                                    . ./.build_vars-Linux.sh
+                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$CART_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
+                                        cd \$CART_BASE
+                                        ./test/iof_test_alloc_fail.py
+                                    """,
                         publishValgrind (
                             failBuildOnInvalidReports: true,
                             failBuildOnMissingReports: false,
