@@ -209,7 +209,7 @@ pipeline {
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
-                                ./test/iof_test_alloc_fail.py
+                                ./test/iof_test_alloc_fail.py"
                             """
                     publishValgrind (
                         failBuildOnInvalidReports: true,
