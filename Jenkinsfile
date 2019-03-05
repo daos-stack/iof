@@ -108,6 +108,7 @@ cd /tmp/
 cp -a \$BASE_DIR/ iof
 cd iof
 git clean -dfx
+cp -a \$BASE_DIR/scons_local/ scons_local/
 find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
 """,
