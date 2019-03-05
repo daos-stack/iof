@@ -94,14 +94,14 @@ pipeline {
                         }
                     }
                     steps {
-                        sh(script: """#!/bin/sh
+                        sh(script: '#!/bin/sh
 df -h
 BASE_DIR=`pwd`
 cd /dev/shm
-cp -a $BASE_DIR/ iof
+cp -a \$BASE_DIR/ iof
 cd iof
 find .
-scons TARGET_PREFIX=${BASE_DIR}/deps PREFIX=${BASE_DIR}/iof --build-deps=yes
+scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
 """,
                          label: 'Try and build in tmpfs')
 /*                        sconsBuild clean: "_build.external${arch}"
