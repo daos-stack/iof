@@ -101,7 +101,7 @@ pipeline {
                     }
                     steps {
                         sh(script: """#!/bin/sh
-rm -rf install/
+rm -rf install/ deps/ iof/
 git clean -dfx
 df -h
 BASE_DIR=`pwd`
