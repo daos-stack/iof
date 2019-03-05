@@ -102,12 +102,12 @@ pipeline {
                     steps {
                         sh(script: """#!/bin/sh
 rm -rf install/ deps/ iof/
-git clean -dfx
 df -h
 BASE_DIR=`pwd`
 cd /tmp/
 cp -a \$BASE_DIR/ iof
 cd iof
+git clean -dfx
 find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
 """,
