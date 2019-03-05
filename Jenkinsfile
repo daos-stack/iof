@@ -63,6 +63,7 @@ pipeline {
 
     stages {
         stage('Build') {
+	    failFast true
             parallel {
                 stage('checkpatch') {
                     agent {
@@ -93,7 +94,7 @@ pipeline {
                         }
                     }
                     steps {
-                    sh(script: """#!/bin/sh
+                        sh(script: """#!/bin/sh
 df -h
 BASE_DIR=`pwd`
 cd /dev/shm
@@ -103,9 +104,9 @@ find .
 scons TARGET_PREFIX=${BASE_DIR}/deps PREFIX=${BASE_DIR}/iof --build-deps=yes
 """,
                          label: 'Try and build in tmpfs')
-                        sconsBuild clean: "_build.external${arch}"
+/*                        sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'install/**'
-                        stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
+                        stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*" */
                     }
                     post {
                         always {
