@@ -62,7 +62,7 @@ pipeline {
     }
 
     stages {
-        stage('Pre-build') {
+        stage('Build') {
             parallel {
                 stage('checkpatch') {
                     agent {
@@ -83,13 +83,6 @@ pipeline {
                         }
                     }
                 }
-            }
-        }
-        stage('Build') {
-            // abort other builds if/when one fails to avoid wasting time
-            // and resources
-            failFast true
-            parallel {
                 stage('Build on CentOS 7') {
                     agent {
                         dockerfile {
@@ -100,6 +93,7 @@ pipeline {
                         }
                     }
                     steps {
+    			sh "df -h"
                         sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
