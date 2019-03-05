@@ -62,8 +62,7 @@ pipeline {
     }
 
     stages {
-        stage('Build') {
-	    failFast true
+        stage('Pre-build') {
             parallel {
                 stage('checkpatch') {
                     agent {
@@ -84,6 +83,13 @@ pipeline {
                         }
                     }
                 }
+            }
+        }
+        stage('Build') {
+            // abort other builds if/when one fails to avoid wasting time
+            // and resources
+            failFast true
+            parallel {
                 stage('Build on CentOS 7') {
                     agent {
                         dockerfile {
@@ -95,6 +101,7 @@ pipeline {
                     }
                     steps {
                         sh(script: """#!/bin/sh
+git clean -dfx
 df -h
 BASE_DIR=`pwd`
 cd /tmp/
@@ -104,9 +111,9 @@ find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
 """,
                          label: 'Try and build in tmpfs')
-/*                        sconsBuild clean: "_build.external${arch}"
-                        stash name: 'CentOS-install', includes: 'install/**'
-                        stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*" */
+                        sconsBuild clean: "_build.external${arch}"
+                        stash name: 'CentOS-install', includes: 'deps/**,iof/**'
+                        stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
                     }
                     post {
                         always {
