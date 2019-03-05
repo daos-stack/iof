@@ -101,19 +101,20 @@ pipeline {
                     }
                     steps {
                         sh(script: """#!/bin/sh
-rm -rf install/ deps/ iof/
-df -h
+set -x
+set -e
+rm -rf install/ deps/ iof/ .build-Vars*
 BASE_DIR=`pwd`
 cd /tmp/
 cp -a \$BASE_DIR/ iof
 cd iof
 git clean -dfx
-cp -a \$BASE_DIR/scons_local/ scons_local/
+cp -a \$BASE_DIR/scons_local/ scons_local
 find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
+cp .build_vars-Linux.* $BASE_DIR/iof
 """,
                          label: 'Try and build in tmpfs')
-                        sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'deps/**,iof/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
                     }
@@ -176,6 +177,7 @@ scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
+                                    cd iof
                                     . ./.build_vars-Linux.sh
                                     CART_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
@@ -186,7 +188,7 @@ scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount iof/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         nosetests-3.4 --exe --with-xunit"
                                     exit 0
@@ -213,6 +215,7 @@ scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
                         snapshot: true
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
+                            cd iof
                             . ./.build_vars-Linux.sh
                             CART_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
@@ -223,7 +226,7 @@ scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
-                                ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                ln -s /usr/bin/fusermount iof/Linux/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
