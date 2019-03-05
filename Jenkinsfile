@@ -93,12 +93,12 @@ pipeline {
                         }
                     }
                     steps {
-                    sh(script:"""df -h
+                    sh "df -h
 BASE_DIR=`pwd`
 cd /dev/shm
 cp -a $BASE_DIR/ iof
 cd iof
-scons""")
+scons"
                         sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
