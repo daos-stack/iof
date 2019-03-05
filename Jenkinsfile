@@ -98,7 +98,8 @@ BASE_DIR=`pwd`
 cd /dev/shm
 cp -a $BASE_DIR/ iof
 cd iof
-scons"
+find .
+scons TARGET_PREFIX=${BASE_DIR}/deps PREFIX=${BASE_DIR}/iof --build-deps=yes"
                         sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
