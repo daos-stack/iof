@@ -94,7 +94,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sh(script: '#!/bin/sh
+                        sh(script: """#!/bin/sh
 df -h
 BASE_DIR=`pwd`
 cd /dev/shm
