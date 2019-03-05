@@ -97,7 +97,7 @@ pipeline {
                         sh(script: """#!/bin/sh
 df -h
 BASE_DIR=`pwd`
-cd /dev/shm
+cd /tmp/
 cp -a \$BASE_DIR/ iof
 cd iof
 find .
