@@ -96,7 +96,7 @@ pipeline {
                     sh(script:"""df -h
 BASE_DIR=`pwd`
 cd /dev/shm
-cp -a BASE_DIR/ iof
+cp -a $BASE_DIR/ iof
 cd iof
 scons""")
                         sconsBuild clean: "_build.external${arch}"
