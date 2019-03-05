@@ -133,6 +133,7 @@ scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
+                    when { branch 'master' }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.ubuntu:18.04'
