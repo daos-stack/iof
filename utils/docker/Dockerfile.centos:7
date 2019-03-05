@@ -62,7 +62,7 @@ RUN yum -y install git gcc gcc-c++ make cmake golang libtool scons boost-devel  
                    python34 python34-pylint python34-PyYAML.x86_64 PyYAML        \
                    python2-paramiko python34-paramiko valgrind rsync             \
                    libyaml-devel file ShellCheck yum-plugin-copr python34-nose   \
-                   python34-pip fuse python34-devel
+                   python34-pip fuse python34-devel python-devel
 RUN yum -y copr enable jhli/ipmctl
 RUN yum -y copr enable jhli/safeclib
 RUN yum -y install libsafec libipmctl-devel
