@@ -102,7 +102,7 @@ cd iof
 find .
 scons TARGET_PREFIX=${BASE_DIR}/deps PREFIX=${BASE_DIR}/iof --build-deps=yes
 """,
-                         label='Try and build in tmpfs')
+                         label: 'Try and build in tmpfs')
                         sconsBuild clean: "_build.external${arch}"
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
