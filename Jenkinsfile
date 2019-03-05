@@ -93,7 +93,7 @@ pipeline {
                         }
                     }
                     steps {
-                    sh "df -h
+                    sh(script: "df -h
 BASE_DIR=`pwd`
 cd /dev/shm
 cp -a $BASE_DIR/ iof
