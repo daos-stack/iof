@@ -182,7 +182,6 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                                     cd iof
                                     . ./.build_vars-Linux.sh
                                     IOF_BASE=\${SL_PREFIX%/install*}
-                                    ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
                                     trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
@@ -192,6 +191,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
+                                        ln -s /usr/bin/fusermount bin/fusermount3
                                         nosetests-3.4 --exe --with-xunit"
                                     """,
                                 junit_files: "nosetests.xml"
@@ -230,6 +230,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                                 sudo mkdir -p \$IOF_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                 cd \$IOF_BASE
+                                ln -s /usr/bin/fusermount bin/fusermount3
                                 ./test/iof_test_alloc_fail.py"
                             """
                     }
