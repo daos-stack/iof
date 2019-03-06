@@ -191,7 +191,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/
                                         pip3.4 install --user tabulate
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
-                                        ln -s /usr/bin/fusermount \${IOF_BASE}bin/fusermount3
+                                        ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                                         cd \$IOF_BASE
                                         cd ..
                                         nosetests-3.4 --exe --with-xunit"
@@ -230,7 +230,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/
                                 pip3.4 install --user tabulate
                                 sudo mkdir -p \$IOF_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
-                                ln -s /usr/bin/fusermount \${IOF_BASE}bin/fusermount3
+                                ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                                 cd \$IOF_BASE
                                 cd ..
                                 ./test/iof_test_alloc_fail.py"
