@@ -182,8 +182,8 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                                     CART_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
-                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                    trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    ssh -i ../ci_key jenkins@\$NODE "set -x
                                         set -e
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
@@ -220,8 +220,8 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                             CART_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
-                            ssh -i ci_key jenkins@\$NODE "set -x
+                            trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                            ssh -i ../ci_key jenkins@\$NODE "set -x
                                 set -e
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
@@ -232,7 +232,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                             """
                     publishValgrind (
                         failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: false,
+                        failBuildOnMissingReports: true,
                         failThresholdDefinitelyLost: '0',
                         failThresholdInvalidReadWrite: '0',
                         failThresholdTotal: '0',
