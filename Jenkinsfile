@@ -112,7 +112,7 @@ git clean -dfx
 cp -a \$BASE_DIR/scons_local/ scons_local
 find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
-cp .build_vars-Linux.* $BASE_DIR/iof
+cp .build_vars-Linux.* \${BASE_DIR}/iof
 """,
                          label: 'Try and build in tmpfs')
                         stash name: 'CentOS-install', includes: 'deps/**,iof/**'
