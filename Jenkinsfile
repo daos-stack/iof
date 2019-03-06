@@ -180,8 +180,8 @@ cp .build_vars-Linux.* \${BASE_DIR}/
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     set -e
-                                    cd iof
                                     . ./.build_vars-Linux.sh
+                                    cd iof
                                     IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
@@ -233,6 +233,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/
                                 ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                                 cd \$IOF_BASE
                                 cd ..
+				find .
                                 ./test/iof_test_alloc_fail.py"
                             """
                     }
