@@ -100,6 +100,7 @@ pipeline {
                         }
                     }
                     steps {
+		    /* TODO: Remove xml results file */
                         sh(script: """#!/bin/sh
 set -x
 set -e
@@ -113,7 +114,7 @@ cp -a \$BASE_DIR/scons_local/ scons_local
 find .
 scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
 scons install
-cp .build_vars-Linux.* \${BASE_DIR}/iof
+cp .build_vars-Linux.* \${BASE_DIR}/
 """,
                          label: 'Try and build in tmpfs')
                         stash name: 'CentOS-install', includes: 'deps/**,iof/**'
@@ -218,8 +219,8 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
                             set -e
-                            cd iof
                             . ./.build_vars-Linux.sh
+                            cd iof
                             IOF_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
