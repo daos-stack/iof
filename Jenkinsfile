@@ -178,21 +178,21 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
+                                    set -e
                                     cd iof
                                     . ./.build_vars-Linux.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
+                                    ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ../ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount iof/bin/fusermount3
                                         pip3.4 install --user tabulate
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         nosetests-3.4 --exe --with-xunit"
-                                    exit 0
                                     """,
                                 junit_files: "nosetests.xml"
                     }
@@ -216,22 +216,26 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                         snapshot: true
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
+                            set -e
                             cd iof
                             . ./.build_vars-Linux.sh
-                            CART_BASE=\${SL_PREFIX%/install*}
+                            IOF_BASE=\${SL_PREFIX%/install*}
+                            ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                            trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                             ssh -i ../ci_key jenkins@\$NODE "set -x
                                 set -e
-                                sudo mkdir -p \$CART_BASE
-                                sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                cd \$CART_BASE
-                                ln -s /usr/bin/fusermount iof/bin/fusermount3
                                 pip3.4 install --user tabulate
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                cd \$IOF_BASE
                                 ./test/iof_test_alloc_fail.py"
                             """
-                    publishValgrind (
+                    }
+                    post {
+                        always {
+                            publishValgrind (
                         failBuildOnInvalidReports: true,
                         failBuildOnMissingReports: true,
                         failThresholdDefinitelyLost: '0',
@@ -245,9 +249,7 @@ cp .build_vars-Linux.* \${BASE_DIR}/iof
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
-                    }
-                    post {
-                        always {
+
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                         }
                     }
