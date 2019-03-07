@@ -104,7 +104,7 @@ pipeline {
                         sh(script: """#!/bin/sh
 set -x
 set -e
-rm -rf install/ deps/ iof/ .build-Vars*
+rm -rf install/ deps/ iof/ .build-Vars* nosetests.xml
 BASE_DIR=`pwd`
 cd /tmp/
 cp -a \$BASE_DIR/ iof
