@@ -126,6 +126,37 @@ pipeline {
                         }
                     }
                 }
+                stage('Build master CentOS 7') {
+                    agent {
+                        dockerfile {
+                            filename 'Dockerfile.centos:7'
+                            dir 'utils/docker'
+                            label 'docker_runner'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                        }
+                    }
+                    steps {
+                        sh "mv build-master.config build.config"
+                        sconsBuild clean: "_build.external${arch}"
+                        stash name: 'CentOS-master-install', includes: 'install/**'
+                        stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
+                    }
+                    post {
+                        always {
+                            node('lightweight') {
+                                recordIssues enabledForFailure: true,
+                                             aggregatingResults: true,
+                                             id: "analysis-centos7",
+                                             tools: [ gcc4(), cppCheck() ],
+                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
+                                                       excludeFile('_build\\.external-Linux\\/.*')]
+                            }
+                        }
+                        success {
+                            sh "rm -rf _build.external${arch}"
+                        }
+                    }
+                }
                 stage('Build on Ubuntu 18.04') {
                     agent {
                         dockerfile {
@@ -261,7 +292,41 @@ pipeline {
                         }
                     }
                 }
-            stage('Fault injection') {
+                stage('Single node cart-master') {
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars-Linux.sh
+                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$CART_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
+                                        cd \$CART_BASE
+                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        pip3.4 install --user tabulate
+                                        nosetests-3.4 --exe --with-xunit"
+                                    exit 0
+                                    """,
+                                junit_files: "nosetests.xml"
+                    }
+                    post {
+                        always {
+                            junit 'nosetests.xml'
+                            archiveArtifacts artifacts: 'test/output/Testlocal/*/*.log'
+                        }
+                    }
+                }
+             stage('Fault injection') {
                 agent {
                     label 'ci_vm1'
                 }
