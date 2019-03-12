@@ -52,7 +52,7 @@ pipeline {
         BAHTTPS_PROXY = "${env.HTTP_PROXY ? '--build-arg HTTP_PROXY="' + env.HTTP_PROXY + '" --build-arg http_proxy="' + env.HTTP_PROXY + '"' : ''}"
         BAHTTP_PROXY = "${env.HTTP_PROXY ? '--build-arg HTTPS_PROXY="' + env.HTTPS_PROXY + '" --build-arg https_proxy="' + env.HTTPS_PROXY + '"' : ''}"
         UID=sh(script: "id -u", returnStdout: true)
-        BUILDARGS = "--build-arg NOBUILD=1 --build-arg UID=$env.UID $env.BAHTTP_PROXY $env.BAHTTPS_PROXY"
+        BUILDARGS = "--build-arg UID=$env.UID $env.BAHTTP_PROXY $env.BAHTTPS_PROXY"
     }
 
     options {
@@ -106,8 +106,24 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: "_build.external${arch}"
-                        stash name: 'CentOS-install', includes: 'install/**'
+		    /* TODO: Remove xml results file */
+                        sh(script: """#!/bin/sh
+set -x
+set -e
+rm -rf install/ deps/ iof/ .build-Vars* nosetests.xml
+BASE_DIR=`pwd`
+cd /tmp/
+cp -a \$BASE_DIR/ iof
+cd iof
+git clean -dfx
+cp -a \$BASE_DIR/scons_local/ scons_local
+find .
+scons TARGET_PREFIX=\${BASE_DIR}/deps PREFIX=\${BASE_DIR}/iof --build-deps=yes
+scons install
+cp .build_vars-Linux.* \${BASE_DIR}/
+""",
+                         label: 'Try and build in tmpfs')
+                        stash name: 'CentOS-install', includes: 'deps/**,iof/**'
                         stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
                     }
                     post {
@@ -127,6 +143,7 @@ pipeline {
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
+                    when { branch 'master' }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.ubuntu:18.04'
@@ -168,20 +185,22 @@ pipeline {
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
+                                    set -e
                                     . ./.build_vars-Linux.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    cd iof
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
-                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                    trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                    ssh -i ../ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
+                                        cd \$IOF_BASE
+                                        cd ..
                                         nosetests-3.4 --exe --with-xunit"
-                                    exit 0
                                     """,
                                 junit_files: "nosetests.xml"
                     }
@@ -205,23 +224,30 @@ pipeline {
                         snapshot: true
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
+                            set -e
                             . ./.build_vars-Linux.sh
-                            CART_BASE=\${SL_PREFIX%/install*}
+                            cd iof
+                            IOF_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
-                            ssh -i ci_key jenkins@\$NODE "set -x
+                            trap 'set +e; set -x; ssh -i ../ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                            ssh -i ../ci_key jenkins@\$NODE "set -x
                                 set -e
-                                sudo mkdir -p \$CART_BASE
-                                sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                cd \$CART_BASE
-                                ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                 pip3.4 install --user tabulate
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                ln -s /usr/bin/fusermount \${IOF_BASE}/bin/fusermount3
+                                cd \$IOF_BASE
+                                cd ..
+				find .
                                 ./test/iof_test_alloc_fail.py"
                             """
-                    publishValgrind (
+                    }
+                    post {
+                        always {
+                            publishValgrind (
                         failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: false,
+                        failBuildOnMissingReports: true,
                         failThresholdDefinitelyLost: '0',
                         failThresholdInvalidReadWrite: '0',
                         failThresholdTotal: '0',
@@ -233,9 +259,7 @@ pipeline {
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
-                    }
-                    post {
-                        always {
+
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                         }
                     }
