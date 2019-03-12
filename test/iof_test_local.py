@@ -530,7 +530,7 @@ class Testlocal(unittest.TestCase,
                 process = psutil.Process(pid)
             except psutil.NoSuchProcess:
                 continue
-            while (process and process.pid not in known_pids):
+            while process and process.pid not in known_pids:
                 known_pids.add(process.pid)
                 ret.append(process)
                 process = process.parent()
