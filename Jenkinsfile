@@ -175,6 +175,7 @@ pipeline {
                                     trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
+                                        sudo yum -y install python34-psutil
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
@@ -212,6 +213,7 @@ pipeline {
                             trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
                             ssh -i ci_key jenkins@\$NODE "set -x
                                 set -e
+                                sudo yum -y install python34-psutil
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
