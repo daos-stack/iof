@@ -136,10 +136,15 @@ pipeline {
                         }
                     }
                     steps {
-                        sh "mv build-master.config build.config"
-                        sconsBuild clean: "_build.external${arch}"
-                        stash name: 'CentOS-master-install', includes: 'install/**'
-                        stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
+                        cleanWs()
+     checkoutScm(checkoutDir: 'iof', withSubmodules: true)
+sh (script: """#!/bin/sh
+cd iof
+mv build-master.config build.config
+scons --build-deps=yes
+scons install"""
+                        stash name: 'CentOS-master-install', includes: 'iof/install/**'
+                        stash name: 'CentOS-master-build-vars', includes: "iof/.build_vars${arch}.*"
                     }
                     post {
                         always {
