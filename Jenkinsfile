@@ -138,6 +138,7 @@ pipeline {
                     steps {
                         sh (script: """#!/bin/sh
 set -e
+find .
 mv build-master.config build.config
 rm -rf install _build.external-Linux/ iof-Linux.conf iof/
 scons --build-deps=yes
@@ -155,6 +156,7 @@ scons install""")
                                              filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
                                                        excludeFile('_build\\.external-Linux\\/.*')]
                             }
+                            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
                         }
                         success {
                             sh "rm -rf _build.external${arch}"
