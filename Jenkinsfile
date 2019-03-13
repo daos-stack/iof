@@ -137,7 +137,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild(clean: "_build.external${arch}",
-			           scons_args: '--build-config=build-master.config')
+                                   scons_args: '--build-config=build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
                     }
@@ -315,7 +315,7 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        nosetests-3.4 --exe --with-xunit"
+                                        nosetests-3.4 --where test iof_test_local:Testlocal.test_use_ino
                                     exit 0
                                     """,
                                 junit_files: "nosetests.xml"
