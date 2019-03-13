@@ -136,9 +136,11 @@ pipeline {
                         }
                     }
                     steps {
-                        cleanWs()
      checkoutScm(checkoutDir: 'iof', withSubmodules: true)
 sh (script: """#!/bin/sh
+set -e
+pwd
+find .
 cd iof
 mv build-master.config build.config
 scons --build-deps=yes
