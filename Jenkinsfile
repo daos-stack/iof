@@ -142,7 +142,7 @@ sh (script: """#!/bin/sh
 cd iof
 mv build-master.config build.config
 scons --build-deps=yes
-scons install"""
+scons install""")
                         stash name: 'CentOS-master-install', includes: 'iof/install/**'
                         stash name: 'CentOS-master-build-vars', includes: "iof/.build_vars${arch}.*"
                     }
