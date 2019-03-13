@@ -136,13 +136,8 @@ pipeline {
                         }
                     }
                     steps {
-                        sh (script: """#!/bin/sh
-set -e
-find .
-mv build-master.config build.config
-rm -rf install _build.external-Linux/ iof-Linux.conf iof/
-scons --build-deps=yes
-scons install""")
+                        sconsBuild(clean: "_build.external${arch}",
+			           scons_args: '--build-config=build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
                     }
