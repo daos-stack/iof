@@ -136,16 +136,14 @@ pipeline {
                         }
                     }
                     steps {
-     checkoutScm(checkoutDir: 'iof', withSubmodules: true)
-sh (script: """#!/bin/sh
+                        sh (script: """#!/bin/sh
 set -e
-cd iof
 mv build-master.config build.config
-rm -rf install _build.external-Linux/ iof-Linux.conf
+rm -rf install _build.external-Linux/ iof-Linux.conf iof/
 scons --build-deps=yes
 scons install""")
-                        stash name: 'CentOS-master-install', includes: 'iof/install/**'
-                        stash name: 'CentOS-master-build-vars', includes: "iof/.build_vars${arch}.*"
+                        stash name: 'CentOS-master-install', includes: 'install/**'
+                        stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
                     }
                     post {
                         always {
