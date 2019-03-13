@@ -139,10 +139,9 @@ pipeline {
      checkoutScm(checkoutDir: 'iof', withSubmodules: true)
 sh (script: """#!/bin/sh
 set -e
-pwd
-find .
 cd iof
 mv build-master.config build.config
+rm -rf install _build.external-Linux/ iof-Linux.conf
 scons --build-deps=yes
 scons install""")
                         stash name: 'CentOS-master-install', includes: 'iof/install/**'
