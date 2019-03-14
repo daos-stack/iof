@@ -315,10 +315,10 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        nosetests-3.4 --with-xunit test/iof_test_local:Testlocal.test_use_ino"
+                                        nosetests-3.4 --with-xunit --xunit-testsuite-name=master test/iof_test_local.py:Testlocal.test_use_ino"
                                     exit 0
                                     """,
-                                junit_files: "nosetests.xml"
+                                junit_files: 'nosetests.xml'
                     }
                     post {
                         always {
