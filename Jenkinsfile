@@ -180,15 +180,17 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        nosetests-3.4 --exe --with-xunit"
+                                        export TR_USE_VALGRIND=none
+                                        export IOF_TESTLOG=test/output-centos
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
-                                junit_files: "nosetests.xml"
+                                junit_files: 'nosetests-centos.xml'
                     }
                     post {
                         always {
-                            junit 'nosetests.xml'
-                            archiveArtifacts artifacts: 'test/output/Testlocal/*/*.log'
+                            junit 'nosetests-centos.xml'
+                            archiveArtifacts artifacts: '**/*.log'
                         }
                     }
                 }
@@ -214,12 +216,17 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-					export TR_USE_VALGRIND=memcheck
-					export IOF_TESTLOG=test/output-memcheck
+                                        export TR_USE_VALGRIND=memcheck
+                                        export IOF_TESTLOG=test/output-memcheck
                                         nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
                                     exit 0
                                     """,
                         junit_files: 'nosetests-valgrind.xml'
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-valgrind.xml'
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                         publishValgrind (
                             failBuildOnInvalidReports: true,
                             failBuildOnMissingReports: true,
@@ -234,11 +241,6 @@ pipeline {
                             unstableThresholdInvalidReadWrite: '',
                             unstableThresholdTotal: ''
                         )
-                    }
-                    post {
-                        always {
-                            junit 'nosetests-valgrind.xml'
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                         }
                     }
                 }
@@ -269,6 +271,11 @@ pipeline {
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                        }
                     publishValgrind (
                         failBuildOnInvalidReports: true,
                         failBuildOnMissingReports: true,
@@ -283,11 +290,6 @@ pipeline {
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                        }
                     }
                 }
             }
