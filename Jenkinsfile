@@ -215,6 +215,7 @@ pipeline {
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
 					export TR_USE_VALGRIND=memcheck
+					export IOF_TESTLOG=test/output-memcheck
                                         nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
                                     exit 0
                                     """,
@@ -237,7 +238,7 @@ pipeline {
                     post {
                         always {
                             junit 'nosetests-valgrind.xml'
-                            archiveArtifacts artifacts: '**/*.log'
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                         }
                     }
                 }
