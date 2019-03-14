@@ -192,6 +192,55 @@ pipeline {
                         }
                     }
                 }
+                stage('Single node valgrind') {
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars-Linux.sh
+                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$CART_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
+                                        cd \$CART_BASE
+                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        pip3.4 install --user tabulate
+					export TR_USE_VALGRIND=memcheck
+                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
+                                    exit 0
+                                    """,
+                        junit_files: 'nosetests-valgrind.xml'
+                        publishValgrind (
+                            failBuildOnInvalidReports: true,
+                            failBuildOnMissingReports: false,
+                            failThresholdDefinitelyLost: '0',
+                            failThresholdInvalidReadWrite: '0',
+                            failThresholdTotal: '0',
+                            pattern: '**/*.memcheck',
+                            publishResultsForAbortedBuilds: false,
+                            publishResultsForFailedBuilds: false,
+                            sourceSubstitutionPaths: '',
+                            unstableThresholdDefinitelyLost: '',
+                            unstableThresholdInvalidReadWrite: '',
+                            unstableThresholdTotal: ''
+                        )
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-valgrind.xml'
+                            archiveArtifacts artifacts: '**/*.log'
+                        }
+                    }
+                }
             stage('Fault injection') {
                 agent {
                     label 'ci_vm1'
