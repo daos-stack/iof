@@ -275,7 +275,6 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                        }
                     publishValgrind (
                         failBuildOnInvalidReports: true,
                         failBuildOnMissingReports: true,
@@ -290,6 +289,7 @@ pipeline {
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
+                    }
                     }
                 }
             }
