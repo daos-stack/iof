@@ -222,7 +222,7 @@ pipeline {
                         junit_files: 'nosetests-valgrind.xml'
                         publishValgrind (
                             failBuildOnInvalidReports: true,
-                            failBuildOnMissingReports: false,
+                            failBuildOnMissingReports: true,
                             failThresholdDefinitelyLost: '0',
                             failThresholdInvalidReadWrite: '0',
                             failThresholdTotal: '0',
@@ -271,7 +271,7 @@ pipeline {
                             """
                     publishValgrind (
                         failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: false,
+                        failBuildOnMissingReports: true,
                         failThresholdDefinitelyLost: '0',
                         failThresholdInvalidReadWrite: '0',
                         failThresholdTotal: '0',

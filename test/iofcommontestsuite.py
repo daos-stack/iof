@@ -130,7 +130,7 @@ def valgrind_suffix(log_path, pmix=True):
                '--xml=yes',
                '--xml-file=%s' %
                os.path.join(log_path,
-                            "valgrind-%s.xml" % pid),
+                            "valgrind-%s.memcheck" % pid),
                '--sim-hints=fuse-compatible',
                '--leak-check=full', '--gen-suppressions=all',
                '--fullpath-after=',
