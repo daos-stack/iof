@@ -229,13 +229,13 @@ pipeline {
                             archiveArtifacts artifacts: '**/*.log'
                         }
                         cleanup {
-                        dir('test/output') {
-                            deleteDir()
+                            dir('test/output-centos') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
-                }
-                stage('Single node valgrind') {
+                stage('Single node cart-master') {
                     agent {
                         label 'ci_vm1'
                     }
@@ -246,7 +246,7 @@ pipeline {
                         provisionNodes NODELIST: env.NODELIST,
                            node_count: 1,
                            snapshot: true
-                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                        runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars.sh
                                     CART_BASE=\${SL_PREFIX%/install*}
@@ -260,48 +260,37 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        export TR_USE_VALGRIND=memcheck
-                                        export IOF_TESTLOG=test/output-memcheck
-                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
+                                        export TR_USE_VALGRIND=none
+                                        export IOF_TESTLOG=test/output-master
+                                        nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
                                     exit 0
                                     """,
-                        junit_files: 'nosetests-valgrind.xml'
+                                junit_files: 'nosetests-master.xml'
                     }
                     post {
                         always {
-                            junit 'nosetests-valgrind.xml'
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                        publishValgrind (
-                            failBuildOnInvalidReports: true,
-                            failBuildOnMissingReports: true,
-                            failThresholdDefinitelyLost: '0',
-                            failThresholdInvalidReadWrite: '0',
-                            failThresholdTotal: '0',
-                            pattern: '**/*.memcheck',
-                            publishResultsForAbortedBuilds: false,
-                            publishResultsForFailedBuilds: false,
-                            sourceSubstitutionPaths: '',
-                            unstableThresholdDefinitelyLost: '',
-                            unstableThresholdInvalidReadWrite: '',
-                            unstableThresholdTotal: ''
-                        )
+                            junit 'nosetests-master.xml'
+                            archiveArtifacts artifacts: '**/*.log'
                         }
                         cleanup {
-                            dir('test/output-memcheck') {
+                            dir('test/output-master') {
                                 deleteDir()
                             }
                         }
                     }
-                }
-                stage('Single node cart-master') {
+		}
+                stage('Single node valgrind') {
                     agent {
                         label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
                     }
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
                            node_count: 1,
                            snapshot: true
-                        runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars-Linux.sh
                                     CART_BASE=\${SL_PREFIX%/install*}
@@ -315,15 +304,36 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        nosetests-3.4 --with-xunit --xunit-file=nosetests-master.xml --xunit-testsuite-name=master test/iof_test_local.py:Testlocal.test_use_ino"
+                                        export TR_USE_VALGRIND=memcheck
+                                        export IOF_TESTLOG=test/output-memcheck
+                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
                                     exit 0
                                     """,
-                                junit_files: 'nosetests-master.xml'
+                        junit_files: 'nosetests-valgrind.xml'
                     }
                     post {
                         always {
-                            junit 'nosetests-master.xml'
-                            archiveArtifacts artifacts: '**/*.log'
+                            junit 'nosetests-valgrind.xml'
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                            )
+                        }
+                        cleanup {
+                            dir('test/output-memcheck') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -358,26 +368,26 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                    publishValgrind (
-                        failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: true,
-                        failThresholdDefinitelyLost: '0',
-                        failThresholdInvalidReadWrite: '0',
-                        failThresholdTotal: '0',
-                        pattern: '**/*.memcheck',
-                        publishResultsForAbortedBuilds: false,
-                        publishResultsForFailedBuilds: false,
-                        sourceSubstitutionPaths: '',
-                        unstableThresholdDefinitelyLost: '',
-                        unstableThresholdInvalidReadWrite: '',
-                        unstableThresholdTotal: ''
-                        )
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                                )
                         }
                         cleanup {
-                        dir('test/output') {
-                            deleteDir()
+                            dir('test/output') {
+                                deleteDir()
+                            }
                         }
-                    }
                     }
                 }
             }
