@@ -195,10 +195,12 @@ pipeline {
                             junit 'nosetests-centos.xml'
                             archiveArtifacts artifacts: '**/*.log'
                         }
+                        cleanup {
                         dir('test/output') {
                             deleteDir()
                         }
                     }
+                }
                 }
                 stage('Single node valgrind') {
                     agent {
@@ -250,9 +252,11 @@ pipeline {
                             unstableThresholdInvalidReadWrite: '',
                             unstableThresholdTotal: ''
                         )
-                        dir('test/output-memcheck') {
-                            deleteDir()
                         }
+                        cleanup {
+                            dir('test/output-memcheck') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -301,6 +305,8 @@ pipeline {
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
+                        }
+                        cleanup {
                         dir('test/output') {
                             deleteDir()
                         }
