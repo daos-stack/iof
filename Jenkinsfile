@@ -180,15 +180,67 @@ pipeline {
                                         cd \$CART_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
-                                        nosetests-3.4 --exe --with-xunit"
+                                        export TR_USE_VALGRIND=none
+                                        export IOF_TESTLOG=test/output-centos
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
-                                junit_files: "nosetests.xml"
+                                junit_files: 'nosetests-centos.xml'
                     }
                     post {
                         always {
-                            junit 'nosetests.xml'
-                            archiveArtifacts artifacts: 'test/output/Testlocal/*/*.log'
+                            junit 'nosetests-centos.xml'
+                            archiveArtifacts artifacts: '**/*.log'
+                        }
+                    }
+                }
+                stage('Single node valgrind') {
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars-Linux.sh
+                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$CART_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
+                                        cd \$CART_BASE
+                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        pip3.4 install --user tabulate
+                                        export TR_USE_VALGRIND=memcheck
+                                        export IOF_TESTLOG=test/output-memcheck
+                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
+                                    exit 0
+                                    """,
+                        junit_files: 'nosetests-valgrind.xml'
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-valgrind.xml'
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                        publishValgrind (
+                            failBuildOnInvalidReports: true,
+                            failBuildOnMissingReports: true,
+                            failThresholdDefinitelyLost: '0',
+                            failThresholdInvalidReadWrite: '0',
+                            failThresholdTotal: '0',
+                            pattern: '**/*.memcheck',
+                            publishResultsForAbortedBuilds: false,
+                            publishResultsForFailedBuilds: false,
+                            sourceSubstitutionPaths: '',
+                            unstableThresholdDefinitelyLost: '',
+                            unstableThresholdInvalidReadWrite: '',
+                            unstableThresholdTotal: ''
+                        )
                         }
                     }
                 }
@@ -219,9 +271,13 @@ pipeline {
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
                     publishValgrind (
                         failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: false,
+                        failBuildOnMissingReports: true,
                         failThresholdDefinitelyLost: '0',
                         failThresholdInvalidReadWrite: '0',
                         failThresholdTotal: '0',
@@ -234,10 +290,6 @@ pipeline {
                         unstableThresholdTotal: ''
                         )
                     }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                        }
                     }
                 }
             }
