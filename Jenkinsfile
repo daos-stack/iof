@@ -117,8 +117,8 @@ pipeline {
                                              aggregatingResults: true,
                                              id: "analysis-centos7",
                                              tools: [ gcc4(), cppCheck() ],
-                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
-                                                       excludeFile('_build\\.external-Linux\\/.*')]
+                                             filters: [excludeFile(".*\\/_build\\.external${arch}\\/.*"),
+                                                       excludeFile("_build\\.external${arch}\\/.*")]
                             }
                         }
                         success {
@@ -145,8 +145,8 @@ pipeline {
                                              aggregatingResults: true,
                                              id: "analysis-ubuntu18",
                                              tools: [ gcc4(), cppCheck() ],
-                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
-                                                       excludeFile('_build\\.external-Linux\\/.*')]
+                                             filters: [excludeFile(".*\\/_build\\.external${arch}\\/.*"),
+                                                       excludeFile("_build\\.external${arch}\\/.*")]
                             }
                         }
                         success {
@@ -161,6 +161,9 @@ pipeline {
                 stage('Single node') {
                     agent {
                         label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
                     }
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
@@ -192,11 +195,19 @@ pipeline {
                             junit 'nosetests-centos.xml'
                             archiveArtifacts artifacts: '**/*.log'
                         }
+                        cleanup {
+                        dir('test/output') {
+                            deleteDir()
+                        }
                     }
+                }
                 }
                 stage('Single node valgrind') {
                     agent {
                         label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
                     }
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
@@ -241,6 +252,11 @@ pipeline {
                             unstableThresholdInvalidReadWrite: '',
                             unstableThresholdTotal: ''
                         )
+                        }
+                        cleanup {
+                            dir('test/output-memcheck') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -289,6 +305,11 @@ pipeline {
                         unstableThresholdInvalidReadWrite: '',
                         unstableThresholdTotal: ''
                         )
+                        }
+                        cleanup {
+                        dir('test/output') {
+                            deleteDir()
+                        }
                     }
                     }
                 }
