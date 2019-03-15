@@ -137,7 +137,7 @@ pipeline {
                     }
                     steps {
                         sconsBuild(clean: "_build.external${arch}",
-                                   scons_args: '--build-config=build-master.config')
+                                   scons_args: '--build-config=utils/build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
                     }
