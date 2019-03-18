@@ -93,8 +93,8 @@ pipeline {
         stage('Build') {
             /* Don't use failFast here as whilst it avoids using extra resources
              * and gives faster results for PRs it's also on for master where we
-	     * do want complete results in the case of partial failure
-	     */
+             * do want complete results in the case of partial failure
+             */
             //failFast true
             parallel {
                 stage('Build on CentOS 7') {
@@ -129,6 +129,7 @@ pipeline {
                     }
                 }
                 stage('Build master CentOS 7') {
+                    when { branch 'master' }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.centos:7'
@@ -207,20 +208,20 @@ pipeline {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.4 --with-unit --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-centos.xml'
@@ -238,12 +239,16 @@ pipeline {
                     }
                 }
                 stage('Single node cart-master') {
+                    when { branch 'master' }
                     agent {
                         label 'ci_vm1'
                     }
                     options {
                         timeout(time: 60, unit: 'MINUTES')
                     }
+                    /* To run a single test use this command:
+                     * nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                     */
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
                            node_count: 1,
@@ -251,15 +256,15 @@ pipeline {
                         runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
@@ -280,7 +285,7 @@ pipeline {
                             }
                         }
                     }
-		}
+                }
                 stage('Single node valgrind') {
                     agent {
                         label 'ci_vm1'
@@ -295,15 +300,15 @@ pipeline {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars-Linux.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
@@ -353,15 +358,15 @@ pipeline {
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
                             . ./.build_vars.sh
-                            CART_BASE=\${SL_PREFIX%/install*}
+                            IOF_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                             ssh -i ci_key jenkins@\$NODE "set -x
                                 set -e
-                                sudo mkdir -p \$CART_BASE
-                                sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                cd \$CART_BASE
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
