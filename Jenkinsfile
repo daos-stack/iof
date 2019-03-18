@@ -180,7 +180,7 @@ pipeline {
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
@@ -224,7 +224,7 @@ pipeline {
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
                                         export IOF_TESTLOG=test/output-memcheck
@@ -282,7 +282,7 @@ pipeline {
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
-                                ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
