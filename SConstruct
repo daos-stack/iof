@@ -59,14 +59,14 @@ DESIRED_FLAGS = ['-Wdeclaration-after-statement',
                  '-Wshadow',
                  '-Wno-gnu-zero-variadic-macro-arguments']
 
-def save_build_info(env, prereqs, platform):
+def save_build_info(env, prereqs):
     """Save the build information"""
 
     build_info = prereqs.get_build_info()
 
     #Save the build info locally
-    json_build_vars = '.build_vars-%s.json' % platform
-    sh_build_vars = '.build_vars-%s.sh' % platform
+    json_build_vars = '.build_vars.json'
+    sh_build_vars = '.build_vars.sh'
     build_info.gen_script(sh_build_vars)
     build_info.save(json_build_vars)
 
@@ -76,30 +76,20 @@ def save_build_info(env, prereqs, platform):
     env.InstallAs('$PREFIX/TESTING/.build_vars.json',
                   json_build_vars)
 
-def run_checks(env, prereqs, platform):
+def run_checks(env, prereqs):
     """Run all configure time checks"""
 
     cenv = env.Clone()
     cenv.Append(CFLAGS='-Werror')
     config = Configure(cenv)
-    try:
-        cmd = 'setfattr'
-        if platform == 'Darwin':
-            cmd = 'xattr'
 
-        if not config.CheckProg(cmd):
-            print('%s command not installed, extended attribute test ' \
-               'will not work' % cmd)
-
-    except AttributeError:
-        print('CheckProg not present')
+    cmd = 'setfattr'
+    if not config.CheckProg(cmd):
+        print('%s command not installed, extended attribute test ' \
+              'will not work' % cmd)
 
     if config.CheckHeader('stdatomic.h'):
         env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
-
-    if not config.CheckHeader('yaml.h'):
-        print('libyaml-dev package required')
-        Exit(2)
 
     prereqs.require(cenv, 'cart')
     config.Finish()
@@ -111,24 +101,21 @@ def run_checks(env, prereqs, platform):
 
 def scons():
     """Scons function"""
-    platform = os.uname()[0]
-    opts_file = os.path.join(Dir('#').abspath, 'iof-%s.conf' % platform)
+    opts_file = os.path.join(Dir('#').abspath, 'iof.conf')
 
     commits_file = os.path.join(Dir('#').abspath, 'build.config')
     if not os.path.exists(commits_file):
         commits_file = None
 
     env = DefaultEnvironment()
-    arch_dir = 'build/%s' % platform
+    arch_dir = 'build'
     VariantDir(arch_dir, '.', duplicate=0)
 
-    if os.path.exists('iof.conf') and not os.path.exists(opts_file):
-        print('Renaming legacy conf file')
-        os.rename('iof.conf', opts_file)
+    if os.path.exists('iof-Linux.conf') and not os.path.exists('iof.conf'):
+        os.rename('iof-Linux.conf', 'iof.conf')
 
     opts = Variables(opts_file)
-    prereqs = PreReqComponent(env, opts,
-                              config_file=commits_file, arch=platform)
+    prereqs = PreReqComponent(env, opts)
 
     prereqs.load_definitions(prebuild=["cart", "fuse", "ompi"])
 
@@ -144,7 +131,7 @@ def scons():
     opts.Update(env)
 
     if not env.GetOption('clean'):
-        run_checks(env, prereqs, platform)
+        run_checks(env, prereqs)
     opts.Save(opts_file, env)
 
     unknown = opts.UnknownVariables()
@@ -154,15 +141,15 @@ def scons():
 
     env.Alias('install', "$PREFIX")
 
-    SConscript('%s/src/SConscript' % arch_dir)
-    SConscript('%s/test/SConscript' % arch_dir)
-    SConscript('%s/scons_local/test_runner/SConscript' % arch_dir)
+    SConscript('build/src/SConscript')
+    SConscript('build/test/SConscript')
+    SConscript('build/scons_local/test_runner/SConscript')
 
     env.Install('$PREFIX/etc', ['utils/memcheck-iof.supp'])
 
     # Put this after all SConscript calls so that any imports they require can
     # be included.
-    save_build_info(env, prereqs, platform)
+    save_build_info(env, prereqs)
 
     try:
         #if using SCons 2.4+, provide a more complete help
