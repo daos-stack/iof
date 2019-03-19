@@ -56,6 +56,7 @@ DESIRED_FLAGS = ['-Wdeclaration-after-statement',
                  '-Wno-ignored-attributes',
                  '-Wunknown-warning-option',
                  '-Wno-gnu-designator',
+                 '-Wframe-larger-than=4096',
                  '-Wshadow',
                  '-Wno-gnu-zero-variadic-macro-arguments']
 
