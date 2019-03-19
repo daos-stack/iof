@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <mntent.h>
 
+#include "log.h"
 #include <gurt/common.h>
 
 #include "iof_mntent.h"
