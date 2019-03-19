@@ -221,7 +221,7 @@ pipeline {
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
-                                        nosetests-3.4 --with-xunit --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe"
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-centos.xml'
