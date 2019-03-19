@@ -101,7 +101,7 @@ def run_checks(env, prereqs):
     cenv = env.Clone()
     prereqs.require(cenv, 'cart')
     config = Configure(cenv)
-    if config.CheckType('struct d_fault_attr_t', '#include <gurt/fault_inject.h>'):
+    if config.CheckFunc('d_fault_attr_lookup'):
         env.AppendUnique(CPPDEFINES=['GURT_NEW_FI=1'])
     config.Finish()
 
