@@ -139,10 +139,10 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: "_build.external${arch}",
+                        sconsBuild(clean: "_build.external",
                                    scons_args: '--build-config=utils/build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
-                        stash name: 'CentOS-master-build-vars', includes: ".build_vars${arch}.*"
+                        stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
                     }
                     post {
                         always {
@@ -157,7 +157,7 @@ pipeline {
                             archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
                         }
                         success {
-                            sh "rm -rf _build.external${arch}"
+                            sh "rm -rf _build.external"
                         }
                     }
                 }
