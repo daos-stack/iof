@@ -37,7 +37,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-def arch="-Linux"
 def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll('%2f', '-')
 
 pipeline {
@@ -106,9 +105,9 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: "_build.external${arch}"
+                        sconsBuild clean: "_build.external"
                         stash name: 'CentOS-install', includes: 'install/**'
-                        stash name: 'CentOS-build-vars', includes: ".build_vars${arch}.*"
+                        stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
                     post {
                         always {
@@ -117,12 +116,12 @@ pipeline {
                                              aggregatingResults: true,
                                              id: "analysis-centos7",
                                              tools: [ gcc4(), cppCheck() ],
-                                             filters: [excludeFile(".*\\/_build\\.external${arch}\\/.*"),
-                                                       excludeFile("_build\\.external${arch}\\/.*")]
+                                             filters: [excludeFile(".*\\/_build\\.external\\/.*"),
+                                                       excludeFile("_build\\.external\\/.*")]
                             }
                         }
                         success {
-                            sh "rm -rf _build.external${arch}"
+                            sh "rm -rf _build.external"
                         }
                     }
                 }
@@ -136,7 +135,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: "_build.external${arch}"
+                        sconsBuild clean: "_build.external"
                     }
                     post {
                         always {
@@ -145,12 +144,12 @@ pipeline {
                                              aggregatingResults: true,
                                              id: "analysis-ubuntu18",
                                              tools: [ gcc4(), cppCheck() ],
-                                             filters: [excludeFile(".*\\/_build\\.external${arch}\\/.*"),
-                                                       excludeFile("_build\\.external${arch}\\/.*")]
+                                             filters: [excludeFile(".*\\/_build\\.external\\/.*"),
+                                                       excludeFile("_build\\.external\\/.*")]
                             }
                         }
                         success {
-                            sh "rm -rf _build.external${arch}"
+                            sh "rm -rf _build.external"
                         }
                     }
                 }
@@ -171,7 +170,7 @@ pipeline {
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
-                                    . ./.build_vars-Linux.sh
+                                    . ./.build_vars.sh
                                     CART_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
@@ -181,7 +180,7 @@ pipeline {
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
@@ -215,7 +214,7 @@ pipeline {
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
-                                    . ./.build_vars-Linux.sh
+                                    . ./.build_vars.sh
                                     CART_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
@@ -225,7 +224,7 @@ pipeline {
                                         sudo mkdir -p \$CART_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                         cd \$CART_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
                                         export IOF_TESTLOG=test/output-memcheck
@@ -273,7 +272,7 @@ pipeline {
                         snapshot: true
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
-                            . ./.build_vars-Linux.sh
+                            . ./.build_vars.sh
                             CART_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
@@ -283,7 +282,7 @@ pipeline {
                                 sudo mkdir -p \$CART_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
                                 cd \$CART_BASE
-                                ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
                             """
