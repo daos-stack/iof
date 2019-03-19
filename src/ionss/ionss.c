@@ -67,6 +67,9 @@
 		IOF_PROTO_SERVER_VER,		\
 		0)
 
+#if GURT_NEW_FI
+static struct d_fault_attr_t *fault_attr_shutdown;
+#endif
 static int shutdown;
 static ATOMIC unsigned int cnss_count;
 
@@ -2773,6 +2776,10 @@ int main(int argc, char **argv)
 	crt_group_rank(base.primary_group, &base.my_rank);
 	crt_group_size(base.primary_group, &base.num_ranks);
 
+#if GURT_NEW_FI
+	fault_attr_shutdown = d_fault_attr_lookup(100);
+#endif
+
 	base.gs = ios_gah_init(base.my_rank);
 	if (!base.gs) {
 		D_GOTO(shutdown_no_proj, exit_rc = -DER_NOMEM);
@@ -3002,9 +3009,15 @@ int main(int argc, char **argv)
 
 	shutdown = 0;
 
+#if GURT_NEW_FI
+	if (D_SHOULD_FAIL(fault_attr_shutdown)) {
+		D_GOTO(shutdown, exit_rc = -DER_SHUTDOWN);
+	}
+#else
 	if (D_SHOULD_FAIL(100)) {
 		D_GOTO(shutdown, exit_rc = -DER_SHUTDOWN);
 	}
+#endif
 
 	if (base.thread_count == 1) {
 		int rc;

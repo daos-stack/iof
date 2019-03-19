@@ -79,9 +79,9 @@ def save_build_info(env, prereqs):
 def run_checks(env, prereqs):
     """Run all configure time checks"""
 
-    cenv = env.Clone()
-    cenv.Append(CFLAGS='-Werror')
-    config = Configure(cenv)
+    tenv = env.Clone()
+    tenv.Append(CFLAGS='-Werror')
+    config = Configure(tenv)
 
     cmd = 'setfattr'
     if not config.CheckProg(cmd):
@@ -91,10 +91,19 @@ def run_checks(env, prereqs):
     if config.CheckHeader('stdatomic.h'):
         env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
 
-    prereqs.require(cenv, 'cart')
     config.Finish()
 
     env.AppendIfSupported(CFLAGS=DESIRED_FLAGS)
+
+    # Check for the new fault injection interface.  This is only needed so that
+    # IOF can build against both the old and the new CaRT, and should be removed
+    # once IOF has updated past the change.
+    cenv = env.Clone()
+    prereqs.require(cenv, 'cart')
+    config = Configure(cenv)
+    if config.CheckFunc('d_fault_attr_lookup'):
+        env.AppendUnique(CPPDEFINES=['GURT_NEW_FI=1'])
+    config.Finish()
 
     print('Compiler options: %s %s' % (env.get('CC'),
                                        ' '.join(env.get('CFLAGS'))))
