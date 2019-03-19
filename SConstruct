@@ -112,10 +112,6 @@ def scons():
     """Scons function"""
     opts_file = os.path.join(Dir('#').abspath, 'iof.conf')
 
-    commits_file = os.path.join(Dir('#').abspath, 'build.config')
-    if not os.path.exists(commits_file):
-        commits_file = None
-
     env = DefaultEnvironment()
     arch_dir = 'build'
     VariantDir(arch_dir, '.', duplicate=0)

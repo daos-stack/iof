@@ -91,9 +91,11 @@ pipeline {
             }
         }
         stage('Build') {
-            // abort other builds if/when one fails to avoid wasting time
-            // and resources
-            failFast true
+            /* Don't use failFast here as whilst it avoids using extra resources
+             * and gives faster results for PRs it's also on for master where we
+             * do want complete results in the case of partial failure
+             */
+            //failFast true
             parallel {
                 stage('Build on CentOS 7') {
                     agent {
@@ -105,8 +107,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sh "rm iof.conf"
-                        sconsBuild clean: "_build.external"
+                        sconsBuild(clean: '_build.external iof.conf')
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
@@ -126,6 +127,39 @@ pipeline {
                         }
                     }
                 }
+                stage('Build master CentOS 7') {
+                    when { branch 'master' }
+                    agent {
+                        dockerfile {
+                            filename 'Dockerfile.centos:7'
+                            dir 'utils/docker'
+                            label 'docker_runner'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                        }
+                    }
+                    steps {
+                        sconsBuild(clean: '_build.external iof.conf',
+                                   scons_args: '--build-config=utils/build-master.config')
+                        stash name: 'CentOS-master-install', includes: 'install/**'
+                        stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
+                    }
+                    post {
+                        always {
+                            node('lightweight') {
+                                recordIssues enabledForFailure: true,
+                                             aggregatingResults: true,
+                                             id: "analysis-master-centos7",
+                                             tools: [ gcc4(), cppCheck() ],
+                                             filters: [excludeFile('.*\\/_build\\.external\\/.*'),
+                                                       excludeFile('_build\\.external\\/.*')]
+                            }
+                            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
+                        }
+                        success {
+                            sh "rm -rf _build.external"
+                        }
+                    }
+                }
                 stage('Build on Ubuntu 18.04') {
                     agent {
                         dockerfile {
@@ -136,8 +170,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sh "rm iof.conf"
-                        sconsBuild clean: "_build.external"
+                        sconsBuild(clean: '_build.external iof.conf')
                     }
                     post {
                         always {
@@ -173,15 +206,15 @@ pipeline {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
@@ -197,11 +230,59 @@ pipeline {
                             archiveArtifacts artifacts: '**/*.log'
                         }
                         cleanup {
-                        dir('test/output') {
-                            deleteDir()
+                            dir('test/output-centos') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
+                stage('Single node cart-master') {
+                    when { branch 'master' }
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
+                    /* To run a single test use this command:
+                     * nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                     */
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars.sh
+                                    IOF_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
+                                        pip3.4 install --user tabulate
+                                        export TR_USE_VALGRIND=none
+                                        export IOF_TESTLOG=test/output-master
+                                        nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                                    exit 0
+                                    """,
+                                junit_files: 'nosetests-master.xml'
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-master.xml'
+                            archiveArtifacts artifacts: '**/*.log'
+                        }
+                        cleanup {
+                            dir('test/output-master') {
+                                deleteDir()
+                            }
+                        }
+                    }
                 }
                 stage('Single node valgrind') {
                     agent {
@@ -217,15 +298,15 @@ pipeline {
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
                                     . ./.build_vars.sh
-                                    CART_BASE=\${SL_PREFIX%/install*}
+                                    IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
-                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        sudo mkdir -p \$CART_BASE
-                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                        cd \$CART_BASE
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
@@ -239,20 +320,20 @@ pipeline {
                         always {
                             junit 'nosetests-valgrind.xml'
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                        publishValgrind (
-                            failBuildOnInvalidReports: true,
-                            failBuildOnMissingReports: true,
-                            failThresholdDefinitelyLost: '0',
-                            failThresholdInvalidReadWrite: '0',
-                            failThresholdTotal: '0',
-                            pattern: '**/*.memcheck',
-                            publishResultsForAbortedBuilds: false,
-                            publishResultsForFailedBuilds: false,
-                            sourceSubstitutionPaths: '',
-                            unstableThresholdDefinitelyLost: '',
-                            unstableThresholdInvalidReadWrite: '',
-                            unstableThresholdTotal: ''
-                        )
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                            )
                         }
                         cleanup {
                             dir('test/output-memcheck') {
@@ -261,7 +342,7 @@ pipeline {
                         }
                     }
                 }
-            stage('Fault injection') {
+             stage('Fault injection') {
                 agent {
                     label 'ci_vm1'
                 }
@@ -275,15 +356,15 @@ pipeline {
                     runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                         script: """set -x
                             . ./.build_vars.sh
-                            CART_BASE=\${SL_PREFIX%/install*}
+                            IOF_BASE=\${SL_PREFIX%/install*}
                             NODELIST=$nodelist
                             NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$CART_BASE"' EXIT
+                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                             ssh -i ci_key jenkins@\$NODE "set -x
                                 set -e
-                                sudo mkdir -p \$CART_BASE
-                                sudo mount -t nfs \$HOSTNAME:\$PWD \$CART_BASE
-                                cd \$CART_BASE
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
                                 ./test/iof_test_alloc_fail.py"
@@ -292,26 +373,26 @@ pipeline {
                     post {
                         always {
                             archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
-                    publishValgrind (
-                        failBuildOnInvalidReports: true,
-                        failBuildOnMissingReports: true,
-                        failThresholdDefinitelyLost: '0',
-                        failThresholdInvalidReadWrite: '0',
-                        failThresholdTotal: '0',
-                        pattern: '**/*.memcheck',
-                        publishResultsForAbortedBuilds: false,
-                        publishResultsForFailedBuilds: false,
-                        sourceSubstitutionPaths: '',
-                        unstableThresholdDefinitelyLost: '',
-                        unstableThresholdInvalidReadWrite: '',
-                        unstableThresholdTotal: ''
-                        )
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                                )
                         }
                         cleanup {
-                        dir('test/output') {
-                            deleteDir()
+                            dir('test/output') {
+                                deleteDir()
+                            }
                         }
-                    }
                     }
                 }
             }
