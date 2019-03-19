@@ -95,9 +95,9 @@ def run_checks(env, prereqs):
 
     env.AppendIfSupported(CFLAGS=DESIRED_FLAGS)
 
-    # Check for the new fault injection interface.  This is only needed so that IOF
-    # can build against both the old and the new CaRT, and should be removed once
-    # IOF has updated past the change.
+    # Check for the new fault injection interface.  This is only needed so that
+    # IOF can build against both the old and the new CaRT, and should be removed
+    # once IOF has updated past the change.
     cenv = env.Clone()
     prereqs.require(cenv, 'cart')
     config = Configure(cenv)
