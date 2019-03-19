@@ -151,8 +151,8 @@ pipeline {
                                              aggregatingResults: true,
                                              id: "analysis-master-centos7",
                                              tools: [ gcc4(), cppCheck() ],
-                                             filters: [excludeFile('.*\\/_build\\.external-Linux\\/.*'),
-                                                       excludeFile('_build\\.external-Linux\\/.*')]
+                                             filters: [excludeFile('.*\\/_build\\.external\\/.*'),
+                                                       excludeFile('_build\\.external\\/.*')]
                             }
                             archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
                         }
@@ -299,7 +299,7 @@ pipeline {
                            snapshot: true
                         runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
                                 script: """set -x
-                                    . ./.build_vars-Linux.sh
+                                    . ./.build_vars.sh
                                     IOF_BASE=\${SL_PREFIX%/install*}
                                     NODELIST=$nodelist
                                     NODE=\${NODELIST%%,*}
@@ -309,7 +309,7 @@ pipeline {
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
-                                        ln -s /usr/bin/fusermount install/Linux/bin/fusermount3
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
                                         export IOF_TESTLOG=test/output-memcheck
