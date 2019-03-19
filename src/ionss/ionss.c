@@ -51,6 +51,7 @@
 
 #include <fuse3/fuse_lowlevel.h>
 
+#define D_LOGFAC DD_FAC(ion)
 #include "version.h"
 #include "log.h"
 #include "iof_common.h"
@@ -2682,7 +2683,7 @@ int main(int argc, char **argv)
 
 	char *version = iof_get_version();
 
-	iof_log_init("ION", "IONSS", NULL);
+	iof_log_init();
 	IOF_LOG_INFO("IONSS version: %s", version);
 
 	D_RWLOCK_INIT(&base.gah_rwlock, NULL);

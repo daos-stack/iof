@@ -48,6 +48,8 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <CUnit/Basic.h>
+#define D_LOGFAC DD_FAC(test)
+#include "log.h"
 #include "iof_ctrl_util.h"
 #include "iof_ioctl.h"
 #include "iof_api.h"

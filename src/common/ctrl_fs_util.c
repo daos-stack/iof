@@ -49,11 +49,9 @@
 #include <libgen.h>
 #include <stdarg.h>
 
-static int log_handle;
-
-#define D_LOGFAC log_handle
-#include "iof_atomic.h"
+#define D_LOGFAC DD_FAC(cli)
 #include "log.h"
+#include "iof_atomic.h"
 #include "iof_mntent.h"
 #include "iof_ctrl_util.h"
 
@@ -338,8 +336,6 @@ cleanup:
 static void init_fs_util(void)
 {
 	char *cnss_env;
-
-	iof_log_init("CLI", "CLIENT", &log_handle);
 
 	cnss_env = getenv("CNSS_PREFIX");
 

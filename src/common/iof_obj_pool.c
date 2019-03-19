@@ -38,6 +38,7 @@
  * A simple, efficient pool for allocating objects of equal size
  */
 #include <pthread.h>
+#include "log.h"
 #include <gurt/common.h> /* container_of */
 #include <gurt/list.h>
 #include "iof_obj_pool.h"

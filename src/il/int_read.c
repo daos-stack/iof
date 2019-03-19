@@ -35,8 +35,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "iof_common.h"
+#define D_LOGFAC DD_FAC(il)
 #include "log.h"
+#include "iof_common.h"
 #include "ios_gah.h"
 #include "intercept.h"
 
