@@ -107,8 +107,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sh "rm iof.conf"
-                        sconsBuild clean: "_build.external"
+                        sconsBuild(clean: '_build.external iof.conf')
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
@@ -139,7 +138,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: "_build.external",
+                        sconsBuild(clean: '_build.external iof.conf',
                                    scons_args: '--build-config=utils/build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
@@ -171,8 +170,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sh "rm iof.conf"
-                        sconsBuild clean: "_build.external"
+                        sconsBuild(clean: '_build.external iof.conf')
                     }
                     post {
                         always {
