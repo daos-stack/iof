@@ -43,37 +43,79 @@
 FROM centos:7
 MAINTAINER Johann Lombardi <johann.lombardi@intel.com>
 
-# Build arguments can be set via -build-arg
+# Build arguments can be set via --build-arg
 # use same UID as host and default value of 1000 if not specified
 ARG UID=1000
+ARG USE_RPMS=false
 
 # for good measure, clean the metadata
 RUN yum clean metadata
 
 # Install basic tools
 RUN yum -y install epel-release
-RUN yum -y install git gcc gcc-c++ make cmake golang libtool scons boost-devel   \
-                   libuuid-devel openssl-devel libevent-devel libtool-ltdl-devel \
-                   libcmocka libcmocka-devel readline-devel                      \
-                   doxygen pandoc flex patch nasm yasm ninja-build meson         \
-                   CUnit-devel libaio-devel python-pep8 lcov                     \
-                   python clang-analyzer sg3_utils libiscsi-devel                \
-                   numactl-devel doxygen graphviz pylint python2-pygithub        \
-                   python34 python34-pylint python34-PyYAML.x86_64 PyYAML        \
-                   python2-paramiko python34-paramiko valgrind rsync             \
-                   libyaml-devel file ShellCheck yum-plugin-copr python34-nose   \
-                   python34-pip fuse python34-devel python-devel
+RUN yum -y install                                                 \
+           git gcc gcc-c++ make cmake golang libtool boost-devel   \
+           libuuid-devel openssl-devel libevent-devel hwloc-devel  \
+           libtool-ltdl-devel libcmocka-devel readline-devel       \
+           doxygen pandoc flex patch nasm yasm ninja-build meson   \
+           CUnit-devel libaio-devel clang-analyzer sg3_utils       \
+           libiscsi-devel numactl-devel graphviz                   \
+           libyaml-devel                                           \
+           scons pylint file ShellCheck python-pep8 lcov python    \
+           python2-pygithub yum-plugin-copr
+
+# external deps build/repos
+# sadly this doesn't work
+#RUN yum-config-manager --save --setopt=*_job_daos-stack_job_${ext}_job_master_lastSuccessfulBuild_artifact_artifacts_.gpgcheck=0
+RUN if ! $USE_RPMS; then exit 0; fi;                                                                                                                    \
+for ext in openpa libfabric mercury pmix ompi; do                                                                                                       \
+    yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/${ext}/job/master/lastSuccessfulBuild/artifact/artifacts/;            \
+    echo "gpgcheck = False" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_${ext}_job_master_lastSuccessfulBuild_artifact_artifacts_.repo; \
+done
+
+ARG OPENPA=unknown
+ARG LIBFABRIC=unknown
+ARG MERCURY=unknown
+ARG PMIX=unknown
+ARG OMPI=unknown
+
+RUN if ! $USE_RPMS; then exit 0; fi;                                            \
+OPENPA=${OPENPA}                                                                \
+LIBFABRIC=${LIBFABRIC}                                                          \
+MERCURY=${MERCURY}                                                              \
+PMIX=${PMIX}                                                                    \
+OMPI=${OMPI}                                                                    \
+yum -y install openpa-devel libfabric-devel mercury-devel pmix-devel ompi-devel
+
 RUN yum -y copr enable jhli/ipmctl
 RUN yum -y copr enable jhli/safeclib
-RUN yum -y install libsafec libipmctl-devel
+RUN yum -y install libipmctl-devel
 
-RUN pip3.4 install tabulate
+RUN yum -y install doxygen python34 python34-pylint python34-PyYAML.x86_64 \
+           PyYAML python2-paramiko python34-paramiko valgrind rsync
 
 # Add CaRT user
 ENV USER cart
 ENV PASSWD cart
 RUN useradd -u $UID -ms /bin/bash $USER
 RUN echo "$USER:$PASSWD" | chpasswd
+
+RUN yum -y install python34-nose python34-pip fuse python34-devel python-devel
+
+RUN pip3.4 install tabulate
+
+ARG CART_BRANCH=unknown
+
+RUN if ! $USE_RPMS; then exit 0; fi;                                                                                                                    \
+for ext in cart; do                                                                                                                                     \
+    yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/${ext}/job/${CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/;            \
+    echo "gpgcheck = False" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_${ext}_job_${CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo; \
+done
+
+ARG CART_VERSION=unknown
+
+RUN if ! $USE_RPMS; then exit 0; fi; \
+CART_VERSION=${CART_VERSION} yum -y install cart
 
 # Switch to new user
 USER $USER

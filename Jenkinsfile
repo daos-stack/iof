@@ -39,6 +39,27 @@
 
 def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll('%2f', '-')
 
+long get_timestamp() {
+    Date date = new Date()
+    return date.getTime()
+}
+
+String get_deps_build_vars() {
+    def deps = [
+        'MERCURY'  : '1.0.1-2',
+        'OMPI'     : '3.0.0rc4-3',
+        'PMIX'     : '2.1.1-2',
+        'LIBFABRIC': '1.7.1rc1-1'
+    ]
+    def buildargs = ""
+    deps.each {
+        dep, ver -> buildargs +="--build-arg ${dep}=" +
+                              dep.toLowerCase() + "-${ver} "
+    }
+
+    return buildargs
+}
+
 pipeline {
     agent { label 'lightweight' }
 
@@ -60,6 +81,10 @@ pipeline {
         timestamps ()
     }
 
+    parameters {
+        string(name: 'CART_BRANCH', defaultValue: '',
+               description: "Which cart job (PR, branch, etc.) to use for the build and test")
+    }
     stages {
         stage('Cancel Previous Builds') {
             when { changeRequest() }
@@ -75,7 +100,13 @@ pipeline {
                             filename 'Dockerfile.centos:7'
                             dir 'utils/docker'
                             label 'docker_runner'
-                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " +
+                                                '$BUILDARGS --build-arg USE_RPMS=true ' +
+                                                get_deps_build_vars() +
+                                                '--build-arg CART_BRANCH=' +
+                                                params.CART_BRANCH +
+                                                ' --build-arg CART_VERSION=' +
+                                                get_timestamp()
                         }
                     }
                     steps {
@@ -103,7 +134,13 @@ pipeline {
                             filename 'Dockerfile.centos:7'
                             dir 'utils/docker'
                             label 'docker_runner'
-                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " + '$BUILDARGS'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " +
+                                                '$BUILDARGS --build-arg USE_RPMS=true ' +
+                                                get_deps_build_vars() +
+                                                '--build-arg CART_BRANCH=' +
+                                                params.CART_BRANCH +
+                                                ' --build-arg CART_VERSION=' +
+                                                get_timestamp()
                         }
                     }
                     steps {
@@ -212,6 +249,13 @@ pipeline {
                                     trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
+                                        for ext in cart; do
+                                            sudo bash << EOF
+                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
+                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+EOF
+                                        done
+                                        sudo yum -y install cart
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
@@ -304,6 +348,13 @@ pipeline {
                                     trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
+                                        for ext in cart; do
+                                            sudo bash << EOF
+                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
+                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+EOF
+                                        done
+                                        sudo yum -y install cart
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
@@ -362,6 +413,13 @@ pipeline {
                             trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                             ssh -i ci_key jenkins@\$NODE "set -x
                                 set -e
+                                for ext in cart; do
+                                    sudo bash << EOF
+                                        yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
+                                        echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+EOF
+                                done
+                                sudo yum -y install cart
                                 sudo mkdir -p \$IOF_BASE
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                 cd \$IOF_BASE
