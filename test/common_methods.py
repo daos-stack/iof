@@ -850,7 +850,8 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
 
         self_test = find_executable('self_test')
         if not self_test:
-            cart_prefix = os.getenv("IOF_CART_PREFIX", None)
+            cart_prefix = os.getenv("IOF_CART_PREFIX",
+                                    iofcommontestsuite.CART_PREFIX)
             if not cart_prefix:
                 self.skipTest('Could not find self_test binary')
             self_test = os.path.join(cart_prefix, 'bin', 'self_test')
@@ -861,7 +862,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         environ['OFI_INTERFACE'] = self.ofi_interface
         cmd = [self_test, '--singleton', '--path', self.cnss_prefix,
                '--group-name', 'IONSS', '-e' '0:0',
-               '-r', '1000', '-s' '0 0,0 128,128 0']
+               '-r', '50', '-s' '0 0,0 128,128 0']
 
         log_top_dir = os.getenv("IOF_TESTLOG",
                                 os.path.join(os.path.dirname(
@@ -879,7 +880,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
                 outfile.write("{!s}\n  Command: {!s} \n{!s}\n".format(
                     ("=" * 40), (" ".join(cmd)), ("=" * 40)))
                 outfile.flush()
-                procrtn = subprocess.call(cmd, timeout=180, env=environ,
+                procrtn = subprocess.call(cmd, timeout=5 * 60, env=environ,
                                           stdout=outfile, stderr=errfile)
         except (FileNotFoundError) as e:
             self.logger.info("Testnss: %s", \
