@@ -85,8 +85,7 @@ def run_checks(env, prereqs):
 
     cmd = 'setfattr'
     if not config.CheckProg(cmd):
-        print('%s command not installed, extended attribute test ' \
-              'will not work' % cmd)
+        print('%s command not installed, extended attribute test will not work' % cmd)
 
     if config.CheckHeader('stdatomic.h'):
         env.AppendUnique(CPPDEFINES=['HAVE_STDATOMIC=1'])
