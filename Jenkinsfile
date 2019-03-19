@@ -36,6 +36,9 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+// To use a test branch (i.e. PR) until it lands to master
+// I.e. for testing library changes
+@Library(value="pipeline-lib@pipeline-pr-test-rpms") _
 
 def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll('%2f', '-')
 
@@ -82,7 +85,7 @@ pipeline {
     }
 
     parameters {
-        string(name: 'CART_BRANCH', defaultValue: '',
+        string(name: 'CART_BRANCH', defaultValue: 'PR-93',
                description: "Which cart job (PR, branch, etc.) to use for the build and test")
     }
 
@@ -346,8 +349,8 @@ pipeline {
                                         set -e
                                         for ext in cart; do
                                             sudo bash << EOF
-                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
-                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastCompletedBuild/artifact/artifacts/
+                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastCompletedBuild_artifact_artifacts_.repo
 EOF
                                         done
                                         sudo yum -y install cart
@@ -514,8 +517,8 @@ EOF
                                         set -e
                                         for ext in cart; do
                                             sudo bash << EOF
-                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
-                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastCompletedBuild/artifact/artifacts/
+                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastCompletedBuild_artifact_artifacts_.repo
 EOF
                                         done
                                         sudo yum -y install cart
@@ -640,8 +643,8 @@ EOF
                                     set -e
                                     for ext in cart; do
                                         sudo bash << EOF
-                                            yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
-                                            echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+                                            yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastCompletedBuild/artifact/artifacts/
+                                            echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastCompletedBuild_artifact_artifacts_.repo
 EOF
                                     done
                                     sudo yum -y install cart

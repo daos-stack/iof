@@ -106,10 +106,10 @@ RUN pip3.4 install tabulate
 
 ARG CART_BRANCH=unknown
 
-RUN if ! $USE_RPMS; then exit 0; fi;                                                                                                                    \
-for ext in cart; do                                                                                                                                     \
-    yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/${ext}/job/${CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/;            \
-    echo "gpgcheck = False" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_${ext}_job_${CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo; \
+RUN if ! $USE_RPMS; then exit 0; fi;                                                                                                                           \
+for ext in cart; do                                                                                                                                            \
+    yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/${ext}/job/${CART_BRANCH}/lastCompletedBuild/artifact/artifacts/;            \
+    echo "gpgcheck = False" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_${ext}_job_${CART_BRANCH}_lastCompletedBuild_artifact_artifacts_.repo; \
 done
 
 ARG CART_VERSION=unknown
