@@ -871,8 +871,8 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
 
         if not os.path.exists(log_path):
             os.makedirs(log_path)
-        cmdfileout = os.path.join(log_path, "self_test.out")
-        cmdfileerr = os.path.join(log_path, "self_test.err")
+        cmdfileout = os.path.join(log_path, "self_test.out.log")
+        cmdfileerr = os.path.join(log_path, "self_test.err.log")
         procrtn = -1
         try:
             with open(cmdfileout, mode='w') as outfile, \
@@ -888,6 +888,12 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         except (IOError) as e:
             self.logger.info("Testnss: Error opening the log files: %s", \
                              e.errno)
+
+        with open(cmdfileout, "r") as fd:
+            for line in fd.readlines():
+                print(line.strip())
+        fd.close()
+
         if procrtn != 0:
             self.fail("cart self test failed: %s" % procrtn)
 
