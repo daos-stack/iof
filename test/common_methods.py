@@ -818,6 +818,11 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
         icount = 10
         iiters = 3
 
+        # This test is resource constrained and test VMs are small so do not
+        # run under valgrind.
+        if self.cnss_valgrind:
+            self.skipTest("Does not like valgrind")
+
         self.htable_bug = True
 
         (rtn, elapsed) = self.run_mdtest(count=icount, iters=iiters)
