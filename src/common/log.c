@@ -37,9 +37,9 @@
  */
 
 #include <pthread.h>
+#include "log.h"
 #include <gurt/common.h>
 
-#include "log.h"
 
 IOF_FOREACH_LOG_FAC(D_LOG_INSTANTIATE_FAC, D_NOOP)
 
