@@ -274,7 +274,7 @@ class CommonTestSuite():
         Return the error code of the process, or -1 if the process was killed.
         """
         self.logger.info("Test: stopping processes :%s", proc.pid)
-        i = 60
+        i = 120
         procrtn = None
         while i:
             proc.poll()
