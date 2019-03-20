@@ -198,7 +198,10 @@ pipeline {
                     }
                 }
                 stage('Build master CentOS 7') {
-                    when { branch 'master' }
+                    when {
+                        beforeAgent true
+                        branch 'master'
+                    }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.centos:7'
@@ -370,7 +373,10 @@ EOF
                     }
                 }
                 stage('Single node cart-master') {
-                    when { branch 'master' }
+                    when {
+                        beforeAgent true
+                        branch 'master'
+                    }
                     agent {
                         label 'ci_vm1'
                     }
