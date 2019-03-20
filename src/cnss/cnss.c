@@ -804,10 +804,6 @@ int main(int argc, char **argv)
 	} else {
 		/* Load the built-in iof "plugin" */
 
-		IOF_TRACE_INFO(cnss_info,
-			       "Loading plugin at entry point %p",
-			       FN_TO_PVOID(iof_plugin_init));
-
 		rcb = add_plugin(cnss_info, iof_plugin_init, NULL);
 		if (!rcb)
 			D_GOTO(shutdown_ctrl_fs, ret = CNSS_ERR_PLUGIN);
