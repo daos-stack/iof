@@ -249,7 +249,8 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf')
+                        echo "Skipping"
+                        //sconsBuild clean: "_build.external iof.conf"
                     }
                     post {
                         always {
