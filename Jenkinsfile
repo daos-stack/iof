@@ -125,7 +125,10 @@ pipeline {
             //failFast true
             parallel {
                 stage('Build on CentOS 7') {
-                    when { expression { params.CART_BRANCH == '' } }
+                    when { 
+                        beforeAgent true
+                        equals expected: '', actual: params.CART_BRANCH
+                    }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.centos:7'
@@ -157,7 +160,10 @@ pipeline {
                     }
                 }
                 stage('Build on CentOS 7 with RPMs') {
-                    when { expression { params.CART_BRANCH != '' } }
+                    when {
+                        beforeAgent true
+                        not { equals expected: '', actual: params.CART_BRANCH }
+                    }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.centos:7'
@@ -225,7 +231,10 @@ pipeline {
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
-                    when { expression { params.CART_BRANCH == '' } }
+                    when { 
+                        beforeAgent true
+                        equals expected: '', actual: params.CART_BRANCH
+                    }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.ubuntu:18.04'
@@ -258,7 +267,10 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Single node') {
-                    when { expression { params.CART_BRANCH == '' } }
+                    when { 
+                        beforeAgent true
+                        equals expected: '', actual: params.CART_BRANCH
+                    }
                     agent {
                         label 'ci_vm1'
                     }
@@ -303,7 +315,10 @@ pipeline {
                     }
                 }
                 stage('Single node with RPMs') {
-                    when { expression { params.CART_BRANCH != '' } }
+                    when {
+                        beforeAgent true
+                        not { equals expected: '', actual: params.CART_BRANCH }
+                    }
                     agent {
                         label 'ci_vm1'
                     }
@@ -403,7 +418,10 @@ EOF
                     }
                 }
                 stage('Single node valgrind') {
-                    when { expression { params.CART_BRANCH == '' } }
+                    when { 
+                        beforeAgent true
+                        equals expected: '', actual: params.CART_BRANCH
+                    }
                     agent {
                         label 'ci_vm1'
                     }
@@ -462,7 +480,10 @@ EOF
                     }
                 }
                 stage('Single node valgrind with RPMs') {
-                    when { expression { params.CART_BRANCH != '' } }
+                    when {
+                        beforeAgent true
+                        not { equals expected: '', actual: params.CART_BRANCH }
+                    }
                     agent {
                         label 'ci_vm1'
                     }
@@ -528,7 +549,10 @@ EOF
                     }
                 }
                 stage('Fault injection') {
-                    when { expression { params.CART_BRANCH == '' } }
+                    when { 
+                        beforeAgent true
+                        equals expected: '', actual: params.CART_BRANCH
+                    }
                     agent {
                         label 'ci_vm1'
                     }
@@ -582,7 +606,10 @@ EOF
                     }
                 }
                 stage('Fault injection with RPMs') {
-                    when { expression { params.CART_BRANCH != '' } }
+                    when {
+                        beforeAgent true
+                        not { equals expected: '', actual: params.CART_BRANCH }
+                    }
                     agent {
                         label 'ci_vm1'
                     }
