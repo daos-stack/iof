@@ -873,6 +873,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
             os.makedirs(log_path)
         cmdfileout = os.path.join(log_path, "self_test.out.log")
         cmdfileerr = os.path.join(log_path, "self_test.err.log")
+        environ['D_LOG_FILE'] = os.path.join(log_path, 'self_test_cart.log')
         procrtn = -1
         try:
             with open(cmdfileout, mode='w') as outfile, \
