@@ -1192,7 +1192,7 @@ static int ctrl_write(const char *fname,
 			if (len > (IOF_CTRL_MAX_LEN - 1))
 				mylen = IOF_CTRL_MAX_LEN - 1;
 
-			D_ALLOC(mybuf, mylen);
+			D_ALLOC(mybuf, mylen + 1);
 			if (!mybuf) {
 				return -ENOMEM;
 			}
