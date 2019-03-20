@@ -85,6 +85,7 @@ pipeline {
         string(name: 'CART_BRANCH', defaultValue: '',
                description: "Which cart job (PR, branch, etc.) to use for the build and test")
     }
+
     stages {
         stage('Cancel Previous Builds') {
             when { changeRequest() }
@@ -101,12 +102,7 @@ pipeline {
                             dir 'utils/docker'
                             label 'docker_runner'
                             additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " +
-                                                '$BUILDARGS --build-arg USE_RPMS=true ' +
-                                                get_deps_build_vars() +
-                                                '--build-arg CART_BRANCH=' +
-                                                params.CART_BRANCH +
-                                                ' --build-arg CART_VERSION=' +
-                                                get_timestamp()
+                                                '$BUILDARGS --build-arg USE_RPMS=false'
                         }
                     }
                     steps {
@@ -129,6 +125,39 @@ pipeline {
             //failFast true
             parallel {
                 stage('Build on CentOS 7') {
+                    when { expression { params.CART_BRANCH == '' } }
+                    agent {
+                        dockerfile {
+                            filename 'Dockerfile.centos:7'
+                            dir 'utils/docker'
+                            label 'docker_runner'
+                            additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " +
+                                                '$BUILDARGS --build-arg USE_RPMS=false'
+                        }
+                    }
+                    steps {
+                        sconsBuild clean: '_build.external iof.conf'
+                        stash name: 'CentOS-install', includes: 'install/**'
+                        stash name: 'CentOS-build-vars', includes: '.build_vars.*'
+                    }
+                    post {
+                        always {
+                            node('lightweight') {
+                                recordIssues enabledForFailure: true,
+                                             aggregatingResults: true,
+                                             id: "analysis-centos7",
+                                             tools: [ gcc4(), cppCheck() ],
+                                             filters: [excludeFile(".*\\/_build\\.external\\/.*"),
+                                                       excludeFile("_build\\.external\\/.*")]
+                            }
+                        }
+                        success {
+                            sh "rm -rf _build.external"
+                        }
+                    }
+                }
+                stage('Build on CentOS 7 with RPMs') {
+                    when { expression { params.CART_BRANCH != '' } }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.centos:7'
@@ -144,9 +173,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf')
-                        stash name: 'CentOS-install', includes: 'install/**'
-                        stash name: 'CentOS-build-vars', includes: '.build_vars.*'
+                        sconsBuild clean: '_build.external iof.conf'
                     }
                     post {
                         always {
@@ -175,8 +202,8 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf',
-                                   scons_args: '--build-config=utils/build-master.config')
+                        sconsBuild clean: '_build.external iof.conf',
+                                   scons_args: '--build-config=utils/build-master.config'
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
                     }
@@ -198,6 +225,7 @@ pipeline {
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
+                    when { expression { params.CART_BRANCH == '' } }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.ubuntu:18.04'
@@ -230,6 +258,52 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Single node') {
+                    when { expression { params.CART_BRANCH == '' } }
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars.sh
+                                    IOF_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
+                                        pip3.4 install --user tabulate
+                                        export TR_USE_VALGRIND=none
+                                        export IOF_TESTLOG=test/output-centos
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                    exit 0
+                                    """,
+                                junit_files: 'nosetests-centos.xml'
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-centos.xml'
+                            archiveArtifacts artifacts: '**/*.log'
+                        }
+                        cleanup {
+                            dir('test/output-centos') {
+                                deleteDir()
+                            }
+                        }
+                    }
+                }
+                stage('Single node with RPMs') {
+                    when { expression { params.CART_BRANCH != '' } }
                     agent {
                         label 'ci_vm1'
                     }
@@ -263,14 +337,14 @@ EOF
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos-rpms.xml --exe --with-xunit"
                                     exit 0
                                     """,
-                                junit_files: 'nosetests-centos.xml'
+                                junit_files: 'nosetests-centos-rpms.xml'
                     }
                     post {
                         always {
-                            junit 'nosetests-centos.xml'
+                            junit 'nosetests-centos-rpms.xml'
                             archiveArtifacts artifacts: '**/*.log'
                         }
                         cleanup {
@@ -329,6 +403,7 @@ EOF
                     }
                 }
                 stage('Single node valgrind') {
+                    when { expression { params.CART_BRANCH == '' } }
                     agent {
                         label 'ci_vm1'
                     }
@@ -348,13 +423,6 @@ EOF
                                     trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
                                     ssh -i ci_key jenkins@\$NODE "set -x
                                         set -e
-                                        for ext in cart; do
-                                            sudo bash << EOF
-                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
-                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
-EOF
-                                        done
-                                        sudo yum -y install cart
                                         sudo mkdir -p \$IOF_BASE
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
@@ -393,40 +461,161 @@ EOF
                         }
                     }
                 }
-             stage('Fault injection') {
-                agent {
-                    label 'ci_vm1'
-                }
-                options {
-                    timeout(time: 60, unit: 'MINUTES')
-                }
-                steps {
-                    provisionNodes NODELIST: env.NODELIST,
-                        node_count: 1,
-                        snapshot: true
-                    runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
-                        script: """set -x
-                            . ./.build_vars.sh
-                            IOF_BASE=\${SL_PREFIX%/install*}
-                            NODELIST=$nodelist
-                            NODE=\${NODELIST%%,*}
-                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
-                            ssh -i ci_key jenkins@\$NODE "set -x
-                                set -e
-                                for ext in cart; do
-                                    sudo bash << EOF
-                                        yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
-                                        echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+                stage('Single node valgrind with RPMs') {
+                    when { expression { params.CART_BRANCH != '' } }
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                           node_count: 1,
+                           snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                                script: """set -x
+                                    . ./.build_vars.sh
+                                    IOF_BASE=\${SL_PREFIX%/install*}
+                                    NODELIST=$nodelist
+                                    NODE=\${NODELIST%%,*}
+                                    trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                    ssh -i ci_key jenkins@\$NODE "set -x
+                                        set -e
+                                        for ext in cart; do
+                                            sudo bash << EOF
+                                                yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
+                                                echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
 EOF
-                                done
-                                sudo yum -y install cart
-                                sudo mkdir -p \$IOF_BASE
-                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
-                                cd \$IOF_BASE
-                                ln -s /usr/bin/fusermount install/bin/fusermount3
-                                pip3.4 install --user tabulate
-                                ./test/iof_test_alloc_fail.py"
-                            """
+                                        done
+                                        sudo yum -y install cart
+                                        sudo mkdir -p \$IOF_BASE
+                                        sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                        cd \$IOF_BASE
+                                        ln -s /usr/bin/fusermount install/bin/fusermount3
+                                        pip3.4 install --user tabulate
+                                        export TR_USE_VALGRIND=memcheck
+                                        export IOF_TESTLOG=test/output-memcheck
+                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind-rpms.xml --exe --with-xunit"
+                                    exit 0
+                                    """,
+                        junit_files: 'nosetests-valgrind-rpms.xml'
+                    }
+                    post {
+                        always {
+                            junit 'nosetests-valgrind-rpms.xml'
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                            )
+                        }
+                        cleanup {
+                            dir('test/output-memcheck') {
+                                deleteDir()
+                            }
+                        }
+                    }
+                }
+                stage('Fault injection') {
+                    when { expression { params.CART_BRANCH == '' } }
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                            node_count: 1,
+                            snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                            script: """set -x
+                                . ./.build_vars.sh
+                                IOF_BASE=\${SL_PREFIX%/install*}
+                                NODELIST=$nodelist
+                                NODE=\${NODELIST%%,*}
+                                trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                ssh -i ci_key jenkins@\$NODE "set -x
+                                    set -e
+                                    sudo mkdir -p \$IOF_BASE
+                                    sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                    cd \$IOF_BASE
+                                    ln -s /usr/bin/fusermount install/bin/fusermount3
+                                    pip3.4 install --user tabulate
+                                    ./test/iof_test_alloc_fail.py"
+                                """
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                                )
+                        }
+                        cleanup {
+                            dir('test/output') {
+                                deleteDir()
+                            }
+                        }
+                    }
+                }
+                stage('Fault injection with RPMs') {
+                    when { expression { params.CART_BRANCH != '' } }
+                    agent {
+                        label 'ci_vm1'
+                    }
+                    options {
+                        timeout(time: 60, unit: 'MINUTES')
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                            node_count: 1,
+                            snapshot: true
+                        runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                            script: """set -x
+                                . ./.build_vars.sh
+                                IOF_BASE=\${SL_PREFIX%/install*}
+                                NODELIST=$nodelist
+                                NODE=\${NODELIST%%,*}
+                                trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                                ssh -i ci_key jenkins@\$NODE "set -x
+                                    set -e
+                                    for ext in cart; do
+                                        sudo bash << EOF
+                                            yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/\\\${ext}/job/${params.CART_BRANCH}/lastSuccessfulBuild/artifact/artifacts/
+                                            echo \"gpgcheck = False\" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_\\\${ext}_job_${params.CART_BRANCH}_lastSuccessfulBuild_artifact_artifacts_.repo
+EOF
+                                    done
+                                    sudo yum -y install cart
+                                    sudo mkdir -p \$IOF_BASE
+                                    sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                    cd \$IOF_BASE
+                                    ln -s /usr/bin/fusermount install/bin/fusermount3
+                                    pip3.4 install --user tabulate
+                                    ./test/iof_test_alloc_fail.py"
+                                """
                     }
                     post {
                         always {
