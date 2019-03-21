@@ -43,7 +43,7 @@ pipeline {
     agent { label 'lightweight' }
 
     triggers {
-        cron(env.BRANCH_NAME == 'master' ? 'H 0 * * *' : '')
+        cron(env.BRANCH_NAME == 'master' ? 'H */4 * * *' : '')
     }
 
     environment {
@@ -267,7 +267,7 @@ pipeline {
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-master
-                                        nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-master.xml'
