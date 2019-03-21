@@ -155,7 +155,6 @@ pipeline {
                                              filters: [excludeFile('.*\\/_build\\.external\\/.*'),
                                                        excludeFile('_build\\.external\\/.*')]
                             }
-                            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
                         }
                         cleanup {
                             dir('_build.external') {
