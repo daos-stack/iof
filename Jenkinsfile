@@ -122,8 +122,10 @@ pipeline {
                                                        excludeFile("_build\\.external\\/.*")]
                             }
                         }
-                        success {
-                            sh "rm -rf _build.external"
+                        cleanup {
+                            dir('_build.external') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -155,8 +157,10 @@ pipeline {
                             }
                             archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
                         }
-                        success {
-                            sh "rm -rf _build.external"
+                        cleanup {
+                            dir('_build.external') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -183,8 +187,10 @@ pipeline {
                                                        excludeFile("_build\\.external\\/.*")]
                             }
                         }
-                        success {
-                            sh "rm -rf _build.external"
+                        cleanup {
+                            dir('_build.external') {
+                                deleteDir()
+                            }
                         }
                     }
                 }
@@ -267,7 +273,7 @@ pipeline {
                                         pip3.4 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-master
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.4 --xunit-testsuite-name=master --xunit-file=nosetests-master.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-master.xml'
