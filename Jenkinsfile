@@ -122,11 +122,6 @@ pipeline {
                                                        excludeFile("_build\\.external\\/.*")]
                             }
                         }
-                        cleanup {
-                            dir('_build.external') {
-                                deleteDir()
-                            }
-                        }
                     }
                 }
                 stage('Build master CentOS 7') {
@@ -156,11 +151,6 @@ pipeline {
                                                        excludeFile('_build\\.external\\/.*')]
                             }
                         }
-                        cleanup {
-                            dir('_build.external') {
-                                deleteDir()
-                            }
-                        }
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
@@ -184,11 +174,6 @@ pipeline {
                                              tools: [ gcc4(), cppCheck() ],
                                              filters: [excludeFile(".*\\/_build\\.external\\/.*"),
                                                        excludeFile("_build\\.external\\/.*")]
-                            }
-                        }
-                        cleanup {
-                            dir('_build.external') {
-                                deleteDir()
                             }
                         }
                     }
