@@ -52,7 +52,8 @@ String get_deps_build_vars() {
         'MERCURY'  : '1.0.1-2',
         'OMPI'     : '3.0.0rc4-3',
         'PMIX'     : '2.1.1-2',
-        'LIBFABRIC': '1.7.1rc1-1'
+        'LIBFABRIC': '1.7.1rc1-1',
+        'OPENPA'   : '1.0.4-2'
     ]
     def buildargs = ""
     deps.each {
@@ -128,7 +129,7 @@ pipeline {
             //failFast true
             parallel {
                 stage('Build on CentOS 7') {
-                    when { 
+                    when {
                         beforeAgent true
                         equals expected: '', actual: params.CART_BRANCH
                     }
@@ -142,7 +143,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: '_build.external iof.conf'
+                        sconsBuild clean: '_build.external'
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
@@ -182,7 +183,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: '_build.external iof.conf'
+                        sconsBuild clean: '_build.external'
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
@@ -216,7 +217,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild clean: '_build.external iof.conf',
+                        sconsBuild clean: '_build.external',
                                    scons_args: '--build-config=utils/build-master.config'
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
@@ -239,7 +240,7 @@ pipeline {
                     }
                 }
                 stage('Build on Ubuntu 18.04') {
-                    when { 
+                    when {
                         beforeAgent true
                         equals expected: '', actual: params.CART_BRANCH
                     }
@@ -253,7 +254,7 @@ pipeline {
                     }
                     steps {
                         echo "Skipping"
-                        //sconsBuild clean: "_build.external iof.conf"
+                        //sconsBuild clean: "_build.external"
                     }
                     post {
                         always {
@@ -276,7 +277,7 @@ pipeline {
         stage('Test') {
             parallel {
                 stage('Single node') {
-                    when { 
+                    when {
                         beforeAgent true
                         equals expected: '', actual: params.CART_BRANCH
                     }
@@ -430,7 +431,7 @@ EOF
                     }
                 }
                 stage('Single node valgrind') {
-                    when { 
+                    when {
                         beforeAgent true
                         equals expected: '', actual: params.CART_BRANCH
                     }
@@ -561,7 +562,7 @@ EOF
                     }
                 }
                 stage('Fault injection') {
-                    when { 
+                    when {
                         beforeAgent true
                         equals expected: '', actual: params.CART_BRANCH
                     }
