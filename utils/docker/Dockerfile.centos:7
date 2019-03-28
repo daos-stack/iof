@@ -55,7 +55,7 @@ RUN yum clean metadata
 RUN yum -y install epel-release
 RUN yum -y install                                                 \
            git gcc gcc-c++ make cmake golang libtool boost-devel   \
-           libuuid-devel openssl-devel libevent-devel hwloc-devel  \
+           libuuid-devel openssl-devel libevent-devel              \
            libtool-ltdl-devel libcmocka-devel readline-devel       \
            doxygen pandoc flex patch nasm yasm ninja-build meson   \
            CUnit-devel libaio-devel clang-analyzer sg3_utils       \
@@ -68,6 +68,7 @@ RUN yum -y install                                                 \
 # sadly this doesn't work
 #RUN yum-config-manager --save --setopt=*_job_daos-stack_job_${ext}_job_master_lastSuccessfulBuild_artifact_artifacts_.gpgcheck=0
 RUN if ! $USE_RPMS; then exit 0; fi;                                                                                                                    \
+yum -y install hwloc-devel;                                                                                                                             \
 for ext in openpa libfabric mercury pmix ompi; do                                                                                                       \
     yum-config-manager --add-repo=https://build.hpdd.intel.com/job/daos-stack/job/${ext}/job/master/lastSuccessfulBuild/artifact/artifacts/;            \
     echo "gpgcheck = False" >> /etc/yum.repos.d/build.hpdd.intel.com_job_daos-stack_job_${ext}_job_master_lastSuccessfulBuild_artifact_artifacts_.repo; \
