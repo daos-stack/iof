@@ -91,7 +91,7 @@ RUN yum -y copr enable jhli/ipmctl
 RUN yum -y copr enable jhli/safeclib
 RUN yum -y install libipmctl-devel
 
-RUN yum -y install doxygen python34 python34-pylint python34-PyYAML.x86_64 \
+RUN yum -y install python34 python34-pylint python34-PyYAML.x86_64 \
            PyYAML python2-paramiko python34-paramiko valgrind rsync
 
 # Add CaRT user
