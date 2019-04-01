@@ -385,6 +385,60 @@ pipeline {
                         }
                     }
                 }
+             stage('cart-master-nightly') {
+                when { branch 'master' }
+                agent {
+                    label 'ci_vm1'
+                }
+                options {
+                    timeout(time: 60, unit: 'MINUTES')
+                }
+                steps {
+                    provisionNodes NODELIST: env.NODELIST,
+                        node_count: 1,
+                        snapshot: true
+                    runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                        script: """set -x
+                            . ./.build_vars.sh
+                            IOF_BASE=\${SL_PREFIX%/install*}
+                            NODELIST=$nodelist
+                            NODE=\${NODELIST%%,*}
+                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                            ssh -i ci_key jenkins@\$NODE "set -x
+                                set -e
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                cd \$IOF_BASE
+                                ln -s /usr/bin/fusermount install/bin/fusermount3
+                                pip3.4 install --user tabulate
+                                ./test/iof_test_alloc_fail.py"
+                            """
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,**/*.cart-master-nightly'
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: '**/*.cart-master-nightly',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                                )
+                        }
+                        cleanup {
+                            dir('test/output') {
+                                deleteDir()
+                            }
+                        }
+                    }
+                }
             }
         }
     }
