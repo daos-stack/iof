@@ -385,7 +385,7 @@ pipeline {
                         }
                     }
                 }
-             stage('cart-master-nightly') {
+             stage('Fault Injection using cart master') {
                 when { branch 'master' }
                 agent {
                     label 'ci_vm1'
@@ -397,7 +397,7 @@ pipeline {
                     provisionNodes NODELIST: env.NODELIST,
                         node_count: 1,
                         snapshot: true
-                    runTest stashes: [ 'CentOS-install', 'CentOS-build-vars' ],
+                    runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
                         script: """set -x
                             . ./.build_vars.sh
                             IOF_BASE=\${SL_PREFIX%/install*}
@@ -411,19 +411,20 @@ pipeline {
                                 cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
+                                export IOF_TESTLOG=test/output-master-fi
                                 ./test/iof_test_alloc_fail.py"
                             """
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: '**/*.log,**/*.cart-master-nightly'
+                            archiveArtifacts artifacts: '**/*.log,test/output-master-fi/**/*.log'
                             publishValgrind (
                                 failBuildOnInvalidReports: true,
                                 failBuildOnMissingReports: true,
                                 failThresholdDefinitelyLost: '0',
                                 failThresholdInvalidReadWrite: '0',
                                 failThresholdTotal: '0',
-                                pattern: '**/*.cart-master-nightly',
+                                pattern: 'test/output-master-fi/**/*.log',
                                 publishResultsForAbortedBuilds: false,
                                 publishResultsForFailedBuilds: false,
                                 sourceSubstitutionPaths: '',
