@@ -357,19 +357,20 @@ pipeline {
                                 cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
                                 pip3.4 install --user tabulate
+                                export IOF_TESTLOG=test/output-fi
                                 ./test/iof_test_alloc_fail.py"
                             """
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                            archiveArtifacts artifacts: '**/*.log,test/output-fi/**/*.memcheck'
                             publishValgrind (
                                 failBuildOnInvalidReports: true,
                                 failBuildOnMissingReports: true,
                                 failThresholdDefinitelyLost: '0',
                                 failThresholdInvalidReadWrite: '0',
                                 failThresholdTotal: '0',
-                                pattern: '**/*.memcheck',
+                                pattern: 'test/output-fi/**/*.memcheck',
                                 publishResultsForAbortedBuilds: false,
                                 publishResultsForFailedBuilds: false,
                                 sourceSubstitutionPaths: '',
@@ -417,14 +418,14 @@ pipeline {
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: '**/*.log,test/output-master-fi/**/*.log'
+                            archiveArtifacts artifacts: '**/*.log,test/output-master-fi/**/*.memcheck'
                             publishValgrind (
                                 failBuildOnInvalidReports: true,
                                 failBuildOnMissingReports: true,
                                 failThresholdDefinitelyLost: '0',
                                 failThresholdInvalidReadWrite: '0',
                                 failThresholdTotal: '0',
-                                pattern: 'test/output-master-fi/**/*.log',
+                                pattern: 'test/output-master-fi/**/*.memcheck',
                                 publishResultsForAbortedBuilds: false,
                                 publishResultsForFailedBuilds: false,
                                 sourceSubstitutionPaths: '',
