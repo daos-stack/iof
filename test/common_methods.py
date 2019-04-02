@@ -753,7 +753,7 @@ class CnssChecks(iof_ionss_verify.IonssVerify,
 
         test_dir = os.path.join(self.import_dir, 'many')
         files = []
-        for x in range(0, 15):
+        for x in range(0, 100):
             this_file = 'file_%d' % x
             filename = os.path.join(test_dir, this_file)
             fd = open(filename, 'w')
