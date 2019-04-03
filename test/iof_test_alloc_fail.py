@@ -210,8 +210,8 @@ def run_app(ionss=False):
                             os.path.join(os.path.dirname(
                                 os.path.realpath(__file__)),
                                          'output',
-                                         'alloc_fail',
-                                         bin_cmd))
+                                         'alloc_fail'))
+    log_top_dir = os.path.join(log_top_dir, bin_cmd)
 
     try:
         os.makedirs(os.path.join(log_top_dir, 'af'))
