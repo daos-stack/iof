@@ -3108,6 +3108,7 @@ shutdown_no_proj:
 			if (ret != -DER_SUCCESS) {
 				IOF_LOG_ERROR("Could not destroy context, giving up %d",
 					      ret);
+			}
 		}
 		if (ret != -DER_SUCCESS) {
 			if (exit_rc == -DER_SUCCESS) {
