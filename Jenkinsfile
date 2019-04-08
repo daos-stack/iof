@@ -206,10 +206,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-centos.xml'
@@ -235,7 +235,7 @@ pipeline {
                         timeout(time: 60, unit: 'MINUTES')
                     }
                     /* To run a single test use this command:
-                     * nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                     * nosetests-3.6 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
                      */
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
@@ -254,10 +254,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-master
-                                        nosetests-3.4 --xunit-testsuite-name=master --xunit-file=nosetests-master.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=master --xunit-file=nosetests-master.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-master.xml'
@@ -298,10 +298,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
                                         export IOF_TESTLOG=test/output-memcheck
-                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
                                     exit 0
                                     """,
                         junit_files: 'nosetests-valgrind.xml'
@@ -356,7 +356,7 @@ pipeline {
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                 cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
-                                pip3.4 install --user tabulate
+                                pip3 install --user tabulate
                                 export IOF_TESTLOG=test/output-fi
                                 ./test/iof_test_alloc_fail.py"
                             """
@@ -411,7 +411,7 @@ pipeline {
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                 cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
-                                pip3.4 install --user tabulate
+                                pip3 install --user tabulate
                                 export IOF_TESTLOG=test/output-master-fi
                                 ./test/iof_test_alloc_fail.py"
                             """
