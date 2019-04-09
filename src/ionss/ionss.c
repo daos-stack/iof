@@ -3101,7 +3101,7 @@ shutdown_no_proj:
 
 	ret = crt_context_destroy(base.crt_ctx, false);
 	if (ret != -DER_SUCCESS) {
-		IOF_LOG_ERROR("Could not destroy context, trying force %d",
+		IOF_LOG_INFO("Could not destroy context, trying force %d",
 			      ret);
 		if (ret == -DER_TIMEDOUT) {
 			ret = crt_context_destroy(base.crt_ctx, true);
