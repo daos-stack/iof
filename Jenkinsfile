@@ -107,7 +107,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf')
+                        sconsBuild(clean: '_build.external')
                         stash name: 'CentOS-install', includes: 'install/**'
                         stash name: 'CentOS-build-vars', includes: '.build_vars.*'
                     }
@@ -122,9 +122,6 @@ pipeline {
                                                        excludeFile("_build\\.external\\/.*")]
                             }
                         }
-                        success {
-                            sh "rm -rf _build.external"
-                        }
                     }
                 }
                 stage('Build master CentOS 7') {
@@ -138,7 +135,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf',
+                        sconsBuild(clean: '_build.external',
                                    scons_args: '--build-config=utils/build-master.config')
                         stash name: 'CentOS-master-install', includes: 'install/**'
                         stash name: 'CentOS-master-build-vars', includes: ".build_vars.*"
@@ -153,10 +150,6 @@ pipeline {
                                              filters: [excludeFile('.*\\/_build\\.external\\/.*'),
                                                        excludeFile('_build\\.external\\/.*')]
                             }
-                            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
-                        }
-                        success {
-                            sh "rm -rf _build.external"
                         }
                     }
                 }
@@ -170,7 +163,7 @@ pipeline {
                         }
                     }
                     steps {
-                        sconsBuild(clean: '_build.external iof.conf')
+                        sconsBuild(clean: '_build.external')
                     }
                     post {
                         always {
@@ -182,9 +175,6 @@ pipeline {
                                              filters: [excludeFile(".*\\/_build\\.external\\/.*"),
                                                        excludeFile("_build\\.external\\/.*")]
                             }
-                        }
-                        success {
-                            sh "rm -rf _build.external"
                         }
                     }
                 }
@@ -216,10 +206,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-centos
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-centos.xml'
@@ -245,7 +235,7 @@ pipeline {
                         timeout(time: 60, unit: 'MINUTES')
                     }
                     /* To run a single test use this command:
-                     * nosetests-3.4 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
+                     * nosetests-3.6 --with-xunit --xunit-testsuite-name=master --xunit-file=nosetests-master.xml test/iof_test_local.py:Testlocal.test_use_ino"
                      */
                     steps {
                         provisionNodes NODELIST: env.NODELIST,
@@ -264,10 +254,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=none
                                         export IOF_TESTLOG=test/output-master
-                                        nosetests-3.4 --xunit-testsuite-name=centos --xunit-file=nosetests-centos.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=master --xunit-file=nosetests-master.xml --exe --with-xunit"
                                     exit 0
                                     """,
                                 junit_files: 'nosetests-master.xml'
@@ -308,10 +298,10 @@ pipeline {
                                         sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                         cd \$IOF_BASE
                                         ln -s /usr/bin/fusermount install/bin/fusermount3
-                                        pip3.4 install --user tabulate
+                                        pip3 install --user tabulate
                                         export TR_USE_VALGRIND=memcheck
                                         export IOF_TESTLOG=test/output-memcheck
-                                        nosetests-3.4 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
+                                        nosetests-3.6 --xunit-testsuite-name=valgrind --xunit-file=nosetests-valgrind.xml --exe --with-xunit"
                                     exit 0
                                     """,
                         junit_files: 'nosetests-valgrind.xml'
@@ -366,20 +356,76 @@ pipeline {
                                 sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
                                 cd \$IOF_BASE
                                 ln -s /usr/bin/fusermount install/bin/fusermount3
-                                pip3.4 install --user tabulate
+                                pip3 install --user tabulate
+                                export IOF_TESTLOG=test/output-fi
                                 ./test/iof_test_alloc_fail.py"
                             """
                     }
                     post {
                         always {
-                            archiveArtifacts artifacts: '**/*.log,**/*.memcheck'
+                            archiveArtifacts artifacts: '**/*.log,test/output-fi/**/*.memcheck'
                             publishValgrind (
                                 failBuildOnInvalidReports: true,
                                 failBuildOnMissingReports: true,
                                 failThresholdDefinitelyLost: '0',
                                 failThresholdInvalidReadWrite: '0',
                                 failThresholdTotal: '0',
-                                pattern: '**/*.memcheck',
+                                pattern: 'test/output-fi/**/*.memcheck',
+                                publishResultsForAbortedBuilds: false,
+                                publishResultsForFailedBuilds: false,
+                                sourceSubstitutionPaths: '',
+                                unstableThresholdDefinitelyLost: '',
+                                unstableThresholdInvalidReadWrite: '',
+                                unstableThresholdTotal: ''
+                                )
+                        }
+                        cleanup {
+                            dir('test/output') {
+                                deleteDir()
+                            }
+                        }
+                    }
+                }
+             stage('Fault Injection using cart master') {
+                when { branch 'master' }
+                agent {
+                    label 'ci_vm1'
+                }
+                options {
+                    timeout(time: 60, unit: 'MINUTES')
+                }
+                steps {
+                    provisionNodes NODELIST: env.NODELIST,
+                        node_count: 1,
+                        snapshot: true
+                    runTest stashes: [ 'CentOS-master-install', 'CentOS-master-build-vars' ],
+                        script: """set -x
+                            . ./.build_vars.sh
+                            IOF_BASE=\${SL_PREFIX%/install*}
+                            NODELIST=$nodelist
+                            NODE=\${NODELIST%%,*}
+                            trap 'set +e; set -x; ssh -i ci_key jenkins@\$NODE "set -ex; sudo umount \$IOF_BASE"' EXIT
+                            ssh -i ci_key jenkins@\$NODE "set -x
+                                set -e
+                                sudo mkdir -p \$IOF_BASE
+                                sudo mount -t nfs \$HOSTNAME:\$PWD \$IOF_BASE
+                                cd \$IOF_BASE
+                                ln -s /usr/bin/fusermount install/bin/fusermount3
+                                pip3 install --user tabulate
+                                export IOF_TESTLOG=test/output-master-fi
+                                ./test/iof_test_alloc_fail.py"
+                            """
+                    }
+                    post {
+                        always {
+                            archiveArtifacts artifacts: '**/*.log,test/output-master-fi/**/*.memcheck'
+                            publishValgrind (
+                                failBuildOnInvalidReports: true,
+                                failBuildOnMissingReports: true,
+                                failThresholdDefinitelyLost: '0',
+                                failThresholdInvalidReadWrite: '0',
+                                failThresholdTotal: '0',
+                                pattern: 'test/output-master-fi/**/*.memcheck',
                                 publishResultsForAbortedBuilds: false,
                                 publishResultsForFailedBuilds: false,
                                 sourceSubstitutionPaths: '',

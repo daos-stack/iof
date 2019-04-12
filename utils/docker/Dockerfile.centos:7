@@ -67,8 +67,6 @@ RUN yum -y copr enable jhli/ipmctl
 RUN yum -y copr enable jhli/safeclib
 RUN yum -y install libsafec libipmctl-devel
 
-RUN pip3.4 install tabulate
-
 # Add CaRT user
 ENV USER cart
 ENV PASSWD cart
