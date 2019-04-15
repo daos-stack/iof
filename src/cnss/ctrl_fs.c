@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2019 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,9 +40,8 @@
 #include <sys/queue.h>
 #include <sys/xattr.h>
 
-static int ctrl_log_handle;
-
-#define D_LOGFAC ctrl_log_handle
+#define D_LOGFAC DD_FAC(ctrl)
+#include "log.h"
 
 #include <gurt/common.h>
 
@@ -54,7 +53,6 @@ static int ctrl_log_handle;
 
 # include <fuse3/fuse.h>
 
-#include "log.h"
 #include "iof_fs.h"
 #include "ctrl_fs.h"
 #include "iof_ctrl_util.h"
@@ -189,7 +187,7 @@ static void init_root_node(void)
 {
 	int rc;
 
-	iof_log_init("CTRL", "CTRLFS", &ctrl_log_handle);
+	iof_log_init();
 
 	rc = init_node(&ctrl_fs.root, "", S_IFDIR | 0700, 0);
 

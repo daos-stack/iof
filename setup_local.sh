@@ -34,13 +34,12 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 # THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-VARS_FILE=./.build_vars-`uname -s`.sh
+VARS_FILE=./.build_vars.sh
 
 if [ ! -f $VARS_FILE ]
 then
     echo Build vars file $VARS_FILE does not exist
     echo Cannot continue
-    exit 1
 fi
 
 . $VARS_FILE
