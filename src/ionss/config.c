@@ -40,6 +40,8 @@
 #include <errno.h>
 #include <yaml.h>
 
+#define D_LOGFAC DD_FAC(ion)
+
 #include "log.h"
 #include "ionss.h"
 

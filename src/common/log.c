@@ -55,6 +55,8 @@ void iof_log_init(void)
 			    rc);
 		return;
 	}
+
+	d_log_sync_mask();
 }
 
 void iof_log_close(void)
