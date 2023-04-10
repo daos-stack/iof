@@ -42,10 +42,6 @@ def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll(
 pipeline {
     agent { label 'lightweight' }
 
-    triggers {
-        cron(env.BRANCH_NAME == 'master' ? 'H */4 * * *' : '')
-    }
-
     environment {
         GITHUB_USER = credentials('daos-jenkins-review-posting')
         BAHTTPS_PROXY = "${env.HTTP_PROXY ? '--build-arg HTTP_PROXY="' + env.HTTP_PROXY + '" --build-arg http_proxy="' + env.HTTP_PROXY + '"' : ''}"
